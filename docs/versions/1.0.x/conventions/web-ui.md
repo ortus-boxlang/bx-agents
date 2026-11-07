@@ -453,6 +453,8 @@ When the agent has a [`notes`](agent-yaml.md#notes) block, the Settings menu has
 
 When an `mcpServers` entry has [`oauth`](connect.md), the Settings menu has a **Connections** item (`/info`'s `capabilities.connections` says whether). It opens a panel with a row for each service: its name, its address, *Connected* or *Not connected*, and a *Connect* or *Disconnect* button. *Connect* opens the provider's sign in in a new tab (a link is also shown, in case the browser blocks the tab) and the panel checks again every two seconds until it works. The page never sees a token.
 
+![The Connections panel with mail connected](../assets/webui/connections.png)
+
 ## What is not here yet
 
 The page is complete against its own API - every route it needs exists and is exercised. These are the gaps:

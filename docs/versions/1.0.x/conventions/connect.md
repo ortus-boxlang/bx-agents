@@ -21,6 +21,16 @@ mcpServers:
 
 `oauth: true` is enough for a server that tells us what we need. The entry needs a `name`, because people type it.
 
+<video controls preload="metadata" poster="/assets/video/connect-poster.png" style="max-width:100%">
+  <source src="/assets/video/connect.mp4" type="video/mp4">
+  <source src="/assets/video/connect.webm" type="video/webm">
+  <track kind="captions" src="/assets/video/connect.vtt" srclang="en" label="English" default>
+</video>
+
+The sign in above is real, against a small fake mail service ([`tools/demo/fake-oauth-mcp.bxs`](https://github.com/ortus-boxlang/bx-agents/tree/development/tools/demo)); the agent's first answer is scripted.
+
+![The Connections panel with mail connected](../assets/webui/connections.png)
+
 ## What you write
 
 | Key under `oauth` | Meaning |
