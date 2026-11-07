@@ -581,6 +581,16 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.filter( e => e.findNoCase( "notes" ) ) ).toBeEmpty();
 			} );
 
+			it( "rejects a data block with an unknown key", function() {
+				var text = validateFixture( "bad-data" ).errors.filter( e => e.findNoCase( "'data'" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "'data' has an unknown key [folder]" );
+			} );
+
+			it( "accepts a data block that names a home", function() {
+				expect( validateFixture( "with-data" ).errors.filter( e => e.findNoCase( "'data" ) ) ).toBeEmpty();
+			} );
+
 			it( "rejects a vault block with an unknown key or a bad flag", function() {
 				var text = validateFixture( "bad-vault" ).errors.filter( e => e.findNoCase( "vault" ) ).toList( char( 10 ) );
 

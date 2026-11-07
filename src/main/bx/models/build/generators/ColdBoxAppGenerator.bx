@@ -155,6 +155,7 @@ class {
 				sessionManagement  : arguments.hasWebUi,
 				datasourceName     : database.datasource ?: "",
 				databasePath       : database.path ?: "",
+				dataHome           : ( arguments.resolvedConfig.data ?: {} ).home ?: "",
 				schedulerClasses   : arguments.schedulerClasses
 			)
 		)
@@ -213,6 +214,7 @@ class {
 	 * @sessionTimeoutMinutes Only used when `sessionManagement` is true - minutes until `this.sessionTimeout` expires
 	 * @datasourceName Non-empty only when the web UI's chat store needs one (see `generate()`'s `webUiDatabase`) - registers it as a NAMED SQLite `this.datasources[...]` entry AND as `this.datasource` (the app default), so an unqualified query always resolves rather than failing with "No default datasource defined"
 	 * @databasePath Only used alongside `datasourceName` - the SQLite file path, relative to the app folder, for that datasource's `"database"` key
+	 * @dataHome `data.home` from Agent.yaml, stamped into the app so the data home is the same one `serve` and `chat` use. Blank when it is not set
 	 * @schedulerClasses Class paths of the project's schedulers, registered through `this.schedulers` so they start and stop with the app
 	 *
 	 * @return The rendered bxagents/Application.bx source: the base class the app's own Application.bx extends
@@ -224,6 +226,7 @@ class {
 		numeric sessionTimeoutMinutes = 60,
 		string datasourceName = "",
 		string databasePath = "",
+		string dataHome = "",
 		array schedulerClasses = []
 	) {
 		var lines = [
@@ -275,7 +278,7 @@ class {
 			lines.append( '		"driver"  : "sqlite",' )
 			// BXAGENTS_DB, when set, names the file: `serve` sets it so the web chat and
 			// the terminal chat share one database in the project's data/ folder
-			lines.append( '		"database": getSystemSetting( "BXAGENTS_DB", appPath( "#Strings::bxLiteral( arguments.databasePath )#" ) )' )
+			lines.append( '		"database": databaseFile( "#Strings::bxLiteral( arguments.databasePath )#" )' )
 			lines.append( "	}" )
 			// Also the app default. A generated app has exactly one datasource,
 			// so anything that runs a query without naming one should reach it
@@ -305,8 +308,11 @@ class {
 			// error at boot, not an auto-created folder. Done here rather than in
 			// ChatDb because this is where the configured path literally is;
 			// ChatDb only ever knows the datasource NAME.
-			lines.append( "		// SQLite creates the db file, but not the directory holding it" )
-			lines.append( '		directoryCreate( getDirectoryFromPath( getSystemSetting( "BXAGENTS_DB", appPath( "#Strings::bxLiteral( arguments.databasePath )#" ) ) ), true, true )' )
+			lines.append( "		// SQLite creates the db file, but not the directory holding it. The data home also gets its folders and README" )
+			lines.append( '		var ready = dataHome().ensure( databaseFile( "#Strings::bxLiteral( arguments.databasePath )#" ) )' )
+			lines.append( '		if ( len( ready.warning ) ) {' )
+			lines.append( '			systemOutput( "[bxagents] " & ready.warning, true )' )
+			lines.append( '		}' )
 		}
 		// Named args deliberately, not positional - coldbox.system.Bootstrap's
 		// real init() signature is
@@ -339,6 +345,20 @@ class {
 		lines.append( "		}" )
 		lines.append( "		application.cbBootstrap.onRequestStart( arguments.targetPage )" )
 		lines.append( "		return true" )
+		lines.append( "	}" )
+		lines.append( "" )
+		lines.append( "	/**" )
+		lines.append( "	 * Where the app keeps everything: BXAGENTS_HOME, else `data.home` from Agent.yaml, else data/ in the app." )
+		lines.append( "	 */" )
+		lines.append( "	private any function dataHome() {" )
+		lines.append( '		return new "models.data.DataHome@bxagents"( projectRoot : expandPath( "/" ), configured : "#Strings::bxLiteral( arguments.dataHome )#" )' )
+		lines.append( "	}" )
+		lines.append( "" )
+		lines.append( "	/**" )
+		lines.append( "	 * The database file: BXAGENTS_DB, else the data home when it was chosen, else the app's own path." )
+		lines.append( "	 */" )
+		lines.append( "	private string function databaseFile( required string fallback ) {" )
+		lines.append( "		return dataHome().databaseOr( appPath( arguments.fallback ) )" )
 		lines.append( "	}" )
 		lines.append( "" )
 		lines.append( "	/**" )

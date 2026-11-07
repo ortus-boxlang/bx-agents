@@ -2,15 +2,16 @@
  * Where a project's chat database lives, for the commands that run on a developer's machine
  * (`chat` and `serve`) so the terminal chat and the web chat open the same file.
  *
- * The environment variable BXAGENTS_DB names the file and wins. Without it the file is
- * `data/chat.db` in the project folder. A deployed app does not use this: it keeps the file
- * where its gateway's `database.path` says, inside the app, unless BXAGENTS_DB is set there too.
+ * The environment variable BXAGENTS_DB names the file and wins. Without it the file is `chat.db` in the project's
+ * data home (see DataHome): `data/` in the project folder unless BXAGENTS_HOME or `data.home` says otherwise.
+ * A deployed app does not use this: it asks the same DataHome from inside the app.
  */
+import bxModules.bxagents.models.data.DataHome;
+
 class {
 
 	static {
 		ENVIRONMENT_VARIABLE = "BXAGENTS_DB"
-		DEFAULT_FILE         = "data/chat.db"
 	}
 
 	/**
@@ -19,11 +20,21 @@ class {
 	 * @return The absolute path of the chat database file, with forward slashes
 	 */
 	string function forProject( required string projectRoot ) {
-		var fromEnvironment = trim( getSystemSetting( static.ENVIRONMENT_VARIABLE, "" ) )
-		if ( len( fromEnvironment ) ) {
-			return fromEnvironment.replace( "\", "/", "all" )
-		}
-		return arguments.projectRoot.reReplace( "[\/]+$", "" ).replace( "\", "/", "all" ) & "/" & static.DEFAULT_FILE
+		return DataHome::forProject( arguments.projectRoot ).database()
+	}
+
+	/**
+	 * The database file of a project, with its data home made first (folders, README), for the commands that
+	 * are about to open it.
+	 *
+	 * @projectRoot The project folder
+	 *
+	 * @return The absolute path of the chat database file, with forward slashes
+	 */
+	string function prepared( required string projectRoot ) {
+		var home = DataHome::forProject( arguments.projectRoot )
+		home.ensure()
+		return home.database()
 	}
 
 	/**

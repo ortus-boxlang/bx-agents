@@ -686,9 +686,28 @@ class extends="testbox.system.BaseSpec" {
 				);
 
 				var content = fileRead( buildDir & "/bxagents/Application.bx" );
-				expect( content ).toInclude( '"database": getSystemSetting( "BXAGENTS_DB", appPath( "./data/chat.db" ) )' );
-				// the folder is made for whichever file is used
-				expect( content ).toInclude( 'directoryCreate( getDirectoryFromPath( getSystemSetting( "BXAGENTS_DB", appPath( "./data/chat.db" ) ) ), true, true )' );
+				// one place decides: BXAGENTS_DB, then the data home when it was chosen, then the configured path
+				expect( content ).toInclude( '"database": databaseFile( "./data/chat.db" )' );
+				expect( content ).toInclude( 'return dataHome().databaseOr( appPath( arguments.fallback ) )' );
+				// the data home is made with its folders, around whichever file is used
+				expect( content ).toInclude( 'dataHome().ensure( databaseFile( "./data/chat.db" ) )' );
+				expect( content ).toInclude( 'configured : ""' );
+			} );
+
+			it( "stamps data.home from Agent.yaml into the app so it keeps the data where serve and chat do", function() {
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				config.data = { home : "~/.nanobox" };
+				generator.generate(
+					projectRoot    : fixtures & "/full-project",
+					buildDir       : buildDir,
+					resolvedConfig : config,
+					hasWebUi       : true,
+					webUiDatabase  : { datasource : "acmechat", path : "./data/chat.db" }
+				);
+
+				var content = fileRead( buildDir & "/bxagents/Application.bx" );
+				expect( content ).toInclude( 'configured : "~/.nanobox"' );
 			} );
 
 			/**

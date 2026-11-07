@@ -1,0 +1,299 @@
+/**
+ * The one folder an agent keeps everything in: the chat database, the files it writes, the skills it saves and the
+ * backups of all of it.
+ *
+ * ```
+ * <data home>/
+ *   README.md      what this folder is, written once
+ *   chat.db        conversations, notes, tokens, secrets, usage
+ *   files/         what the agent writes (the `files` volume)
+ *   skills/        skills the agent saves
+ *   backups/       written by `bxAgents backup`
+ * ```
+ *
+ * Where it is, first match wins:
+ *
+ * 1. the environment variable BXAGENTS_HOME
+ * 2. `data.home` in `Agent.yaml`
+ * 3. `data/` in the project folder (in a built app, `data/` inside the app)
+ *
+ * The environment variable BXAGENTS_DB keeps naming the database file on its own, and wins for that file.
+ *
+ * Nothing here is created until `ensure()` is called, so asking where the home is never changes the disk.
+ */
+class {
+
+	static {
+		ENVIRONMENT_VARIABLE = "BXAGENTS_HOME"
+		DATABASE_VARIABLE    = "BXAGENTS_DB"
+		DEFAULT_FOLDER       = "data"
+		DATABASE_FILE        = "chat.db"
+		FOLDERS              = [ "files", "skills", "backups" ]
+	}
+
+	/**
+	 * @projectRoot The project folder, or the folder of a built app
+	 * @configured `data.home` from `Agent.yaml`; blank when it is not set
+	 * @environment A struct standing in for the environment ({ BXAGENTS_HOME, BXAGENTS_DB }); leave it out to read the real one
+	 * @userHome What `~` stands for; leave it blank to use the current user's home
+	 */
+	function init( required string projectRoot, string configured = "", struct environment, string userHome = "" ) {
+		variables.root = clean( arguments.projectRoot )
+		variables.configured = trim( arguments.configured )
+		variables.hasEnvironment = !isNull( arguments.environment )
+		if ( variables.hasEnvironment ) {
+			variables.environment = arguments.environment
+		}
+		variables.userHome = len( trim( arguments.userHome ) ) ? clean( arguments.userHome ) : clean( createObject( "java", "java.lang.System" ).getProperty( "user.home" ) )
+		return this
+	}
+
+	/**
+	 * The data home of a project on this machine: `data.home` is read from the project's `Agent.yaml`.
+	 *
+	 * @projectRoot The project folder
+	 */
+	static function forProject( required string projectRoot ) {
+		var configured = ""
+		var file = arguments.projectRoot.replace( "\", "/", "all" ).reReplace( "/+$", "" ) & "/Agent.yaml"
+		if ( fileExists( file ) ) {
+			try {
+				var loaded = new "models.build.AgentYamlLoader@bxagents"().load( file )
+				configured = ( loaded.config.data ?: {} ).home ?: ""
+			} catch ( any e ) {
+				// A file that cannot be read is reported by the build; the default home is still right to use here
+			}
+		}
+		return new "models.data.DataHome@bxagents"( projectRoot : arguments.projectRoot, configured : configured )
+	}
+
+	/**
+	 * @data The `data` setting as written in `Agent.yaml`
+	 *
+	 * @return One message per problem; empty when the setting is fine
+	 */
+	static array function problems( required any data ) {
+		if ( !isStruct( arguments.data ) ) {
+			return [ "'data' must be a mapping such as { home: ~/.nanobox }" ]
+		}
+		var problems = []
+		for ( var key in arguments.data ) {
+			if ( key != "home" ) {
+				problems.append( "'data' has an unknown key [#key#]. The only key is home" )
+			}
+		}
+		if ( arguments.data.keyExists( "home" ) && ( !isSimpleValue( arguments.data.home ) || !len( trim( arguments.data.home ) ) ) ) {
+			problems.append( "'data.home' must be a folder: an absolute path, one that starts with ~, or one relative to the project" )
+		}
+		return problems
+	}
+
+	/**
+	 * @return The absolute path of the data home, with forward slashes and no trailing slash
+	 */
+	string function path() {
+		var fromEnvironment = setting( static.ENVIRONMENT_VARIABLE )
+		if ( len( fromEnvironment ) ) {
+			return absolute( fromEnvironment )
+		}
+		if ( len( variables.configured ) ) {
+			return absolute( variables.configured )
+		}
+		return variables.root & "/" & static.DEFAULT_FOLDER
+	}
+
+	/**
+	 * @return environment, setting or default: which of the three places gave the path
+	 */
+	string function source() {
+		if ( len( setting( static.ENVIRONMENT_VARIABLE ) ) ) {
+			return "environment"
+		}
+		return len( variables.configured ) ? "setting" : "default"
+	}
+
+	/**
+	 * @return The absolute path of the chat database file. BXAGENTS_DB names it on its own when it is set
+	 */
+	string function database() {
+		var named = setting( static.DATABASE_VARIABLE )
+		return len( named ) ? clean( named ) : path() & "/" & static.DATABASE_FILE
+	}
+
+	/**
+	 * @name files, skills or backups
+	 *
+	 * @return The absolute path of that folder in the data home
+	 */
+	string function folder( required string name ) {
+		if ( !static.FOLDERS.contains( arguments.name ) ) {
+			throw( type = "BxAgents.UnknownDataFolder", message = "There is no data folder [#arguments.name#]. They are: #static.FOLDERS.toList( ', ' )#." )
+		}
+		return path() & "/" & arguments.name
+	}
+
+	/**
+	 * The database file when the home was chosen on purpose, else a fallback the caller already has (an app's own
+	 * `database.path`). BXAGENTS_DB wins over both.
+	 *
+	 * @fallback The file to use when neither BXAGENTS_DB nor a chosen home names one
+	 */
+	string function databaseOr( required string fallback ) {
+		if ( len( setting( static.DATABASE_VARIABLE ) ) || source() != "default" ) {
+			return database()
+		}
+		return clean( arguments.fallback )
+	}
+
+	/**
+	 * Makes the home, its folders, the folder of the database file and the README, when they are missing. Safe to call again.
+	 *
+	 * @databaseFile The database file in use, when it is not the one `database()` names; its folder is made too
+	 *
+	 * @return { home, created : the names of what was made, warning : text to show, or blank }
+	 */
+	struct function ensure( string databaseFile = "" ) {
+		var made = []
+		var home = path()
+		make( home, "", made )
+		for ( var name in static.FOLDERS ) {
+			make( home & "/" & name, name & "/", made )
+		}
+		make( getDirectoryFromPath( len( arguments.databaseFile ) ? arguments.databaseFile : database() ).reReplace( "[\/]+$", "" ), "", made )
+		var readme = home & "/README.md"
+		if ( !fileExists( readme ) ) {
+			fileWrite( readme, readmeText() )
+			made.append( "README.md" )
+		}
+		return { home : home, created : made, warning : warning() }
+	}
+
+	/**
+	 * @return Text to show when the home was not chosen on purpose (it fell back to `data/` in the app), else blank.
+	 *         Quiet when BXAGENTS_DB names the database: `serve` sets it, and the data is then in a place that was chosen
+	 */
+	string function warning() {
+		if ( source() != "default" || len( setting( static.DATABASE_VARIABLE ) ) ) {
+			return ""
+		}
+		return "The data home is [#path()#], the default. Set #static.ENVIRONMENT_VARIABLE# or `data.home` in Agent.yaml to keep it outside the app, so a new build does not replace it."
+	}
+
+	/**
+	 * @return True when a file can be written in the home (made first if it is missing)
+	 */
+	boolean function writable() {
+		try {
+			ensure()
+			var probe = path() & "/.write-test-" & createUUID()
+			fileWrite( probe, "" )
+			fileDelete( probe )
+			return true
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	/**
+	 * @return { home, source, database, items : [ { name, bytes, files } ] }: the sizes `bxAgents data` and the web page show
+	 */
+	struct function describe() {
+		var items = []
+		var database = database()
+		items.append( { name : static.DATABASE_FILE, bytes : sizeOfDatabase( database ), files : fileExists( database ) ? 1 : 0 } )
+		for ( var name in static.FOLDERS ) {
+			var found = measure( path() & "/" & name )
+			items.append( { name : name & "/", bytes : found.bytes, files : found.files } )
+		}
+		return { home : path(), source : source(), database : database, items : items }
+	}
+
+	// ---------------------------------------------------------------------------
+
+	/**
+	 * @return The value of a setting from the real environment, or from the stand-in, blank when it is not set
+	 */
+	private string function setting( required string name ) {
+		return trim( variables.hasEnvironment ? ( variables.environment[ arguments.name ] ?: "" ) : getSystemSetting( arguments.name, "" ) )
+	}
+
+	/**
+	 * @return The path with forward slashes and no trailing slash
+	 */
+	private string function clean( required string path ) {
+		var value = trim( arguments.path ).replace( "\", "/", "all" )
+		return value.len() > 1 ? value.reReplace( "/+$", "" ) : value
+	}
+
+	/**
+	 * @return An absolute path: `~` is the user's home, a relative path starts at the project folder
+	 */
+	private string function absolute( required string path ) {
+		var value = clean( arguments.path )
+		if ( value == "~" ) {
+			return variables.userHome
+		}
+		if ( value.startsWith( "~/" ) ) {
+			return variables.userHome & value.mid( 2, value.len() )
+		}
+		if ( value.startsWith( "/" ) || reFind( "^[A-Za-z]:/", value ) ) {
+			return value
+		}
+		return variables.root & "/" & value.reReplace( "^(\./)+", "" )
+	}
+
+	private void function make( required string path, required string label, required array made ) {
+		if ( !directoryExists( arguments.path ) ) {
+			directoryCreate( path = arguments.path, createPath = true, ignoreExists = true )
+			if ( len( arguments.label ) ) {
+				arguments.made.append( arguments.label )
+			}
+		}
+	}
+
+	/**
+	 * @return The size of the database file with the two files SQLite keeps beside it while it is open
+	 */
+	private numeric function sizeOfDatabase( required string file ) {
+		var total = 0
+		for ( var candidate in [ arguments.file, arguments.file & "-wal", arguments.file & "-shm" ] ) {
+			if ( fileExists( candidate ) ) {
+				total += createObject( "java", "java.io.File" ).init( candidate ).length()
+			}
+		}
+		return total
+	}
+
+	/**
+	 * @return { bytes, files } for everything below a folder
+	 */
+	private struct function measure( required string folder ) {
+		var out = { bytes : 0, files : 0 }
+		if ( !directoryExists( arguments.folder ) ) {
+			return out
+		}
+		for ( var file in directoryList( path = arguments.folder, recurse = true, listInfo = "array", type = "file" ) ) {
+			out.bytes += createObject( "java", "java.io.File" ).init( file ).length()
+			out.files++
+		}
+		return out
+	}
+
+	private string function readmeText() {
+		var nl = char( 10 )
+		return [
+			"## Data home",
+			"",
+			"Everything this agent keeps is in this folder.",
+			"",
+			"- `chat.db`: conversations, notes, access tokens, secrets and usage counts.",
+			"- `files/`: what the agent writes.",
+			"- `skills/`: skills the agent saved.",
+			"- `backups/`: made by `bxAgents backup`.",
+			"",
+			"Back it up with `bxAgents backup`. Put it somewhere that survives a new build by setting #static.ENVIRONMENT_VARIABLE# or `data.home` in `Agent.yaml`.",
+			""
+		].toList( nl )
+	}
+
+}

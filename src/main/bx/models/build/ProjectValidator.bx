@@ -13,6 +13,7 @@ import bxModules.bxagents.models.build.AgentApiConfig;
 
 import bxModules.bxagents.models.api.ApiPath;
 import bxModules.bxagents.models.api.Guards;
+import bxModules.bxagents.models.data.DataHome;
 
 class {
 
@@ -71,6 +72,7 @@ class {
 		validateAgentApi( arguments.resolvedConfig, arguments.discovery, errors )
 		validateNotes( arguments.resolvedConfig, errors )
 		validateVault( arguments.resolvedConfig, errors )
+		validateData( arguments.resolvedConfig, errors )
 
 		return { errors : errors, warnings : warnings }
 	}
@@ -890,6 +892,23 @@ class {
 	}
 
 	/**
+	 * Validates the optional `data` block: where the agent keeps everything (see DataHome).
+	 *
+	 *   data:
+	 *     home: ~/.nanobox     # an absolute path, ~/..., or relative to the project
+	 *
+	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `data` is used
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	private void function validateData( required struct resolvedConfig, required array errors ) {
+		if ( structKeyExists( arguments.resolvedConfig, "data" ) ) {
+			for ( var problem in DataHome::problems( arguments.resolvedConfig.data ) ) {
+				arguments.errors.append( "Agent.bx's " & problem )
+			}
+		}
+	}
+
+	/**
 	 * Validates the optional `vault` block. Present (even empty) gives the agent the vault_list and vault_request
 	 * tools; absent leaves them out. Using ${vault.NAME} in the config needs no block.
 	 *
@@ -1275,7 +1294,7 @@ class {
 	private void function validateAiSettings( required struct config, required array errors, required string label, array profileNames = [], boolean isRoot = true ) {
 		if ( !arguments.isRoot ) {
 			// bx-ai's settings are global to the app, so these belong to the root Agent.yaml
-			for ( var key in [ "params", "options", "providers", "profiles", "defaultProfile", "embeddings", "speech", "transcription", "image", "usage", "tui", "extensions" ] ) {
+			for ( var key in [ "params", "options", "providers", "profiles", "defaultProfile", "embeddings", "speech", "transcription", "image", "usage", "tui", "extensions", "data" ] ) {
 				if ( arguments.config.keyExists( key ) ) {
 					arguments.errors.append( "#arguments.label#: '#key#' applies to the whole app, so it belongs in the project's own Agent.yaml. A subagent can set model or profile" )
 				}
