@@ -21,6 +21,7 @@
  * implements natively.
  */
 import bxModules.bxagents.models.util.Strings;
+import bxModules.bxagents.models.wizard.WizardCatalog;
 
 class {
 
@@ -86,6 +87,11 @@ class {
 		directoryCreate( path = appDir & "/bxagents", createPath = true, ignoreExists = true )
 
 		var appName = len( arguments.resolvedConfig.name ?: "" ) ? arguments.resolvedConfig.name : "BxAi"
+
+		// The project's volumes and data home belong to the whole app, but every agent in the tree gets its file tools
+		// from them (see renderToolsLines). The build is one pass, so they are kept here for the nodes to read.
+		variables.projectVolumes = isStruct( arguments.resolvedConfig.volumes ?: "" ) ? arguments.resolvedConfig.volumes : {}
+		variables.projectDataHome = ( isStruct( arguments.resolvedConfig.data ?: "" ) ? arguments.resolvedConfig.data : {} ).home ?: ""
 
 		var applicationPath  = appDir & "/Application.bx"
 		var baseApplicationPath = appDir & "/bxagents/Application.bx"
@@ -1295,6 +1301,47 @@ class {
 	}
 
 	/**
+	 * Gives an agent that lists bx-ai's file tools the project's volumes to use them over, unless it names folders of
+	 * its own with `toolOptions.bxai.allowedPaths`. The tools are then fenced into volumes and speak in volume names.
+	 *
+	 * @toolOptions The agent's own `toolOptions`
+	 * @declared The agent's `tools:` entries
+	 *
+	 * @return The `toolOptions` to generate, with `bxai.volumes` and `bxai.dataHome` added where they apply
+	 */
+	private struct function withVolumes( required any toolOptions, required any declared ) {
+		var options = isStruct( arguments.toolOptions ) ? arguments.toolOptions : {}
+		if ( !isArray( arguments.declared ) || !listsFileTools( arguments.declared ) ) {
+			return options
+		}
+		if ( isStruct( options.bxai ?: "" ) && options.bxai.keyExists( "allowedPaths" ) ) {
+			return options
+		}
+		var merged = duplicate( options )
+		merged.bxai = isStruct( merged.bxai ?: "" ) ? merged.bxai : {}
+		merged.bxai.volumes = variables.projectVolumes
+		if ( len( variables.projectDataHome ) ) {
+			merged.bxai.dataHome = variables.projectDataHome
+		}
+		return merged
+	}
+
+	/**
+	 * @declared The `tools:` entries, each item@module
+	 *
+	 * @return True when one of them is a bx-ai file tool, or all of bx-ai's tools
+	 */
+	private boolean function listsFileTools( required array declared ) {
+		var fileTools = WizardCatalog::FILE_TOOLS_READ.duplicate().append( WizardCatalog::FILE_TOOLS_WRITE, true ).map( function( tool ) {
+			return tool.name
+		} )
+		return arguments.declared.some( function( entry ) {
+			var parts = toString( entry ).listToArray( "@" )
+			return parts.len() == 2 && parts[ 2 ] == "bxai" && ( parts[ 1 ] == "*" || fileTools.contains( parts[ 1 ] ) )
+		} )
+	}
+
+	/**
 	 * The generated statements that decide ONE agent's tools. An agent gets its
 	 * own `tools/` folder plus whatever its `tools:` list names, resolved against
 	 * the registry when the app assembles its agents (see ToolSelector). It does
@@ -1343,7 +1390,7 @@ class {
 
 		var declared = arguments.resolvedConfig.tools ?: []
 		var quoted = isArray( declared ) ? declared.map( entry => '"#Strings::bxLiteral( toString( entry ) )#"' ) : []
-		var toolOptions = arguments.resolvedConfig.toolOptions ?: {}
+		var toolOptions = withVolumes( arguments.resolvedConfig.toolOptions ?: {}, declared )
 		var toolOptionsArgument = isStruct( toolOptions ) && toolOptions.len() ? ", #renderLiteral( toolOptions )#" : ""
 		lines.append( 'var #arguments.varName#Tools = new "models.build.ToolSelector@bxagents"().select( [ #quoted.toList( ", " )# ], #arguments.varName#OwnTools, "#Strings::bxLiteral( arguments.name )#"#toolOptionsArgument# )' )
 

@@ -97,6 +97,21 @@ class extends="testbox.system.BaseSpec" {
 				expect( adapter.validateOptions( { allowedPaths : [ "${env.DATA_DIR}" ] } ) ).toBeEmpty();
 			} );
 
+			it( "takes volumes in place of allowedPaths", function() {
+				expect( adapter.validateOptions( { volumes : { notes : { path : "~/Notes", mode : "rw" } }, dataHome : "~/.nanobox" } ) ).toBeEmpty();
+			} );
+
+			it( "refuses volumes and allowedPaths together", function() {
+				var problems = adapter.validateOptions( { volumes : {}, allowedPaths : [ "tmp" ] } );
+
+				expect( problems ).toHaveLength( 1 );
+				expect( problems[ 1 ] ).toInclude( "not both" );
+			} );
+
+			it( "reports a volume that is not valid", function() {
+				expect( adapter.validateOptions( { volumes : { notes : { mode : "rw" } } } )[ 1 ] ).toInclude( "needs a path" );
+			} );
+
 		} );
 	}
 

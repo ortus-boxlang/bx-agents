@@ -2,6 +2,8 @@
  * Loads the agent a project's `build` generated, to use it in this process: what `chat` talks to and what
  * `sessions fork` copies messages in.
  */
+import bxModules.bxagents.models.data.DataHome;
+
 class {
 
 	/**
@@ -24,6 +26,10 @@ class {
 	any function load( required string root ) {
 		if ( !len( trim( getSystemSetting( "BXAGENTS_DB", "" ) ) ) ) {
 			createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", new "models.store.ChatStorePath@bxagents"().prepared( arguments.root ) )
+		}
+		// the volumes and the data home are worked out from the same place the database is
+		if ( !len( trim( getSystemSetting( "BXAGENTS_HOME", "" ) ) ) ) {
+			createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_HOME", DataHome::forProject( arguments.root ).path() )
 		}
 		var factoryPath = arguments.root & "/.build/app/agent/GeneratedAgentFactory.bx"
 		var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()

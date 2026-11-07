@@ -22,12 +22,20 @@
  * This adapter ADDS to bx-ai's own tools (now, httpGet, webSearch, ...), which
  * keep coming from its registry; see supplements().
  */
+import bxModules.bxagents.models.data.Volumes;
+
 class {
 
 	/**
 	 * Names that stand for a folder the project cannot know in advance.
 	 */
 	variables.TOKENS = [ "tmp", "cwd" ]
+
+	/**
+	 * The options an agent can give. `volumes` and `dataHome` are filled in by the build from the project's own
+	 * `volumes` and `data.home`; they are not written by hand under toolOptions.
+	 */
+	variables.OPTIONS = [ "allowedPaths", "volumes", "dataHome" ]
 
 	/**
 	 * @toolsFactory Builds the file tools for a list of absolute folders. Defaults to bx-ai's FileSystemTools; tests pass a stand-in.
@@ -68,16 +76,29 @@ class {
 	 */
 	array function validateOptions( required any options ) {
 		if ( !isStruct( arguments.options ) ) {
-			return [ "must be a mapping with an allowedPaths list" ]
+			return [ "must be a mapping with an allowedPaths list, or volumes" ]
 		}
 		var errors = []
 		for ( var key in arguments.options ) {
-			if ( key != "allowedPaths" ) {
-				errors.append( "unknown option [#key#]. Valid options: allowedPaths" )
+			if ( !variables.OPTIONS.contains( key ) ) {
+				errors.append( "unknown option [#key#]. Valid options: #variables.OPTIONS.toList( ', ' )#" )
 			}
 		}
-		if ( !arguments.options.keyExists( "allowedPaths" ) ) {
-			return errors.len() ? errors : [ "needs allowedPaths: the folders the file tools may use, for example [ tmp, cwd ]" ]
+		var hasPaths = arguments.options.keyExists( "allowedPaths" )
+		var hasFence = arguments.options.keyExists( "volumes" )
+		if ( hasPaths && hasFence ) {
+			errors.append( "use volumes or allowedPaths, not both. Volumes are named folders set in Agent.yaml; allowedPaths are full paths" )
+			return errors
+		}
+		if ( hasFence ) {
+			errors.append( Volumes::problems( arguments.options.volumes ), true )
+			if ( arguments.options.keyExists( "dataHome" ) && ( !isSimpleValue( arguments.options.dataHome ) ) ) {
+				errors.append( "option [dataHome] must be a folder" )
+			}
+			return errors
+		}
+		if ( !hasPaths ) {
+			return errors.len() ? errors : [ "needs allowedPaths: the folders the file tools may use, for example [ tmp, cwd ], or volumes" ]
 		}
 		var paths = arguments.options.allowedPaths
 		if ( !isArray( paths ) || !paths.len() ) {
@@ -111,13 +132,34 @@ class {
 	 * @return bx-ai tools; empty when no folders are given, so the tools are never open by omission
 	 */
 	array function tools( struct options = {} ) {
+		if ( arguments.options.keyExists( "volumes" ) ) {
+			return volumeTools( arguments.options )
+		}
 		var paths = arguments.options.allowedPaths ?: []
 		if ( !paths.len() ) {
 			return []
 		}
-		var folders = paths.map( path => resolveFolder( path ) )
+		return fileTools( paths.map( path => resolveFolder( path ) ) )
+	}
+
+	/**
+	 * The file tools over the project's volumes, speaking in volume names (see VolumeFileTools).
+	 *
+	 * @options The agent's `toolOptions.bxai`: the `volumes` setting and the `data.home` it was written with
+	 */
+	private array function volumeTools( required struct options ) {
+		var home = new "models.data.DataHome@bxagents"( projectRoot : expandPath( "/" ), configured : arguments.options.dataHome ?: "" )
+		var fence = new "models.data.Volumes@bxagents"( arguments.options.volumes, home )
+		home.ensure()
+		return new "models.data.VolumeFileTools@bxagents"( fence, folders => fileTools( folders ) ).tools()
+	}
+
+	/**
+	 * bx-ai's file tools for a list of absolute folders.
+	 */
+	private array function fileTools( required array folders ) {
 		if ( !variables.useRealTools ) {
-			return variables.toolsFactory( folders )
+			return variables.toolsFactory( arguments.folders )
 		}
 
 		// scanClass() always registers; do it under a scratch module name and take it back out,
@@ -125,7 +167,7 @@ class {
 		var scratch = "bxagents-filetools-" & createUUID()
 		var registry = aiToolRegistry()
 		var built = registry.scanClass(
-			new "bxModules.bxai.models.tools.filesystem.FileSystemTools"( allowedPaths : folders ),
+			new "bxModules.bxai.models.tools.filesystem.FileSystemTools"( allowedPaths : arguments.folders ),
 			scratch
 		)
 		registry.unregisterByModule( scratch )

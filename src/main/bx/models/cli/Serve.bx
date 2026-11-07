@@ -40,6 +40,8 @@
  * nothing our own verb classes do can change it retroactively for the
  * process they're already running in.
  */
+import bxModules.bxagents.models.data.DataHome;
+
 class {
 
 	/**
@@ -129,6 +131,8 @@ class {
 		var databaseFile = paths.prepared( root )
 		var environment = createObject( "java", "java.util.HashMap" ).init()
 		environment.put( javaCast( "string", paths.variableName() ), javaCast( "string", databaseFile ) )
+		// the served app keeps its volumes and files in the same data home
+		environment.put( javaCast( "string", "BXAGENTS_HOME" ), javaCast( "string", DataHome::forProject( root ).path() ) )
 
 		var process = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( executable, configPath, true, environment )
 

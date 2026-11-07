@@ -1,0 +1,108 @@
+/**
+ * bx-ai's file tools, fenced into an agent's volumes and speaking in volume names.
+ *
+ * bx-ai's FileSystemTools works on full paths and tells the model where everything is on the machine. This wraps the
+ * tools it makes so that:
+ *
+ * - the model writes `volume:path` (for example `notes:todo.md`) and the path is worked out here, never trusted;
+ * - a tool that changes things is refused a path in a read only volume, while a tool that only reads, or the source
+ *   of a copy, may use it;
+ * - what comes back, results and error messages alike, names volumes and never a folder on the machine;
+ * - `listAllowedDirectories` answers with the volumes, their modes and their descriptions.
+ *
+ * It only changes how the tools are called. Which tools exist is still bx-ai's.
+ */
+import bxModules.bxagents.models.wizard.WizardCatalog;
+
+class {
+
+	static {
+		// the arguments of the file tools that name a place
+		PATH_ARGUMENTS = [ "path", "source", "destination", "sourcePath", "zipFilePath", "extractPath" ]
+		// in a tool that changes things, these arguments are only read
+		READ_ARGUMENTS = { copyFile : [ "source" ], zipFiles : [ "sourcePath" ], unzipFile : [ "zipFilePath" ] }
+	}
+
+	/**
+	 * @fence The Volumes the tools are fenced into
+	 * @makeTools A function that takes a list of absolute folders and returns bx-ai's file tools for them
+	 */
+	function init( required any fence, required any makeTools ) {
+		variables.fence = arguments.fence
+		variables.makeTools = arguments.makeTools
+		variables.changing = WizardCatalog::FILE_TOOLS_WRITE.map( function( tool ) {
+			return tool.name
+		} )
+		return this
+	}
+
+	/**
+	 * @return bx-ai's file tools over every volume, each one bound to the fence. Whether a tool may change a place is
+	 *         decided in front of it, from the volume's mode.
+	 */
+	array function tools() {
+		var out = variables.makeTools( variables.fence.folders( "any" ) )
+		for ( var tool in out ) {
+			bind( tool )
+		}
+		return out
+	}
+
+	// ---------------------------------------------------------------------------
+
+	/**
+	 * Puts the volume logic around one tool's callable and says how paths are written in its description.
+	 */
+	private void function bind( required any tool ) {
+		var fence = variables.fence
+		var name = arguments.tool.getName()
+		if ( name == "listAllowedDirectories" ) {
+			arguments.tool.setDescription( "List the volumes you can use: each one's name, whether it is read only or read and write, and what it is for. Paths are written volume:path." )
+			arguments.tool.setCallable( function() {
+				return fence.listing()
+			} )
+			return
+		}
+		var changes = variables.changing.contains( name )
+		var readOnlyArguments = static.READ_ARGUMENTS[ name ] ?: []
+		var pathArguments = static.PATH_ARGUMENTS
+		var inner = arguments.tool.getCallable()
+		var example = fence.all()[ fence.all().len() > 1 ? 2 : 1 ].name
+		arguments.tool.setDescription( arguments.tool.getDescription() & " Write every path as volume:path, for example #example#:todo.md. Use listAllowedDirectories to see the volumes." )
+		arguments.tool.setCallable( function() {
+			var passed = {}
+			for ( var key in arguments ) {
+				passed[ key ] = arguments[ key ]
+			}
+			try {
+				for ( var argument in pathArguments ) {
+					if ( passed.keyExists( argument ) ) {
+						passed[ argument ] = fence.resolve( passed[ argument ], changes && !readOnlyArguments.contains( argument ) ).path
+					}
+				}
+				if ( passed.keyExists( "paths" ) ) {
+					var wanted = isArray( passed.paths ) ? passed.paths : jsonDeserialize( passed.paths )
+					passed.paths = jsonSerialize( wanted.map( function( spec ) {
+						return fence.resolve( spec ).path
+					} ) )
+				}
+				var result = inner( argumentCollection = passed )
+			} catch ( any e ) {
+				throw( type = e.type, message = fence.present( e.message ) )
+			}
+			// what a file holds is the file's, so it is handed back as it is; the places it was found are named
+			if ( name == "readFile" ) {
+				return result
+			}
+			if ( name == "readMultipleFiles" && isStruct( result ) ) {
+				var named = {}
+				for ( var place in result ) {
+					named[ fence.present( place ) ] = result[ place ]
+				}
+				return named
+			}
+			return fence.present( result )
+		} )
+	}
+
+}

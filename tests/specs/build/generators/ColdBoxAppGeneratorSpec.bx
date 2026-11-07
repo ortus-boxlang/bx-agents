@@ -411,6 +411,31 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( '"yaml-tool-options-agent", { "bxplaywright" : { "baseURL" : "${env.APP_URL:http://localhost:8080}", "headless" : false, "profile" : "mobile" } } )' );
 			} );
 
+			it( "fences an agent's file tools into the project's volumes and stamps the data home", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/yaml-file-tools", buildDir );
+				var content = fileRead( result.agentFactory );
+
+				expect( content ).toInclude( '"bxai" : { "dataHome" : "~/.nanobox", "volumes" : { "notes" : { "mode" : "rw", "path" : "~/Notes" } } }' );
+			} );
+
+			it( "leaves an agent that names its own allowedPaths on those", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/yaml-file-tools-own-paths", buildDir );
+				var content = fileRead( result.agentFactory );
+
+				expect( content ).toInclude( '"bxai" : { "allowedPaths" : [ "tmp" ] }' );
+				expect( content ).notToInclude( '"volumes"' );
+			} );
+
+			it( "gives no volumes to an agent that lists no file tool", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/yaml-tools", buildDir );
+				var content = fileRead( result.agentFactory );
+
+				expect( content ).notToInclude( '"volumes"' );
+			} );
+
 			it( "attaches no module tools at all to an agent that lists none", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );
