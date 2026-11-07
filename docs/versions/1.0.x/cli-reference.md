@@ -846,6 +846,8 @@ bxAgents connect mail --remove
 bxAgents connect [--user=NAME] [--json]
 ```
 
+![bxAgents connect mail: the address, the wait, then connected](assets/tui/connect-cli.png)
+
 - Without a name it lists the services and whether you are connected (`--json` for a script).
 - With a name it prints an address and opens your browser, waits for the redirect on `127.0.0.1` (a free port, or `--port`), and finishes the sign in. `--no-open` only prints. `--timeout` is the seconds to wait, 300 by default.
 - `--remove` forgets your sign in. `--user` is whose: `local` by default, the one user an open server has.

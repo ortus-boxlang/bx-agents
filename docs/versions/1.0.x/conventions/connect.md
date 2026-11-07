@@ -55,6 +55,8 @@ Each way asks the same questions of the same place, so they never disagree about
 | Chat platforms | `/connect mail` sends an address that works once, for ten minutes. Open it in a browser and sign in |
 | HTTP | `GET /connect`, `POST /connect`, `POST /connect/remove` on the [agent API](../guides/agent-api.md) |
 
+![The terminal chat after /connect: not connected, the address to open, then connected](../assets/tui/connect-chat.png)
+
 When a person has not signed in to a service, the agent is told which one and how to connect, in one short line, so it can say so instead of "I cannot read your mail". The tools of a service appear in the same running agent once somebody has signed in; there is no restart.
 
 ## Where the browser comes back to
