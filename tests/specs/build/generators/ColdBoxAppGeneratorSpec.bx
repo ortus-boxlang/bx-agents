@@ -416,7 +416,7 @@ class extends="testbox.system.BaseSpec" {
 				var result = generateFor( fixtures & "/yaml-file-tools", buildDir );
 				var content = fileRead( result.agentFactory );
 
-				expect( content ).toInclude( '"bxai" : { "dataHome" : "~/.nanobox", "volumes" : { "notes" : { "mode" : "rw", "path" : "~/Notes" } } }' );
+				expect( content ).toInclude( '"bxai" : { "agentName" : "file-tools-agent", "dataHome" : "~/.nanobox", "volumes" : { "notes" : { "mode" : "rw", "path" : "~/Notes" } } }' );
 			} );
 
 			it( "leaves an agent that names its own allowedPaths on those", function() {
@@ -717,6 +717,8 @@ class extends="testbox.system.BaseSpec" {
 				// the data home is made with its folders, around whichever file is used
 				expect( content ).toInclude( 'dataHome().ensure( databaseFile( "./data/chat.db" ) )' );
 				expect( content ).toInclude( 'configured : ""' );
+				// the agent's name makes the conventional home, ~/.bxagents/<name>
+				expect( content ).toInclude( 'agentName : "' & config.name & '"' );
 			} );
 
 			it( "stamps data.home from Agent.yaml into the app so it keeps the data where serve and chat do", function() {

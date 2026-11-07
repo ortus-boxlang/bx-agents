@@ -22,8 +22,9 @@ or package as a portable `.bxa`.
 #### Data home and volumes
 
 - One **data home** holds everything an agent keeps (`chat.db`, `files/`, `skills/`, `backups/`).
-  It is `BXAGENTS_HOME`, else `data.home` in `Agent.yaml`, else `data/`. A built app with no home
-  chosen says so when it starts.
+  There is always one, by convention: `~/.bxagents/<agent name>`, outside the project and the
+  build. `BXAGENTS_HOME` or `data.home` in `Agent.yaml` choose another, and a project that already
+  has `data/chat.db` keeps using it.
 - **Volumes**: `volumes:` in `Agent.yaml` names host folders, read only or read and write. The file
   tools take `volume:path`, refuse full paths, `..` and symbolic links that leave a volume, and
   name volumes in results and errors.

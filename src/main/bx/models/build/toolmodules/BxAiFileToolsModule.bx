@@ -32,10 +32,10 @@ class {
 	variables.TOKENS = [ "tmp", "cwd" ]
 
 	/**
-	 * The options an agent can give. `volumes` and `dataHome` are filled in by the build from the project's own
+	 * The options an agent can give. `volumes`, `dataHome` and `agentName` are filled in by the build from the project's own
 	 * `volumes` and `data.home`; they are not written by hand under toolOptions.
 	 */
-	variables.OPTIONS = [ "allowedPaths", "volumes", "dataHome" ]
+	variables.OPTIONS = [ "allowedPaths", "volumes", "dataHome", "agentName" ]
 
 	/**
 	 * @toolsFactory Builds the file tools for a list of absolute folders. Defaults to bx-ai's FileSystemTools; tests pass a stand-in.
@@ -148,7 +148,7 @@ class {
 	 * @options The agent's `toolOptions.bxai`: the `volumes` setting and the `data.home` it was written with
 	 */
 	private array function volumeTools( required struct options ) {
-		var home = new "models.data.DataHome@bxagents"( projectRoot : expandPath( "/" ), configured : arguments.options.dataHome ?: "" )
+		var home = new "models.data.DataHome@bxagents"( projectRoot : expandPath( "/" ), configured : arguments.options.dataHome ?: "", agentName : arguments.options.agentName ?: "" )
 		var fence = new "models.data.Volumes@bxagents"( arguments.options.volumes, home )
 		home.ensure()
 		return new "models.data.VolumeFileTools@bxagents"( fence, folders => fileTools( folders ) ).tools()

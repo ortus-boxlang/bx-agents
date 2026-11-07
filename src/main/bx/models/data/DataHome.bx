@@ -11,11 +11,14 @@
  *   backups/       written by `bxAgents backup`
  * ```
  *
- * Where it is, first match wins:
+ * There is always a home, by convention. Where it is, first match wins:
  *
  * 1. the environment variable BXAGENTS_HOME
  * 2. `data.home` in `Agent.yaml`
- * 3. `data/` in the project folder (in a built app, `data/` inside the app)
+ * 3. the folder of BXAGENTS_DB, when that names a file called chat.db (what `serve` and `chat` set)
+ * 4. `data/` in the project, when it already holds a chat.db (a project from before the convention keeps its data)
+ * 5. `~/.bxagents/<agent name>`: outside the project and the build, so a new build never replaces it
+ * 6. `data/` in the project, for an agent with no name to go by
  *
  * The environment variable BXAGENTS_DB keeps naming the database file on its own, and wins for that file.
  *
@@ -27,6 +30,7 @@ class {
 		ENVIRONMENT_VARIABLE = "BXAGENTS_HOME"
 		DATABASE_VARIABLE    = "BXAGENTS_DB"
 		DEFAULT_FOLDER       = "data"
+		CONVENTION_FOLDER    = ".bxagents"
 		DATABASE_FILE        = "chat.db"
 		FOLDERS              = [ "files", "skills", "backups" ]
 	}
@@ -36,14 +40,16 @@ class {
 	 * @configured `data.home` from `Agent.yaml`; blank when it is not set
 	 * @environment A struct standing in for the environment ({ BXAGENTS_HOME, BXAGENTS_DB }); leave it out to read the real one
 	 * @userHome What `~` stands for; leave it blank to use the current user's home
+	 * @agentName The agent's name, which names the conventional home; blank when it is not known
 	 */
-	function init( required string projectRoot, string configured = "", struct environment, string userHome = "" ) {
+	function init( required string projectRoot, string configured = "", struct environment, string userHome = "", string agentName = "" ) {
 		variables.root = clean( arguments.projectRoot )
 		variables.configured = trim( arguments.configured )
 		variables.hasEnvironment = !isNull( arguments.environment )
 		if ( variables.hasEnvironment ) {
 			variables.environment = arguments.environment
 		}
+		variables.agentName = trim( arguments.agentName )
 		variables.userHome = len( trim( arguments.userHome ) ) ? clean( arguments.userHome ) : clean( createObject( "java", "java.lang.System" ).getProperty( "user.home" ) )
 		return this
 	}
@@ -90,7 +96,13 @@ class {
 			return absolute( variables.configured )
 		}
 		var beside = homeOfDatabase()
-		return len( beside ) ? beside : variables.root & "/" & static.DEFAULT_FOLDER
+		if ( len( beside ) ) {
+			return beside
+		}
+		if ( fileExists( projectData() & "/" & static.DATABASE_FILE ) ) {
+			return projectData()
+		}
+		return len( variables.agentName ) ? variables.userHome & "/" & static.CONVENTION_FOLDER & "/" & folderName( variables.agentName ) : projectData()
 	}
 
 	/**
@@ -103,7 +115,7 @@ class {
 	}
 
 	/**
-	 * @return environment, setting, database or default: which place gave the path. `database` is a home worked out from BXAGENTS_DB naming a chat.db
+	 * @return environment, setting, database, project, convention or default: which place gave the path. `database` is a home worked out from BXAGENTS_DB naming a chat.db; `project` is an existing data/chat.db in the project; `convention` is ~/.bxagents/<agent name>
 	 */
 	string function source() {
 		if ( len( setting( static.ENVIRONMENT_VARIABLE ) ) ) {
@@ -112,7 +124,13 @@ class {
 		if ( len( variables.configured ) ) {
 			return "setting"
 		}
-		return len( homeOfDatabase() ) ? "database" : "default"
+		if ( len( homeOfDatabase() ) ) {
+			return "database"
+		}
+		if ( fileExists( projectData() & "/" & static.DATABASE_FILE ) ) {
+			return "project"
+		}
+		return len( variables.agentName ) ? "convention" : "default"
 	}
 
 	/**
@@ -172,14 +190,14 @@ class {
 	}
 
 	/**
-	 * @return Text to show when the home was not chosen on purpose (it fell back to `data/` in the app), else blank.
-	 *         Quiet when BXAGENTS_DB names the database: `serve` sets it, and the data is then in a place that was chosen
+	 * @return Text to show when the home is the project's own `data/` only because the agent has no name to build the
+	 *         conventional home from, else blank
 	 */
 	string function warning() {
 		if ( source() != "default" || len( setting( static.DATABASE_VARIABLE ) ) ) {
 			return ""
 		}
-		return "The data home is [#path()#], the default. Set #static.ENVIRONMENT_VARIABLE# or `data.home` in Agent.yaml to keep it outside the app, so a new build does not replace it."
+		return "The data home is [#path()#]. Give the agent a name, or set #static.ENVIRONMENT_VARIABLE# or `data.home` in Agent.yaml, to keep it outside the project."
 	}
 
 	/**
@@ -212,6 +230,21 @@ class {
 	}
 
 	// ---------------------------------------------------------------------------
+
+	/**
+	 * @return data/ in the project folder
+	 */
+	private string function projectData() {
+		return variables.root & "/" & static.DEFAULT_FOLDER
+	}
+
+	/**
+	 * @return The agent's name as a folder name: letters, digits, dots, dashes and underscores
+	 */
+	private string function folderName( required string name ) {
+		var safe = arguments.name.reReplace( "[^A-Za-z0-9._-]+", "-", "all" ).reReplace( "^[.-]+", "" ).left( 64 )
+		return len( safe ) ? safe : "agent"
+	}
 
 	/**
 	 * `serve` and `chat` name the database with BXAGENTS_DB. When it names a file called chat.db and nothing chose a home,
@@ -308,7 +341,7 @@ class {
 			"- `skills/`: skills the agent saved.",
 			"- `backups/`: made by `bxAgents backup`.",
 			"",
-			"Back it up with `bxAgents backup`. Put it somewhere that survives a new build by setting #static.ENVIRONMENT_VARIABLE# or `data.home` in `Agent.yaml`.",
+			"Back it up with `bxAgents backup`. Move it by setting #static.ENVIRONMENT_VARIABLE# or `data.home` in `Agent.yaml`.",
 			""
 		].toList( nl )
 	}

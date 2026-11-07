@@ -21,25 +21,27 @@ An agent keeps its state in one place, the **data home**, and reaches the rest o
   backups/       written by bxAgents backup
 ```
 
-Where it is, first match wins:
+There is always a home. Where it is, first match wins:
 
 1. The environment variable `BXAGENTS_HOME`.
 2. `data.home` in `Agent.yaml`.
 3. The folder of `BXAGENTS_DB` when that names a file called `chat.db` (what `serve` and `chat` set).
-4. `data/` in the project, or `data/` inside a built app.
+4. `data/` in the project, when it already holds a `chat.db`. A project from before this convention keeps its data.
+5. **`~/.bxagents/<agent name>`**, the convention. It is outside the project and outside the build, so a new build never replaces it, and it is the same place in development and when deployed.
+6. `data/` in the project, only for an agent that has no name.
 
 ```yaml
 # Agent.yaml
+name: nanobox
 data:
   home: ~/.nanobox      # an absolute path, one starting with ~, or one relative to the project
 ```
 
 `BXAGENTS_DB` keeps working and names the database file on its own.
 
-The folders and the README are made the first time the app or `chat` starts. Nothing is made just by asking where the home is.
+The agent name is turned into a safe folder name: letters, digits, dots, dashes and underscores, the rest become a dash. Two projects with the same agent name share one home, so give them different names, or set `data.home` on one.
 
-!!! warning
-    A built app that has no home chosen keeps its data in `data/` inside the app, and says so when it starts. A new build can then replace it. Set `BXAGENTS_HOME` where the app runs, or `data.home`, to keep it outside.
+The folders and the README are made the first time the app or `chat` starts. Nothing is made just by asking where the home is.
 
 ## Volumes
 
