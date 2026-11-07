@@ -1,0 +1,119 @@
+/**
+ * The OAuth token store that seals every record with the vault key.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * Saving, reading, expiring and removing records, and what never sits in the clear.
+	 */
+	function run() {
+		describe( "VaultTokenStore", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-tokens-" );
+				variables.chatStore = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.vault = new bxagents.models.vault.VaultService( chatStore, new bxagents.models.vault.VaultKey( dir ) );
+				variables.tokens = new bxagents.models.vault.VaultTokenStore( chatStore, vault );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "gives back what it was given", function() {
+				tokens.set( "token:https://mail.example.com/mcp:alice", { accessToken : "at-123", scope : "mail.read", n : 3 } );
+
+				var back = tokens.get( "token:https://mail.example.com/mcp:alice" );
+				expect( back.accessToken ).toBe( "at-123" );
+				expect( back.scope ).toBe( "mail.read" );
+			} );
+
+			it( "answers an empty struct for a key it does not have", function() {
+				expect( tokens.get( "token:nobody" ) ).toBe( {} );
+			} );
+
+			it( "replaces a record saved under the same key", function() {
+				tokens.set( "k", { v : 1 } );
+				tokens.set( "k", { v : 2 } );
+
+				expect( tokens.get( "k" ).v ).toBe( 2 );
+				expect( chatStore.rows( "SELECT COUNT(*) AS n FROM oauth_records" )[ 1 ].n ).toBe( 1 );
+			} );
+
+			it( "removes a record, and removing what is not there is fine", function() {
+				tokens.set( "k", { v : 1 } );
+
+				tokens.remove( "k" );
+				tokens.remove( "k" );
+
+				expect( tokens.get( "k" ) ).toBe( {} );
+			} );
+
+			it( "forgets a record whose time is up", function() {
+				tokens.set( "short", { v : 1 }, 1 );
+				tokens.set( "forever", { v : 1 } );
+				chatStore.exec( "UPDATE oauth_records SET expiresAt = :past WHERE expiresAt IS NOT NULL", { past : { value : dateAdd( "n", -5, now() ), cfsqltype : "timestamp" } } );
+
+				expect( tokens.get( "short" ) ).toBe( {} );
+				expect( tokens.get( "forever" ).v ).toBe( 1 );
+			} );
+
+			it( "purges what has expired", function() {
+				tokens.set( "short", { v : 1 }, 1 );
+				chatStore.exec( "UPDATE oauth_records SET expiresAt = :past", { past : { value : dateAdd( "n", -5, now() ), cfsqltype : "timestamp" } } );
+
+				expect( tokens.purgeExpired() ).toBe( 1 );
+				expect( chatStore.rows( "SELECT COUNT(*) AS n FROM oauth_records" )[ 1 ].n ).toBe( 0 );
+			} );
+
+			it( "never keeps the tokens, the key or the person in the clear", function() {
+				tokens.set( "token:https://mail.example.com/mcp:alice", { accessToken : "super-secret-token", refreshToken : "refresh-secret" } );
+
+				var dump = jsonSerialize( chatStore.rows( "SELECT * FROM oauth_records" ) );
+				expect( dump ).notToInclude( "super-secret-token" );
+				expect( dump ).notToInclude( "refresh-secret" );
+				expect( dump ).notToInclude( "alice" );
+				expect( dump ).notToInclude( "mail.example.com" );
+			} );
+
+			it( "refuses a sealed value moved onto another record", function() {
+				tokens.set( "alices", { accessToken : "alice-token" } );
+				tokens.set( "bobs", { accessToken : "bob-token" } );
+				var rows = chatStore.rows( "SELECT recordKey, sealed FROM oauth_records" );
+				chatStore.exec( "UPDATE oauth_records SET sealed = :s WHERE recordKey = :k", { s : rows[ 1 ].sealed, k : rows[ 2 ].recordKey } );
+
+				// whichever row got the other's value cannot open it
+				var refused = 0;
+				for ( var name in [ "alices", "bobs" ] ) {
+					try {
+						tokens.get( name );
+					} catch ( any e ) {
+						refused += e.type == "BxAgents.VaultCannotOpen" ? 1 : 0;
+					}
+				}
+				expect( refused ).toBe( 1 );
+			} );
+
+			it( "says plainly when a record was sealed with another key", function() {
+				tokens.set( "k", { v : 1 } );
+				chatStore.exec( "UPDATE oauth_records SET keyId = 'deadbeef'" );
+				var fresh = new bxagents.models.vault.VaultTokenStore( chatStore, new bxagents.models.vault.VaultService( chatStore, new bxagents.models.vault.VaultKey( dir ) ) );
+
+				expect( function() { fresh.get( "k" ); } ).toThrow( "BxAgents.VaultWrongKey" );
+			} );
+
+			it( "does not make a new key while sign-ins are saved and the key file is gone", function() {
+				tokens.set( "k", { v : 1 } );
+				fileDelete( dir & "/vault.key" );
+				var fresh = new bxagents.models.vault.VaultTokenStore( chatStore, new bxagents.models.vault.VaultService( chatStore, new bxagents.models.vault.VaultKey( dir ) ) );
+
+				expect( function() { fresh.get( "k" ); } ).toThrow( "BxAgents.VaultKeyMissing" );
+				expect( fileExists( dir & "/vault.key" ) ).toBeFalse();
+			} );
+
+		} );
+	}
+
+}

@@ -278,6 +278,41 @@ class {
 
 	// ----------------------------------------------------------------------------------
 
+	/**
+	 * Seals a value with the vault key for a store that is not the secrets table (the OAuth token store).
+	 *
+	 * @value   The text to seal
+	 * @context What the value belongs to; it must be the same again to open it
+	 *
+	 * @return { sealed, keyId }
+	 */
+	struct function sealFor( required string value, required string context ) {
+		loadKey( true )
+		return { sealed : variables.crypto.seal( arguments.value, arguments.context ), keyId : variables.keyId }
+	}
+
+	/**
+	 * Opens a value sealed by sealFor().
+	 *
+	 * @sealed  The sealed text
+	 * @keyId   The key id saved with it
+	 * @context What it belongs to
+	 *
+	 * @return The text
+	 *
+	 * @throws BxAgents.VaultWrongKey when it was sealed with another key
+	 */
+	string function openFor( required string sealed, required string keyId, required string context ) {
+		var key = loadKey( false )
+		if ( arguments.keyId != key.keyId ) {
+			throw(
+				type    = "BxAgents.VaultWrongKey",
+				message = "A saved sign-in was sealed with another vault key (#arguments.keyId#, this one is #key.keyId#). Set #variables.keys.variableName()# to the key it was sealed with."
+			)
+		}
+		return variables.crypto.open( arguments.sealed, arguments.context )
+	}
+
 	private struct function target( required string name, struct options = {} ) {
 		var name = trim( arguments.name )
 		if ( !reFind( "^[A-Za-z][A-Za-z0-9_]{0,63}$", name ) ) {
@@ -344,7 +379,9 @@ class {
 	 */
 	private struct function loadKey( required boolean forWriting ) {
 		if ( !isObject( variables.crypto ) ) {
-			var empty = variables.store.rows( "SELECT COUNT(*) AS n FROM vault_secrets" )[ 1 ].n == 0
+			var secrets = variables.store.rows( "SELECT COUNT(*) AS n FROM vault_secrets" )[ 1 ].n
+			var records = variables.store.rows( "SELECT COUNT(*) AS n FROM oauth_records" )[ 1 ].n
+			var empty   = secrets == 0 && records == 0
 			var key = variables.keys.load( allowCreate = empty )
 			variables.crypto = new VaultCrypto( key.bytes )
 			variables.keyId = key.id
