@@ -160,6 +160,50 @@ class extends="testbox.system.BaseSpec" {
 					expect( who.agent ).toBe( "fake" );
 				} );
 
+				describe( "skills", function() {
+
+					beforeEach( function() {
+						variables.home = new bxagents.models.data.DataHome( projectRoot : dir, configured : dir & "/home", environment : {}, userHome : "/home/someone" );
+						variables.shared = new bxagents.models.api.AgentService( agent, store, nullValue(), {
+							data : new bxagents.models.data.AppData( home, new bxagents.models.data.Volumes( {}, home ) )
+						} );
+						variables.globalBefore = aiGlobalSkills().slice( 1, aiGlobalSkills().len() );
+					} );
+
+					afterEach( function() {
+						var global = aiGlobalSkills();
+						global.clear();
+						global.append( globalBefore, true );
+					} );
+
+					it( "lists the skills with their origin, and never a folder on the machine", function() {
+						new bxagents.models.skills.SkillLibrary( home ).save( "report", "Monthly report.", "Steps." );
+
+						var listed = shared.skills( ada ).data().skills.filter( s => s.name == "report" );
+
+						expect( listed ).toHaveLength( 1 );
+						expect( listed[ 1 ].origin ).toBe( "agent" );
+						expect( listed[ 1 ].description ).toBe( "Monthly report." );
+						expect( jsonSerialize( shared.skills( ada ).data() ) ).notToInclude( dir.replace( "\", "/", "all" ) );
+					} );
+
+					it( "still lists the skills when the app does not know its data home", function() {
+						expect( service.skills( ada ).succeeded() ).toBeTrue();
+						expect( service.skills( ada ).data() ).toHaveKey( "skills" );
+					} );
+
+					it( "lets a conversation and the commands list the skills", function() {
+						new bxagents.models.skills.SkillLibrary( home ).save( "report", "Monthly report.", "Steps." );
+
+						expect( shared.conversation( ada ).skills().map( s => s.name ) ).toInclude( "report" );
+						var reply = shared.commands().execute( "ada", "c-" & createUUID(), "/skills", "web", false );
+						expect( jsonSerialize( reply.blocks ) ).toInclude( "report" );
+						expect( jsonSerialize( reply.blocks ) ).toInclude( "agent" );
+						expect( jsonSerialize( reply.blocks ) ).notToInclude( dir.replace( "\", "/", "all" ) );
+					} );
+
+				} );
+
 				describe( "volumes and the data report", function() {
 
 					beforeEach( function() {

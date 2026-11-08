@@ -1,0 +1,26 @@
+/**
+ * /skills: the skills the agent can load, and who wrote each: the project, or the agent itself. Never a folder on
+ * the machine, so it is safe to show on every transport.
+ */
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "skills"
+	}
+
+	string function hint() {
+		return "list the skills the agent can load"
+	}
+
+	any function run( required any context, required string args ) {
+		var skills = arguments.context.chat().skills()
+		if ( !skills.len() ) {
+			return arguments.context.reply().text( "The agent has no skills." )
+		}
+		var lines = skills.map( function( s ) {
+			return left( s.name & repeatString( " ", 24 ), 24 ) & left( ( s.origin == "agent" ? "agent" : "project" ) & repeatString( " ", 9 ), 9 ) & s.description
+		} )
+		return arguments.context.reply().text( "Skills:" & char( 10 ) & lines.toList( char( 10 ) ) )
+	}
+
+}

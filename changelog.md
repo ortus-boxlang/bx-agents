@@ -19,6 +19,17 @@ or package as a portable `.bxa`.
 
 ### Added
 
+#### Skills
+
+- **The agent can save skills of its own.** The root agent gets a `saveSkill( name, description, content )`
+  tool: after a task that took real steps and is likely to come up again, it writes a skill to
+  `skills/` in the data home and has it in its skill list at once, with no restart. The skills it saved
+  are loaded again when the app starts. Each save is approved by a person unless `skills.autoApprove` is
+  true, and `skills.agentCanSave: false` takes the tool away. A skill of the project's always wins: the
+  agent cannot take its name or replace it. Backups carry the saved skills.
+- **`/skills` and `GET /skills`** list every skill with its description and who wrote it, the project or the
+  agent, never a folder on the machine. The client has `skills()`.
+
 #### Memory
 
 - **Every agent remembers in the chat database by default.** With no `memory:` in `Agent.yaml`, the root

@@ -619,6 +619,24 @@ class extends="testbox.system.BaseSpec" {
 				expect( appSource ).toInclude( 'new "models.store.ChatStore@bxagents"( "" ).migrate()' );
 			} );
 
+			it( "gives only the root agent the saveSkill tool, and loads the agent's saved skills before any agent is built", function() {
+				var result = generateFor( fixtures & "/subagents-chain", newBuildDir() );
+
+				var factory = fileRead( result.agentFactory );
+				expect( factory.reMatch( 'SkillWiring@bxagents"\(\)\.attach\(' ) ).toHaveLength( 1 );
+				expect( factory ).toInclude( 'SkillWiring@bxagents"().attach( agent, {  }, ' );
+				expect( factory.reMatch( 'SkillWiring@bxagents"\(\)\.load\(' ) ).toHaveLength( 1 );
+				expect( factory.find( 'SkillWiring@bxagents"().load(' ) ).toBeLT( factory.find( "subagent_" ) );
+			} );
+
+			it( "passes the skills settings and the data home to the wiring", function() {
+				var result = generateFor( fixtures & "/with-skills", newBuildDir() );
+
+				var factory = fileRead( result.agentFactory );
+				expect( factory ).toInclude( '"autoApprove" : true' );
+				expect( factory ).toInclude( 'SkillWiring@bxagents"().attach( agent, {' );
+			} );
+
 			it( "attaches the vault tools to an agent that declares a vault, and gives the app the shared database", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/with-vault", buildDir );

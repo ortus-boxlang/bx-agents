@@ -85,6 +85,35 @@ The agent writes a path as `volume:path`, for example `notes:todo.md`. A path wi
 - **Over the API:** `GET /volumes` answers the same list to anyone who may call the API. `GET /data` answers the data home, the size of each part and the folder of each volume, and is for admins only, since it shows paths.
 - **In `doctor`:** it reports the data home, where it came from, and whether it can be written. It makes nothing.
 
+## Skills the agent saves
+
+A skill is a folder with a `SKILL.md`: instructions the agent loads by name when a task calls for them. Two places hold them:
+
+| Place | Written by | Loaded |
+|---|---|---|
+| `skills/` and `.agents/skills/` in the project, and the skills extensions carry | You, or `bxAgents skills install` | Copied into the build |
+| `skills/` in the data home | The agent, with its `saveSkill` tool | At start, and the moment a skill is saved |
+
+After a task that took real steps and is likely to come up again, the root agent can call `saveSkill( name, description, content )`. The skill is written to the data home and is in the agent's skill list at once, with no restart. Subagents are given the skills when they are built; they cannot save any.
+
+- **Yours win.** The agent cannot take the name of a skill of the project's or replace it. It can save over a skill it wrote itself, to improve it.
+- **Approval.** Each save is approved by a person, as for any tool that needs approval, unless `skills.autoApprove: true`.
+- **Limits.** A name is a folder name (letters, digits, `.`, `_`, `-`). A description is up to 500 characters and the content up to 20,000. The agent keeps up to 50 skills; saving over one it has is always allowed.
+- **Off switch.** `skills.agentCanSave: false` takes the tool away.
+
+```yaml
+skills:
+  agentCanSave: true     # default true; the root agent only
+  autoApprove: false     # default false
+```
+
+A saved skill is part of the data home, so `backup` and `restore` carry it. To remove one, delete its folder.
+
+### Seeing the skills
+
+- **In chat:** `/skills` lists every skill with who wrote it, the project or the agent.
+- **Over the API:** `GET /skills` answers `{ skills: [ { name, description, origin } ] }` to anyone who may call the API. It never shows a folder on the machine.
+
 ## `bxAgents data`
 
 ```bash

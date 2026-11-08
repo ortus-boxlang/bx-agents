@@ -1,0 +1,141 @@
+/**
+ * The saveSkill tool of the root agent: what it saves, who approves it, and that a saved skill reaches the agent
+ * at once. bx-ai's global skill list is shared by the process, so each test puts it back as it found it.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "skills.SkillWiring", function() {
+
+			beforeEach( function() {
+				variables.dir = replace( createTempDirectory( prefix = "bxagents-skillwiring-" ), "\", "/", "all" );
+				variables.before = aiGlobalSkills().slice( 1, aiGlobalSkills().len() );
+				variables.wiring = new bxagents.models.skills.SkillWiring();
+				variables.saveHome = createObject( "java", "java.lang.System" ).getProperty( "BXAGENTS_HOME" ) ?: "";
+				createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_HOME", dir & "/home" );
+			} );
+
+			afterEach( function() {
+				if ( len( saveHome ) ) {
+					createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_HOME", saveHome );
+				} else {
+					createObject( "java", "java.lang.System" ).clearProperty( "BXAGENTS_HOME" );
+				}
+				var global = aiGlobalSkills();
+				global.clear();
+				global.append( before, true );
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function newAgent() {
+				return aiAgent(
+					name         = "boss",
+					model        = aiModel( provider = "mock", options = { providerOptions : { responses : [ "ok" ] } } ),
+					checkpointer = aiMemory( memory = "cache", config = {} )
+				);
+			}
+
+			function requestFor() {
+				return new bxModules.bxai.models.requests.AiChatRequest( new bxModules.bxai.models.runnables.AiMessage(), {}, { userId : "ada", threadId : "t-1" } );
+			}
+
+			function call( required any agent, required struct args ) {
+				return jsonDeserialize( agent.getTools().filter( t => t.getName() == "saveSkill" )[ 1 ].invoke( args, requestFor() ) );
+			}
+
+			function approvalGuards( required any agent ) {
+				return agent.getMiddleware().filter( m => isInstanceOf( m, "bxModules.bxai.models.middleware.core.HumanInTheLoopMiddleware" ) );
+			}
+
+			describe( "the settings", function() {
+
+				it( "accept nothing, and the two settings", function() {
+					expect( wiring.problems( {} ) ).toBeEmpty();
+					expect( wiring.problems( { agentCanSave : true, autoApprove : false } ) ).toBeEmpty();
+				} );
+
+				it( "refuse a setting they do not know, naming the ones they do", function() {
+					var found = wiring.problems( { saveAlways : true } );
+					expect( found ).toHaveLength( 1 );
+					expect( found[ 1 ] ).toInclude( "agentCanSave" );
+					expect( found[ 1 ] ).toInclude( "autoApprove" );
+				} );
+
+				it( "want true or false, not a number or a word", function() {
+					expect( wiring.problems( { autoApprove : "maybe" } ) ).toHaveLength( 1 );
+					expect( wiring.problems( { agentCanSave : 1 } ) ).toHaveLength( 1 );
+				} );
+
+				it( "throw from attach with the same words", function() {
+					expect( function() {
+						wiring.attach( newAgent(), { autoApprove : "maybe" }, "boss" );
+					} ).toThrow( "BxAgents.InvalidSkills" );
+				} );
+
+			} );
+
+			describe( "the tool", function() {
+
+				it( "is on the agent by default, described for the model", function() {
+					var agent = wiring.attach( newAgent(), {}, "boss" );
+
+					var tool = agent.getTools().filter( t => t.getName() == "saveSkill" );
+					expect( tool ).toHaveLength( 1 );
+					expect( tool[ 1 ].getSchema().function.parameters.required.sort( "text" ) ).toBe( [ "content", "description", "name" ] );
+				} );
+
+				it( "is left off when agentCanSave is false", function() {
+					var agent = wiring.attach( newAgent(), { agentCanSave : false }, "boss" );
+
+					expect( agent.getTools().filter( t => t.getName() == "saveSkill" ) ).toBeEmpty();
+					expect( approvalGuards( agent ) ).toBeEmpty();
+				} );
+
+				it( "needs a person's approval by default, and not with autoApprove", function() {
+					expect( approvalGuards( wiring.attach( newAgent(), {}, "boss" ) ) ).toHaveLength( 1 );
+					expect( approvalGuards( wiring.attach( newAgent(), { autoApprove : true }, "boss" ) ) ).toBeEmpty();
+				} );
+
+				it( "saves the skill in the data home and gives it to the agent at once", function() {
+					var agent = wiring.attach( newAgent(), { autoApprove : true }, "boss" );
+
+					var answer = call( agent, { name : "release-notes", description : "Writes release notes after a release.", content : "1. List merged pull requests." } );
+
+					expect( answer ).toBe( { ok : true, name : "release-notes", created : true } );
+					expect( fileExists( dir & "/home/skills/release-notes/SKILL.md" ) ).toBeTrue();
+					expect( agent.getAvailableSkills().map( s => s.getName() ) ).toInclude( "release-notes" );
+					expect( agent.buildSystemMessage( true ) ).toInclude( "Writes release notes after a release." );
+				} );
+
+				it( "says why a skill was not saved, so the agent can try again", function() {
+					var agent = wiring.attach( newAgent(), { autoApprove : true }, "boss" );
+
+					var answer = call( agent, { name : "../escape", description : "Bad.", content : "Bad." } );
+
+					expect( answer.ok ).toBeFalse();
+					expect( answer.reason ).toInclude( "name" );
+					expect( directoryExists( dir & "/home/skills" ) ).toBeFalse();
+				} );
+
+			} );
+
+			describe( "load", function() {
+
+				it( "brings back what the agent saved before a restart, for the agents built afterwards", function() {
+					var first = wiring.attach( newAgent(), { autoApprove : true }, "boss" );
+					call( first, { name : "report", description : "Monthly report.", content : "Steps." } );
+					aiGlobalSkills().clear();
+
+					expect( wiring.load( "", "boss" ) ).toBe( [ "report" ] );
+
+					expect( newAgent().getAvailableSkills().map( s => s.getName() ) ).toInclude( "report" );
+				} );
+
+			} );
+
+		} );
+	}
+
+}

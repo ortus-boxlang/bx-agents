@@ -1,0 +1,198 @@
+/**
+ * The skills an agent can load, from two places:
+ *
+ *   project   skills/ and .agents/skills/ of the project, and the skills extensions carry. Written by a person.
+ *   agent     <data home>/skills/<name>/SKILL.md. Written by the agent with its saveSkill tool.
+ *
+ * bx-ai keeps one list of global skills that every agent is given when it is built. This class puts the agent's own
+ * skills in that list, and saves a new one in the folder and in the list, so an agent built later has it. A skill
+ * of the project's always wins: the agent can neither take its name nor replace it.
+ *
+ * `listing()` is safe to show to anyone: names, descriptions and origin, never a folder on the machine.
+ */
+import bxModules.bxagents.models.util.NameRules;
+
+class {
+
+	static {
+		MAX_DESCRIPTION = 500
+		MAX_CONTENT     = 20000
+		// How many skills the agent may keep; saving over one it already has is always allowed
+		MAX_SKILLS      = 50
+	}
+
+	/**
+	 * @dataHome A DataHome. Without one the library can list but cannot tell the agent's skills from the project's,
+	 *           and cannot save.
+	 */
+	function init( any dataHome ) {
+		variables.dataHome = arguments.dataHome ?: ""
+		return this
+	}
+
+	/**
+	 * @return The absolute folder of the agent's skills, with forward slashes. It is not made. Blank without a data home.
+	 */
+	string function folder() {
+		return isObject( variables.dataHome ) ? replace( variables.dataHome.folder( "skills" ), "\", "/", "all" ) : ""
+	}
+
+	/**
+	 * The skills the agent saved earlier.
+	 *
+	 * @return An array of AiSkill
+	 */
+	array function saved() {
+		if ( !len( folder() ) ) {
+			return []
+		}
+		return bxModules.bxai.models.skills.AiSkill::fromDirectory( folder() ).filter( s => isObject( s ) )
+	}
+
+	/**
+	 * Puts the agent's saved skills in bx-ai's global list, unless a skill of the project has the name.
+	 * Safe to run more than once.
+	 *
+	 * @return The names that were added
+	 */
+	array function load() {
+		var added = []
+		var global = aiGlobalSkills()
+		for ( var skill in saved() ) {
+			var at = positionOf( global, skill.getName() )
+			if ( at == 0 ) {
+				global.append( skill )
+				added.append( skill.getName() )
+			} else if ( isAgents( global[ at ] ) ) {
+				// the file on disk is the truth for what the agent saved
+				global[ at ] = skill
+			}
+		}
+		return added
+	}
+
+	/**
+	 * @return [ { name, description, origin } ] sorted by name; origin is project or agent
+	 */
+	array function listing() {
+		return aiGlobalSkills()
+			.map( s => { name : s.getName(), description : s.getDescription(), origin : originOf( s ) } )
+			.sort( ( a, b ) => compareNoCase( a.name, b.name ) )
+	}
+
+	/**
+	 * @skill An AiSkill
+	 *
+	 * @return agent when the skill is one the agent saved, otherwise project
+	 */
+	string function originOf( required any skill ) {
+		return isAgents( arguments.skill ) ? "agent" : "project"
+	}
+
+	/**
+	 * What is wrong with a skill the agent wants to save, in words for the agent.
+	 *
+	 * @name The skill's name, also its folder
+	 * @description What it does and when to use it
+	 * @content The instructions
+	 *
+	 * @return An array of messages, empty when it can be saved
+	 */
+	array function problems( required string name, required string description, required string content ) {
+		var found = []
+		if ( !NameRules::isSafeFolder( arguments.name, 64 ) ) {
+			found.append( "The name must be 1 to 64 characters: letters, digits, . _ and -, starting with a letter or digit. Use something like release-notes." )
+		}
+		if ( !len( trim( arguments.description ) ) ) {
+			found.append( "The description is empty. Say what the skill does and when to use it, in a sentence or two." )
+		} else if ( len( trim( arguments.description ) ) > static.MAX_DESCRIPTION ) {
+			found.append( "The description is longer than #static.MAX_DESCRIPTION# characters. Keep it to what the skill does and when to use it." )
+		}
+		if ( !len( trim( arguments.content ) ) ) {
+			found.append( "The content is empty. Write the steps or knowledge the skill holds." )
+		} else if ( len( arguments.content ) > static.MAX_CONTENT ) {
+			found.append( "The content is longer than #static.MAX_CONTENT# characters. Make it shorter, or split it into two skills." )
+		}
+		return found
+	}
+
+	/**
+	 * Saves a skill in the data home and in the global list. A skill of the agent's own with that name is replaced.
+	 *
+	 * @name The skill's name, also its folder
+	 * @description What it does and when to use it
+	 * @content The instructions
+	 *
+	 * @return { ok : true, name, created : boolean, skill : AiSkill } or { ok : false, reason }. It never throws for a bad request.
+	 */
+	struct function save( required string name, required string description, required string content ) {
+		if ( !len( folder() ) ) {
+			return { ok : false, reason : "There is nowhere to keep skills here." }
+		}
+		var skillName = trim( arguments.name )
+		var found = problems( skillName, arguments.description, arguments.content )
+		if ( found.len() ) {
+			return { ok : false, reason : found.toList( " " ) }
+		}
+		var global = aiGlobalSkills()
+		var at = positionOf( global, skillName )
+		if ( at > 0 && !isAgents( global[ at ] ) ) {
+			return { ok : false, reason : "[#global[ at ].getName()#] is a skill of the project and cannot be replaced. Choose another name." }
+		}
+		var existing = directoryExists( folder() & "/" & skillName )
+		if ( !existing && at == 0 && saved().len() >= static.MAX_SKILLS ) {
+			return { ok : false, reason : "You already keep #static.MAX_SKILLS# skills. Save over one of them, or ask a person to remove one with bxAgents skills." }
+		}
+		var file = folder() & "/" & skillName & "/SKILL.md"
+		directoryCreate( getDirectoryFromPath( file ), true, true )
+		fileWrite( file, render( skillName, arguments.description, arguments.content ), "UTF-8" )
+		var skill = bxModules.bxai.models.skills.AiSkill::fromPath( file )
+		if ( at > 0 ) {
+			global[ at ] = skill
+		} else {
+			global.append( skill )
+		}
+		return { ok : true, name : skillName, created : !existing, skill : skill }
+	}
+
+	/**
+	 * Gives a running agent a skill, replacing the one it has with the same name. The system message is rebuilt on
+	 * the agent's next run.
+	 *
+	 * @agent An AiAgent
+	 * @skill An AiSkill
+	 */
+	void function offer( required any agent, required any skill ) {
+		var pool = arguments.agent.getAvailableSkills()
+		var at = positionOf( pool, arguments.skill.getName() )
+		if ( at > 0 ) {
+			pool[ at ] = arguments.skill
+			// the cached system message names the old description
+			arguments.agent.buildSystemMessage( true )
+		} else {
+			arguments.agent.addAvailableSkill( arguments.skill )
+		}
+	}
+
+	private string function render( required string name, required string description, required string content ) {
+		// A folded block scalar needs no quoting or escaping, so any description is valid YAML and reads back as written
+		var oneLine = trim( reReplace( arguments.description, "\s+", " ", "all" ) )
+		return "---" & char( 10 )
+			& "name: " & arguments.name & char( 10 )
+			& "description: >" & char( 10 )
+			& "  " & oneLine & char( 10 )
+			& "---" & char( 10 )
+			& trim( arguments.content ) & char( 10 )
+	}
+
+	private boolean function isAgents( required any skill ) {
+		var path = replace( arguments.skill.getFilePath() ?: "", "\", "/", "all" )
+		return len( path ) && len( folder() ) && path.startsWith( folder() & "/" )
+	}
+
+	private numeric function positionOf( required array skills, required string name ) {
+		var wanted = arguments.name
+		return arguments.skills.find( s => compareNoCase( s.getName(), wanted ) == 0 )
+	}
+
+}

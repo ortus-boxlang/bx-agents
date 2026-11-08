@@ -1,0 +1,115 @@
+/**
+ * Connects an agent to the skills it can save, from the `skills` block of Agent.yaml:
+ *
+ *   skills:
+ *     agentCanSave: true     # the root agent has the saveSkill tool (default true; subagents never get it)
+ *     autoApprove: false     # a person approves each save (default false)
+ *
+ * The generated agent factory calls load() once before any agent is built, so the skills the agent saved earlier
+ * are in every agent's list, and attach() on the root agent for the tool.
+ */
+class {
+
+	static {
+		KNOWN_KEYS = [ "agentCanSave", "autoApprove" ]
+	}
+
+	/**
+	 * The problems in a `skills` block, in words for the author.
+	 *
+	 * @settings The `skills` block
+	 *
+	 * @return An array of messages, empty when the block is fine
+	 */
+	array function problems( required struct settings ) {
+		var found = []
+		for ( var key in arguments.settings ) {
+			if ( !static.KNOWN_KEYS.findNoCase( key ) ) {
+				found.append( "skills.#key# is not a setting. The settings are agentCanSave and autoApprove." )
+			} else if ( !isTrueBoolean( arguments.settings[ key ] ) ) {
+				found.append( "skills.#key# must be true or false." )
+			}
+		}
+		return found
+	}
+
+	/**
+	 * Puts the skills the agent saved earlier in the list every agent is given. Safe to run more than once.
+	 *
+	 * @dataHome `data.home` from Agent.yaml, blank when not set
+	 * @agentName The root agent's name
+	 *
+	 * @return The names that were added
+	 */
+	array function load( string dataHome = "", string agentName = "" ) {
+		return library( arguments.dataHome, arguments.agentName ).load()
+	}
+
+	/**
+	 * Gives the agent its saveSkill tool, with a person's approval before each save unless the block turns that off.
+	 *
+	 * @agent The root AiAgent
+	 * @settings The `skills` block
+	 * @agentName The agent's name
+	 * @dataHome `data.home` from Agent.yaml, blank when not set
+	 *
+	 * @return The agent
+	 */
+	any function attach( required any agent, struct settings = {}, string agentName = "", string dataHome = "" ) {
+		var found = problems( arguments.settings )
+		if ( found.len() ) {
+			throw( type = "BxAgents.InvalidSkills", message = "The skills settings of [#arguments.agentName#] are not valid: " & found.toList( " " ) )
+		}
+		if ( !( arguments.settings.agentCanSave ?: true ) ) {
+			return arguments.agent
+		}
+		arguments.agent.withTools( [ tool( arguments.agent, library( arguments.dataHome, arguments.agentName ) ) ] )
+		if ( !( arguments.settings.autoApprove ?: false ) ) {
+			// the run pauses for a person like for any tool that needs approval
+			arguments.agent.withMiddleware( new bxModules.bxai.models.middleware.core.HumanInTheLoopMiddleware(
+				toolsRequiringApproval = [ "saveSkill" ],
+				mode                   = "web"
+			) )
+		}
+		return arguments.agent
+	}
+
+	/**
+	 * @agent The AiAgent that gets the skill the moment it is saved
+	 * @library A SkillLibrary
+	 *
+	 * @return The saveSkill tool, not entered in the global tool registry
+	 */
+	any function tool( required any agent, required any library ) {
+		var target = arguments.agent
+		var skills = arguments.library
+		var saveSkill = aiTool(
+			"saveSkill",
+			"Save a skill: instructions you can load again in later conversations. Use it after a task that took real steps or knowledge and is likely to come up again, for example how a report is put together or how a system is checked. Do not save one-off facts about a person (use remember for those) and do not save a skill that is already in your skill list; save over your own to improve it. The skill is available at once. The answer says whether it was saved; if not, it says why, and you can fix the problem and try again.",
+			( required string name, required string description, required string content ) => {
+				var result = skills.save( arguments.name, arguments.description, arguments.content )
+				if ( !result.ok ) {
+					return result
+				}
+				skills.offer( target, result.skill )
+				return { ok : true, name : result.name, created : result.created }
+			},
+			false
+		)
+		saveSkill.describeArg( "name", "A short folder-style name such as release-notes: letters, digits, . _ and -." )
+		saveSkill.describeArg( "description", "What the skill does and when to use it, in a sentence or two. This is what you will see in your skill list." )
+		saveSkill.describeArg( "content", "The instructions, in markdown: the steps to follow or the knowledge to apply." )
+		return saveSkill
+	}
+
+	private any function library( string dataHome = "", string agentName = "" ) {
+		return new "models.skills.SkillLibrary@bxagents"(
+			new "models.data.DataHome@bxagents"( projectRoot : expandPath( "/" ), configured : arguments.dataHome, agentName : arguments.agentName )
+		)
+	}
+
+	private boolean function isTrueBoolean( required any value ) {
+		return isBoolean( arguments.value ) && !isNumeric( arguments.value )
+	}
+
+}

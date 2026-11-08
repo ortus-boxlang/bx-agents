@@ -1,0 +1,188 @@
+/**
+ * The skills of a project and the skills an agent saves in its data home: one list, the project's always winning.
+ * bx-ai's global skill list is shared by the whole process, so each test puts it back as it found it.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "skills.SkillLibrary", function() {
+
+			beforeEach( function() {
+				variables.dir = replace( createTempDirectory( prefix = "bxagents-skilllib-" ), "\", "/", "all" );
+				variables.library = new bxagents.models.skills.SkillLibrary(
+					new bxagents.models.data.DataHome( projectRoot = dir, configured = dir & "/home", environment = {} )
+				);
+				variables.before = aiGlobalSkills().slice( 1, aiGlobalSkills().len() );
+			} );
+
+			afterEach( function() {
+				var global = aiGlobalSkills();
+				global.clear();
+				global.append( before, true );
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			/** A skill of the project, as bx-ai loads one from the project's skills/ folder */
+			function projectSkill( required string name ) {
+				var folder = dir & "/project-skills/" & arguments.name;
+				directoryCreate( folder, true, true );
+				fileWrite( folder & "/SKILL.md", "---#char( 10 )#name: #arguments.name##char( 10 )#description: Ours#char( 10 )#---#char( 10 )#Do it our way.", "UTF-8" );
+				var skill = bxModules.bxai.models.skills.AiSkill::fromPath( folder & "/SKILL.md" );
+				aiGlobalSkills().append( skill );
+				return skill;
+			}
+
+			describe( "saving", function() {
+
+				it( "writes SKILL.md in the data home and lists the skill as the agent's", function() {
+					var result = library.save( "release-notes", "Writes release notes. Use after a release.", "1. List the merged pull requests." );
+
+					expect( result.ok ).toBeTrue();
+					expect( result.created ).toBeTrue();
+					expect( fileExists( dir & "/home/skills/release-notes/SKILL.md" ) ).toBeTrue();
+					var listed = library.listing().filter( s => s.name == "release-notes" );
+					expect( listed ).toHaveLength( 1 );
+					expect( listed[ 1 ].origin ).toBe( "agent" );
+					expect( listed[ 1 ].description ).toBe( "Writes release notes. Use after a release." );
+				} );
+
+				it( "keeps a description with a colon and quotes as it was written", function() {
+					var description = "Use when asked for ""the report"": monthly, not weekly";
+					library.save( "report", description, "Steps." );
+
+					var again = bxModules.bxai.models.skills.AiSkill::fromPath( dir & "/home/skills/report/SKILL.md" );
+					expect( again.getDescription() ).toBe( description );
+					expect( again.getContent() ).toInclude( "Steps." );
+				} );
+
+				it( "replaces a skill of its own and says it was not new", function() {
+					library.save( "report", "First.", "One." );
+					var second = library.save( "report", "Second.", "Two." );
+
+					expect( second.ok ).toBeTrue();
+					expect( second.created ).toBeFalse();
+					var listed = library.listing().filter( s => s.name == "report" );
+					expect( listed ).toHaveLength( 1 );
+					expect( listed[ 1 ].description ).toBe( "Second." );
+				} );
+
+				it( "will not take the name of a project skill, and leaves it as it was", function() {
+					projectSkill( "house-style" );
+
+					var result = library.save( "house-style", "Mine.", "Different." );
+
+					expect( result.ok ).toBeFalse();
+					expect( result.reason ).toInclude( "house-style" );
+					expect( result.reason ).toInclude( "project" );
+					expect( directoryExists( dir & "/home/skills/house-style" ) ).toBeFalse();
+					expect( library.listing().filter( s => s.name == "house-style" )[ 1 ].origin ).toBe( "project" );
+				} );
+
+				it( "compares names without regard to case", function() {
+					projectSkill( "House-Style" );
+
+					expect( library.save( "house-style", "Mine.", "Different." ).ok ).toBeFalse();
+				} );
+
+				it( "refuses names that are not a safe folder name", function() {
+					for ( var bad in [ "", "../escape", "a/b", ".hidden", "with space", repeatString( "x", 65 ) ] ) {
+						var result = library.save( bad, "Fine.", "Fine." );
+						expect( result.ok ).toBeFalse( "[#bad#] should be refused" );
+					}
+					expect( directoryExists( dir & "/home/skills" ) ).toBeFalse();
+				} );
+
+				it( "refuses an empty or too long description and content, saying what to change", function() {
+					expect( library.save( "a", "", "Steps." ).reason ).toInclude( "description" );
+					expect( library.save( "a", "Fine.", "" ).reason ).toInclude( "content" );
+					expect( library.save( "a", repeatString( "d", 501 ), "Steps." ).reason ).toInclude( "description" );
+					expect( library.save( "a", "Fine.", repeatString( "c", 20001 ) ).reason ).toInclude( "content" );
+				} );
+
+				it( "stops at 50 skills of its own but still lets it improve one it has", function() {
+					for ( var i = 1; i <= 50; i++ ) {
+						expect( library.save( "skill-#i#", "Number #i#.", "Steps." ).ok ).toBeTrue();
+					}
+
+					var extra = library.save( "one-too-many", "No.", "Steps." );
+					expect( extra.ok ).toBeFalse();
+					expect( extra.reason ).toInclude( "50" );
+					expect( library.save( "skill-7", "Better.", "Steps." ).ok ).toBeTrue();
+				} );
+
+			} );
+
+			describe( "loading what was saved earlier", function() {
+
+				it( "puts the saved skills in the global list, once however often it runs", function() {
+					library.save( "report", "Monthly report.", "Steps." );
+					aiGlobalSkills().clear();
+
+					expect( library.load() ).toBe( [ "report" ] );
+					expect( library.load() ).toBe( [] );
+					expect( aiGlobalSkills().filter( s => s.getName() == "report" ) ).toHaveLength( 1 );
+				} );
+
+				it( "leaves a skill of the project in place when a saved one has the same name", function() {
+					library.save( "house-style", "Mine.", "Different." );
+					aiGlobalSkills().clear();
+					projectSkill( "house-style" );
+
+					library.load();
+
+					var listed = library.listing().filter( s => s.name == "house-style" );
+					expect( listed ).toHaveLength( 1 );
+					expect( listed[ 1 ].origin ).toBe( "project" );
+				} );
+
+				it( "does nothing when the agent has saved nothing, and makes no folder", function() {
+					expect( library.load() ).toBe( [] );
+					expect( directoryExists( dir & "/home/skills" ) ).toBeFalse();
+				} );
+
+			} );
+
+			describe( "listing", function() {
+
+				it( "names, describes and gives the origin, and shows no folder on the machine", function() {
+					projectSkill( "house-style" );
+					library.save( "report", "Monthly report.", "Steps." );
+
+					var listed = library.listing();
+
+					expect( listed.map( s => s.name ) ).toBe( [ "house-style", "report" ] );
+					for ( var skill in listed ) {
+						expect( skill.keyArray().sort( "text" ) ).toBe( [ "description", "name", "origin" ] );
+						expect( jsonSerialize( skill ) ).notToInclude( dir );
+					}
+				} );
+
+			} );
+
+			describe( "giving a running agent a skill", function() {
+
+				it( "adds it, and replaces it rather than listing it twice", function() {
+					var agent = aiAgent(
+						name  = "worker",
+						model = aiModel( provider = "mock", options = { providerOptions : { responses : [ "ok" ] } } )
+					);
+					var first = library.save( "report", "First.", "One." ).skill;
+					library.offer( agent, first );
+					var second = library.save( "report", "Second.", "Two." ).skill;
+					library.offer( agent, second );
+
+					var mine = agent.getAvailableSkills().filter( s => s.getName() == "report" );
+					expect( mine ).toHaveLength( 1 );
+					expect( mine[ 1 ].getDescription() ).toBe( "Second." );
+					expect( agent.buildSystemMessage() ).toInclude( "Second." );
+					expect( agent.buildSystemMessage() ).notToInclude( "First." );
+				} );
+
+			} );
+
+		} );
+	}
+
+}
