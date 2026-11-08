@@ -124,6 +124,22 @@ class {
 			directoryCreate( getDirectoryFromPath( file ), true, true )
 			return { driver : "sqlite", database : file }
 		}
+		return appDatasource()
+	}
+
+	/**
+	 * The datasource the running application registered as its default (the generated Application sets
+	 * `this.datasource`; the name is the web UI's when the project names one), else the conventional name.
+	 */
+	private string function appDatasource() {
+		try {
+			var named = getApplicationMetadata().datasource ?: ""
+			if ( isSimpleValue( named ) && len( trim( named ) ) ) {
+				return trim( named )
+			}
+		} catch ( any e ) {
+			// no application here (a script, a unit test): the conventional name
+		}
 		return static.APP_DATASOURCE
 	}
 
