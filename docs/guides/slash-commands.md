@@ -26,7 +26,7 @@ Type `/` in the terminal chat or the [web chat](../conventions/web-ui.md#slash-c
 | `/name <name>` | T W | Name this conversation | `/name Quarterly plan` |
 | `/fork [name]` | T W | Copy this conversation, messages and all, and carry on in the copy | `/fork Other approach` |
 | `/clear` | T W G | Forget this conversation's messages, keep the conversation | `/clear` |
-| `/compact` | T W G | Replace older messages with a summary. Needs a summary model on the agent's memory | `/compact` |
+| `/compact` | T W G | Replace older messages with a summary and keep the latest few (`keepRecent`). The agent's own model writes the summary, unless its memory names a summary model | `/compact` |
 | `/export [file] [--format=md\|html]` | T W | Save the conversation. The file name decides the format unless `--format` says | `/export plan.html` |
 | `/exit` (alias `/quit`) | T | Leave the chat | `/exit` |
 
@@ -39,7 +39,7 @@ On a gateway, `/new`, `/clear`, `/compact`, `/sessions` and `/resume` are off un
 | `/help` | T W G | List the commands you can run here | `/help` |
 | `/info` | T W G | Agent, model, conversation, message count, notes and database | `/info` |
 | `/tools` | T W G | List the agent's tools | `/tools` |
-| `/context` | T W | How big the context is and what it is made of. Worked out locally, no model call | `/context` |
+| `/context` | T W | How big the context is and what it is made of, and how many of the messages its memory keeps this conversation has (a warning near the limit). Worked out locally, no model call | `/context` |
 | `/stats [days] [--by=model\|provider\|day\|user]` | T | Tokens the model calls used. `/stats enable` turns usage recording on | `/stats 7 --by=day` |
 | `/keys` | T W | Which key does what, with the action name of each. `?` alone does the same | `/keys` |
 

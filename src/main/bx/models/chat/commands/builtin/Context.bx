@@ -30,6 +30,9 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 		} else {
 			reply.text( "The project does not say this model's context window. Add contextWindow to its profile, or to the top of Agent.yaml, to see the share it takes." )
 		}
+		if ( ( report.messages ?: {} ).near ?: false ) {
+			reply.warn( "This conversation has #report.messages.count# of the #report.messages.limit# messages its memory keeps. Past that the oldest are dropped as new ones come in; /compact summarizes them instead." )
+		}
 		if ( report.tools.len() ) {
 			reply.text( "Largest tool definitions: " & report.tools.slice( 1, min( 5, report.tools.len() ) ).map( t => t.name & " " & words.approx( t.tokens ) ).toList( ", " ) )
 		}

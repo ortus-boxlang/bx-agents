@@ -19,6 +19,22 @@ or package as a portable `.bxa`.
 
 ### Added
 
+#### Memory
+
+- **Every agent remembers in the chat database by default.** With no `memory:` in `Agent.yaml`, the root
+  agent and each subagent keep their conversations as jdbc memory in `chat.db`, one row per person and
+  conversation under the agent's own name. The same person finds the same conversation from the
+  terminal, the web page and the API, and a subagent that a parent delegates to keeps its own rows
+  for the same person and conversation. `maxMessages` (20 to 100000, default 500) and `keepRecent`
+  (default 20) tune it. A `memory:` that names a `type` is built exactly as written.
+- **`/compact` works with nothing set up.** A memory with no summary model is summarized by the agent's
+  own model, and the answer says which one. `/context` shows how many of the messages its memory keeps
+  a conversation has, with a warning near the limit, and the status line adds `msgs 460/500` there.
+- **The message count in the conversation list is what memory holds.** It is set whenever memory changes
+  (after a turn, `/clear`, `/compact`), never added to, so it cannot pass the limit or go stale.
+  `Conversations` is the one place that changes a conversation's row and its memory together: `clear`,
+  `delete` and `refreshCount`.
+
 #### Data home and volumes
 
 - One **data home** holds everything an agent keeps (`chat.db`, `files/`, `skills/`, `backups/`).

@@ -429,29 +429,61 @@ class {
 	}
 
 	/**
-	 * @return True when the agent's memory has a summary model, so compacting does something; without one the button would only look broken
+	 * The model that summarizes when a memory has none of its own: the agent's own. Only the provider and the model's
+	 * name are taken, so the summary is a plain call of its own, without the agent's tools or instructions.
+	 *
+	 * @return { provider, model } of the agent's model, or an empty struct when the agent does not say
 	 */
-	boolean function canCompact() {
-		return variables.agent.getMemories().some( ( memory ) => len( memory.getSummaryProvider() ?: "" ) && len( memory.getSummaryModel() ?: "" ) )
+	struct function compactModel() {
+		var model = variables.agent.getConfig().model ?: {}
+		if ( !isStruct( model ) ) {
+			return {}
+		}
+		var id = ( model.params ?: {} ).model ?: ""
+		return ( len( model.provider ?: "" ) && len( id ) ) ? { provider : model.provider, model : id } : {}
 	}
 
 	/**
-	 * Replaces the older messages with a summary and keeps the most recent few.
+	 * @return True when compacting can do something: a memory has a summary model of its own, or the agent has a model of its own to summarize with
+	 */
+	boolean function canCompact() {
+		return !compactModel().isEmpty() || variables.agent.getMemories().some( ( memory ) => len( memory.getSummaryProvider() ?: "" ) && len( memory.getSummaryModel() ?: "" ) )
+	}
+
+	/**
+	 * Replaces the older messages with a summary and keeps the most recent few. A memory with a summary model of its
+	 * own uses it; any other is summarized by the agent's own model, so `/compact` works with nothing set up.
 	 *
-	 * @return { available, compacted, before, after }; available is false when the agent's memory has no summary model
+	 * @return { available, compacted, before, after, model }; available is false when there is no model at all to summarize with, model says which one was used (provider/model, blank when the memory used its own)
 	 */
 	struct function compact() {
 		var summarizes = canCompact()
 		var before = variables.agent.getMemoryMessages( variables.userId, variables.conversationId ).len()
 		if ( !summarizes ) {
-			return { available : false, compacted : false, before : before, after : before }
+			return { available : false, compacted : false, before : before, after : before, model : "" }
 		}
-		variables.agent.getMemories().each( ( memory ) => memory.summarize( {}, variables.userId, variables.conversationId ) )
+		var fallback = compactModel()
+		var usedFallback = false
+		for ( var memory in variables.agent.getMemories() ) {
+			var own = len( memory.getSummaryProvider() ?: "" ) && len( memory.getSummaryModel() ?: "" )
+			if ( own ) {
+				memory.summarize( {}, variables.userId, variables.conversationId )
+			} else if ( !fallback.isEmpty() ) {
+				memory.summarize( fallback, variables.userId, variables.conversationId )
+				usedFallback = true
+			}
+		}
 		var after = variables.agent.getMemoryMessages( variables.userId, variables.conversationId ).len()
 		if ( keepsSessions() ) {
 			variables.conversations.refreshCount( asCaller(), variables.conversationId )
 		}
-		return { available : true, compacted : after < before, before : before, after : after }
+		return {
+			available : true,
+			compacted : after < before,
+			before    : before,
+			after     : after,
+			model     : usedFallback ? fallback.provider & "/" & fallback.model : ""
+		}
 	}
 
 	/**

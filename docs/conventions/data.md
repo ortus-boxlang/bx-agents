@@ -15,7 +15,7 @@ An agent keeps its state in one place, the **data home**, and reaches the rest o
 ```text
 <data home>/
   README.md      what this folder is, written once
-  chat.db        conversations, notes, access tokens, secrets and usage counts
+  chat.db        conversations and the agents' memory of them, notes, access tokens, secrets and usage counts
   files/         what the agent writes (the `files` volume)
   skills/        skills the agent saves
   backups/       written by bxAgents backup
