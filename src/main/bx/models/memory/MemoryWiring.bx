@@ -81,15 +81,25 @@ class {
 		if ( keepRecent >= max ) {
 			keepRecent = max - 1
 		}
-		return aiMemory(
-			memory : "jdbc",
-			key    : keyOf( arguments.agentName ),
-			config : {
-				datasource       : datasource(),
-				maxMessages      : max,
-				summaryThreshold : keepRecent
+		try {
+			return aiMemory(
+				memory : "jdbc",
+				key    : keyOf( arguments.agentName ),
+				config : {
+					datasource       : datasource(),
+					maxMessages      : max,
+					summaryThreshold : keepRecent
+				}
+			)
+		} catch ( any e ) {
+			if ( e.message.findNoCase( "Datasource with name [#static.APP_DATASOURCE#] not found" ) ) {
+				throw(
+					type    = "BxAgents.MemoryNoDatabase",
+					message = "The memory of [#arguments.agentName#] needs the chat database, and none is set up here. Set BXAGENTS_DB to the database file, or run the agent through its generated application, which registers the [#static.APP_DATASOURCE#] datasource. To keep this agent's memory elsewhere, name a memory type in Agent.yaml."
+				)
 			}
-		)
+			rethrow
+		}
 	}
 
 	/**
@@ -109,7 +119,7 @@ class {
 	 * @return A datasource struct, or the name of a registered datasource
 	 */
 	any function datasource() {
-		var file = trim( getSystemSetting( "BXAGENTS_DB", "" ) ).replace( "\", "/", "all" )
+		var file = new "models.store.DbSetting@bxagents"().file()
 		if ( len( file ) ) {
 			directoryCreate( getDirectoryFromPath( file ), true, true )
 			return { driver : "sqlite", database : file }

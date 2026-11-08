@@ -22,8 +22,19 @@ class {
 	 * @return The agent object
 	 */
 	any function load( required string root ) {
-		if ( !len( trim( getSystemSetting( "BXAGENTS_DB", "" ) ) ) ) {
-			createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", new "models.store.ChatStorePath@bxagents"().prepared( arguments.root ) )
+		// A value that someone else named (the environment, `serve` for its child) is kept. A value that an earlier
+		// load() in this same process set is replaced, so a process that opens several projects one after the other
+		// gives each its own file and never keeps writing into the first one's. The last value load() set is
+		// remembered in a second property, which lives as long as the process whatever happens to this class.
+		var jvm = createObject( "java", "java.lang.System" )
+		var named = new "models.store.DbSetting@bxagents"().file()
+		var ours = trim( jvm.getProperty( "bxagents.db.chosen" ) ?: "" )
+		if ( !len( named ) || named == ours ) {
+			// the data home asks BXAGENTS_DB first, so the earlier value has to be gone before the new path is worked out
+			jvm.clearProperty( "BXAGENTS_DB" )
+			var chosen = new "models.store.ChatStorePath@bxagents"().prepared( arguments.root )
+			jvm.setProperty( "BXAGENTS_DB", chosen )
+			jvm.setProperty( "bxagents.db.chosen", chosen )
 		}
 		var factoryPath = arguments.root & "/.build/app/agent/GeneratedAgentFactory.bx"
 		var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()

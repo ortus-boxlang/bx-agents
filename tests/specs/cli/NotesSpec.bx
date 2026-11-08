@@ -10,10 +10,20 @@ class extends="testbox.system.BaseSpec" {
 				variables.verb = new bxagents.models.cli.Notes();
 				variables.root = createTempDirectory( prefix = "bxagents-cli-notes-" );
 				fileWrite( root & "/Agent.yaml", "name: helper" & char( 10 ) & "model: openai/gpt-4o" & char( 10 ) & "notes:" & char( 10 ) & "  user: { limit: 120 }" & char( 10 ) );
-				variables.usesDefaultPath = !len( getSystemSetting( "BXAGENTS_DB", "" ) );
+				// the notes live in the project's own data home, so no database may be named from an earlier spec
+				variables.savedDb = createObject( "java", "java.lang.System" ).getProperty( "BXAGENTS_DB" ) ?: "";
+				createObject( "java", "java.lang.System" ).clearProperty( "BXAGENTS_DB" );
+				createObject( "java", "java.lang.System" ).clearProperty( "bxagents.db.chosen" );
+				// a project that already has data/chat.db keeps its data there (see DataHome), so each test gets its own
+				directoryCreate( root & "/data" );
+				fileWrite( root & "/data/chat.db", "" );
+				variables.usesDefaultPath = true;
 			} );
 
 			afterEach( function() {
+				if ( len( savedDb ) ) {
+					createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", savedDb );
+				}
 				if ( directoryExists( root ) ) {
 					directoryDelete( root, true );
 				}

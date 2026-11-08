@@ -277,7 +277,13 @@ class {
 	 * @return The value of a setting from the real environment, or from the stand-in, blank when it is not set
 	 */
 	private string function setting( required string name ) {
-		return trim( variables.hasEnvironment ? ( variables.environment[ arguments.name ] ?: "" ) : getSystemSetting( arguments.name, "" ) )
+		if ( variables.hasEnvironment ) {
+			return trim( variables.environment[ arguments.name ] ?: "" )
+		}
+		// the JVM's own properties first, read live: getSystemSetting() does not follow a property that was changed
+		// after it was first looked up (a process that opens several projects changes BXAGENTS_DB for each)
+		var live = createObject( "java", "java.lang.System" ).getProperty( arguments.name )
+		return trim( isNull( live ) ? getSystemSetting( arguments.name, "" ) : live )
 	}
 
 	/**
