@@ -35,10 +35,12 @@ flowchart LR
 - Routines are stored in the chat database, per owner. Admins can see and manage all of them.
 - One built-in scheduler, the **heartbeat**, ticks every minute, finds the routines that are due and runs them. Nothing else runs routines. (The earlier idea of a `HEARTBEAT.md` checklist is dropped.)
 - Each routine chooses where its result goes when it is created: the main chat, or a chat app such as Telegram or WhatsApp.
-- Each routine has a results folder in the data home, with any number of files. It can be listed, read, cleaned up and wiped.
+- Each routine has a results folder in the data home, with any number of files. It can be listed, read, cleaned up and wiped. Nothing is deleted automatically: a person starts every clean-up.
 - A routine has the same approval rules as chat: a tool that needs approval waits until a person answers.
 - The web page manages routines: list, edit the schedule, prompt and destination, pause, run now, delete, read and delete results.
-- Logs: the data home gets a `logs/` folder with a log per area (gateways, routines, heartbeat, api, agent), written with BoxLang's own logging. Admins read them in the web page.
+- Logs: the data home gets a `logs/` folder with a log per area (gateways, routines, heartbeat, api, agent), written with BoxLang's own logging. We add no rotation or retention settings; BoxLang's rolling file handling does it. Admins read them in the web page.
+- One Logs section for the whole app, not one per agent. Every line names the agent.
+- "Main chat" means the conversation the routine was created in. Created from Telegram, the answer comes back to Telegram.
 
 ## 1. Turning it on
 
@@ -47,8 +49,6 @@ routines:
   enabled: true            # default false
   maxPerUser: 20           # default 20
   minInterval: 5m          # default 5m; the shortest a routine may repeat
-  results:
-    keepDays: 30           # reports older than this are deleted by the heartbeat; 0 keeps them
 ```
 
 With `enabled: false` (or no block) there is no tool, no command, no route that creates a routine, no heartbeat, and the Routines section of the web page is absent. `doctor` says which it is.
@@ -87,8 +87,7 @@ A built-in scheduler, always registered when `routines.enabled` is true. Every m
 
 1. Reads the routines that are enabled and due.
 2. Starts each one (a few at the same time, a small fixed limit).
-3. Deletes reports older than `results.keepDays`.
-4. Writes one line to `heartbeat.log` when it did something, and a warning when it could not.
+3. Writes one line to `heartbeat.log` when it did something, and a warning when it could not.
 
 It needs no dynamic scheduling: the schedule lives in the database, and the heartbeat reads it. Pausing, editing and deleting take effect at the next tick.
 
@@ -137,7 +136,7 @@ BoxLang's `writeLog( log = "<absolute path>" )` makes a rolling file appender at
 ```
 
 - Lines carry time, level, agent name, area and a short message. No secrets, tokens, passwords or message text: the logger redacts known secret names and keeps message bodies out.
-- Files roll by size and age (defaults 10 MB, 14 days, configurable under `logs:` in `Agent.yaml`).
+- Rolling and retention are BoxLang's own; we do not add settings for them.
 - `bxAgents logs [area] [--tail=100] [--level=warn]` prints them.
 - `GET /logs` lists the files; `GET /logs/<area>?tail=200&level=warn&q=text` returns lines. Admin only.
 
@@ -171,23 +170,20 @@ Everything goes through one `Routines` service (as `Conversations` does for conv
 ## Tasks
 
 1. Spike: can `TurnRunner` run on a scheduler thread with no web request? Which chat apps can send a message nobody asked for, and what do they need (a stored chat id per person)? Does `writeLog` with an absolute path roll and keep working under the app's logging config?
-2. `Logger` (areas, levels, redaction, rolling files in `<data home>/logs`), `logs:` setting, `bxAgents logs`; use it in the gateways, API errors and agent errors; specs.
+2. `Logger` (areas, levels, redaction, files in `<data home>/logs` through `writeLog`), `bxAgents logs`; use it in the gateways, API errors and agent errors; specs.
 3. `GET /logs`, `GET /logs/<area>` (admin), contract, handler, client, OpenAPI; specs.
 4. Web page: Logs section (tabs, filter, search, tail, count badge).
 5. `routines:` setting (loader, validator, `doctor`); `ChatStore` migration (v10) and the `Routines` service; specs.
-6. Heartbeat scheduler and `RoutineRunner` (due, run as the owner, overlap, failures, catch-up, retention); specs with a mock model.
+6. Heartbeat scheduler and `RoutineRunner` (due, run as the owner, overlap, failures, catch-up); specs with a mock model.
 7. `scheduleRoutine`, `saveReport` and routine management tools; approvals from a routine; specs.
 8. Destinations: `here`, `routine`, and chat apps through the gateway registry; specs.
 9. Results folder: layout, tools, `bxAgents routines results`, API; specs.
 10. `/routines`, `/routine`, `bxAgents routines`, the API routes (owner and admin rules), client, OpenAPI; specs.
 11. Web page: Routines section.
-12. Docs (English and the `1.0.x` mirror): a routines page that opens with the schedulers table and diagram, the `routines:` and `logs:` settings, the data home layout, the API; changelog; full suite; ColdBox integration run.
+12. Docs (English and the `1.0.x` mirror): a routines page that opens with the schedulers table and diagram, the `routines:` setting, the data home layout, the API; changelog; full suite; ColdBox integration run.
 
 Slices, one draft pull request each: logs (2 to 4), routines core (5 to 7), delivery and results (8 to 9), surface (10 to 12).
 
 ## Open questions
 
-1. **Linking a person to a chat app.** A routine sent to Telegram needs that person's chat id there. Is "they have messaged the agent from it before" enough, or do you want an explicit link step?
-2. **Main chat.** I take it as the conversation the routine was created in. If the person asked from Telegram, the answer comes back to Telegram. Is that what you mean?
-3. **Logs in the web page.** One Logs section for the whole app (my pick, since the logs are per app and every line names the agent), or a logs view per agent?
-4. **Retention defaults.** Reports 30 days, logs 14 days. Right?
+1. **Sending a routine's result to a chat app.** The app knows a person on Telegram as `telegram:<their id>`, which is a different identity from their web login. A routine created *from* Telegram can answer back there with no extra step. A routine created from the web page and sent to Telegram needs a link between the two identities. Options: (a) v1 sends only to the chat the routine was created in, and the web page; (b) a link step, where the web page shows a short code and the person sends `/link <code>` to the bot once.
