@@ -95,7 +95,7 @@ A skill is a folder with a `SKILL.md`: instructions the agent loads by name when
 | Ships with the agent | `skills/` in the project, and the skills extensions carry | You | `project` |
 | The agent's own | `skills/` in the data home | The agent, with its `saveSkill` tool | `agent` |
 
-The build copies the first two into the app, and the app loads the third at start and the moment a skill is saved. A skill that ships with the agent wins over an installed one of the same name.
+The build copies the first two into the app, and the app loads the third at start and the moment a skill is saved. A diagram of the levels is on the [skills page](skills.md#the-three-levels). A skill that ships with the agent wins over an installed one of the same name.
 
 After a task that took real steps and is likely to come up again, the root agent can call `saveSkill( name, description, content )`. The skill is written to the data home and is in the agent's skill list at once, with no restart. Subagents are given the skills when they are built; they cannot save any.
 

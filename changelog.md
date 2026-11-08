@@ -29,7 +29,8 @@ or package as a portable `.bxa`.
   installed skill or one that ships with it, or replace it. Backups carry the saved skills.
 - **Three levels of skills.** Installed from the registry (`.agents/skills/`), shipped with the agent
   (`skills/`) and the agent's own (the data home). The build lists the installed ones in the app's
-  `skills/.installed.json`, so the app can tell the first two apart.
+  `skills/.installed.json`, so the app can tell the first two apart. A skill linked into `.agents/skills` from a
+  global skills folder (as skills tools do) is followed, and the app gets a copy of what the link points at.
 - **`/skills` and `GET /skills`** list every skill with its description and level (`installed`, `project`
   or `agent`), never a folder on the machine. The client has `skills()`.
 
