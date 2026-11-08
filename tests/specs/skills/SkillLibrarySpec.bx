@@ -34,6 +34,48 @@ class extends="testbox.system.BaseSpec" {
 				return skill;
 			}
 
+			describe( "the three levels", function() {
+
+				it( "tells installed skills from the ones that ship with the agent, and from the agent's own", function() {
+					// as the build lays them out: both in the app's skills/, the installed ones listed in .installed.json
+					var skills = dir & "/app/skills";
+					for ( var folder in [ "from-registry", "shipped" ] ) {
+						directoryCreate( skills & "/" & folder, true, true );
+						fileWrite( skills & "/" & folder & "/SKILL.md", "---#char( 10 )#name: #folder##char( 10 )#description: #folder# one#char( 10 )#---#char( 10 )#Body.", "UTF-8" );
+						aiGlobalSkills().append( bxModules.bxai.models.skills.AiSkill::fromPath( skills & "/" & folder & "/SKILL.md" ) );
+					}
+					fileWrite( skills & "/.installed.json", jsonSerialize( [ "from-registry" ] ), "UTF-8" );
+					library.save( "mine", "Agent one.", "Steps." );
+
+					var origins = {};
+					library.listing().each( s => origins[ s.name ] = s.origin );
+
+					expect( origins[ "from-registry" ] ).toBe( "installed" );
+					expect( origins[ "shipped" ] ).toBe( "project" );
+					expect( origins[ "mine" ] ).toBe( "agent" );
+				} );
+
+				it( "will not let the agent take the name of an installed skill either", function() {
+					var skills = dir & "/app/skills/from-registry";
+					directoryCreate( skills, true, true );
+					fileWrite( skills & "/SKILL.md", "---#char( 10 )#name: from-registry#char( 10 )#description: Installed.#char( 10 )#---#char( 10 )#Body.", "UTF-8" );
+					fileWrite( dir & "/app/skills/.installed.json", jsonSerialize( [ "from-registry" ] ), "UTF-8" );
+					aiGlobalSkills().append( bxModules.bxai.models.skills.AiSkill::fromPath( skills & "/SKILL.md" ) );
+
+					var result = library.save( "from-registry", "Mine.", "Different." );
+
+					expect( result.ok ).toBeFalse();
+					expect( result.reason ).toInclude( "cannot be replaced" );
+				} );
+
+				it( "treats a skill with no marker beside it as one that ships with the agent", function() {
+					projectSkill( "house-style" );
+
+					expect( library.listing().filter( s => s.name == "house-style" )[ 1 ].origin ).toBe( "project" );
+				} );
+
+			} );
+
 			describe( "saving", function() {
 
 				it( "writes SKILL.md in the data home and lists the skill as the agent's", function() {
@@ -75,7 +117,7 @@ class extends="testbox.system.BaseSpec" {
 
 					expect( result.ok ).toBeFalse();
 					expect( result.reason ).toInclude( "house-style" );
-					expect( result.reason ).toInclude( "project" );
+					expect( result.reason ).toInclude( "came with the agent" );
 					expect( directoryExists( dir & "/home/skills/house-style" ) ).toBeFalse();
 					expect( library.listing().filter( s => s.name == "house-style" )[ 1 ].origin ).toBe( "project" );
 				} );

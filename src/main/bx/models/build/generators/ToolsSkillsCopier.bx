@@ -35,7 +35,8 @@ class {
 	}
 
 	/**
-	 * Adds the skills installed from the registry (.agents/skills/) to the app's skills/.
+	 * Adds the skills installed from the registry (.agents/skills/) to the app's skills/, and lists their folders in
+	 * skills/.installed.json.
 	 * A skill of your own with the same folder name is already there and is left alone, so
 	 * it wins; the dotfile rule still applies to everything inside.
 	 *
@@ -48,12 +49,19 @@ class {
 			return
 		}
 		directoryCreate( path = arguments.skillsDest, createPath = true, ignoreExists = true )
+		var added = []
 		for ( var entry in directoryList( path = src, recurse = false, listInfo = "name", sort = "asc", type = "dir" ) ) {
 			if ( entry.startsWith( "." ) || directoryExists( arguments.skillsDest & "/" & entry ) ) {
 				continue
 			}
 			directoryCreate( path = arguments.skillsDest & "/" & entry, createPath = true, ignoreExists = true )
 			copyTree( src & "/" & entry, arguments.skillsDest & "/" & entry )
+			added.append( entry )
+		}
+		// Both kinds end up in the app's one skills/ folder. Which folders came from the registry is kept beside them,
+		// so the app can still tell the skills installed from those that ship with the agent (see SkillLibrary).
+		if ( added.len() ) {
+			fileWrite( arguments.skillsDest & "/.installed.json", jsonSerialize( added ), "UTF-8" )
 		}
 	}
 

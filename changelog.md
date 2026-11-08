@@ -25,10 +25,13 @@ or package as a portable `.bxa`.
   tool: after a task that took real steps and is likely to come up again, it writes a skill to
   `skills/` in the data home and has it in its skill list at once, with no restart. The skills it saved
   are loaded again when the app starts. Each save is approved by a person unless `skills.autoApprove` is
-  true, and `skills.agentCanSave: false` takes the tool away. A skill of the project's always wins: the
-  agent cannot take its name or replace it. Backups carry the saved skills.
-- **`/skills` and `GET /skills`** list every skill with its description and who wrote it, the project or the
-  agent, never a folder on the machine. The client has `skills()`.
+  true, and `skills.agentCanSave: false` takes the tool away. The agent cannot take the name of an
+  installed skill or one that ships with it, or replace it. Backups carry the saved skills.
+- **Three levels of skills.** Installed from the registry (`.agents/skills/`), shipped with the agent
+  (`skills/`) and the agent's own (the data home). The build lists the installed ones in the app's
+  `skills/.installed.json`, so the app can tell the first two apart.
+- **`/skills` and `GET /skills`** list every skill with its description and level (`installed`, `project`
+  or `agent`), never a folder on the machine. The client has `skills()`.
 
 #### Memory
 
