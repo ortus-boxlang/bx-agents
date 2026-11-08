@@ -174,6 +174,17 @@ A **Logs** section in Settings, with one tab per log:
 - Filter by level, search box, "last 200 / 1000", auto-refresh toggle, download the file.
 - Errors and warnings in the last day show as a count on the Settings icon, so a broken gateway is noticed without opening anything.
 
+### Which chat apps are connected
+
+Today nothing in the API or the web page says which gateways exist or whether they are up. The data is there: the registry lists the gateways, and each one knows whether it is running (`isRunning()`). So the same Settings area gets a **Gateways** section (admin only), next to Logs:
+
+- One row per gateway: name, type, state (connected, stopped, or failing), when it last received and last sent a message, and the last error with a link to its lines in `gateways.log`.
+- Which credentials are set, by the name of the environment variable and set or not set. Never a value.
+- The chats it has talked with (platform and chat id), which is also what a routine can send to.
+- `GET /gateways` (admin) returns the same, for the CLI (`bxAgents gateways`) and the client.
+
+Connections themselves are still made in `gateways/<name>.bx` and `.env`, not in the page.
+
 ## 7. Surface for routines
 
 | Where | What |
@@ -198,7 +209,7 @@ Everything goes through one `Routines` service (as `Conversations` does for conv
 1. Spike: can `TurnRunner` run on a scheduler thread with no web request? Which chat apps can send a message nobody asked for, and what do they need (a stored chat id per person)? Does `writeLog` with an absolute path roll and keep working under the app's logging config?
 2. `Logger` (areas, levels, redaction, files in `<data home>/logs` through `writeLog`), `bxAgents logs`; use it in the gateways, API errors and agent errors; specs.
 3. `GET /logs`, `GET /logs/<area>` (admin), contract, handler, client, OpenAPI; specs.
-4. Web page: Logs section (tabs, filter, search, tail, count badge).
+4. Web page: Logs section (tabs, filter, search, tail, count badge), and the Gateways section with `GET /gateways` and `bxAgents gateways`.
 5. `routines:` setting (loader, validator, `doctor`); `ChatStore` migration (v10) and the `Routines` service; specs.
 6. Heartbeat scheduler and `RoutineRunner` (due, run as the owner, overlap, failures, catch-up); specs with a mock model.
 7. `scheduleRoutine`, `saveReport` and routine management tools; approvals from a routine; specs.
