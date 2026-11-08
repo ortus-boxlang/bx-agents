@@ -9,6 +9,7 @@
  *   service.commands()                    the slash commands
  *   service.whoami( caller )              who the server takes the caller to be
  *   service.volumes( caller )             the folders the agent may use, by name
+ *   service.skills( caller )              the skills the agent can load, with who wrote each
  *   service.data( caller )                where the agent keeps everything (admin only)
  *   service.accounts()                    the sign-in accounts and who is an admin (admin only), or null with no database
  *
@@ -253,6 +254,14 @@ class {
 	 */
 	any function volumes( required any caller ) {
 		return Outcome::done( { "volumes" : isNull( variables.appData ) ? [] : variables.appData.listing() } )
+	}
+
+	/**
+	 * @return An Outcome: { skills : [ { name, description, origin } ] }, never a folder on the machine
+	 */
+	any function skills( required any caller ) {
+		var library = new "models.skills.SkillLibrary@bxagents"( isNull( variables.appData ) ? "" : variables.appData.home() )
+		return Outcome::done( { "skills" : library.listing() } )
 	}
 
 	/**

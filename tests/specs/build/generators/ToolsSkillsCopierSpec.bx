@@ -34,6 +34,51 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileRead( result.tools & "/nested/Search.bx" ) ).toBe( fileRead( fixtures & "/full-project/tools/nested/Search.bx" ) );
 			} );
 
+			it( "lists the skills it copied from .agents/skills in skills/.installed.json, and not the ones that ship with the agent", function() {
+				var project = createTempDirectory( prefix = "bxagents-tools-skills-src-" );
+				tempDirs.append( project );
+				for ( var place in [ "skills/shipped", ".agents/skills/from-registry", ".agents/skills/shipped" ] ) {
+					directoryCreate( project & "/" & place, true, true );
+					fileWrite( project & "/" & place & "/SKILL.md", "---#char( 10 )#name: x#char( 10 )#description: y#char( 10 )#---#char( 10 )#Body in #place#", "UTF-8" );
+				}
+				var buildDir = newBuildDir();
+
+				var result = copier.copy( project, buildDir );
+
+				// the project's own skill wins over the installed one of the same name, so only one is installed
+				expect( jsonDeserialize( fileRead( result.skills & "/.installed.json" ) ) ).toBe( [ "from-registry" ] );
+				expect( fileRead( result.skills & "/shipped/SKILL.md" ) ).toInclude( "skills/shipped" );
+			} );
+
+			it( "follows a symbolic link in .agents/skills to a global skills folder, as skill installers make", function() {
+				var project = createTempDirectory( prefix = "bxagents-tools-skills-link-" );
+				var globalHome = createTempDirectory( prefix = "bxagents-global-skills-" );
+				tempDirs.append( project );
+				tempDirs.append( globalHome );
+				directoryCreate( globalHome & "/linked-skill", true, true );
+				fileWrite( globalHome & "/linked-skill/SKILL.md", "---#char( 10 )#name: linked-skill#char( 10 )#description: From the global folder#char( 10 )#---#char( 10 )#Body.", "UTF-8" );
+				directoryCreate( project & "/.agents/skills", true, true );
+				createObject( "java", "java.nio.file.Files" ).createSymbolicLink(
+					createObject( "java", "java.nio.file.Paths" ).get( project & "/.agents/skills/linked-skill", [] ),
+					createObject( "java", "java.nio.file.Paths" ).get( globalHome & "/linked-skill", [] ),
+					[]
+				);
+				var buildDir = newBuildDir();
+
+				var result = copier.copy( project, buildDir );
+
+				expect( fileRead( result.skills & "/linked-skill/SKILL.md" ) ).toInclude( "From the global folder" );
+				expect( jsonDeserialize( fileRead( result.skills & "/.installed.json" ) ) ).toBe( [ "linked-skill" ] );
+				// the app holds a copy, not the link
+				expect( createObject( "java", "java.nio.file.Files" ).isSymbolicLink( createObject( "java", "java.nio.file.Paths" ).get( result.skills & "/linked-skill", [] ) ) ).toBeFalse();
+			} );
+
+			it( "writes no marker when nothing was installed", function() {
+				var result = copier.copy( fixtures & "/full-project", newBuildDir() );
+
+				expect( fileExists( result.skills & "/.installed.json" ) ).toBeFalse();
+			} );
+
 			it( "copies skills/ byte-for-byte, including SKILL.md files", function() {
 				var buildDir = newBuildDir();
 				var result = copier.copy( fixtures & "/full-project", buildDir );

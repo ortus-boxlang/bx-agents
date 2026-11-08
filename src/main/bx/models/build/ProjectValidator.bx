@@ -76,6 +76,7 @@ class {
 		validateData( arguments.resolvedConfig, errors )
 		validateVolumes( arguments.resolvedConfig, errors )
 		validateMemory( arguments.resolvedConfig, errors )
+		validateSkills( arguments.resolvedConfig, errors )
 
 		return { errors : errors, warnings : warnings }
 	}
@@ -942,6 +943,30 @@ class {
 			for ( var problem in Volumes::problems( arguments.resolvedConfig.volumes ) ) {
 				arguments.errors.append( "Agent.bx's " & problem )
 			}
+		}
+	}
+
+	/**
+	 * Validates the optional `skills` block: whether the root agent may save skills of its own and whether a person
+	 * approves each one. See SkillWiring.
+	 *
+	 *   skills:
+	 *     agentCanSave: true     # default true
+	 *     autoApprove: false     # default false
+	 *
+	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `skills` is used
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	private void function validateSkills( required struct resolvedConfig, required array errors ) {
+		if ( !structKeyExists( arguments.resolvedConfig, "skills" ) ) {
+			return
+		}
+		if ( !isStruct( arguments.resolvedConfig.skills ) ) {
+			arguments.errors.append( "Agent.bx's 'skills' must be a struct such as { autoApprove: true }" )
+			return
+		}
+		for ( var problem in new "models.skills.SkillWiring@bxagents"().problems( arguments.resolvedConfig.skills ) ) {
+			arguments.errors.append( "Agent.bx's " & problem )
 		}
 	}
 

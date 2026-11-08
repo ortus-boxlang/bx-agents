@@ -792,6 +792,11 @@ class {
 		if ( len( skillsLine ) ) {
 			lines.insertAt( lines.findNoCase( "		// usage recording is off unless Agent.yaml says usage: true" ), skillsLine )
 		}
+		// then the skills the agent saved in its data home, after the project's and the extensions' so theirs win
+		lines.insertAt(
+			lines.findNoCase( "		// usage recording is off unless Agent.yaml says usage: true" ),
+			'		new "models.skills.SkillWiring@bxagents"().load( "#Strings::bxLiteral( variables.projectDataHome )#", "#Strings::bxLiteral( resolveAgentName( arguments.resolvedConfig ) )#" )'
+		)
 
 		for ( var helperLine in renderResolveAppPath() ) {
 			lines.append( helperLine )
@@ -934,6 +939,11 @@ class {
 		if ( structKeyExists( arguments.resolvedConfig, "notes" ) && isStruct( arguments.resolvedConfig.notes ) ) {
 			// the notes this agent keeps: a prompt block and the remember and forget tools
 			statements.append( 'new "models.notes.NotesWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.notes )#, "#Strings::bxLiteral( thisName )#" )' )
+		}
+
+		if ( arguments.accessorPath.isEmpty() ) {
+			// the root agent may save skills of its own (subagents never do): the saveSkill tool, unless skills.agentCanSave is false
+			statements.append( 'new "models.skills.SkillWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( isStruct( arguments.resolvedConfig.skills ?: "" ) ? arguments.resolvedConfig.skills : {} )#, "#Strings::bxLiteral( thisName )#", "#Strings::bxLiteral( variables.projectDataHome )#" )' )
 		}
 
 		if ( structKeyExists( arguments.resolvedConfig, "vault" ) && isStruct( arguments.resolvedConfig.vault ) ) {

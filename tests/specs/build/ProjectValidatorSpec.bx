@@ -639,6 +639,14 @@ class extends="testbox.system.BaseSpec" {
 				expect( text ).toInclude( "'vault.tools' must be true or false" );
 			} );
 
+			it( "rejects a skills block with an unknown key or a bad flag, and accepts a good one", function() {
+				var text = validateFixture( "bad-skills" ).errors.filter( e => e.findNoCase( "skills" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "skills.saveAlways is not a setting" );
+				expect( text ).toInclude( "skills.autoApprove must be true or false" );
+				expect( validateFixture( "../with-skills" ).errors.filter( e => e.findNoCase( "skills" ) ) ).toBeEmpty();
+			} );
+
 			it( "accepts a vault block, and a vault placeholder with no block", function() {
 				for ( var fixture in [ "with-vault", "with-vault-placeholder" ] ) {
 					var projectRoot = expandPath( "/fixtures/" & fixture );

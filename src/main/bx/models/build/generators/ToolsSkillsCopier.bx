@@ -35,7 +35,8 @@ class {
 	}
 
 	/**
-	 * Adds the skills installed from the registry (.agents/skills/) to the app's skills/.
+	 * Adds the skills installed from the registry (.agents/skills/) to the app's skills/, and lists their folders in
+	 * skills/.installed.json.
 	 * A skill of your own with the same folder name is already there and is left alone, so
 	 * it wins; the dotfile rule still applies to everything inside.
 	 *
@@ -48,12 +49,20 @@ class {
 			return
 		}
 		directoryCreate( path = arguments.skillsDest, createPath = true, ignoreExists = true )
+		var added = []
 		for ( var entry in directoryList( path = src, recurse = false, listInfo = "name", sort = "asc", type = "dir" ) ) {
 			if ( entry.startsWith( "." ) || directoryExists( arguments.skillsDest & "/" & entry ) ) {
 				continue
 			}
 			directoryCreate( path = arguments.skillsDest & "/" & entry, createPath = true, ignoreExists = true )
-			copyTree( src & "/" & entry, arguments.skillsDest & "/" & entry )
+			// a skill installer links a global skill into .agents/skills; the app gets a copy of what the link points at
+			copyTree( realPathOf( src & "/" & entry ), arguments.skillsDest & "/" & entry )
+			added.append( entry )
+		}
+		// Both kinds end up in the app's one skills/ folder. Which folders came from the registry is kept beside them,
+		// so the app can still tell the skills installed from those that ship with the agent (see SkillLibrary).
+		if ( added.len() ) {
+			fileWrite( arguments.skillsDest & "/.installed.json", jsonSerialize( added ), "UTF-8" )
 		}
 	}
 
@@ -79,6 +88,18 @@ class {
 	}
 
 	/**
+	 * BoxLang lists nothing inside a folder reached through a symbolic link, so the folder is listed by the place the
+	 * link points at.
+	 *
+	 * @path A file or folder path
+	 *
+	 * @return The path with every link resolved, forward slashes
+	 */
+	private string function realPathOf( required string path ) {
+		return replace( createObject( "java", "java.nio.file.Paths" ).get( arguments.path, [] ).toRealPath( [] ).toString(), "\", "/", "all" )
+	}
+
+	/**
 	 * Recursively copies `src`'s contents into `dest`, one directory level at
 	 * a time, skipping any entry (file or directory) whose own name starts
 	 * with "." - so a hidden directory's contents are never reached at all,
@@ -87,7 +108,11 @@ class {
 	 * @src Absolute path to the source directory (already known to exist)
 	 * @dest Absolute path to the destination directory (already created)
 	 */
-	private void function copyTree( required string src, required string dest ) {
+	private void function copyTree( required string src, required string dest, numeric depth = 1 ) {
+		// a link back up the tree would otherwise copy for ever
+		if ( arguments.depth > 32 ) {
+			throw( type = "BxAgents.CopyTooDeep", message = "Stopped copying [#arguments.src#]: the folders are nested more than 32 deep, which usually means a symbolic link that points back up the tree." )
+		}
 		var entries = directoryList( path = arguments.src, recurse = false, listInfo = "name", sort = "asc", type = "all" )
 
 		for ( var entry in entries ) {
@@ -100,7 +125,7 @@ class {
 
 			if ( directoryExists( srcPath ) ) {
 				directoryCreate( path = destPath, createPath = true, ignoreExists = true )
-				copyTree( srcPath, destPath )
+				copyTree( realPathOf( srcPath ), destPath, arguments.depth + 1 )
 			} else {
 				fileCopy( srcPath, destPath )
 			}
