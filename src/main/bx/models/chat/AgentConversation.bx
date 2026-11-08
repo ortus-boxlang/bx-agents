@@ -22,6 +22,8 @@ class {
 		variables.conversationId = len( arguments.conversationId ) ? arguments.conversationId : createUUID()
 		variables.userId = len( trim( arguments.userId ) ) ? trim( arguments.userId ) : Caller::localId()
 		variables.threadId = createUUID()
+		// the one place that changes a conversation's memory and its row in the list together
+		variables.conversations = isNull( variables.sessions ) ? nullValue() : new "models.api.Conversations@bxagents"( variables.agent, variables.sessions )
 		return this
 	}
 
@@ -411,11 +413,19 @@ class {
 	 * Forgets this conversation's messages (the agent's memory of it) and keeps the conversation.
 	 */
 	struct function clear() {
-		variables.agent.getMemories().each( ( memory ) => memory.clear( variables.userId, variables.conversationId ) )
-		if ( keepsSessions() ) {
-			variables.sessions.resetCount( variables.userId, variables.conversationId )
+		// the memory and the count in the list change together, in Conversations; a chat that has no row in the
+		// list yet (nothing was said) only has its memory to forget
+		if ( !keepsSessions() || !variables.conversations.clear( asCaller(), variables.conversationId ).succeeded() ) {
+			variables.agent.getMemories().each( ( memory ) => memory.clear( variables.userId, variables.conversationId ) )
 		}
 		return { ok : true }
+	}
+
+	/**
+	 * This conversation's owner as the Caller that Conversations works with.
+	 */
+	private any function asCaller() {
+		return new "models.api.Caller@bxagents"( id = variables.userId, name = variables.userId, scope = "chat", source = "terminal" )
 	}
 
 	/**
@@ -438,6 +448,9 @@ class {
 		}
 		variables.agent.getMemories().each( ( memory ) => memory.summarize( {}, variables.userId, variables.conversationId ) )
 		var after = variables.agent.getMemoryMessages( variables.userId, variables.conversationId ).len()
+		if ( keepsSessions() ) {
+			variables.conversations.refreshCount( asCaller(), variables.conversationId )
+		}
 		return { available : true, compacted : after < before, before : before, after : after }
 	}
 

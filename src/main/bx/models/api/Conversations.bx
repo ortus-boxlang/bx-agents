@@ -98,4 +98,38 @@ class {
 		return Outcome::done( { "deleted" : true } )
 	}
 
+	/**
+	 * Forgets a conversation's messages and keeps the conversation: the agent's memory of it is emptied and the
+	 * count in the list goes to zero, together.
+	 *
+	 * @return An Outcome: { cleared : true }, bad_request or not_found
+	 */
+	any function clear( required any caller, required string conversationId ) {
+		var opened = open( arguments.caller, arguments.conversationId )
+		if ( !opened.succeeded() ) {
+			return opened
+		}
+		var userId = arguments.caller.id()
+		var id = arguments.conversationId
+		variables.agent.getMemories().each( ( memory ) => memory.clear( userId, id ) )
+		variables.sessions.setCount( userId, id, 0 )
+		return Outcome::done( { "cleared" : true } )
+	}
+
+	/**
+	 * Sets the count in the list to what the agent's memory holds for the conversation. It is called whenever
+	 * memory changed: after a turn, after compacting. The count is never added to, because a memory keeps at most
+	 * `maxMessages` and compacting shrinks it.
+	 *
+	 * @return The number of messages the memory holds, which is now the count
+	 */
+	numeric function refreshCount( required any caller, required string conversationId ) {
+		if ( !len( arguments.conversationId ) ) {
+			return 0
+		}
+		var held = variables.agent.getMemoryMessages( arguments.caller.id(), arguments.conversationId ).len()
+		variables.sessions.setCount( arguments.caller.id(), arguments.conversationId, held )
+		return held
+	}
+
 }

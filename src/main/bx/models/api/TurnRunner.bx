@@ -29,6 +29,8 @@ class {
 		variables.agent = arguments.agent
 		variables.sessions = arguments.sessions ?: nullValue()
 		variables.offered = arguments.offered ?: nullValue()
+		// the list's message count is refreshed from memory when a turn ends (see prepareTurn)
+		variables.conversations = isNull( variables.sessions ) ? nullValue() : new Conversations( variables.agent, variables.sessions )
 		return this
 	}
 
@@ -90,11 +92,37 @@ class {
 
 		var thisAgent = variables.agent
 		var params = arguments.request.params ?: {}
+		var tally = isNull( variables.conversations ) ? nullValue() : variables.conversations
+		var theCaller = arguments.caller
+		var theConversation = conversationId
+		// when the turn ends, however it ends, the list's count becomes what memory holds. A list that cannot be
+		// written must not fail the turn.
+		var settle = () => {
+			if ( !isNull( tally ) && len( theConversation ) ) {
+				try {
+					tally.refreshCount( theCaller, theConversation )
+				} catch ( any e ) {
+					// the turn is over; the count is corrected by the next one
+				}
+			}
+		}
 		return Outcome::done( {
 			threadId : threadId,
 			owner    : arguments.caller.id(),
-			work     : ( onChunk ) => thisAgent.stream( onChunk, input, params, options ),
-			run      : () => thisAgent.run( input, params, options )
+			work     : ( onChunk ) => {
+				try {
+					return thisAgent.stream( onChunk, input, params, options )
+				} finally {
+					settle()
+				}
+			},
+			run      : () => {
+				try {
+					return thisAgent.run( input, params, options )
+				} finally {
+					settle()
+				}
+			}
 		} )
 	}
 
@@ -367,12 +395,12 @@ class {
 	}
 
 	/**
-	 * Notes the turn in the conversation list. A list that cannot be written must not stop the turn.
+	 * Notes the turn in the conversation list: the row exists, has its title and its time is now. The count is not touched here, it is set from memory when the turn ends. A list that cannot be written must not stop the turn.
 	 */
 	private void function noteTurn( required any caller, required string conversationId, required string input ) {
 		try {
 			if ( !isNull( variables.sessions ) ) {
-				variables.sessions.touch( arguments.caller.id(), arguments.conversationId, arguments.input, 2, arguments.caller.source() )
+				variables.sessions.touch( arguments.caller.id(), arguments.conversationId, arguments.input, 0, arguments.caller.source() )
 			}
 		} catch ( any e ) {
 			// the turn goes on without a list

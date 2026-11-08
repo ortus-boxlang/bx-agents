@@ -166,14 +166,27 @@ class {
 	}
 
 	/**
+	 * Sets the count to what the conversation's memory holds. The count is not kept by adding to it: a memory keeps
+	 * at most `maxMessages` of them and `/compact` shrinks it, so a running total would drift from what is there.
+	 * Conversations works the number out and calls this.
+	 *
+	 * @userId Whose conversation
+	 * @conversationId The conversation
+	 * @count How many messages the memory holds for it
+	 */
+	void function setCount( required string userId, required string conversationId, required numeric count ) {
+		variables.store.exec(
+			"UPDATE conversations SET messageCount = :count, updatedAt = :now WHERE id = :id AND userId = :userId",
+			{ count : int( arguments.count ), now : { value : now(), cfsqltype : "timestamp" }, id : arguments.conversationId, userId : arguments.userId }
+		)
+	}
+
+	/**
 	 * Sets the count to zero after the conversation's messages were cleared, so lists do not advertise history
 	 * that is gone.
 	 */
 	void function resetCount( required string userId, required string conversationId ) {
-		variables.store.exec(
-			"UPDATE conversations SET messageCount = 0, updatedAt = :now WHERE id = :id AND userId = :userId",
-			{ now : { value : now(), cfsqltype : "timestamp" }, id : arguments.conversationId, userId : arguments.userId }
-		)
+		setCount( arguments.userId, arguments.conversationId, 0 )
 	}
 
 	/**
