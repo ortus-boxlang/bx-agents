@@ -19,6 +19,36 @@ or package as a portable `.bxa`.
 
 ### Added
 
+#### Memory
+
+- **Every agent remembers in the chat database by default.** With no `memory:` in `Agent.yaml`, the root
+  agent and each subagent keep their conversations as jdbc memory in `chat.db`, one row per person and
+  conversation under the agent's own name. The same person finds the same conversation from the
+  terminal, the web page and the API, and a subagent that a parent delegates to keeps its own rows
+  for the same person and conversation. `maxMessages` (20 to 100000, default 500) and `keepRecent`
+  (default 20) tune it. A `memory:` that names a `type` is built exactly as written.
+- **`/compact` works with nothing set up.** A memory with no summary model is summarized by the agent's
+  own model, and the answer says which one. `/context` shows how many of the messages its memory keeps
+  a conversation has, with a warning near the limit, and the status line adds `msgs 460/500` there.
+- **The message count in the conversation list is what memory holds.** It is set whenever memory changes
+  (after a turn, `/clear`, `/compact`), never added to, so it cannot pass the limit or go stale.
+  `Conversations` is the one place that changes a conversation's row and its memory together: `clear`,
+  `delete` and `refreshCount`.
+
+#### Data home and volumes
+
+- One **data home** holds everything an agent keeps (`chat.db`, `files/`, `skills/`, `backups/`).
+  There is always one, by convention: `~/.bxagents/<agent name>`, outside the project and the
+  build. `BXAGENTS_HOME` or `data.home` in `Agent.yaml` choose another, and a project that already
+  has `data/chat.db` keeps using it.
+- **Volumes**: `volumes:` in `Agent.yaml` names host folders, read only or read and write. The file
+  tools take `volume:path`, refuse full paths, `..` and symbolic links that leave a volume, and
+  name volumes in results and errors.
+- **Admins and members.** Every web account has an `admin` flag: `admin: true` on a `users` entry seeds it, the database keeps it from then on, and an admin changes it with `POST /users/admin`, `GET /users` and `bxAgents users list|admin|member`. The last admin cannot be demoted. The signed-in caller now has the admin scope when the account is one, and the API contract marks each route `anyone` or `admin`; the admin routes (`/tokens`, `/data`, `/users`) are refused for a member before their action runs.
+- `/volumes` in chat (terminal, web page, chat apps), `GET /volumes` and an admin-only `GET /data` on the agent API, `volumes()` and `data()` on `AgentApiClient`, and a data home check in `doctor`.
+- `bxAgents data`, `bxAgents backup` and `bxAgents restore`. A backup is one zip; the database is
+  copied with `VACUUM INTO`; a restore keeps what was there as `.before-restore`.
+
 #### Markdown and syntax highlighting
 
 - The web UI renders answers as full Markdown (tables, quotes, strikethrough) with

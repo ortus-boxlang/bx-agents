@@ -411,6 +411,31 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( '"yaml-tool-options-agent", { "bxplaywright" : { "baseURL" : "${env.APP_URL:http://localhost:8080}", "headless" : false, "profile" : "mobile" } } )' );
 			} );
 
+			it( "fences an agent's file tools into the project's volumes and stamps the data home", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/yaml-file-tools", buildDir );
+				var content = fileRead( result.agentFactory );
+
+				expect( content ).toInclude( '"bxai" : { "agentName" : "file-tools-agent", "dataHome" : "~/.nanobox", "volumes" : { "notes" : { "mode" : "rw", "path" : "~/Notes" } } }' );
+			} );
+
+			it( "leaves an agent that names its own allowedPaths on those", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/yaml-file-tools-own-paths", buildDir );
+				var content = fileRead( result.agentFactory );
+
+				expect( content ).toInclude( '"bxai" : { "allowedPaths" : [ "tmp" ] }' );
+				expect( content ).notToInclude( '"volumes"' );
+			} );
+
+			it( "gives no volumes to an agent that lists no file tool", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/yaml-tools", buildDir );
+				var content = fileRead( result.agentFactory );
+
+				expect( content ).notToInclude( '"volumes"' );
+			} );
+
 			it( "attaches no module tools at all to an agent that lists none", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );
@@ -631,12 +656,55 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileRead( buildDir & "/bxagents/Application.bx" ) ).toInclude( 'this.datasources[ "bxagents" ]' );
 			} );
 
-			it( "leaves notes and the shared database out of an agent that keeps none", function() {
+			it( "keeps notes out of an agent that keeps none, while its memory lives in the shared database", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/valid-minimal", buildDir );
 
 				expect( fileRead( result.agentFactory ) ).notToInclude( "NotesWiring" );
-				expect( fileRead( buildDir & "/bxagents/Application.bx" ) ).notToInclude( "this.datasources" );
+				expect( fileRead( result.agentFactory ) ).toInclude( "MemoryWiring" );
+				expect( fileRead( buildDir & "/bxagents/Application.bx" ) ).toInclude( "this.datasources" );
+			} );
+
+			it( "gives every agent that names no memory the default one, under its own name", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/subagents-chain", buildDir );
+				var content = fileRead( result.agentFactory );
+
+				// one default memory per agent: the root and each subagent
+				var found = 0;
+				var from = 1;
+				while ( from > 0 ) {
+					from = content.findNoCase( "MemoryWiring@bxagents", from );
+					if ( from > 0 ) {
+						found++;
+						from++;
+					}
+				}
+				expect( found ).toBeGTE( 2 );
+			} );
+
+			it( "passes maxMessages and keepRecent of a memory block with no type to the default memory", function() {
+				var dir = createTempDirectory( prefix = "bxagents-coldbox-memory-" );
+				fileWrite( dir & "/instructions.md", "Be helpful." );
+				fileWrite( dir & "/Agent.yaml", "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "memory:" & char( 10 ) & "  maxMessages: 300" & char( 10 ) & "  keepRecent: 10" & char( 10 ) );
+				var factory = fileRead( generateFor( dir, newBuildDir() ).agentFactory );
+
+				// struct keys come out in no fixed order, so the two settings are looked for one by one
+				expect( factory ).toInclude( 'MemoryWiring@bxagents"().memory( "keeper", {' );
+				expect( factory ).toInclude( '"maxMessages" : 300' );
+				expect( factory ).toInclude( '"keepRecent" : 10' );
+				expect( factory ).notToInclude( 'aiMemory( memory: "jdbc"' );
+			} );
+
+			it( "builds a memory that names a type exactly as written, with no default memory beside it", function() {
+				var dir = createTempDirectory( prefix = "bxagents-coldbox-memory-" );
+				fileWrite( dir & "/instructions.md", "Be helpful." );
+				fileWrite( dir & "/Agent.yaml", "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "memory:" & char( 10 ) & "  type: window" & char( 10 ) & "  maxMessages: 40" & char( 10 ) );
+				var buildDir = newBuildDir();
+				var factory = fileRead( generateFor( dir, buildDir ).agentFactory );
+
+				expect( factory ).toInclude( 'aiMemory( memory: "window"' );
+				expect( factory ).notToInclude( "MemoryWiring" );
 			} );
 
 			it( "emits an empty mcpServers: [] when no mcpServers are declared", function() {
@@ -703,9 +771,30 @@ class extends="testbox.system.BaseSpec" {
 				);
 
 				var content = fileRead( buildDir & "/bxagents/Application.bx" );
-				expect( content ).toInclude( '"database": getSystemSetting( "BXAGENTS_DB", appPath( "./data/chat.db" ) )' );
-				// the folder is made for whichever file is used
-				expect( content ).toInclude( 'directoryCreate( getDirectoryFromPath( getSystemSetting( "BXAGENTS_DB", appPath( "./data/chat.db" ) ) ), true, true )' );
+				// one place decides: BXAGENTS_DB, then the data home when it was chosen, then the configured path
+				expect( content ).toInclude( '"database": databaseFile( "./data/chat.db" )' );
+				expect( content ).toInclude( 'return dataHome().databaseOr( appPath( arguments.fallback ) )' );
+				// the data home is made with its folders, around whichever file is used
+				expect( content ).toInclude( 'dataHome().ensure( databaseFile( "./data/chat.db" ) )' );
+				expect( content ).toInclude( 'configured : ""' );
+				// the agent's name makes the conventional home, ~/.bxagents/<name>
+				expect( content ).toInclude( 'agentName : "' & config.name & '"' );
+			} );
+
+			it( "stamps data.home from Agent.yaml into the app so it keeps the data where serve and chat do", function() {
+				var buildDir = newBuildDir();
+				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
+				config.data = { home : "~/.nanobox" };
+				generator.generate(
+					projectRoot    : fixtures & "/full-project",
+					buildDir       : buildDir,
+					resolvedConfig : config,
+					hasWebUi       : true,
+					webUiDatabase  : { datasource : "acmechat", path : "./data/chat.db" }
+				);
+
+				var content = fileRead( buildDir & "/bxagents/Application.bx" );
+				expect( content ).toInclude( 'configured : "~/.nanobox"' );
 			} );
 
 			/**
@@ -813,9 +902,20 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).notToInclude( "identifierProvider" );
 			} );
 
-			it( "declares no datasource at all for a project without a web UI", function() {
+			it( "registers the chat database for the default memory even in a project without a web UI", function() {
 				var buildDir = newBuildDir();
 				generateFor( fixtures & "/full-project", buildDir );
+				var content = fileRead( buildDir & "/bxagents/Application.bx" );
+
+				expect( content ).toInclude( 'this.datasources[ "bxagents" ]' );
+			} );
+
+			it( "declares no datasource when every agent chose its own memory type", function() {
+				var dir = createTempDirectory( prefix = "bxagents-coldbox-memory-" );
+				fileWrite( dir & "/instructions.md", "Be helpful." );
+				fileWrite( dir & "/Agent.yaml", "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "memory:" & char( 10 ) & "  type: window" & char( 10 ) );
+				var buildDir = newBuildDir();
+				generateFor( dir, buildDir );
 				var content = fileRead( buildDir & "/bxagents/Application.bx" );
 
 				expect( content ).notToInclude( "this.datasources[" );

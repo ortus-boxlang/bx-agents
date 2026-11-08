@@ -1,0 +1,151 @@
+/**
+ * The memory an agent gets when its Agent.yaml does not name one.
+ *
+ * Every agent, the root and each subagent, remembers its conversations in the chat database, as bx-ai jdbc
+ * memory. The key is the agent's own name, so agents never share a row, and the database keeps one row per
+ * person and conversation under that key. The user and conversation ids come with each run, so a served agent
+ * with many people never mixes them up.
+ *
+ *   memory:
+ *     maxMessages: 500     # per conversation, the oldest are dropped past it (20 to 100000, default 500)
+ *     keepRecent: 20       # messages kept as they are when /compact summarizes the rest (default 20)
+ *
+ * A `memory` block that names a `type` is a choice of the author and is built exactly as written, see
+ * ColdBoxAppGenerator.renderMemoryExpression(). The generated agent factory calls memory() for the rest.
+ */
+class {
+
+	static {
+		DEFAULT_MAX_MESSAGES = 500
+		MIN_MAX_MESSAGES     = 20
+		MAX_MAX_MESSAGES     = 100000
+		DEFAULT_KEEP_RECENT  = 20
+		// The named datasource that the generated Application registers for the chat database
+		APP_DATASOURCE       = "bxagents"
+		// The keys this class reads from `memory`; anything else under it is a mistake worth a message
+		KNOWN_KEYS           = [ "maxMessages", "keepRecent" ]
+	}
+
+	/**
+	 * The problems in the settings of a default `memory` block, in words for the author. Used when the project is
+	 * checked and again when the memory is built, so both say the same thing.
+	 *
+	 * @settings The `memory` block without a `type`
+	 *
+	 * @return An array of messages, empty when the settings are fine
+	 */
+	array function problems( required struct settings ) {
+		var found = []
+		for ( var key in arguments.settings ) {
+			if ( key == "key" ) {
+				continue
+			}
+			if ( !static.KNOWN_KEYS.findNoCase( key ) ) {
+				found.append( "memory.#key# is not a setting of the default memory. Use maxMessages and keepRecent, or name a memory type to configure it yourself." )
+			}
+		}
+		var max = static.DEFAULT_MAX_MESSAGES
+		if ( arguments.settings.keyExists( "maxMessages" ) ) {
+			if ( !isWholeNumber( arguments.settings.maxMessages ) || arguments.settings.maxMessages < static.MIN_MAX_MESSAGES || arguments.settings.maxMessages > static.MAX_MAX_MESSAGES ) {
+				found.append( "memory.maxMessages must be a whole number from #static.MIN_MAX_MESSAGES# to #static.MAX_MAX_MESSAGES#." )
+			} else {
+				max = int( arguments.settings.maxMessages )
+			}
+		}
+		if ( arguments.settings.keyExists( "keepRecent" ) ) {
+			if ( !isWholeNumber( arguments.settings.keepRecent ) || arguments.settings.keepRecent < 1 ) {
+				found.append( "memory.keepRecent must be a whole number of at least 1." )
+			} else if ( arguments.settings.keepRecent >= max ) {
+				found.append( "memory.keepRecent must be lower than memory.maxMessages (#max#)." )
+			}
+		}
+		return found
+	}
+
+	/**
+	 * Builds the default memory of one agent.
+	 *
+	 * @agentName The agent's name, which is also the key its rows are kept under
+	 * @settings The `memory` block without a `type`: maxMessages, keepRecent
+	 *
+	 * @return A bx-ai jdbc memory
+	 */
+	any function memory( required string agentName, struct settings = {} ) {
+		var found = problems( arguments.settings )
+		if ( found.len() ) {
+			throw( type = "BxAgents.InvalidMemory", message = "The memory of [#arguments.agentName#] is not valid: " & found.toList( " " ) )
+		}
+		var keepRecent = int( arguments.settings.keepRecent ?: static.DEFAULT_KEEP_RECENT )
+		var max        = int( arguments.settings.maxMessages ?: static.DEFAULT_MAX_MESSAGES )
+		// The default keep-recent cannot reach the limit on a small maxMessages
+		if ( keepRecent >= max ) {
+			keepRecent = max - 1
+		}
+		try {
+			return aiMemory(
+				memory : "jdbc",
+				key    : keyOf( arguments.agentName ),
+				config : {
+					datasource       : datasource(),
+					maxMessages      : max,
+					summaryThreshold : keepRecent
+				}
+			)
+		} catch ( any e ) {
+			if ( e.message.findNoCase( "Datasource with name [#static.APP_DATASOURCE#] not found" ) ) {
+				throw(
+					type    = "BxAgents.MemoryNoDatabase",
+					message = "The memory of [#arguments.agentName#] needs the chat database, and none is set up here. Set BXAGENTS_DB to the database file, or run the agent through its generated application, which registers the [#static.APP_DATASOURCE#] datasource. To keep this agent's memory elsewhere, name a memory type in Agent.yaml."
+				)
+			}
+			rethrow
+		}
+	}
+
+	/**
+	 * The key an agent's rows are kept under: its name, or "agent" for one without a name.
+	 *
+	 * @agentName The agent's name
+	 */
+	string function keyOf( required string agentName ) {
+		return len( trim( arguments.agentName ) ) ? trim( arguments.agentName ) : "agent"
+	}
+
+	/**
+	 * Where the rows live: the chat database file named by BXAGENTS_DB when there is one (the terminal chat and a
+	 * served project, the same file the notes use), otherwise the datasource the generated application registers
+	 * for it (a deployed app).
+	 *
+	 * @return A datasource struct, or the name of a registered datasource
+	 */
+	any function datasource() {
+		var file = new "models.store.DbSetting@bxagents"().file()
+		if ( len( file ) ) {
+			directoryCreate( getDirectoryFromPath( file ), true, true )
+			return { driver : "sqlite", database : file }
+		}
+		return appDatasource()
+	}
+
+	/**
+	 * The datasource the running application registered as its default (the generated Application sets
+	 * `this.datasource`; the name is the web UI's when the project names one), else the conventional name.
+	 */
+	private string function appDatasource() {
+		try {
+			var named = getApplicationMetadata().datasource ?: ""
+			if ( isSimpleValue( named ) && len( trim( named ) ) ) {
+				return trim( named )
+			}
+		} catch ( any e ) {
+			// no application here (a script, a unit test): the conventional name
+		}
+		return static.APP_DATASOURCE
+	}
+
+	private boolean function isWholeNumber( required any value ) {
+		// "true" and "yes" are not numeric, so only real numbers get here
+		return isNumeric( arguments.value ) && arguments.value == int( arguments.value )
+	}
+
+}

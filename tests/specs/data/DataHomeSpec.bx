@@ -1,0 +1,337 @@
+import bxModules.bxagents.models.data.DataHome;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "DataHome", function() {
+
+			beforeEach( function() {
+				// another spec can leave these set (loading a built agent names the database); this spec must see none
+				variables.savedEnvironment = {}
+				for ( var name in [ "BXAGENTS_DB", "BXAGENTS_HOME" ] ) {
+					variables.savedEnvironment[ name ] = createObject( "java", "java.lang.System" ).getProperty( name ) ?: ""
+					createObject( "java", "java.lang.System" ).clearProperty( name )
+				}
+				variables.root = getTempDirectory() & "bxa-datahome-" & createUUID()
+				directoryCreate( variables.root )
+			} );
+
+			afterEach( function() {
+				for ( var name in variables.savedEnvironment ) {
+					if ( len( variables.savedEnvironment[ name ] ) ) {
+						createObject( "java", "java.lang.System" ).setProperty( name, variables.savedEnvironment[ name ] )
+					}
+				}
+				if ( directoryExists( variables.root ) ) {
+					directoryDelete( variables.root, true )
+				}
+			} );
+
+			function home( string configured = "", struct environment = {} ) {
+				return new bxagents.models.data.DataHome( projectRoot : variables.root, configured : arguments.configured, environment : arguments.environment, userHome : "/home/someone" )
+			}
+
+			describe( "where it is", function() {
+
+				it( "is data/ in the project when the agent has no name and nothing says otherwise", function() {
+					var h = home()
+					expect( h.path() ).toBe( variables.root.replace( "\", "/", "all" ) & "/data" )
+					expect( h.source() ).toBe( "default" )
+				} );
+
+				it( "uses data.home from Agent.yaml, relative to the project", function() {
+					var h = home( configured : "./state" )
+					expect( h.path() ).toBe( variables.root.replace( "\", "/", "all" ) & "/state" )
+					expect( h.source() ).toBe( "setting" )
+				} );
+
+				it( "keeps an absolute data.home as it is", function() {
+					expect( home( configured : "/srv/nanobox/" ).path() ).toBe( "/srv/nanobox" )
+					expect( home( configured : "C:\nanobox" ).path() ).toBe( "C:/nanobox" )
+				} );
+
+				it( "expands ~ to the user's home", function() {
+					expect( home( configured : "~/.nanobox" ).path() ).toBe( "/home/someone/.nanobox" )
+					expect( home( configured : "~" ).path() ).toBe( "/home/someone" )
+				} );
+
+				it( "lets the environment win over the setting", function() {
+					var h = home( configured : "./state", environment : { BXAGENTS_HOME : "/mnt/volume/agent" } )
+					expect( h.path() ).toBe( "/mnt/volume/agent" )
+					expect( h.source() ).toBe( "environment" )
+				} );
+
+				it( "ignores a blank environment value", function() {
+					expect( home( environment : { BXAGENTS_HOME : "   " } ).source() ).toBe( "default" )
+				} );
+
+			} );
+
+			describe( "the home by convention", function() {
+
+				function named( string agentName, string configured = "", struct environment = {} ) {
+					return new bxagents.models.data.DataHome( projectRoot : variables.root, configured : arguments.configured, environment : arguments.environment, userHome : "/home/someone", agentName : arguments.agentName )
+				}
+
+				it( "is ~/.bxagents/<agent name> when nothing else chose one", function() {
+					var h = named( "nanobox" )
+					expect( h.path() ).toBe( "/home/someone/.bxagents/nanobox" )
+					expect( h.source() ).toBe( "convention" )
+				} );
+
+				it( "turns an awkward agent name into a safe folder name", function() {
+					expect( named( "My Agent / v2" ).path() ).toBe( "/home/someone/.bxagents/My-Agent-v2" )
+					expect( named( "../../etc" ).path() ).toBe( "/home/someone/.bxagents/etc" )
+					expect( named( "///" ).path() ).toBe( "/home/someone/.bxagents/agent" )
+				} );
+
+				it( "keeps a project's own data/ when it already holds a chat.db", function() {
+					directoryCreate( variables.root & "/data" )
+					fileWrite( variables.root & "/data/chat.db", "old" )
+					var h = named( "nanobox" )
+					expect( h.path() ).toBe( variables.root.replace( "\", "/", "all" ) & "/data" )
+					expect( h.source() ).toBe( "project" )
+				} );
+
+				it( "lets the setting and the environment win over the convention", function() {
+					expect( named( "nanobox", "/srv/nanobox" ).source() ).toBe( "setting" )
+					expect( named( "nanobox", "", { BXAGENTS_HOME : "/mnt/x" } ).source() ).toBe( "environment" )
+					expect( named( "nanobox", "", { BXAGENTS_DB : "/work/data/chat.db" } ).source() ).toBe( "database" )
+				} );
+
+				it( "gives the database and folders inside it", function() {
+					var h = named( "nanobox" )
+					expect( h.database() ).toBe( "/home/someone/.bxagents/nanobox/chat.db" )
+					expect( h.folder( "skills" ) ).toBe( "/home/someone/.bxagents/nanobox/skills" )
+				} );
+
+				it( "counts as chosen, so the app's own database path is not used", function() {
+					expect( named( "nanobox" ).databaseOr( "/app/data/chat.db" ) ).toBe( "/home/someone/.bxagents/nanobox/chat.db" )
+				} );
+
+				it( "needs no warning", function() {
+					expect( named( "nanobox" ).warning() ).toBe( "" )
+				} );
+
+			} );
+
+			describe( "the database file", function() {
+
+				it( "is chat.db in the home", function() {
+					expect( home( configured : "/srv/nanobox" ).database() ).toBe( "/srv/nanobox/chat.db" )
+				} );
+
+				it( "is named by BXAGENTS_DB on its own when that is set", function() {
+					var h = home( configured : "/srv/nanobox", environment : { BXAGENTS_DB : "/elsewhere/agent.db" } )
+					expect( h.database() ).toBe( "/elsewhere/agent.db" )
+					expect( h.path() ).toBe( "/srv/nanobox" )
+				} );
+
+			} );
+
+			describe( "databaseOr()", function() {
+
+				it( "uses the fallback when the home was not chosen", function() {
+					expect( home().databaseOr( "/app/data/chat.db" ) ).toBe( "/app/data/chat.db" )
+				} );
+
+				it( "uses the chosen home instead of the fallback", function() {
+					expect( home( configured : "/srv/nanobox" ).databaseOr( "/app/data/chat.db" ) ).toBe( "/srv/nanobox/chat.db" )
+				} );
+
+				it( "lets BXAGENTS_DB win over everything", function() {
+					var h = home( configured : "/srv/nanobox", environment : { BXAGENTS_DB : "/elsewhere/agent.db" } )
+					expect( h.databaseOr( "/app/data/chat.db" ) ).toBe( "/elsewhere/agent.db" )
+				} );
+
+			} );
+
+			describe( "folder()", function() {
+
+				it( "gives the path of a known folder", function() {
+					expect( home( configured : "/srv/nanobox" ).folder( "skills" ) ).toBe( "/srv/nanobox/skills" )
+				} );
+
+				it( "refuses a folder that is not part of the home", function() {
+					expect( function() { home().folder( "secrets" ) } ).toThrow( "BxAgents.UnknownDataFolder" )
+				} );
+
+			} );
+
+			describe( "ensure()", function() {
+
+				it( "makes the home, its folders and the README", function() {
+					var h = home()
+					var result = h.ensure()
+					expect( directoryExists( h.path() ) ).toBeTrue()
+					for ( var name in [ "files", "skills", "backups" ] ) {
+						expect( directoryExists( h.path() & "/" & name ) ).toBeTrue( name )
+					}
+					expect( fileExists( h.path() & "/README.md" ) ).toBeTrue()
+					expect( result.created ).toInclude( "README.md" )
+					expect( fileRead( h.path() & "/README.md" ) ).toInclude( "bxAgents backup" )
+				} );
+
+				it( "can be called again and leaves what is there alone", function() {
+					var h = home()
+					h.ensure()
+					fileWrite( h.path() & "/README.md", "mine" )
+					fileWrite( h.path() & "/files/note.txt", "kept" )
+					var again = h.ensure()
+					expect( again.created ).toBeEmpty()
+					expect( fileRead( h.path() & "/README.md" ) ).toBe( "mine" )
+					expect( fileExists( h.path() & "/files/note.txt" ) ).toBeTrue()
+				} );
+
+				it( "makes the folder of a database file it is told about", function() {
+					var elsewhere = variables.root & "/custom/place"
+					home().ensure( elsewhere & "/own.db" )
+					expect( directoryExists( elsewhere ) ).toBeTrue()
+				} );
+
+				it( "makes the folder of the database file when BXAGENTS_DB points elsewhere", function() {
+					var elsewhere = variables.root & "/db-folder/nested"
+					home( environment : { BXAGENTS_DB : elsewhere & "/agent.db" } ).ensure()
+					expect( directoryExists( elsewhere ) ).toBeTrue()
+				} );
+
+			} );
+
+			describe( "warning()", function() {
+
+				it( "says to choose a home when the default is in use", function() {
+					expect( home().warning() ).toInclude( "BXAGENTS_HOME" )
+					expect( home().warning() ).toInclude( "data.home" )
+				} );
+
+				it( "stays quiet once the home was chosen", function() {
+					expect( home( configured : "/srv/nanobox" ).warning() ).toBe( "" )
+					expect( home( environment : { BXAGENTS_HOME : "/srv/nanobox" } ).warning() ).toBe( "" )
+				} );
+
+				it( "stays quiet when serve names the database", function() {
+					expect( home( environment : { BXAGENTS_DB : "/work/data/chat.db" } ).warning() ).toBe( "" )
+				} );
+
+			} );
+
+			describe( "describe()", function() {
+
+				it( "counts the bytes and files in each part", function() {
+					var h = home()
+					h.ensure()
+					fileWrite( h.database(), "12345" )
+					fileWrite( h.path() & "/files/a.txt", "abc" )
+					fileWrite( h.path() & "/files/b.txt", "de" )
+					var info = h.describe()
+					var byName = {}
+					for ( var item in info.items ) {
+						byName[ item.name ] = item
+					}
+					expect( byName[ "chat.db" ].bytes ).toBe( 5 )
+					expect( byName[ "files/" ].files ).toBe( 2 )
+					expect( byName[ "files/" ].bytes ).toBe( 5 )
+					expect( byName[ "skills/" ].files ).toBe( 0 )
+					// the chat.db written above is what makes the project's data/ the home
+					expect( info.source ).toBe( "project" )
+				} );
+
+				it( "does not make anything", function() {
+					var h = home()
+					h.describe()
+					expect( directoryExists( h.path() ) ).toBeFalse()
+				} );
+
+			} );
+
+			describe( "a database named by BXAGENTS_DB", function() {
+
+				it( "makes the folder of a chat.db the home when nothing chose one", function() {
+					var h = home( environment : { BXAGENTS_DB : "/work/project/data/chat.db" } )
+					expect( h.path() ).toBe( "/work/project/data" )
+					expect( h.source() ).toBe( "database" )
+				} );
+
+				it( "does not guess a home from a database with another name", function() {
+					expect( home( environment : { BXAGENTS_DB : "/var/db/agent.sqlite" } ).source() ).toBe( "default" )
+				} );
+
+				it( "leaves a chosen home alone", function() {
+					var h = home( configured : "/srv/nanobox", environment : { BXAGENTS_DB : "/work/project/data/chat.db" } )
+					expect( h.path() ).toBe( "/srv/nanobox" )
+				} );
+
+			} );
+
+			describe( "forProject()", function() {
+
+				it( "reads data.home from the project's Agent.yaml", function() {
+					fileWrite( variables.root & "/Agent.yaml", "name: demo" & char( 10 ) & "data:" & char( 10 ) & "  home: ./state" & char( 10 ) )
+					var found = DataHome::forProject( variables.root )
+					expect( found.path() ).toBe( variables.root.replace( "\", "/", "all" ) & "/state" )
+					expect( found.source() ).toBe( "setting" )
+				} );
+
+				it( "uses the default when there is no Agent.yaml", function() {
+					expect( DataHome::forProject( variables.root ).source() ).toBe( "default" )
+				} );
+
+				it( "uses the default when the Agent.yaml cannot be read", function() {
+					fileWrite( variables.root & "/Agent.yaml", "name: [broken" )
+					expect( DataHome::forProject( variables.root ).source() ).toBe( "default" )
+				} );
+
+			} );
+
+			describe( "problems()", function() {
+
+				it( "accepts a home", function() {
+					expect( DataHome::problems( { home : "~/.nanobox" } ) ).toBeEmpty()
+					expect( DataHome::problems( {} ) ).toBeEmpty()
+				} );
+
+				it( "names an unknown key", function() {
+					var found = DataHome::problems( { folder : "x" } )
+					expect( found ).toHaveLength( 1 )
+					expect( found[ 1 ] ).toInclude( "folder" )
+				} );
+
+				it( "refuses an empty or non-text home", function() {
+					expect( DataHome::problems( { home : "  " } ) ).toHaveLength( 1 )
+					expect( DataHome::problems( { home : [ "a" ] } ) ).toHaveLength( 1 )
+				} );
+
+				it( "refuses a setting that is not a mapping", function() {
+					expect( DataHome::problems( "~/.nanobox" ) ).toHaveLength( 1 )
+				} );
+
+			} );
+
+			describe( "writableWithoutMaking()", function() {
+
+				it( "is true for a home that does not exist yet under a folder that can be written", function() {
+					var h = home( configured : variables.root & "/not/yet/there" )
+					expect( h.writableWithoutMaking() ).toBeTrue()
+					expect( directoryExists( variables.root & "/not" ) ).toBeFalse()
+				} );
+
+				it( "is true for a home that exists", function() {
+					var h = home()
+					h.ensure()
+					expect( h.writableWithoutMaking() ).toBeTrue()
+				} );
+
+			} );
+
+			describe( "writable()", function() {
+
+				it( "is true for a folder it can make", function() {
+					expect( home().writable() ).toBeTrue()
+				} );
+
+			} );
+
+		} );
+	}
+
+}

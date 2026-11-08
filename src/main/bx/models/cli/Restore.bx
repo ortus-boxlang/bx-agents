@@ -1,0 +1,34 @@
+/**
+ * `restore` CLI verb: puts a backup back into the data home.
+ *
+ *   bxAgents restore FILE [--home=DIR] [--force]
+ *
+ * The database, `files/` and `skills/` are replaced; what was there is kept beside it as <name>.before-restore for one
+ * restore. It stops if a server or chat looks to have the database open, unless --force is given.
+ */
+class {
+
+	/**
+	 * @options { projectRoot (required), _positional (the backup), home, force }
+	 */
+	struct function run( struct options = {} ) {
+		var root = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( root ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`restore` requires a project root" )
+		}
+		var file = trim( arguments.options._positional ?: "" )
+		if ( !len( file ) ) {
+			throw( type = "BxAgents.MissingBackup", message = "`restore` needs the backup to put back, for example `bxAgents restore backups/backup-20261107-0914.zip`." )
+		}
+		var data = len( trim( arguments.options.home ?: "" ) )
+			? new "models.data.ProjectData@bxagents"().of( root.reReplace( "[\/]+$", "" ), trim( arguments.options.home ) )
+			: new "models.data.ProjectData@bxagents"().of( root.reReplace( "[\/]+$", "" ) )
+		var done = new "models.data.DataBackup@bxagents"( data.home ).restore( file, arguments.options.force ?: false )
+		var lines = [ "Restored #done.restored.toList( ', ' )# into #data.home.path()#" ]
+		if ( done.kept.len() ) {
+			lines.append( "Kept what was there as #done.kept.toList( ', ' )#. The next restore replaces them." )
+		}
+		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+	}
+
+}

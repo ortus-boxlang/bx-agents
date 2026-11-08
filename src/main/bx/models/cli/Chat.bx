@@ -184,7 +184,7 @@ class {
 		var agent = new "models.cli.support.BuiltAgent@bxagents"().load( arguments.root )
 
 		if ( wantsScreen( arguments.options ) ) {
-			return chatWithScreen( new "models.cli.chat.InProcessSession@bxagents"( agent, user, openSessions( arguments.root ), openConnections( arguments.root, user, agent ) ), arguments.options )
+			return chatWithScreen( new "models.cli.chat.InProcessSession@bxagents"( agent, user, openSessions( arguments.root ), openConnections( arguments.root, user, agent ) ).withData( new "models.data.ProjectData@bxagents"().appDataOf( arguments.root ) ), arguments.options )
 		}
 
 		// MiniConsole shells out to `stty` to set up raw terminal mode, so it
@@ -258,8 +258,7 @@ class {
 	 */
 	private any function openSessions( required string root ) {
 		try {
-			var file = new "models.store.ChatStorePath@bxagents"().forProject( arguments.root )
-			directoryCreate( getDirectoryFromPath( file ), true, true )
+			var file = new "models.store.ChatStorePath@bxagents"().prepared( arguments.root )
 			var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
 			store.migrate()
 			return new "models.store.SessionStore@bxagents"( store )

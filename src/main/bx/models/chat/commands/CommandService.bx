@@ -14,9 +14,11 @@ class {
 	 * @sessions A SessionStore, or null when the server keeps no list of conversations
 	 * @registry The CommandRegistry; the app's (built-ins plus its extensions' commands) when not given
 	 * @offered The profiles a client may ask for (agentApi.profiles), none by default; /ping goes to no other
+	 * @data An AppData: what /volumes lists. Without one the command says it has no list
 	 */
-	function init( required any agent, any sessions, any registry, array offered = [] ) {
+	function init( required any agent, any sessions, any registry, array offered = [], any data ) {
 		variables.offered = arguments.offered
+		variables.data = isNull( arguments.data ) ? nullValue() : arguments.data
 		variables.agent = arguments.agent
 		variables.sessions = isNull( arguments.sessions ) ? nullValue() : arguments.sessions
 		variables.registry = isNull( arguments.registry ) ? new "models.chat.commands.CommandCatalog@bxagents"().forApplication() : arguments.registry
@@ -46,6 +48,9 @@ class {
 		var conversation = ( isNull( variables.sessions )
 			? new "models.chat.ServerConversation@bxagents"( variables.agent, arguments.userId, nullValue(), arguments.conversationId )
 			: new "models.chat.ServerConversation@bxagents"( variables.agent, arguments.userId, variables.sessions, arguments.conversationId ) ).withOfferedProfiles( variables.offered )
+		if ( !isNull( variables.data ) ) {
+			conversation.withData( variables.data )
+		}
 		var context = new "models.chat.commands.CommandContext@bxagents"( conversation, arguments.transport, arguments.admin )
 		var reply = variables.registry.run( arguments.line, context )
 		var answer = reply.toStruct()

@@ -25,6 +25,9 @@ class extends="testbox.system.BaseSpec" {
 			beforeEach( function() {
 				variables.project = createTempDirectory( prefix = "bxagents-connectcli-" );
 				directoryCopy( expandPath( "/fixtures/with-mcp-oauth" ), project, true );
+				// the agent has a name, so without this its data home is the shared ~/.bxagents/<name> and each test sees the last one's vault
+				variables.savedHome = createObject( "java", "java.lang.System" ).getProperty( "BXAGENTS_HOME" ) ?: "";
+				createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_HOME", replace( project, "\", "/", "all" ) & "/data" );
 				// the fixture's mail server takes its client id and secret from the vault
 				var file = new bxagents.models.store.ChatStorePath().forProject( project );
 				directoryCreate( getDirectoryFromPath( file ), true, true );
@@ -42,6 +45,11 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			afterEach( function() {
+				if ( len( savedHome ) ) {
+					createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_HOME", savedHome );
+				} else {
+					createObject( "java", "java.lang.System" ).clearProperty( "BXAGENTS_HOME" );
+				}
 				if ( directoryExists( project ) ) {
 					directoryDelete( project, true );
 				}
@@ -139,6 +147,8 @@ class extends="testbox.system.BaseSpec" {
 			it( "says which vault secret is missing instead of failing", function() {
 				var bare = createTempDirectory( prefix = "bxagents-connectbare-" );
 				directoryCopy( expandPath( "/fixtures/with-mcp-oauth" ), bare, true );
+				// its own data home, so it has no vault of the other project
+				createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_HOME", replace( bare, "\\", "/", "all" ) & "/data" );
 
 				var out = new bxagents.models.cli.Connect().run( {
 					projectRoot    : bare,

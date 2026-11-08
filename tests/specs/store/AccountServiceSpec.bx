@@ -1,0 +1,71 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "store.AccountService", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-accounts-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.accounts = new bxagents.models.store.AccountService( store );
+				addAccount( "ada", true );
+				addAccount( "grace", false );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function addAccount( required string name, required boolean admin, boolean active = true ) {
+				store.exec(
+					"INSERT INTO users ( id, username, passwordHash, displayName, isActive, isAdmin ) VALUES ( :id, :name, 'x', :shown, :active, :admin )",
+					{ id : createUUID(), name : arguments.name, shown : ucFirst( arguments.name ), active : arguments.active ? 1 : 0, admin : arguments.admin ? 1 : 0 }
+				);
+			}
+
+			it( "lists accounts by username with the admin flag and never a password hash", function() {
+				var listed = accounts.list();
+
+				expect( listed.map( a => a.username ) ).toBe( [ "ada", "grace" ] );
+				expect( listed[ 1 ].admin ).toBeTrue();
+				expect( listed[ 2 ].admin ).toBeFalse();
+				expect( jsonSerialize( listed ) ).notToInclude( "passwordHash" );
+			} );
+
+			it( "makes an account an admin and takes that away again", function() {
+				accounts.setAdmin( "grace", true );
+				expect( accounts.adminCount() ).toBe( 2 );
+
+				accounts.setAdmin( "grace", false );
+				expect( accounts.adminCount() ).toBe( 1 );
+			} );
+
+			it( "refuses to demote the last admin", function() {
+				expect( () => accounts.setAdmin( "ada", false ) ).toThrow( "BxAgents.LastAdmin" );
+				expect( accounts.adminCount() ).toBe( 1 );
+			} );
+
+			it( "does not count a deactivated admin as an admin", function() {
+				addAccount( "old", true, false );
+
+				expect( accounts.adminCount() ).toBe( 1 );
+				expect( () => accounts.setAdmin( "old", true ) ).toThrow( "BxAgents.NoSuchAccount" );
+			} );
+
+			it( "says when there is no such account", function() {
+				expect( () => accounts.setAdmin( "nobody", true ) ).toThrow( "BxAgents.NoSuchAccount" );
+			} );
+
+			it( "migrates an older database: accounts that were there are not admins", function() {
+				var old = createTempDirectory( prefix = "bxagents-accounts-old-" );
+				var older = bxagents.models.store.ChatStore::forFile( old & "/chat.db" );
+				older.migrate();
+				expect( new bxagents.models.store.AccountService( older ).list() ).toBeEmpty();
+				directoryDelete( old, true );
+			} );
+
+		} );
+	}
+
+}

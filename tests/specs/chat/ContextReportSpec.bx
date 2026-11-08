@@ -30,6 +30,12 @@ class extends="testbox.system.BaseSpec" {
 				expect( words.status( { total : 12440, contextWindow : 0, percent : 0 } ) ).toBe( "ctx ~12.4k" );
 			} );
 
+			it( "adds the messages kept to the status only when the conversation is near the most its memory keeps", function() {
+				var base = { total : 12440, contextWindow : 128000, percent : 9.7 };
+				expect( words.status( base.append( { messages : { count : 20, limit : 500, near : false } }, true ) ) ).toBe( "ctx ~12.4k / 128k 9.7%" );
+				expect( words.status( base.append( { messages : { count : 460, limit : 500, near : true } }, true ) ) ).toBe( "ctx ~12.4k / 128k 9.7% · msgs 460/500" );
+			} );
+
 			it( "draws a bar of ten cells filled to the share", function() {
 				expect( words.bar( { percent : 0 } ) ).toBe( "[----------]" );
 				expect( words.bar( { percent : 34 } ) ).toBe( "[######-------]" );
@@ -79,6 +85,28 @@ class extends="testbox.system.BaseSpec" {
 				var sum = 0;
 				report.parts.each( p => sum += p.tokens );
 				expect( report.total ).toBe( sum );
+			} );
+
+			it( "says how many messages the memory keeps, and whether this conversation is near that", function() {
+				var kept = aiAgent( name : "tidy", model : aiModel( provider : "mock" ), memory : aiMemory( memory : "cache", config : { maxMessages : 10 } ) );
+				var chatOf = ( id ) => new bxagents.models.chat.AgentConversation( kept, "alice", nullValue(), id );
+				kept.getMemories().each( ( m ) => {
+					m.add( { role : "user", content : "one" }, "alice", "few" );
+					for ( var i = 1; i <= 9; i++ ) {
+						m.add( { role : "user", content : "message #i#" }, "alice", "many" );
+					}
+				} );
+
+				var few = chatOf( "few" ).contextReport();
+				var many = chatOf( "many" ).contextReport();
+
+				expect( few.messages.count ).toBe( 1 );
+				expect( few.messages.limit ).toBe( 10 );
+				expect( few.messages.near ).toBeFalse();
+				expect( many.messages.count ).toBe( 9 );
+				expect( many.messages.limit ).toBe( 10 );
+				expect( many.messages.near ).toBeTrue();
+				expect( part( many, "memory" ).detail ).toInclude( "9 of 10 messages" );
 			} );
 
 			it( "lists the tools largest first", function() {

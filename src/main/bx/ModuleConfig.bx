@@ -63,7 +63,7 @@ class {
 	this.dependencies = [];
 
 	static {
-		subcommandVerbs = [ "token", "notes", "vault", "sessions", "models", "add", "skills", "extensions" ]
+		subcommandVerbs = [ "token", "users", "notes", "vault", "sessions", "models", "add", "skills", "extensions", "restore" ]
 
 		verbs = {
 			"new"     : "models.cli.New",
@@ -78,6 +78,7 @@ class {
 			"clean"   : "models.cli.Clean",
 			"hash-password" : "models.cli.HashPassword",
 			"token"   : "models.cli.Token",
+			"users"   : "models.cli.Users",
 			"notes"   : "models.cli.Notes",
 			"vault"   : "models.cli.Vault",
 			"connect" : "models.cli.Connect",
@@ -87,7 +88,10 @@ class {
 			"doctor"  : "models.cli.Doctor",
 			"add"     : "models.cli.Add",
 			"skills"  : "models.cli.Skills",
-			"extensions" : "models.cli.Extensions"
+			"extensions" : "models.cli.Extensions",
+			"data"    : "models.cli.Data",
+			"backup"  : "models.cli.Backup",
+			"restore" : "models.cli.Restore"
 		}
 
 		verbDescriptions = {
@@ -103,6 +107,7 @@ class {
 			"clean"   : "Remove a project's .build/ and dist/ output",
 			"hash-password" : "Hash a password for a webui users entry (--password)",
 			"token"   : "Issue, list and revoke access tokens for a deployed agent (create --name, list, revoke --name)",
+			"users"   : "The sign-in accounts of the web page and who is an admin (list, admin --name, member --name)",
 			"notes"   : "Read and manage the notes of an agent (list, add, edit, remove, stats, export, import)",
 			"connect" : "Sign in to the MCP servers of a project that ask each person to sign in: connect [name] ([--remove], [--port=N], [--no-open], [--user=NAME], [--timeout=SECONDS], [--json])",
 			"vault"   : "The secrets an agent uses at run time, sealed in the chat database (list, add, edit, remove, status, audit, key). A value is typed hidden or piped with --stdin, never a flag",
@@ -112,6 +117,9 @@ class {
 			"doctor"  : "Diagnose the environment and project - runtime, modules, env vars ([--json])",
 			"add"     : "Add to a project: add <kind> [name] - a tool, interceptor, schedule, mcp, gateway, subagent, skill, profile, provider, capability or extension ([--force], [--dry-run], [--yes])",
 			"skills"  : "Skills from skills.boxlang.io: skills <find|install|list|update|remove> ([--registry=URL], [--limit=N], [--dry-run], [--json])",
+			"data"    : "Where the agent keeps everything: the data home, the size of each part and the volumes it may use ([--json])",
+			"backup"  : "Zip the chat database, files and skills in the data home ([--to=FILE]); the volumes are not included",
+			"restore" : "Put a backup back into the data home: restore <FILE> ([--home=DIR], [--force]); what was there is kept as .before-restore",
 			"extensions" : "The extensions the chat loads, and installing more: extensions <list|install|update|remove|link|unlink> (install takes a folder, .zip, owner/repo, URL or ForgeBox slug; link puts a folder you are working on in ~/.bxagents/extensions; [--name], [--system], [--force], [--yes], [--json])"
 		}
 
@@ -138,6 +146,7 @@ class {
 			"clean"   : [],
 			"hash-password" : [ "password" ],
 			"token"   : [ "name", "scope", "expires" ],
+			"users"   : [ "name" ],
 			"notes"   : [ "scope", "user", "text", "id", "file" ],
 			"vault"   : [ "name", "scope", "user", "description", "hosts", "limit" ],
 			"connect" : [ "port", "user", "timeout" ],
@@ -147,7 +156,10 @@ class {
 			"doctor"  : [],
 			"extensions" : [ "name" ],
 			"add"     : [ "name", "agent", "function", "description", "args", "scope", "points", "when", "prompt", "server", "url", "auth", "header", "user", "env", "timeout", "version", "cors", "tools", "path", "direction", "provider", "model", "format", "temperature", "max-tokens", "api-key-env", "voice", "size", "quality", "style", "instructions", "users", "policy", "type", "parent", "profile", "profiles", "with", "search", "files", "files-dir", "memory", "mcp", "guard", "layout" ],
-			"skills"  : [ "registry", "limit" ]
+			"skills"  : [ "registry", "limit" ],
+			"data"    : [],
+			"backup"  : [ "to" ],
+			"restore" : [ "home" ]
 		}
 	}
 

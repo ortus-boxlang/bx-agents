@@ -8,10 +8,12 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 
 	$verbs = @{
 		'add' = 'Add to a project: add <kind> [name] - a tool, interceptor, schedule, mcp, gateway,...'
+		'backup' = 'Zip the chat database, files and skills in the data home'
 		'build' = 'Build a project into a generated app'
 		'chat' = 'Interactive REPL chat with a built agent'
 		'clean' = 'Remove a project''s .build/ and dist/ output'
 		'connect' = 'Sign in to the MCP servers of a project that ask each person to sign in: connect [name]'
+		'data' = 'Where the agent keeps everything: the data home, the size of each part and the volumes it...'
 		'deploy' = 'Deploy to a target'
 		'doctor' = 'Diagnose the environment and project - runtime, modules, env vars'
 		'extensions' = 'The extensions the chat loads, and installing more: extensions...'
@@ -22,12 +24,14 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'new' = 'Scaffold a new agent project'
 		'notes' = 'Read and manage the notes of an agent'
 		'package' = 'Package a built project into a .bxa'
+		'restore' = 'Put a backup back into the data home: restore <FILE>'
 		'serve' = 'Serve a built project via boxlang-miniserver'
 		'sessions' = 'List, rename, fork, delete, export and import the conversations in the chat database'
 		'skills' = 'Skills from skills.boxlang.io: skills <find|install|list|update|remove>'
 		'stats' = 'What the model calls used: tokens by model, provider, day or user, once Agent.yaml says...'
 		'test' = 'Run a project''s own tests/specs via TestBox'
 		'token' = 'Issue, list and revoke access tokens for a deployed agent'
+		'users' = 'The sign-in accounts of the web page and who is an admin'
 		'vault' = 'The secrets an agent uses at run time, sealed in the chat database'
 		'help' = 'Show the usage and the list of verbs'
 	}
@@ -85,6 +89,11 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'with'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'yes'; Value = $false; Choices = @(); Dir = $false }
 		)
+		'backup' = @(
+			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'to'; Value = $true; Choices = @(); Dir = $false }
+		)
+		'backup:positional' = 'dir'
 		'build' = @(
 			@{ Name = 'environment'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'generatorVersion'; Value = $true; Choices = @(); Dir = $false }
@@ -118,6 +127,10 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'user'; Value = $true; Choices = @(); Dir = $false }
 		)
 		'connect:positional' = 'dir'
+		'data' = @(
+			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+		)
+		'data:positional' = 'dir'
 		'deploy' = @(
 			@{ Name = 'destination'; Value = $true; Choices = @(); Dir = $true }
 			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }
@@ -220,6 +233,11 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'version'; Value = $true; Choices = @(); Dir = $false }
 		)
 		'package:positional' = 'dir'
+		'restore' = @(
+			@{ Name = 'home'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+		)
+		'restore:positional' = 'dir'
 		'serve' = @(
 			@{ Name = 'host'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'port'; Value = $true; Choices = @(); Dir = $false }
@@ -259,6 +277,11 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 			@{ Name = 'scope'; Value = $true; Choices = @('chat', 'admin'); Dir = $false }
 		)
+		'users' = @(
+			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+		)
+		'users:positional' = 'dir'
 		'vault' = @(
 			@{ Name = 'description'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'hosts'; Value = $true; Choices = @(); Dir = $false }

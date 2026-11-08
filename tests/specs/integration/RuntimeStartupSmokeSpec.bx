@@ -37,9 +37,20 @@ class extends="testbox.system.BaseSpec" {
 				variables.pipeline = new bxagents.models.build.BuildPipeline( "e2e-test" );
 				variables.fixtures = expandPath( "/fixtures" );
 				variables.tempDirs = [];
+				// An agent remembers in the chat database; this spec loads the factory without the generated
+				// application, so it names a throwaway database itself, as `chat` does.
+				variables.savedDb = getSystemSetting( "BXAGENTS_DB", "" );
+				variables.dbDir = createTempDirectory( prefix = "bxagents-e2e-db-" );
+				tempDirs.append( dbDir );
+				createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", replace( dbDir, "\", "/", "all" ) & "/chat.db" );
 			} );
 
 			afterEach( function() {
+				if ( len( savedDb ) ) {
+					createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", savedDb );
+				} else {
+					createObject( "java", "java.lang.System" ).clearProperty( "BXAGENTS_DB" );
+				}
 				for ( var dir in tempDirs ) {
 					if ( directoryExists( dir ) ) {
 						directoryDelete( dir, true );

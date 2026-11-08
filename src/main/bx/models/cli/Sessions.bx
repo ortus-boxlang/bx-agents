@@ -186,11 +186,12 @@ class {
 		var loader = new "models.cli.support.BuiltAgent@bxagents"()
 		var cleared = loader.isBuilt( arguments.root )
 		if ( cleared ) {
-			var owner = arguments.user
-			var id = arguments.found.id
-			loader.load( arguments.root ).getMemories().each( memory => memory.clear( owner, id ) )
+			// the row and the messages the agent still holds are removed together, in Conversations
+			var owner = new "models.api.Caller@bxagents"( id = arguments.user, name = arguments.user, scope = "chat", source = "terminal" )
+			new "models.api.Conversations@bxagents"( loader.load( arguments.root ), arguments.sessions ).delete( owner, arguments.found.id )
+		} else {
+			arguments.sessions.delete( arguments.user, arguments.found.id )
 		}
-		arguments.sessions.delete( arguments.user, arguments.found.id )
 		return { exitCode : 0, message : "Deleted [#arguments.found.title ?: ''#]." & ( cleared ? "" : " The project is not built, so any messages a file or jdbc memory kept for it were left." ) }
 	}
 

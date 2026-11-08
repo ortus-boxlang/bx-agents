@@ -600,6 +600,38 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.filter( e => e.findNoCase( "notes" ) ) ).toBeEmpty();
 			} );
 
+			it( "rejects volumes with the reserved name and a bad mode", function() {
+				var text = validateFixture( "bad-volumes" ).errors.filter( e => e.findNoCase( "volumes" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "already has" );
+				expect( text ).toInclude( "must be ro" );
+			} );
+
+			it( "accepts volumes with a path, a mode and a description", function() {
+				expect( validateFixture( "with-volumes" ).errors.filter( e => e.findNoCase( "'volumes" ) ) ).toBeEmpty();
+			} );
+
+			it( "rejects the default memory's settings when they are out of range or unknown", function() {
+				var text = validateFixture( "bad-memory" ).errors.filter( e => e.findNoCase( "memory" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "memory.maxMessages must be a whole number from 20 to 100000" );
+				expect( text ).toInclude( "memory.onLimit is not a setting of the default memory" );
+			} );
+
+			it( "accepts maxMessages and keepRecent under a memory block that names no type", function() {
+				expect( validateFixture( "with-memory" ).errors.filter( e => e.findNoCase( "memory" ) ) ).toBeEmpty();
+			} );
+
+			it( "rejects a data block with an unknown key", function() {
+				var text = validateFixture( "bad-data" ).errors.filter( e => e.findNoCase( "'data'" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "'data' has an unknown key [folder]" );
+			} );
+
+			it( "accepts a data block that names a home", function() {
+				expect( validateFixture( "with-data" ).errors.filter( e => e.findNoCase( "'data" ) ) ).toBeEmpty();
+			} );
+
 			it( "rejects a vault block with an unknown key or a bad flag", function() {
 				var text = validateFixture( "bad-vault" ).errors.filter( e => e.findNoCase( "vault" ) ).toList( char( 10 ) );
 
@@ -723,6 +755,8 @@ class extends="testbox.system.BaseSpec" {
 				expect( joined ).toInclude( "more than once" );
 				// A bcrypt-style hash is not this project's format
 				expect( joined ).toInclude( "not in this project's format" );
+				// admin is a flag, not a word
+				expect( joined ).toInclude( "'admin' that is not true or false" );
 			} );
 
 			it( "returns no errors for a fully valid project", function() {

@@ -83,6 +83,17 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( result.exitCode ).toBe( 0 );
 				expect( result.message ).toInclude( "Everything checks out." );
+				// where the agent keeps everything is part of the report, and nothing was made to say so
+				expect( result.message ).toInclude( "Data home [" );
+			} );
+
+			it( "says where the data home is and that it can be written, without making it", function() {
+				var dir = newTempProject( "validation/with-data" );
+				fileWrite( dir & "/Agent.yaml", "name: kept" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "data:" & char( 10 ) & "  home: ./state-elsewhere" & char( 10 ) );
+				var result = doctorVerb.run( { projectRoot : dir } );
+
+				expect( result.message ).toInclude( "state-elsewhere] (setting) can be written" );
+				expect( directoryExists( dir & "/state-elsewhere" ) ).toBeFalse();
 			} );
 
 			it( "returns exit code 1 and surfaces the real validation error for an invalid project", function() {

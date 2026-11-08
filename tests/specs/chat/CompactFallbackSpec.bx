@@ -1,0 +1,83 @@
+/**
+ * /compact summarizes with the agent's own model when its memory has no summary model, so it works with nothing set up.
+ * A real agent on the default jdbc memory and the mock model.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "AgentConversation.compact", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-compact-" );
+				variables.file = replace( dir, "\", "/", "all" ) & "/chat.db";
+				variables.savedDb = createObject( "java", "java.lang.System" ).getProperty( "BXAGENTS_DB" ) ?: "";
+				createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", file );
+				variables.sessions = new bxagents.models.store.SessionStore( bxagents.models.store.ChatStore::forFile( file ) );
+				variables.agent = aiAgent(
+					name   : "keeper",
+					model  : aiModel( provider : "mock", options : { providerOptions : { responses : [ "ok" ] } } ).withParams( { model : "mock-model" } ),
+					memory : new bxagents.models.memory.MemoryWiring().memory( "keeper", { keepRecent : 2 } )
+				);
+				variables.chat = new bxagents.models.chat.AgentConversation( agent, "alice", sessions, "c1" );
+				variables.runner = new bxagents.models.api.TurnRunner( agent, sessions );
+				variables.alice = new bxagents.models.api.Caller( id = "alice", source = "terminal" );
+			} );
+
+			afterEach( function() {
+				if ( len( savedDb ) ) {
+					createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", savedDb );
+				} else {
+					createObject( "java", "java.lang.System" ).clearProperty( "BXAGENTS_DB" );
+				}
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "names the agent's own model as the one to summarize with", function() {
+				expect( chat.compactModel() ).toBe( { provider : "mock", model : "mock-model" } );
+				expect( chat.canCompact() ).toBeTrue();
+			} );
+
+			it( "compacts with the agent's model when the memory has no summary model, and says which", function() {
+				for ( var turn = 1; turn <= 4; turn++ ) {
+					runner.run( alice, { input : "message #turn#", conversationId : "c1" } );
+				}
+				var before = agent.getMemoryMessages( "alice", "c1" ).len();
+
+				var outcome = chat.compact();
+
+				expect( before ).toBe( 8 );
+				expect( outcome.available ).toBeTrue();
+				expect( outcome.compacted ).toBeTrue();
+				expect( outcome.model ).toBe( "mock/mock-model" );
+				expect( outcome.before ).toBe( 8 );
+				expect( outcome.after ).toBeLT( 8 );
+				expect( agent.getMemoryMessages( "alice", "c1" ).len() ).toBe( outcome.after );
+			} );
+
+			it( "sets the count in the list to what is left after compacting", function() {
+				for ( var turn = 1; turn <= 4; turn++ ) {
+					runner.run( alice, { input : "message #turn#", conversationId : "c1" } );
+				}
+
+				var outcome = chat.compact();
+
+				expect( sessions.byId( "alice", "c1" ).messageCount ).toBe( outcome.after );
+			} );
+
+			// Needs the bx-ai fix of ortus-boxlang/bx-ai#338: before it, summarizing a conversation too short to
+			// summarize emptied it.
+			it( "leaves a short conversation alone", function() {
+				runner.run( alice, { input : "hello", conversationId : "c1" } );
+
+				var outcome = chat.compact();
+
+				expect( outcome.compacted ).toBeFalse();
+				expect( outcome.before ).toBe( outcome.after );
+			} );
+
+		} );
+	}
+
+}

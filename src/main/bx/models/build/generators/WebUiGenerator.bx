@@ -599,7 +599,8 @@ class {
 			"		return user.populate(",
 			'			id          : arguments.record.id ?: "",',
 			'			username    : arguments.record.username ?: "",',
-			'			displayName : arguments.record.displayName ?: ""',
+			'			displayName : arguments.record.displayName ?: "",',
+			'			admin       : ( arguments.record.isAdmin ?: 0 ) == 1',
 			"		)",
 			"	}",
 			"",
@@ -648,14 +649,23 @@ class {
 			'		variables.id = ""',
 			'		variables.username = ""',
 			'		variables.displayName = ""',
+			"		variables.admin = false",
 			"		return this",
 			"	}",
 			"",
-			'	any function populate( string id = "", string username = "", string displayName = "" ) {',
+			'	any function populate( string id = "", string username = "", string displayName = "", boolean admin = false ) {',
 			"		variables.id = arguments.id",
 			"		variables.username = arguments.username",
 			"		variables.displayName = arguments.displayName",
+			"		variables.admin = arguments.admin",
 			"		return this",
+			"	}",
+			"",
+			"	/**",
+			"	 * Whether this account is an admin. The agent API reads it to give the signed-in caller the admin scope.",
+			"	 */",
+			"	boolean function isAdmin() {",
+			"		return variables.admin",
 			"	}",
 			"",
 			"	// cbauth's IAuthUser contract",
@@ -845,7 +855,7 @@ class {
 	 *
 	 * @entries collectWebUiEntries()'s result
 	 *
-	 * @return Array of { username, passwordEnvVar, passwordHash, displayName }
+	 * @return Array of { username, passwordEnvVar, passwordHash, displayName, admin }
 	 */
 	private array function collectWebUiUsers( required array entries ) {
 		var users = []
@@ -855,7 +865,8 @@ class {
 					username       : user.username ?: "",
 					passwordEnvVar : user.passwordEnvVar ?: "",
 					passwordHash   : user.passwordHash ?: "",
-					displayName    : user.displayName ?: ""
+					displayName    : user.displayName ?: "",
+					admin          : ( user.admin ?: false ) == true
 				} )
 			}
 		}
@@ -925,7 +936,8 @@ class {
 				lines.append( "		db.upsertUser(" )
 				lines.append( "			username     : #renderLiteral( user.username )#," )
 				lines.append( "			passwordHash : #renderLiteral( user.passwordHash )#," )
-				lines.append( "			displayName  : #renderLiteral( user.displayName )#" )
+				lines.append( "			displayName  : #renderLiteral( user.displayName )#," )
+				lines.append( "			admin        : #user.admin ? 'true' : 'false'#" )
 				lines.append( "		)" )
 			} else {
 				lines.append( "		var plaintext = getSystemSetting( #renderLiteral( user.passwordEnvVar )#, '' )" )
@@ -948,10 +960,14 @@ class {
 				lines.append( "				db.upsertUser(" )
 				lines.append( "					username     : #renderLiteral( user.username )#," )
 				lines.append( "					passwordHash : hasher.hash( plaintext )," )
-				lines.append( "					displayName  : #renderLiteral( user.displayName )#" )
+				lines.append( "					displayName  : #renderLiteral( user.displayName )#," )
+				lines.append( "					admin        : #user.admin ? 'true' : 'false'#" )
 				lines.append( "				)" )
 				lines.append( "			}" )
 				lines.append( "		}" )
+			}
+			if ( user.admin ) {
+				lines.append( "		db.bootstrapAdmin( #renderLiteral( user.username )# )" )
 			}
 			lines.append( "" )
 		}
@@ -1162,9 +1178,10 @@ class {
 			"	 * Matched on username, NOT on id - the config is the source of truth for",
 			"	 * who exists, and it has no way to know the generated id. An existing",
 			"	 * user keeps their id (and therefore their whole history) even when the",
-			"	 * password or display name changes.",
+			"	 * password or display name changes. `admin` only counts for a new account: the flag of an existing",
+			"	 * one is the database's to change (see bootstrapAdmin).",
 			"	 */",
-			'	string function upsertUser( required string username, required string passwordHash, string displayName = "" ) {',
+			'	string function upsertUser( required string username, required string passwordHash, string displayName = "", boolean admin = false ) {',
 			"		var existing = query()",
 			'			.from( "users" )',
 			'			.where( "username", arguments.username )',
@@ -1192,10 +1209,28 @@ class {
 			'				"passwordHash" : arguments.passwordHash,',
 			'				"displayName"  : arguments.displayName,',
 			'				"isActive"     : 1,',
+			'				"isAdmin"      : arguments.admin ? 1 : 0,',
 			'				"createdAt"    : now(),',
 			'				"updatedAt"    : now()',
 			"			} )",
 			"		return id",
+			"	}",
+			"",
+			"	/**",
+			"	 * Makes a configured admin an admin when no account is yet, which is how accounts from before the flag",
+			"	 * existed get their first admin. Once any admin exists the database wins: config no longer decides.",
+			"	 */",
+			"	void function bootstrapAdmin( required string username ) {",
+			"		if ( !hasActiveAdmin() ) {",
+			'			query().from( "users" ).where( "username", arguments.username ).where( "isActive", 1 ).update( { "isAdmin" : 1 } )',
+			"		}",
+			"	}",
+			"",
+			"	/**",
+			"	 * @return True when an active account is an admin",
+			"	 */",
+			"	boolean function hasActiveAdmin() {",
+			'		return query().from( "users" ).where( "isActive", 1 ).where( "isAdmin", 1 ).count() > 0',
 			"	}",
 			"",
 			"	/**",

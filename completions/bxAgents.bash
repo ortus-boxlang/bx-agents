@@ -12,7 +12,7 @@ _bxagents_complete() {
 	fi
 	local count=${#words[@]}
 	local cur="${words[count-1]}"
-	local verbs="add build chat clean connect deploy doctor extensions hash-password inspect invoke models new notes package serve sessions skills stats test token vault help"
+	local verbs="add backup build chat clean connect data deploy doctor extensions hash-password inspect invoke models new notes package restore serve sessions skills stats test token users vault help"
 	local globals="--help -h --version -v"
 	COMPREPLY=()
 
@@ -33,10 +33,12 @@ _bxagents_complete() {
 		local flag="${cur%%=*}" part="${cur#*=}"
 		case "$verb $flag" in
 			"add --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"backup --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"build --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"chat --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"clean --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"connect --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"data --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"deploy --destination") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"deploy --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"deploy --target") COMPREPLY=($(compgen -W "digitalocean docker ftp local sftp ssh" -- "$part")) ;;
@@ -61,6 +63,7 @@ _bxagents_complete() {
 			"notes --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"notes --scope") COMPREPLY=($(compgen -W "user agent" -- "$part")) ;;
 			"package --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"restore --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"serve --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"sessions --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"skills --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
@@ -68,6 +71,7 @@ _bxagents_complete() {
 			"test --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"token --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"token --scope") COMPREPLY=($(compgen -W "chat admin" -- "$part")) ;;
+			"users --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"vault --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 		esac
 		return 0
@@ -77,10 +81,12 @@ _bxagents_complete() {
 		local flags=""
 		case "$verb" in
 			add) flags="--agent= --api-key-env= --args= --auth= --cors= --description= --direction= --dry-run --env= --files= --files-dir= --force --format= --function= --guard= --header= --instructions= --layout= --max-tokens= --mcp= --memory= --model= --name= --no-tui --parent= --path= --points= --policy= --profile= --profiles= --projectRoot= --prompt= --provider= --quality= --scope= --search= --server= --size= --style= --temperature= --timeout= --tools= --type= --url= --user= --users= --version= --voice= --when= --with= --yes" ;;
+			backup) flags="--projectRoot= --to=" ;;
 			build) flags="--environment= --generatorVersion= --projectRoot= --verbose" ;;
 			chat) flags="--api-path= --connect= --continue --no-tui --port= --projectRoot= --record --server --session= --token= --user=" ;;
 			clean) flags="--force --projectRoot=" ;;
 			connect) flags="--port= --projectRoot= --timeout= --user=" ;;
+			data) flags="--projectRoot=" ;;
 			deploy) flags="--destination= --name= --projectRoot= --target=" ;;
 			doctor) flags="--json --projectRoot=" ;;
 			extensions) flags="--force --installed --json --name= --projectRoot= --system --yes" ;;
@@ -91,12 +97,14 @@ _bxagents_complete() {
 			new) flags="--app= --channels= --class --deploy= --description= --destination= --files= --files-dir= --forgebox= --guard= --host= --max-tokens= --mcp= --memory= --model= --name= --no-tui --no-wizard --projectRoot= --prompt= --region= --registry= --remote-path= --repo= --search= --skipInstall --temperature= --template= --timeout= --user= --web-auth= --widgets= --widgets-bottom= --with= --wizard --yes" ;;
 			notes) flags="--file= --id= --json --projectRoot= --scope= --text= --user=" ;;
 			package) flags="--projectRoot= --version=" ;;
+			restore) flags="--home= --projectRoot=" ;;
 			serve) flags="--host= --port= --projectRoot=" ;;
 			sessions) flags="--file= --json --name= --projectRoot= --session= --user=" ;;
 			skills) flags="--dry-run --json --limit= --projectRoot= --registry=" ;;
 			stats) flags="--by= --days= --projectRoot= --user=" ;;
 			test) flags="--projectRoot=" ;;
 			token) flags="--expires= --json --name= --projectRoot= --scope=" ;;
+			users) flags="--name= --projectRoot=" ;;
 			vault) flags="--description= --hosts= --limit= --name= --projectRoot= --scope= --user=" ;;
 		esac
 		COMPREPLY=($(compgen -W "$flags $globals" -- "$cur"))
@@ -107,19 +115,23 @@ _bxagents_complete() {
 	fi
 
 	case "$verb" in
+		backup) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		build) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		chat) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		clean) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		connect) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
+		data) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		deploy) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		doctor) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		inspect) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		invoke) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		new) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		package) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
+		restore) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		serve) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		stats) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		test) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
+		users) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		vault) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		help) COMPREPLY=($(compgen -W "$verbs" -- "$cur")) ;;
 	esac

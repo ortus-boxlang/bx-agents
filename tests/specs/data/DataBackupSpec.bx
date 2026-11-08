@@ -1,0 +1,155 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "DataBackup", function() {
+
+			beforeEach( function() {
+				variables.root = getTempDirectory() & "bxa-backup-" & createUUID()
+				directoryCreate( variables.root )
+				variables.home = new bxagents.models.data.DataHome( projectRoot : variables.root, configured : variables.root & "/home", environment : {}, userHome : "/home/someone" )
+				variables.home.ensure()
+				// a real database with a row in it
+				variables.store = new bxagents.models.store.ChatStore( { driver : "sqlite", database : variables.home.database() } )
+				variables.store.migrate()
+				variables.store.exec( "INSERT INTO conversations ( id, userId, title, messageCount, createdAt, updatedAt ) VALUES ( 'c1', 'local', 'Plan the week', 0, '2026-11-07', '2026-11-07' )" )
+				fileWrite( variables.home.folder( "files" ) & "/note.txt", "kept" )
+				directoryCreate( variables.home.folder( "files" ) & "/nested" )
+				fileWrite( variables.home.folder( "files" ) & "/nested/deep.txt", "deep" )
+				fileWrite( variables.home.folder( "skills" ) & "/greet.md", "hello" )
+				variables.backup = new bxagents.models.data.DataBackup( variables.home )
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( variables.root ) ) {
+					directoryDelete( variables.root, true )
+				}
+			} );
+
+			/**
+			 * The titles in the database file as it is on disk now. A copy is opened: a connection that was open on the
+			 * file before a restore stays on the old one, which is why restore asks for the database to be closed.
+			 */
+			function titles() {
+				var copy = variables.root & "/read-" & createUUID() & ".db"
+				fileCopy( variables.home.database(), copy )
+				return new bxagents.models.store.ChatStore( { driver : "sqlite", database : copy } ).rows( "SELECT title FROM conversations" ).map( r => r.title )
+			}
+
+			describe( "create()", function() {
+
+				it( "writes a zip in the backups folder by default", function() {
+					var made = variables.backup.create()
+					expect( made.file ).toInclude( "/home/backups/backup-" )
+					expect( fileExists( made.file ) ).toBeTrue()
+					expect( made.bytes ).toBeGT( 0 )
+					expect( made.entries ).toBe( 4 )
+				} );
+
+				it( "writes to the file it is told to", function() {
+					var target = variables.root & "/out/mine.zip"
+					expect( variables.backup.create( target ).file ).toBe( target )
+					expect( fileExists( target ) ).toBeTrue()
+				} );
+
+				it( "refuses to overwrite a file", function() {
+					var target = variables.root & "/mine.zip"
+					variables.backup.create( target )
+					expect( function() { variables.backup.create( target ) } ).toThrow( "BxAgents.BackupExists" )
+				} );
+
+				it( "holds the database, files and skills but not the backups folder", function() {
+					var made = variables.backup.create()
+					var names = []
+					var zip = createObject( "java", "java.util.zip.ZipFile" ).init( made.file )
+					var entries = zip.entries()
+					while ( entries.hasMoreElements() ) {
+						names.append( entries.nextElement().getName() )
+					}
+					zip.close()
+					expect( names ).toInclude( "backup.json" )
+					expect( names ).toInclude( "chat.db" )
+					expect( names ).toInclude( "files/note.txt" )
+					expect( names ).toInclude( "files/nested/deep.txt" )
+					expect( names ).toInclude( "skills/greet.md" )
+					expect( names.filter( n => n.startsWith( "backups" ) ) ).toBeEmpty()
+				} );
+
+				it( "leaves no temporary copy behind", function() {
+					var made = variables.backup.create()
+					expect( fileExists( made.file & ".database.tmp" ) ).toBeFalse()
+				} );
+
+			} );
+
+			describe( "restore()", function() {
+
+				it( "puts the database, files and skills back", function() {
+					var made = variables.backup.create()
+					variables.store.exec( "DELETE FROM conversations" )
+					fileDelete( variables.home.folder( "files" ) & "/note.txt" )
+					fileWrite( variables.home.folder( "skills" ) & "/extra.md", "new" )
+
+					var done = variables.backup.restore( made.file, true )
+
+					expect( titles() ).toBe( [ "Plan the week" ] )
+					expect( fileRead( variables.home.folder( "files" ) & "/note.txt" ) ).toBe( "kept" )
+					expect( fileRead( variables.home.folder( "files" ) & "/nested/deep.txt" ) ).toBe( "deep" )
+					expect( fileExists( variables.home.folder( "skills" ) & "/extra.md" ) ).toBeFalse()
+					expect( done.restored ).toInclude( "chat.db" )
+				} );
+
+				it( "keeps what was there as before-restore", function() {
+					var made = variables.backup.create()
+					fileWrite( variables.home.folder( "files" ) & "/later.txt", "later" )
+
+					var done = variables.backup.restore( made.file, true )
+
+					expect( done.kept ).toInclude( "files.before-restore" )
+					expect( fileExists( variables.home.folder( "files" ) & ".before-restore/later.txt" ) ).toBeTrue()
+					expect( fileExists( variables.home.folder( "files" ) & "/later.txt" ) ).toBeFalse()
+				} );
+
+				it( "refuses while the database looks to be in use, unless forced", function() {
+					var made = variables.backup.create()
+					// an open SQLite database keeps a -wal file beside it
+					fileWrite( variables.home.database() & "-wal", "open" )
+
+					expect( function() { variables.backup.restore( made.file ) } ).toThrow( "BxAgents.DataInUse" )
+					expect( variables.backup.restore( made.file, true ).restored ).toInclude( "chat.db" )
+				} );
+
+				it( "refuses a file that is not a backup", function() {
+					var file = variables.root & "/other.zip"
+					var out = createObject( "java", "java.util.zip.ZipOutputStream" ).init( createObject( "java", "java.io.FileOutputStream" ).init( file ) )
+					out.putNextEntry( createObject( "java", "java.util.zip.ZipEntry" ).init( "hello.txt" ) )
+					out.write( "hi".getBytes( "UTF-8" ) )
+					out.closeEntry()
+					out.close()
+
+					expect( function() { variables.backup.restore( file ) } ).toThrow( "BxAgents.NotABackup" )
+				} );
+
+				it( "refuses an entry that climbs out of the home", function() {
+					var file = variables.root & "/evil.zip"
+					var out = createObject( "java", "java.util.zip.ZipOutputStream" ).init( createObject( "java", "java.io.FileOutputStream" ).init( file ) )
+					for ( var name in [ "backup.json", "files/../../escape.txt" ] ) {
+						out.putNextEntry( createObject( "java", "java.util.zip.ZipEntry" ).init( name ) )
+						out.write( "x".getBytes( "UTF-8" ) )
+						out.closeEntry()
+					}
+					out.close()
+
+					expect( function() { variables.backup.restore( file ) } ).toThrow( "BxAgents.NotABackup" )
+					expect( fileExists( variables.root & "/escape.txt" ) ).toBeFalse()
+				} );
+
+				it( "says when there is no such backup", function() {
+					expect( function() { variables.backup.restore( variables.root & "/missing.zip" ) } ).toThrow( "BxAgents.BackupNotFound" )
+				} );
+
+			} );
+
+		} );
+	}
+
+}

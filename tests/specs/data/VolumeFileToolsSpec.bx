@@ -1,0 +1,161 @@
+/**
+ * The file tools fenced into volumes. The real bx-ai FileSystemTools sits under them, since the point is that the
+ * model speaks in volume names and cannot get out of its fence.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "VolumeFileTools", function() {
+
+			beforeEach( function() {
+				// another spec can leave these set (loading a built agent names the database); this spec must see none
+				variables.savedEnvironment = {}
+				for ( var name in [ "BXAGENTS_DB", "BXAGENTS_HOME" ] ) {
+					variables.savedEnvironment[ name ] = createObject( "java", "java.lang.System" ).getProperty( name ) ?: ""
+					createObject( "java", "java.lang.System" ).clearProperty( name )
+				}
+				variables.root = getTempDirectory() & "bxa-voltools-" & createUUID()
+				variables.notes = variables.root & "/notes"
+				variables.pictures = variables.root & "/pictures"
+				directoryCreate( variables.notes, true )
+				directoryCreate( variables.pictures, true )
+				fileWrite( variables.notes & "/todo.md", "buy seeds" )
+				fileWrite( variables.pictures & "/cat.txt", "meow" )
+				var adapter = new bxagents.models.build.toolmodules.BxAiFileToolsModule()
+				variables.tools = {}
+				for ( var tool in adapter.tools( {
+					volumes  : { notes : { path : variables.notes, mode : "rw", description : "My notes" }, pictures : { path : variables.pictures } },
+					dataHome : variables.root & "/home"
+				} ) ) {
+					variables.tools[ tool.getName() ] = tool
+				}
+			} );
+
+			afterEach( function() {
+				for ( var name in variables.savedEnvironment ) {
+					if ( len( variables.savedEnvironment[ name ] ) ) {
+						createObject( "java", "java.lang.System" ).setProperty( name, variables.savedEnvironment[ name ] )
+					}
+				}
+				if ( directoryExists( variables.root ) ) {
+					directoryDelete( variables.root, true )
+				}
+			} );
+
+			function call( required string name, struct args = {} ) {
+				return variables.tools[ arguments.name ].doInvoke( arguments.args )
+			}
+
+			it( "gives the read tools and the tools that change things", function() {
+				expect( variables.tools.keyExists( "readFile" ) ).toBeTrue()
+				expect( variables.tools.keyExists( "writeFile" ) ).toBeTrue()
+				expect( variables.tools.keyExists( "listAllowedDirectories" ) ).toBeTrue()
+			} );
+
+			it( "reads a file written as volume:path", function() {
+				expect( call( "readFile", { path : "notes:todo.md" } ) ).toBe( "buy seeds" )
+			} );
+
+			it( "reads from a read only volume", function() {
+				expect( call( "readFile", { path : "pictures:cat.txt" } ) ).toBe( "meow" )
+			} );
+
+			it( "writes in a read and write volume", function() {
+				call( "writeFile", { path : "notes:new/list.md", content : "tea" } )
+				expect( fileRead( variables.notes & "/new/list.md" ) ).toBe( "tea" )
+			} );
+
+			it( "refuses writing in a read only volume", function() {
+				expect( function() {
+					call( "writeFile", { path : "pictures:dog.txt", content : "woof" } )
+				} ).toThrow( type = "BxAgents.Volume.ReadOnlyVolume" )
+				expect( fileExists( variables.pictures & "/dog.txt" ) ).toBeFalse()
+			} );
+
+			it( "refuses deleting in a read only volume", function() {
+				expect( function() {
+					call( "deleteFile", { path : "pictures:cat.txt" } )
+				} ).toThrow( type = "BxAgents.Volume.ReadOnlyVolume" )
+				expect( fileExists( variables.pictures & "/cat.txt" ) ).toBeTrue()
+			} );
+
+			it( "copies out of a read only volume into a writable one", function() {
+				call( "copyFile", { source : "pictures:cat.txt", destination : "notes:cat-copy.txt" } )
+				expect( fileRead( variables.notes & "/cat-copy.txt" ) ).toBe( "meow" )
+			} );
+
+			it( "will not move a file out of a read only volume", function() {
+				expect( function() {
+					call( "moveFile", { source : "pictures:cat.txt", destination : "notes:cat.txt" } )
+				} ).toThrow( type = "BxAgents.Volume.ReadOnlyVolume" )
+			} );
+
+			it( "refuses a full path on the machine", function() {
+				expect( function() {
+					call( "readFile", { path : variables.notes & "/todo.md" } )
+				} ).toThrow( type = "BxAgents.Volume.FullPath" )
+			} );
+
+			it( "refuses a path that climbs out of its volume", function() {
+				expect( function() {
+					call( "readFile", { path : "notes:../pictures/cat.txt" } )
+				} ).toThrow( type = "BxAgents.Volume.OutsideVolume" )
+			} );
+
+			it( "puts a path with no volume in files", function() {
+				call( "writeFile", { path : "scratch.txt", content : "x" } )
+				expect( fileExists( variables.root & "/home/files/scratch.txt" ) ).toBeTrue()
+			} );
+
+			it( "names volumes in a listing and never a folder on the machine", function() {
+				var listing = call( "listDirectory", { path : "notes:" } )
+				expect( jsonSerialize( listing ) ).toInclude( "notes:todo.md" )
+				expect( jsonSerialize( listing ) ).notToInclude( variables.root.replace( "\", "/", "all" ) )
+			} );
+
+			it( "names volumes in an error message too", function() {
+				var message = ""
+				try {
+					call( "readFile", { path : "notes:missing.md" } )
+				} catch ( any e ) {
+					message = e.message
+				}
+				expect( message ).notToBe( "" )
+				expect( message ).notToInclude( variables.root.replace( "\", "/", "all" ) )
+			} );
+
+			it( "answers listAllowedDirectories with the volumes, their modes and what they are for", function() {
+				var text = jsonSerialize( call( "listAllowedDirectories" ) )
+				expect( text ).toInclude( "notes" )
+				expect( text ).toInclude( "My notes" )
+				expect( text ).toInclude( "pictures" )
+				expect( text ).notToInclude( variables.root.replace( "\", "/", "all" ) )
+			} );
+
+			it( "reads several files at once by volume path", function() {
+				var found = call( "readMultipleFiles", { paths : jsonSerialize( [ "notes:todo.md", "pictures:cat.txt" ] ) } )
+				expect( found[ "notes:todo.md" ] ).toBe( "buy seeds" )
+				expect( found[ "pictures:cat.txt" ] ).toBe( "meow" )
+			} );
+
+			it( "tells the model how to write a path, in every tool", function() {
+				expect( variables.tools.readFile.getDescription() ).toInclude( "volume:path" )
+				expect( variables.tools.writeFile.getDescription() ).toInclude( "listAllowedDirectories" )
+			} );
+
+			it( "will not follow a symbolic link out of a volume", function() {
+				var outside = variables.root & "/outside"
+				directoryCreate( outside )
+				fileWrite( outside & "/secret.txt", "no" )
+				var files = createObject( "java", "java.nio.file.Files" )
+				var link = createObject( "java", "java.io.File" ).init( variables.notes & "/shortcut" ).toPath()
+				files.createSymbolicLink( link, createObject( "java", "java.io.File" ).init( outside ).toPath(), [] )
+				expect( function() {
+					call( "readFile", { path : "notes:shortcut/secret.txt" } )
+				} ).toThrow( type = "BxAgents.Volume.OutsideVolume" )
+			} );
+
+		} );
+	}
+
+}
