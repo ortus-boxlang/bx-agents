@@ -1,0 +1,96 @@
+/**
+ * The MCP servers that ask each person to sign in, as the agent API shows them to a caller: who is connected to what,
+ * how to start a sign in, how to disconnect. The person is always the caller; nothing a caller sends can name somebody
+ * else. An answer carries names, addresses and yes or no, never a token.
+ */
+import bxModules.bxagents.models.api.Outcome;
+
+class {
+
+	/**
+	 * @service The ConnectionService
+	 * @caller The Caller
+	 */
+	function init( required any service, required any caller ) {
+		variables.service = arguments.service
+		variables.caller = arguments.caller
+		return this
+	}
+
+	/**
+	 * @return An Outcome: { user : the caller's id, servers : [ { name, url, connected, scope } ], missing : [ names ] }
+	 */
+	any function all() {
+		var who = variables.caller.id()
+		return Outcome::done( { "user" : who, "servers" : variables.service.list( who ), "missing" : variables.service.missing( who ) } )
+	}
+
+	/**
+	 * Begins a sign in for the caller.
+	 *
+	 * @name The server's name
+	 *
+	 * @return An Outcome: { name, authorizationUrl }, not_found for a name no server has, bad_request when the app has no address for the callback
+	 */
+	any function start( required string name ) {
+		try {
+			var started = variables.service.start( arguments.name, variables.caller.id() )
+			return Outcome::done( { "name" : started.name, "authorizationUrl" : started.authorizationUrl } )
+		} catch ( any e ) {
+			return refusal( e )
+		}
+	}
+
+	/**
+	 * Forgets the caller's tokens for one server.
+	 *
+	 * @name The server's name
+	 *
+	 * @return An Outcome: { name }, or not_found
+	 */
+	any function remove( required string name ) {
+		try {
+			variables.service.disconnect( arguments.name, variables.caller.id() )
+			return Outcome::done( { "name" : arguments.name } )
+		} catch ( any e ) {
+			return refusal( e )
+		}
+	}
+
+	/**
+	 * Finishes a sign in from what the provider sent back. Public: the browser that returns has no token, and the
+	 * single use state is what says who it is.
+	 *
+	 * @code   The code
+	 * @state  The state
+	 * @issuer The iss
+	 *
+	 * @return An Outcome: { name, subject }, or bad_request when the state is unknown, used or old
+	 */
+	any function complete( required string code, required string state, string issuer = "" ) {
+		try {
+			var done = variables.service.complete( arguments.code, arguments.state, arguments.issuer )
+			return Outcome::done( { "name" : done.name, "subject" : done.subject } )
+		} catch ( any e ) {
+			return refusal( e )
+		}
+	}
+
+	/**
+	 * @error What was thrown
+	 *
+	 * @return The Outcome a known error means
+	 *
+	 * @throws The error itself when it is not one this class knows
+	 */
+	private any function refusal( required any error ) {
+		if ( arguments.error.type == "BxAgents.UnknownConnection" ) {
+			return new Outcome( ok = false, code = "not_found", reason = arguments.error.message )
+		}
+		if ( left( arguments.error.type, 8 ) == "MCPOAuth" || arguments.error.type == "MCPAuthorizationRequired" ) {
+			return new Outcome( ok = false, code = "bad_request", reason = arguments.error.message )
+		}
+		rethrow
+	}
+
+}

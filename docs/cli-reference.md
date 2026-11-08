@@ -867,6 +867,24 @@ bxAgents restore FILE [--home=DIR] [--force]
 - `backup` zips the chat database (copied whole, so it is safe while a server runs), `files/` and `skills/`. Without `--to` the zip goes in the home's `backups/` folder. Volumes are not included.
 - `restore` puts a backup back and keeps what was there as `<name>.before-restore`. It stops when the database looks to be in use unless `--force` is given. `--home` restores into another data home.
 
+### `connect`
+
+Sign in to the services of a project that ask each person to sign in (an `mcpServers` entry with an `oauth` key). See [connect](conventions/connect.md).
+
+```bash
+bxAgents connect
+bxAgents connect mail [--port=8765] [--no-open] [--timeout=300]
+bxAgents connect mail --remove
+bxAgents connect [--user=NAME] [--json]
+```
+
+![bxAgents connect mail: the address, the wait, then connected](assets/tui/connect-cli.png)
+
+- Without a name it lists the services and whether you are connected (`--json` for a script).
+- With a name it prints an address and opens your browser, waits for the redirect on `127.0.0.1` (a free port, or `--port`), and finishes the sign in. `--no-open` only prints. `--timeout` is the seconds to wait, 300 by default.
+- `--remove` forgets your sign in. `--user` is whose: `local` by default, the one user an open server has.
+- Tokens are sealed in the project's chat database. Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
+
 ### `models`
 
 The models of a built project, and whether they answer.

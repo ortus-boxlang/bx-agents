@@ -160,9 +160,19 @@ class {
 				]
 			},
 			{
+				// the OAuth state of MCP servers that ask each person to sign in (see models/vault/VaultTokenStore): tokens, the
+				// client registration and the sign-ins waiting for their callback. Every value is sealed with the vault key.
+				// recordKey is bx-ai's own key, hashed, so a long key or a person's name never sits in the clear.
+				version    : 8,
+				statements : [
+					"CREATE TABLE IF NOT EXISTS oauth_records ( recordKey VARCHAR(64) NOT NULL PRIMARY KEY, sealed TEXT NOT NULL, keyId VARCHAR(16) NOT NULL, expiresAt DATETIME, updatedAt DATETIME )",
+					"CREATE INDEX IF NOT EXISTS idx_oauth_records_expires ON oauth_records ( expiresAt )"
+				]
+			},
+			{
 				// whether a signed-in account is an admin. Config sets it when the account is made, an admin changes it
 				// after that (see AccountService). Accounts from before this version are not admins.
-				version    : 8,
+				version    : 9,
 				statements : [
 					"ALTER TABLE users ADD COLUMN isAdmin INTEGER NOT NULL DEFAULT 0"
 				]

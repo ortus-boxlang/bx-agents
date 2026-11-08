@@ -17,11 +17,12 @@ class {
 	/**
 	 * @appDir The generated app folder
 	 * @agentApi The root project's `agentApi` config - `{ enabled, tokenEnvVar, tokens }`, all optional
+	 * @connections The `mcpServers` entries that have an `oauth` key, as written in Agent.yaml
 	 * @data { agentName, dataHome, volumes }: what the handler needs to say where the agent keeps its data and what it may use
 	 *
 	 * @return { written : boolean, path : string } - written is false when `agentApi.enabled` is false
 	 */
-	struct function generate( required string appDir, struct agentApi = {}, struct data = {} ) {
+	struct function generate( required string appDir, struct agentApi = {}, array connections = [], struct data = {} ) {
 		// what `serve` needs to know about the API without reading the handler: see models.api.ExposureWarning
 		directoryCreate( path = arguments.appDir.reReplace( "[\/]+$", "" ) & "/config", createPath = true, ignoreExists = true )
 		fileWrite(
@@ -44,6 +45,7 @@ class {
 		source = stamp( source, "__DATA_HOME__", Strings::bxLiteral( arguments.data.dataHome ?: "" ) )
 		source = stamp( source, "__AGENT_NAME__", Strings::bxLiteral( arguments.data.agentName ?: "" ) )
 		source = stamp( source, "__VOLUMES__", Strings::bxLiteral( jsonSerialize( arguments.data.volumes ?: {} ) ) )
+		source = stamp( source, "__CONNECTIONS__", Strings::bxLiteral( jsonSerialize( arguments.connections ) ) )
 
 		var path = handlerDir & "/AgentApi.bx"
 		fileWrite( path, source )

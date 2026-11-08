@@ -76,7 +76,7 @@ class {
 	private function service() {
 		// once per request: the probe for the shared database is a query
 		if ( !request.keyExists( "bxagentsService" ) ) {
-			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered(), { manageTokens : manageTokens(), data : appData() } )
+			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered(), { manageTokens : manageTokens(), data : appData(), connections : connectionService() } )
 		}
 		return request.bxagentsService
 	}
@@ -112,6 +112,13 @@ class {
 	 */
 	private boolean function manageTokens() {
 		return "__MANAGE_TOKENS__" == "true"
+	}
+
+	/**
+	 * The MCP servers that ask each person to sign in: the entries the build stamped in, placeholders not yet replaced.
+	 */
+	private function connectionService() {
+		return new "models.connect.ConnectionService@bxagents"( jsonDeserialize( "__CONNECTIONS__" ), { apiPath : apiPath(), agent : agent() } )
 	}
 
 	/**
@@ -849,6 +856,57 @@ class {
 		}
 		var body = event.getHTTPContent( json : true )
 		answer( event, service().vault( callerOf( event ) ).remove( body.scope ?: "user", body.name ?: "" ) )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Connections (MCP servers that ask each person to sign in)
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * GET: the servers and which the caller has connected, { user, servers : [ { name, url, connected, scope } ], missing }.
+	 * POST: starts a sign in, { name }, and answers with { name, authorizationUrl } to send the caller to.
+	 */
+	function connections( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var kept = service().connections( callerOf( event ) )
+		if ( event.getHTTPMethod() == "POST" ) {
+			var body = event.getHTTPContent( json : true )
+			answer( event, kept.start( body.name ?: "" ) )
+			return
+		}
+		answer( event, kept.all() )
+	}
+
+	/**
+	 * Body: { name }. Forgets the caller's tokens for that server.
+	 */
+	function removeConnection( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		answer( event, service().connections( callerOf( event ) ).remove( body.name ?: "" ) )
+	}
+
+	/**
+	 * Where a provider sends the person back. Public on purpose: the browser that returns carries no token, and the
+	 * single use state, kept by the sign in that started, is what says who it is. Shows a small page.
+	 */
+	function connectCallback( event, rc, prc ) {
+		var seen = event.getCollection()
+		var page = new "models.connect.CallbackPage@bxagents"()
+		if ( len( seen.error ?: "" ) ) {
+			event.renderData( type : "html", statusCode : 400, data : page.refused( seen.error_description ?: seen.error ) )
+			return
+		}
+		var done = service().connections( service().localCaller() ).complete( seen.code ?: "", seen.state ?: "", seen.iss ?: "" )
+		if ( done.succeeded() ) {
+			event.renderData( type : "html", data : page.connected( done.data().name ) )
+		} else {
+			event.renderData( type : "html", statusCode : 400, data : page.refused( done.reason() ) )
+		}
 	}
 
 	/**

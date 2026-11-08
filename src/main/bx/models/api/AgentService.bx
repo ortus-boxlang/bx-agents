@@ -30,6 +30,7 @@ class {
 		variables.manageTokens = arguments.options.manageTokens ?: false
 		// an AppData: the data home and volumes of the app; without one the volume list is empty and there is no data report
 		variables.appData = arguments.options.data ?: nullValue()
+		variables.connectionService = arguments.options.connections ?: nullValue()
 		variables.agent = arguments.agent
 		variables.store = arguments.store ?: nullValue()
 		variables.offered = arguments.offered ?: new "models.runtime.OfferedProfiles@bxagents"( [] )
@@ -179,6 +180,22 @@ class {
 	}
 
 	/**
+	 * @caller The Caller
+	 *
+	 * @return The servers that ask the caller to sign in and which they have connected
+	 */
+	any function connections( required any caller ) {
+		return new Connections( isNull( variables.connectionService ) ? new "models.connect.ConnectionService@bxagents"( [] ) : variables.connectionService, arguments.caller )
+	}
+
+	/**
+	 * @return True when at least one MCP server asks people to sign in
+	 */
+	boolean function hasConnections() {
+		return !isNull( variables.connectionService ) && variables.connectionService.hasServers()
+	}
+
+	/**
 	 * Who the agent is, for a client's banner: name, a short model label and what it can do.
 	 *
 	 * @caller The Caller
@@ -211,6 +228,7 @@ class {
 				"compact"       : conversation( arguments.caller ).canCompact(),
 				"notes"         : notes( arguments.caller ).keeps(),
 				"vault"         : keepsSessions(),
+				"connections"   : hasConnections(),
 				"conversations" : keepsSessions(),
 				"preferences"   : keepsSessions(),
 				"profiles"      : variables.offered.any(),

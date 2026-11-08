@@ -15,9 +15,11 @@ class {
 	 * @userId Who is talking: the owner of the user notes and of the conversations. Defaults to `local`, the one user of a server that is open on this machine, so the terminal, the web page and the API share notes and conversations.
 	 * @sessions A SessionStore: the list of conversations in the shared chat database. Without one the chat keeps no list.
 	 * @conversationId The conversation to carry on in; a new one when blank
+	 * @connections A LocalConnections for the project's MCP servers that ask people to sign in; none when the chat has no project
 	 */
-	function init( required any agent, string userId = "", any sessions, string conversationId = "" ) {
+	function init( required any agent, string userId = "", any sessions, string conversationId = "", any connections ) {
 		variables.agent = arguments.agent
+		variables.connectionMode = isNull( arguments.connections ) ? nullValue() : arguments.connections
 		variables.sessions = isNull( arguments.sessions ) ? nullValue() : arguments.sessions
 		variables.conversationId = len( arguments.conversationId ) ? arguments.conversationId : createUUID()
 		variables.userId = len( trim( arguments.userId ) ) ? trim( arguments.userId ) : Caller::localId()
@@ -235,6 +237,13 @@ class {
 			return new "models.cli.chat.NoVault@bxagents"()
 		}
 		return new "models.cli.chat.LocalVault@bxagents"( wiring.service(), variables.userId )
+	}
+
+	/**
+	 * @return The MCP servers of this agent that ask people to sign in, for the chat commands: LocalConnections, or NoConnections
+	 */
+	any function connections() {
+		return isNull( variables.connectionMode ) ? new "models.cli.chat.NoConnections@bxagents"() : variables.connectionMode
 	}
 
 	/**

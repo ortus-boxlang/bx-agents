@@ -93,6 +93,8 @@ None of these holds a provider secret. `BXAGENTS_TOKEN` is the one credential, a
 
 Environment variables are for what you deploy with. For a key or login that a person hands to a **running** agent (an API key for Gmail, a ticket system, a customer's own token), use [the vault](conventions/vault.md): values are sealed in the chat database, added from the terminal chat, the web page or `bxAgents vault`, and read by the runtime at the moment a tool or MCP server needs one. They are never part of a build, a package or the manifest. Set `BXAGENTS_VAULT_KEY` in the environment of the deployed process so the key does not sit beside the database.
 
+A service that asks each person to sign in ([connect](conventions/connect.md)) seals the tokens it is given with the same key. Set `BXAGENTS_PUBLIC_URL` to the address people reach the server at (`https://agent.example.com`), and register `<that address>/__bxagents/connect/callback` with the provider: that is where the browser comes back after a sign in.
+
 ## Deploying
 
 ```bash

@@ -1160,7 +1160,7 @@ class {
 	private void function validateMcpServers( required struct resolvedConfig, required array errors ) {
 		var mcpServers = arguments.resolvedConfig.mcpServers ?: []
 		var sharedKeys = [ "name", "timeout", "prefix", "toolFilter" ]
-		var webKeys = [ "url", "token", "headers", "user", "password", "allowedHosts", "redirects", "maxResponseBytes", "handshake" ]
+		var webKeys = [ "url", "token", "headers", "user", "password", "allowedHosts", "redirects", "maxResponseBytes", "handshake", "oauth" ]
 		var stdioKeys = [ "command", "env", "cwd", "inheritEnv", "maxRestarts" ]
 
 		if ( !isArray( mcpServers ) ) {
@@ -1226,6 +1226,9 @@ class {
 		if ( entry.keyExists( "headers" ) && !isStruct( entry.headers ) ) {
 			arguments.errors.append( "#arguments.label#'s 'headers' must be a mapping of header name to value" )
 		}
+		if ( entry.keyExists( "oauth" ) ) {
+			validateOauthMcpServer( entry, arguments.label, arguments.errors )
+		}
 		if ( entry.keyExists( "allowedHosts" ) && !( isArray( entry.allowedHosts ) && entry.allowedHosts.len() && entry.allowedHosts.every( host => isSimpleValue( host ) && len( host ) ) ) ) {
 			arguments.errors.append( "#arguments.label#'s 'allowedHosts' must be a list of host names, for example [ api.example.com, *.example.com ]" )
 		}
@@ -1237,6 +1240,51 @@ class {
 		}
 		if ( entry.keyExists( "maxResponseBytes" ) && !( isNumeric( entry.maxResponseBytes ) && entry.maxResponseBytes >= 0 ) ) {
 			arguments.errors.append( "#arguments.label#'s 'maxResponseBytes' must be a number of characters, 0 or more" )
+		}
+	}
+
+	/**
+	 * A web server whose people sign in with OAuth.
+	 *
+	 * @entry A web server entry that has an `oauth` key
+	 * @label The entry's name for messages
+	 * @errors Accumulator array
+	 */
+	private void function validateOauthMcpServer( required struct entry, required string label, required array errors ) {
+		var entry = arguments.entry
+		if ( !len( trim( entry.name ?: "" ) ) ) {
+			arguments.errors.append( "#arguments.label# uses 'oauth', so it needs a 'name': people connect to it by that name (bxAgents connect <name>)" )
+		} else if ( !reFind( "^[A-Za-z][A-Za-z0-9_-]*$", entry.name ) ) {
+			arguments.errors.append( "#arguments.label#'s 'name' must be letters, digits, '_' or '-', starting with a letter, because people type it" )
+		}
+		for ( var keyName in [ "token", "user", "password" ] ) {
+			if ( entry.keyExists( keyName ) ) {
+				arguments.errors.append( "#arguments.label# has both 'oauth' and '#keyName#'. A server whose people sign in does not take a fixed credential" )
+			}
+		}
+		if ( isBoolean( entry.oauth ) && entry.oauth ) {
+			return
+		}
+		if ( !isStruct( entry.oauth ) ) {
+			arguments.errors.append( "#arguments.label#'s 'oauth' must be true or a mapping" )
+			return
+		}
+		var oauthKeys = [ "redirectUri", "scopes", "clientId", "clientSecret", "clientMetadataUrl", "clientName" ]
+		for ( var keyName in entry.oauth ) {
+			if ( !oauthKeys.containsNoCase( keyName ) ) {
+				arguments.errors.append( "#arguments.label#'s oauth has an unknown key [#keyName#]. Valid keys: #oauthKeys.toList( ', ' )#" )
+			}
+		}
+		if ( entry.oauth.keyExists( "scopes" ) && !( isArray( entry.oauth.scopes ) && entry.oauth.scopes.every( scope => isSimpleValue( scope ) && len( scope ) ) ) ) {
+			arguments.errors.append( "#arguments.label#'s oauth 'scopes' must be a list of scope names" )
+		}
+		if ( entry.oauth.keyExists( "clientSecret" ) && !( isSimpleValue( entry.oauth.clientSecret ) && ( find( "${env.", entry.oauth.clientSecret ) || find( "${vault.", entry.oauth.clientSecret ) ) ) ) {
+			arguments.errors.append( "#arguments.label# writes its oauth 'clientSecret' in the file. Name an environment variable or a vault secret instead, for example clientSecret: ${vault.MY_CLIENT_SECRET}" )
+		}
+		for ( var keyName in [ "redirectUri", "clientMetadataUrl" ] ) {
+			if ( entry.oauth.keyExists( keyName ) && !find( "${", entry.oauth[ keyName ] ?: "" ) && !reFindNoCase( "^https?://", entry.oauth[ keyName ] ?: "" ) ) {
+				arguments.errors.append( "#arguments.label#'s oauth '#keyName#' must be an address starting with https:// (http:// only for localhost)" )
+			}
 		}
 	}
 

@@ -9,6 +9,7 @@ from the system.
 | --- | --- |
 | `make-demo.bxs` | The whole thing in one command: scaffold and build a demo agent, start the scripted model, type the chat, record it, render it |
 | `fakellm.bxs` | A scripted stand-in for an AI model that speaks the OpenAI chat protocol, so a demo needs no API key and always says the same thing |
+| `fake-oauth-mcp.bxs` | A fake mail service that is an MCP server and the OAuth server that protects it (`FakeOAuthMcp.bx`), for trying `bxAgents connect` and the Connections panel by hand, and for specs. `boxlang tools/demo/fake-oauth-mcp.bxs [--port=9300]`. Its spec is `tests/specs/tools/FakeOAuthMcpSpec.bx` |
 | `drive.bxs` | Runs a command in a pseudo terminal and types at it from a JSON script |
 | `render.bxs` | Turns an asciicast (`.cast`) into a GIF and an MP4 |
 | `VtScreen.bx` | The terminal screen `render.bxs` draws from. Its spec is `tests/specs/tools/VtScreenSpec.bx` |

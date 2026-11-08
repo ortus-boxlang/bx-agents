@@ -91,10 +91,22 @@ class {
 
 	// ----------------------------------------------------------------------------------
 
+	/**
+	 * The key as written in the environment variable.
+	 *
+	 * @return The trimmed value, or an empty string when it is not set
+	 */
 	private string function environmentValue() {
 		return trim( getSystemSetting( static.ENVIRONMENT_VARIABLE, "" ) )
 	}
 
+	/**
+	 * Turn the text of BXAGENTS_VAULT_KEY into 32 key bytes: base64 of 32 bytes is used as it is, anything else is hashed with SHA-256.
+	 *
+	 * @value The text of the variable
+	 *
+	 * @return The key as a Java byte[] of 32 bytes
+	 */
 	private any function fromEnvironment( required string value ) {
 		try {
 			var decoded = toBinary( arguments.value )
@@ -107,6 +119,13 @@ class {
 		return createObject( "java", "java.security.MessageDigest" ).getInstance( "SHA-256" ).digest( arguments.value.getBytes( "UTF-8" ) )
 	}
 
+	/**
+	 * A short id of a key, saved on every row so a secret sealed with another key is recognised.
+	 *
+	 * @bytes The key bytes
+	 *
+	 * @return The first 8 hex characters of the SHA-256 of the key
+	 */
 	private string function fingerprint( required any bytes ) {
 		var digest = createObject( "java", "java.security.MessageDigest" ).getInstance( "SHA-256" ).digest( arguments.bytes )
 		return left( lCase( binaryEncode( digest, "hex" ) ), 8 )

@@ -629,6 +629,23 @@ class extends="testbox.system.BaseSpec" {
 				expect( appSource ).toInclude( 'new "models.store.ChatStore@bxagents"( "" ).migrate()' );
 			} );
 
+			it( "tells an agent whose mcpServers ask people to sign in which ones a person has not connected", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/with-mcp-oauth", buildDir );
+
+				var factory = fileRead( result.agentFactory );
+				expect( factory ).toInclude( 'new "models.connect.ConnectionWiring@bxagents"().attach( agent, [' );
+				expect( factory ).toInclude( '"name" : "mail"' );
+				expect( factory ).toInclude( '"name" : "calendar"' );
+			} );
+
+			it( "leaves the sign in wiring out of an agent whose servers do not ask people to sign in", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/with-mcp-credentials", buildDir );
+
+				expect( fileRead( result.agentFactory ) ).notToInclude( "ConnectionWiring" );
+			} );
+
 			it( "gives the app the shared database for a ${vault.NAME} in its config, and keeps the value out of the build", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/with-vault-placeholder", buildDir );

@@ -941,6 +941,17 @@ class {
 			statements.append( 'new "models.vault.VaultWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.vault )#, "#Strings::bxLiteral( thisName )#" )' )
 		}
 
+		var signInServers = []
+		for ( var listed in ( arguments.resolvedConfig.mcpServers ?: [] ) ) {
+			if ( isStruct( listed ) && listed.keyExists( "oauth" ) ) {
+				signInServers.append( listed )
+			}
+		}
+		if ( signInServers.len() ) {
+			// services that ask each person to sign in: the agent is told which ones this person has not connected
+			statements.append( 'new "models.connect.ConnectionWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( signInServers )# )' )
+		}
+
 		return { statements : statements, nodes : nodes }
 	}
 

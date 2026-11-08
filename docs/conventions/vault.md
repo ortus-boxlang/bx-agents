@@ -12,6 +12,14 @@ An agent that connects to Gmail, a ticket system or any API needs a key or a log
 
 Environment variables stay as they are, and are still the place for provider keys such as `OPENAI_API_KEY`. The vault is for the secrets people hand to a running agent: they change, they differ per person, and they should not need a redeploy.
 
+<video controls preload="metadata" poster="/assets/video/vault-poster.png" style="max-width:100%">
+  <source src="/assets/video/vault.mp4" type="video/mp4">
+  <source src="/assets/video/vault.webm" type="video/webm">
+  <track kind="captions" src="/assets/video/vault.vtt" srclang="en" label="English" default>
+</video>
+
+The agent's request is scripted; the secret that is saved is real.
+
 ## Two scopes
 
 | Scope | Belongs to | Who manages it |
@@ -29,6 +37,8 @@ A value is **never a flag and never typed in a chat message**: it would sit in a
 - **Web page:** *Vault* in the settings menu. The value goes in a password field, is sent once and the field is cleared.
 - **Command line:** `bxAgents vault add --name=GMAIL_TOKEN` asks for the value hidden, or reads it from a pipe with `--stdin`. See [`vault`](../cli-reference.md#vault).
 - **The agent asks:** with a `vault:` block, the agent has a `vault_request` tool. Calling it opens the vault screen or the web panel on that name, with the reason, and the person types the value there. See [what the agent can do](#what-the-agent-can-do).
+
+Sign ins to services such as mail are kept in the same sealed way: see [connect](connect.md).
 
 A secret has a **name** (letters, digits and underscores), an optional **description** and an optional list of **hosts** it may be sent to (`api.example.com`, or `*.example.com` for any subdomain). A secret with hosts is refused anywhere else.
 

@@ -107,7 +107,7 @@ with the platform it started on; an admin can see it with `GET /__bxagents/sessi
 ## Commands in a chat
 
 A message that is a slash command is answered by BxAgents and never reaches the model. A safe set
-is on by default: `/help`, `/tools`, `/model`, `/info`, `/ping`, `/remember` and `/notes`. The
+is on by default: `/help`, `/tools`, `/model`, `/info`, `/ping`, `/remember`, `/notes` and `/connect`. The
 conversation commands (`/new`, `/clear`, `/compact`, `/sessions`, `/resume`) are off, because most
 chats are one long conversation; turn them on with `conversation: true`. Each platform shows the
 commands its own way (Telegram's `/` menu, Discord application commands, Slack slash commands,

@@ -38,6 +38,17 @@ agentApi:
   manageTokens: true             # an admin may make and revoke tokens over the API
 ```
 
+## Connections
+
+When an `mcpServers` entry has `oauth` ([connect](../conventions/connect.md)), the API has the sign in routes. They act for the caller: nothing a caller sends can name somebody else.
+
+| Route | |
+|---|---|
+| `GET /connect` | The services, and whether the caller is connected to each. Never a token |
+| `POST /connect` | `{ "name": "mail" }` starts a sign in and answers `{ "authorizationUrl" }` to send the caller to |
+| `POST /connect/remove` | `{ "name": "mail" }` forgets the caller's sign in |
+| `GET /connect/callback` | Where the provider sends the browser back. **Open**, because the single use `state` says who it is. Shows a small page |
+
 ## With curl
 
 ```bash
@@ -57,13 +68,13 @@ curl -H "$T" -H "Content-Type: application/json" \
 ```javascript
 import bxModules.bxagents.models.api.AgentApiClient;
 
-client = new AgentApiClient( url = "http://127.0.0.1:8080", token = getSystemSetting( "TOKEN_FOR_ADMIN" ) );
+agentClient = new AgentApiClient( url = "http://127.0.0.1:8080", token = getSystemSetting( "TOKEN_FOR_ADMIN" ) );
 
-first = client.invoke( "What can you do?" );
+first = agentClient.invoke( "What can you do?" );
 println( first.output );
 
 // the text as it is written
-client.stream( "Say it shorter.", ( text ) => print( text ), first.threadId );
+agentClient.stream( "Say it shorter.", ( text ) => print( text ), first.threadId );
 ```
 
 Build the client with named arguments. There is one method for each route: `invoke`, `stream`, `events`, `resume`, `cancel`, `steer`, `sessions`, `history`, `export`, `notes`, `preferences`, `command`, `tokens` and the rest. A bad request comes back as `{ success: false, error, code }`; a refused token, a missing route or a server failure is thrown. Pass `path` when the server moved the API with `agentApi.path`, and `source` to name your program in the conversation list.
@@ -102,9 +113,9 @@ Conversations belong to the caller too: `sessions()` lists them, newest first (a
 With `manageTokens: true` an admin can make tokens without a shell on the server:
 
 ```javascript
-made = client.createToken( name = "ci", scope = "chat", expires = "90d" );
+made = agentClient.createToken( name = "ci", scope = "chat", expires = "90d" );
 println( made.token );        // shown once; the server keeps only a fingerprint
-client.revokeToken( "ci" );
+agentClient.revokeToken( "ci" );
 ```
 
 The same list, create and revoke are in the **Tokens** panel of the [web page](../conventions/web-ui.md) (shown to admins on a server that allows it). A `chat` token gets `403`. Leave `manageTokens` off and the routes do not exist.
