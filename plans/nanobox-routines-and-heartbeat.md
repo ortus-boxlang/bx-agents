@@ -41,6 +41,7 @@ flowchart LR
 - Logs: the data home gets a `logs/` folder with a log per area (gateways, routines, heartbeat, api, agent), written with BoxLang's own logging. We add no rotation or retention settings; BoxLang's rolling file handling does it. Admins read them in the web page.
 - One Logs section for the whole app, not one per agent. Every line names the agent.
 - "Main chat" means the conversation the routine was created in. Created from Telegram, the answer comes back to Telegram.
+- No identity linking and no claim code. The owner made the connection, so the app only needs the *address* to push to, and it already has it: every chat the gateway talks to is stored with its chat id (a conversation `telegram:<chat id>`). A chat-app destination uses that chat. If the gateway has talked with exactly one chat, that one. If more than one, the agent asks which and remembers the answer. If none, it tells the owner to message the bot once (Telegram and others do not allow a bot to write first anyway). Email, SMS and Signal use the address or number the owner gave when setting the gateway up.
 - Chat apps belong to the owner. Checked in the code and docs: a gateway is developer configuration (`gateways/<name>.bx`, secrets from the environment, set up by the wizard), shared by the whole app. There is no table, API route or setting that lets a web user connect a chat app of their own; `/connect` is only for signing in to services (OAuth), not chat apps. So for now the person who runs the agent and set up its gateways, the local or admin user, is the only one who has chat apps. Other web users can send a routine's result to the chat it was created in, or to the web page.
 
 ## 1. Turning it on
@@ -103,7 +104,7 @@ The person chooses when they create the routine. Default: the conversation they 
 | `gateway:telegram`, `gateway:whatsapp`, ... | Also sent to the owner on that chat app. Only the owner may choose it |
 
 - The result is always kept in the routine's conversation and results folder, whatever the destination.
-- A chat app can only be chosen by the owner, and only once the owner has claimed it (see the open question). The agent says so when it is not possible.
+- A chat app can only be chosen by the owner, and only when the gateway has a chat to send to (see above). The agent says so when it has none.
 - A send that fails is logged in `routines.log` and shown in the routine's last status; it does not fail the run.
 
 ### How the app pushes into a chat app
@@ -113,7 +114,7 @@ Verified in the code. Chat apps are bx-ai gateways (`IGateway`), registered in b
 Nothing in bxAgents sends a message that nobody asked for yet, but the piece it needs works: `aiGatewayRegistry().get( "telegram" ).deliver( event, context )` needs only a context holding the target (`conversationID` is the chat id, channel id, phone number or address) and the text. A spike with the mock gateway delivered with no inbound message. So we add one small class:
 
 - `Notifier.send( gateway, address, text )` looks up the live gateway, builds the context and event, calls `deliver`, and returns an outcome. Failures go to `gateways.log` and to the routine's last status. Nothing else in the app calls `deliver` for an unprompted message.
-- The owner's address on each chat app is stored in the data home's database when the owner claims it, and read from there.
+- The address comes from the stored conversations of that gateway (and, for email, SMS and Signal, from the gateway's own settings). The one the owner picks, when there are several, is remembered as a preference.
 - The agent can use the same class later for its own proactive messages (a `notifyMe` tool), with the same approval rules. Not in this plan.
 
 What each chat app needs to receive an unprompted message:
@@ -201,7 +202,7 @@ Everything goes through one `Routines` service (as `Conversations` does for conv
 5. `routines:` setting (loader, validator, `doctor`); `ChatStore` migration (v10) and the `Routines` service; specs.
 6. Heartbeat scheduler and `RoutineRunner` (due, run as the owner, overlap, failures, catch-up); specs with a mock model.
 7. `scheduleRoutine`, `saveReport` and routine management tools; approvals from a routine; specs.
-8. `Notifier` (look up the live gateway, build the context, `deliver`, log), the owner claim (`/claim <code>`) and the stored address per chat app (with the Teams `serviceUrl`); the destinations `here`, `routine` and `gateway:<name>`; specs with the mock gateway.
+8. `Notifier` (look up the live gateway, build the context, `deliver`, log), finding a chat to send to from the stored conversations (and keeping the Teams `serviceUrl`); the destinations `here`, `routine` and `gateway:<name>`; specs with the mock gateway.
 9. Results folder: layout, tools, `bxAgents routines results`, API; specs.
 10. `/routines`, `/routine`, `bxAgents routines`, the API routes (owner and admin rules), client, OpenAPI; specs.
 11. Web page: Routines section.
@@ -211,6 +212,4 @@ Slices, one draft pull request each: logs (2 to 4), routines core (5 to 7), deli
 
 ## Open questions
 
-1. **How the owner's chat id on a chat app is learned.** To push a result to Telegram, the app needs the owner's chat id there, and nothing records which `telegram:<id>` is the owner (anyone can message the bot today). Two ways:
-   - (a) **Claim code (my pick).** With routines on and a chat app set up, starting the agent prints a one-time code in the terminal. The owner sends `/claim <code>` to the bot once. The app stores that chat as the owner's for that app. It also marks the owner's `telegram:<id>` as the owner's own identity there.
-   - (b) **Config.** A `notifyTo` option on the gateway entry, filled in by the wizard. Simple, but people rarely know their chat id.
+None blocking. One risk to know about, left for later: a chat app's bot is usually findable by anyone, and gateways have no allowed-people list today, so a stranger who messages the bot becomes another chat on that gateway. That is why the agent asks which chat when there is more than one. An optional "only this chat may talk to the agent" setting on a gateway would remove the risk; it is not part of this plan.
