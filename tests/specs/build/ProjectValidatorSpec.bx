@@ -592,6 +592,17 @@ class extends="testbox.system.BaseSpec" {
 				expect( validateFixture( "with-volumes" ).errors.filter( e => e.findNoCase( "'volumes" ) ) ).toBeEmpty();
 			} );
 
+			it( "rejects the default memory's settings when they are out of range or unknown", function() {
+				var text = validateFixture( "bad-memory" ).errors.filter( e => e.findNoCase( "memory" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "memory.maxMessages must be a whole number from 20 to 100000" );
+				expect( text ).toInclude( "memory.onLimit is not a setting of the default memory" );
+			} );
+
+			it( "accepts maxMessages and keepRecent under a memory block that names no type", function() {
+				expect( validateFixture( "with-memory" ).errors.filter( e => e.findNoCase( "memory" ) ) ).toBeEmpty();
+			} );
+
 			it( "rejects a data block with an unknown key", function() {
 				var text = validateFixture( "bad-data" ).errors.filter( e => e.findNoCase( "'data'" ) ).toList( char( 10 ) );
 

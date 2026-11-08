@@ -1,0 +1,170 @@
+/**
+ * The memory an agent gets when it names none: jdbc in the chat database, one row per person and conversation under
+ * the agent's own name, for the root agent and for every subagent.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "memory.MemoryWiring", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-memory-wiring-" );
+				variables.file = replace( dir, "\", "/", "all" ) & "/data/chat.db";
+				variables.savedDb = getSystemSetting( "BXAGENTS_DB", "" );
+				createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", file );
+				variables.wiring = new bxagents.models.memory.MemoryWiring();
+			} );
+
+			afterEach( function() {
+				if ( len( savedDb ) ) {
+					createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", savedDb );
+				} else {
+					createObject( "java", "java.lang.System" ).clearProperty( "BXAGENTS_DB" );
+				}
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			describe( "the settings", function() {
+
+				it( "accepts nothing, and the two settings", function() {
+					expect( wiring.problems( {} ) ).toBeEmpty();
+					expect( wiring.problems( { maxMessages : 300, keepRecent : 10 } ) ).toBeEmpty();
+				} );
+
+				it( "accepts a key, which only names the rows", function() {
+					expect( wiring.problems( { key : "mine" } ) ).toBeEmpty();
+				} );
+
+				it( "takes maxMessages from 20 to 100000", function() {
+					expect( wiring.problems( { maxMessages : 20 } ) ).toBeEmpty();
+					expect( wiring.problems( { maxMessages : 100000 } ) ).toBeEmpty();
+					expect( wiring.problems( { maxMessages : 19 } ) ).toHaveLength( 1 );
+					expect( wiring.problems( { maxMessages : 100001 } ) ).toHaveLength( 1 );
+					expect( wiring.problems( { maxMessages : 12.5 } ) ).toHaveLength( 1 );
+					expect( wiring.problems( { maxMessages : "lots" } ) ).toHaveLength( 1 );
+				} );
+
+				it( "takes a whole keepRecent of at least 1 that is lower than maxMessages", function() {
+					expect( wiring.problems( { keepRecent : 1 } ) ).toBeEmpty();
+					expect( wiring.problems( { keepRecent : 0 } ) ).toHaveLength( 1 );
+					expect( wiring.problems( { keepRecent : "few" } ) ).toHaveLength( 1 );
+					expect( wiring.problems( { maxMessages : 50, keepRecent : 50 } ) ).toHaveLength( 1 );
+					expect( wiring.problems( { maxMessages : 50, keepRecent : 49 } ) ).toBeEmpty();
+				} );
+
+				it( "refuses a setting it does not know and says what to use", function() {
+					var found = wiring.problems( { onLimit : "summarize" } );
+					expect( found ).toHaveLength( 1 );
+					expect( found[ 1 ] ).toInclude( "onLimit" );
+					expect( found[ 1 ] ).toInclude( "maxMessages" );
+				} );
+
+				it( "throws from memory() with the same words", function() {
+					expect( function() {
+						wiring.memory( "keeper", { maxMessages : 5 } );
+					} ).toThrow( "BxAgents.InvalidMemory" );
+				} );
+
+			} );
+
+			describe( "the memory", function() {
+
+				it( "is jdbc, keyed by the agent's name, in the chat database file", function() {
+					var memory = wiring.memory( "keeper" );
+
+					expect( memory.key() ).toBe( "keeper" );
+					expect( memory.datasource().database ).toBe( file );
+					expect( fileExists( file ) ).toBeTrue();
+				} );
+
+				it( "keys an agent without a name as agent", function() {
+					expect( wiring.memory( "" ).key() ).toBe( "agent" );
+				} );
+
+				it( "keeps 500 messages and 20 recent ones when nothing is said", function() {
+					var summary = wiring.memory( "keeper" ).getSummary();
+
+					expect( summary.maxMessages ).toBe( 500 );
+					expect( summary.summaryThreshold ).toBe( 20 );
+				} );
+
+				it( "takes the two settings", function() {
+					var summary = wiring.memory( "keeper", { maxMessages : 300, keepRecent : 10 } ).getSummary();
+
+					expect( summary.maxMessages ).toBe( 300 );
+					expect( summary.summaryThreshold ).toBe( 10 );
+				} );
+
+				it( "lowers the default keepRecent under a small maxMessages", function() {
+					var summary = wiring.memory( "keeper", { maxMessages : 20 } ).getSummary();
+
+					expect( summary.maxMessages ).toBe( 20 );
+					expect( summary.summaryThreshold ).toBeLT( 20 );
+				} );
+
+				it( "uses the registered datasource when there is no database file named", function() {
+					createObject( "java", "java.lang.System" ).clearProperty( "BXAGENTS_DB" );
+
+					expect( wiring.datasource() ).toBe( "bxagents" );
+				} );
+
+				it( "remembers per person and conversation, and finds it again from a new instance", function() {
+					var first = wiring.memory( "keeper" );
+					first.add( { role : "user", content : "from ada" }, "ada", "c1" );
+					first.add( { role : "user", content : "from bob" }, "bob", "c2" );
+
+					var again = wiring.memory( "keeper" );
+					expect( again.getAll( "ada", "c1" ) ).toHaveLength( 1 );
+					expect( again.getAll( "bob", "c2" ) ).toHaveLength( 1 );
+					expect( again.getAll( "ada", "c2" ) ).toHaveLength( 0 );
+					expect( again.getAll( "bob", "c1" ) ).toHaveLength( 0 );
+				} );
+
+				it( "never mixes two agents, each is kept under its own name", function() {
+					wiring.memory( "boss" ).add( { role : "user", content : "to the boss" }, "ada", "c1" );
+
+					expect( wiring.memory( "worker" ).getAll( "ada", "c1" ) ).toHaveLength( 0 );
+					expect( wiring.memory( "boss" ).getAll( "ada", "c1" ) ).toHaveLength( 1 );
+				} );
+
+			} );
+
+			describe( "an agent that delegates", function() {
+
+				it( "keeps the worker's memory per person and conversation, apart from the boss's", function() {
+					var call = { toolCalls : [ { name : "delegate_to_worker", arguments : { task : "do it" } } ] };
+					var worker = aiAgent(
+						name         : "worker",
+						description  : "Does the work",
+						model        : aiModel( provider : "mock", options : { providerOptions : { responses : [ "worked" ] } } ),
+						memory       : wiring.memory( "worker" )
+					);
+					var boss = aiAgent(
+						name       : "boss",
+						model      : aiModel( provider : "mock", options : { providerOptions : { responses : [ call, "done", call, "done" ] } } ),
+						memory     : wiring.memory( "boss" ),
+						subAgents  : [ worker ]
+					);
+
+					boss.run( "go", {}, { userId : "ada", conversationId : "c1" } );
+					boss.run( "go", {}, { userId : "bob", conversationId : "c2" } );
+
+					var check = new bxagents.models.memory.MemoryWiring();
+					// the worker has its own two messages for each person, nothing in the empty scope
+					expect( check.memory( "worker" ).getAll( "ada", "c1" ) ).toHaveLength( 2 );
+					expect( check.memory( "worker" ).getAll( "bob", "c2" ) ).toHaveLength( 2 );
+					expect( check.memory( "worker" ).getAll( "ada", "c2" ) ).toHaveLength( 0 );
+					expect( check.memory( "worker" ).getAll( "", "" ) ).toHaveLength( 0 );
+					// and the boss has its own, under its own name
+					expect( check.memory( "boss" ).getAll( "ada", "c1" ).len() ).toBeGT( 0 );
+					expect( check.memory( "boss" ).getAll( "ada", "c2" ) ).toHaveLength( 0 );
+				} );
+
+			} );
+
+		} );
+	}
+
+}

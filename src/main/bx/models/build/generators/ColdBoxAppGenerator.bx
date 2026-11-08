@@ -141,7 +141,8 @@ class {
 		// issued tokens): it gets the default datasource, migrated at start.
 		var database = arguments.webUiDatabase
 		// A vault (its tools, or a ${vault.NAME} in the config) lives in the same database.
-		if ( agentFactory.source.find( "NotesWiring@bxagents" ) || agentFactory.source.find( "VaultWiring@bxagents" ) || agentFactory.source.find( "${vault." ) ) {
+		// Every agent's default memory (MemoryWiring) lives in the same database.
+		if ( agentFactory.source.find( "NotesWiring@bxagents" ) || agentFactory.source.find( "VaultWiring@bxagents" ) || agentFactory.source.find( "MemoryWiring@bxagents" ) || agentFactory.source.find( "${vault." ) ) {
 			if ( database.isEmpty() ) {
 				database = { datasource : "bxagents", path : "./data/chat.db" }
 			}
@@ -1007,12 +1008,14 @@ class {
 	 * client-supplied identifier to trust - which is why a `webui` project turns
 	 * session management on (see renderApplication()).
 	 *
-	 * An explicit `memory` key on Agent.bx always wins over that default.
+	 * An explicit `memory` key on Agent.bx always wins over that default. With none, and no build-wide default
+	 * either, the agent gets MemoryWiring's memory: jdbc in the chat database, one row per person and
+	 * conversation under the agent's own name (`maxMessages` and `keepRecent` under `memory` tune it).
 	 *
 	 * @resolvedConfig A single node's own resolved config - only `memory` is used
 	 * @defaultMemory Memory type to use when the node declares none ("" means leave bx-ai's own default alone)
 	 *
-	 * @return A BoxLang `aiMemory( ... )` expression string, or "" to omit the argument entirely
+	 * @return A BoxLang `aiMemory( ... )` or MemoryWiring expression string, or "" to omit the argument entirely
 	 */
 	private string function renderMemoryExpression( required struct resolvedConfig, string defaultMemory = "" ) {
 		var declared = arguments.resolvedConfig.memory ?: {}
@@ -1026,7 +1029,11 @@ class {
 			type = arguments.defaultMemory
 		}
 		if ( !len( type ) ) {
-			return ""
+			// No memory named anywhere: the agent remembers its conversations in the chat database, one row per
+			// person and conversation under its own name (see MemoryWiring). `maxMessages` and `keepRecent` tune it.
+			var settings = isStruct( declared ) ? duplicate( declared ) : {}
+			settings.delete( "key" )
+			return 'new "models.memory.MemoryWiring@bxagents"().memory( "#Strings::bxLiteral( arguments.resolvedConfig.name ?: "" )#", #renderLiteral( settings )# )'
 		}
 
 		var rest = isStruct( declared ) ? duplicate( declared ) : {}

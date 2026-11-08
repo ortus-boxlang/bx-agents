@@ -75,6 +75,7 @@ class {
 		validateVault( arguments.resolvedConfig, errors )
 		validateData( arguments.resolvedConfig, errors )
 		validateVolumes( arguments.resolvedConfig, errors )
+		validateMemory( arguments.resolvedConfig, errors )
 
 		return { errors : errors, warnings : warnings }
 	}
@@ -910,6 +911,23 @@ class {
 			for ( var problem in DataHome::problems( arguments.resolvedConfig.data ) ) {
 				arguments.errors.append( "Agent.bx's " & problem )
 			}
+		}
+	}
+
+	/**
+	 * The `memory` block when it names no `type`: the settings of the default memory (maxMessages, keepRecent).
+	 * A block that names a type is the author's own choice and is built as written, so it is left alone.
+	 *
+	 * @resolvedConfig The resolved config struct
+	 * @errors Accumulator array
+	 */
+	private void function validateMemory( required struct resolvedConfig, required array errors ) {
+		var declared = arguments.resolvedConfig.memory ?: ""
+		if ( !isStruct( declared ) || len( trim( declared.type ?: "" ) ) ) {
+			return
+		}
+		for ( var problem in new "models.memory.MemoryWiring@bxagents"().problems( declared ) ) {
+			arguments.errors.append( problem )
 		}
 	}
 
