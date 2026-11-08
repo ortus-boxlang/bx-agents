@@ -106,6 +106,30 @@ The person chooses when they create the routine. Default: the conversation they 
 - A chat app can only be chosen by the owner, and only once the owner has claimed it (see the open question). The agent says so when it is not possible.
 - A send that fails is logged in `routines.log` and shown in the routine's last status; it does not fail the run.
 
+### How the app pushes into a chat app
+
+Verified in the code. Chat apps are bx-ai gateways (`IGateway`), registered in bx-ai's `aiGatewayRegistry()` and driven by one `aiGatewaySession()`. Today they are used one way round: a person writes, the agent answers through `gateway.deliver( event, context )` on the same chat. Approval questions are pushed the same way, but only into the chat that started the run.
+
+Nothing in bxAgents sends a message that nobody asked for yet, but the piece it needs works: `aiGatewayRegistry().get( "telegram" ).deliver( event, context )` needs only a context holding the target (`conversationID` is the chat id, channel id, phone number or address) and the text. A spike with the mock gateway delivered with no inbound message. So we add one small class:
+
+- `Notifier.send( gateway, address, text )` looks up the live gateway, builds the context and event, calls `deliver`, and returns an outcome. Failures go to `gateways.log` and to the routine's last status. Nothing else in the app calls `deliver` for an unprompted message.
+- The owner's address on each chat app is stored in the data home's database when the owner claims it, and read from there.
+- The agent can use the same class later for its own proactive messages (a `notifyMe` tool), with the same approval rules. Not in this plan.
+
+What each chat app needs to receive an unprompted message:
+
+| Chat app | Address | Works unprompted? |
+|---|---|---|
+| Telegram | chat id | Yes, once the owner has started the bot |
+| Slack | channel or DM id | Yes, with the bot in the channel |
+| Discord | channel id | Yes to a channel. A direct message needs the DM channel id, which an inbound DM gives |
+| Signal | phone number | Yes |
+| Twilio SMS | phone number | Yes (the owner's carrier cost) |
+| Email | address | Yes |
+| WhatsApp Cloud | wa_id | Only within the platform's reply window after the owner last wrote; sending text outside it needs approved templates, which `deliver` does not do. Reported as a failure with that reason |
+| Teams | conversation id and `serviceUrl` | Only after the owner has written once; both values must be stored from that first message |
+| GitHub | issue or PR | Not offered as a destination |
+
 ## 5. Results in the data home
 
 ```
@@ -177,7 +201,7 @@ Everything goes through one `Routines` service (as `Conversations` does for conv
 5. `routines:` setting (loader, validator, `doctor`); `ChatStore` migration (v10) and the `Routines` service; specs.
 6. Heartbeat scheduler and `RoutineRunner` (due, run as the owner, overlap, failures, catch-up); specs with a mock model.
 7. `scheduleRoutine`, `saveReport` and routine management tools; approvals from a routine; specs.
-8. Destinations: `here`, `routine`, and chat apps through the gateway registry; specs.
+8. `Notifier` (look up the live gateway, build the context, `deliver`, log), the owner claim (`/claim <code>`) and the stored address per chat app (with the Teams `serviceUrl`); the destinations `here`, `routine` and `gateway:<name>`; specs with the mock gateway.
 9. Results folder: layout, tools, `bxAgents routines results`, API; specs.
 10. `/routines`, `/routine`, `bxAgents routines`, the API routes (owner and admin rules), client, OpenAPI; specs.
 11. Web page: Routines section.
