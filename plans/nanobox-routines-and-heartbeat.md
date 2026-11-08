@@ -1,106 +1,193 @@
-# Nanobox: routines and heartbeat
+# Nanobox: routines, the heartbeat and logs
 
 Status: API shape for review. No code yet.
 
-## What these are
+## What this is, and what it is not
 
-- **A routine** is work the agent does on a schedule, without anyone messaging it. "Every weekday at 8, summarise my open issues." "On the 1st, tell me what the backups cost." Today the only way is a file you write by hand, `schedules/*.bx`, which needs a rebuild to change.
-- **The heartbeat** is one special routine. Every N minutes the agent wakes up, reads a short checklist you keep, does the cheap checks on it, and says nothing unless something needs you. It is what makes a personal agent feel awake instead of waiting to be asked.
+| | Schedulers (`schedules/*.bx`) | Routines (this plan) |
+|---|---|---|
+| Who creates them | The developer, by hand, before the agent is published | A person, by asking the running agent |
+| Where they live | Code in the project, built into the app | Rows in the chat database (SQLite) |
+| Changing one | Edit the file and rebuild | Say so in chat, or edit it in the web page |
+| Who they belong to | The agent | One person (an admin sees all) |
+| Turned on by | Existing: it is in the project | `routines.enabled: true` in `Agent.yaml`, off by default |
 
-Both come from one line of the phase 1 plan ("routines and heartbeat"); there was no design behind it until this page.
+They do not replace each other. A developer who publishes an autonomous agent with its own schedulers keeps doing exactly that. Routines are for the people who use the published agent: "check my email every 30 minutes", "do social listening on these threads and give me a report on Mondays".
+
+This difference is the first thing the documentation says, with a table and a diagram, on both pages ([schedules](../docs/conventions/schedules.md) and the new routines page).
+
+```mermaid
+flowchart LR
+    P["A person tells the agent<br/>'check my email every 30 minutes'"] --> T["scheduleRoutine tool<br/>(person approves)"]
+    T --> DB[("chat.db<br/>routines")]
+    HB["Heartbeat<br/>one built-in scheduler,<br/>ticks every minute"] -->|"which are due?"| DB
+    HB --> R["Run as that person<br/>(a normal turn, same tools and approvals)"]
+    R --> F["data home / routines / name /<br/>reports and files"]
+    R --> C["The routine's conversation"]
+    R --> D["Where the person chose<br/>main chat, Telegram, WhatsApp, ..."]
+    R --> L["data home / logs /<br/>routines.log"]
+```
 
 ## Decisions so far
 
-- Routines are stored at run time in the data home's database. You (or the agent, with approval) create, list, pause, resume, run now and delete them in the chat, the CLI and the API, with no rebuild. `schedules/*.bx` keeps working and is listed with the origin `file`.
-- The heartbeat is a checklist run on an interval, not a plain routine.
-- A routine keeps its own conversation, and can also send its result to a channel you pick.
-- A routine has the same approval rules as chat. A tool that needs approval pauses the routine and waits in the pending list until a person answers.
+- Routines are separate from schedulers. Schedulers stay hand-written by the developer.
+- The developer or admin turns the feature on in `Agent.yaml`. Off by default, so no published agent grows automated work by surprise.
+- Routines are stored in the chat database, per owner. Admins can see and manage all of them.
+- One built-in scheduler, the **heartbeat**, ticks every minute, finds the routines that are due and runs them. Nothing else runs routines. (The earlier idea of a `HEARTBEAT.md` checklist is dropped.)
+- Each routine chooses where its result goes when it is created: the main chat, or a chat app such as Telegram or WhatsApp.
+- Each routine has a results folder in the data home, with any number of files. It can be listed, read, cleaned up and wiped.
+- A routine has the same approval rules as chat: a tool that needs approval waits until a person answers.
+- The web page manages routines: list, edit the schedule, prompt and destination, pause, run now, delete, read and delete results.
+- Logs: the data home gets a `logs/` folder with a log per area (gateways, routines, heartbeat, api, agent), written with BoxLang's own logging. Admins read them in the web page.
 
-Open (see the end): which channels can be sent to, and what "silent" means exactly.
+## 1. Turning it on
 
-## 1. Routines
+```yaml
+routines:
+  enabled: true            # default false
+  maxPerUser: 20           # default 20
+  minInterval: 5m          # default 5m; the shortest a routine may repeat
+  results:
+    keepDays: 30           # reports older than this are deleted by the heartbeat; 0 keeps them
+```
 
-A routine is a row in the chat database (a new versioned migration):
+With `enabled: false` (or no block) there is no tool, no command, no route that creates a routine, no heartbeat, and the Routines section of the web page is absent. `doctor` says which it is.
+
+## 2. A routine
+
+A row in the chat database (a versioned migration):
 
 | Field | Meaning |
 |---|---|
-| `name` | Folder-style name, unique: `weekday-digest` |
+| `id`, `name` | `name` is folder-style, unique per owner: `check-email` |
+| `ownerId` | Whose routine it is. The run is made as this person, so their notes, volumes and permissions apply |
 | `schedule` | A cron expression, or `every 30m` |
 | `prompt` | What to tell the agent when it fires |
+| `destination` | Where the result is sent (section 4) |
 | `enabled` | Paused routines stay stored |
-| `channel` | Where to also send the result, or empty for nowhere |
-| `ownerId` | Whose routine it is. The run is made as this person, so their notes, volumes and permissions apply |
-| `lastRunAt`, `lastStatus`, `nextRunAt` | Shown in the list |
+| `lastRunAt`, `lastStatus`, `lastError`, `nextRunAt`, `failures` | Shown in the list |
 
 A run:
 
-- Is a normal turn through `TurnRunner`, as a `Caller` with `source = routine`, so everything that already works for a turn (memory, notes, approvals, usage) works for it.
-- Uses the conversation id `routine-<name>`, so each routine has one conversation the person can open and read in the web page, the terminal and the API. The message count and `/compact` behave as for any conversation.
-- Never overlaps itself: a routine that is still running (or waiting for an approval) is skipped, and the skip is recorded.
-- Records its result, the time it took and any error. Three failures in a row pause the routine and say so.
+- Is a normal turn through `TurnRunner`, as a `Caller` with `source = routine`, so memory, notes, approvals and usage all work as they do in chat.
+- Has its own conversation, `routine-<name>`, which the person can open and read anywhere.
+- Never overlaps itself: a routine still running (or waiting for an approval) is skipped, and the skip is logged.
+- Three failures in a row pause the routine and say so where the person was to be notified.
+- If the server was down when one was due, it runs once on start, not once per missed time.
 
-A routine runs as long as the server runs. If the server was down when one was due, it runs once on start, not once per missed time.
+### Who may create, change and see one
 
-### Who may create one
+- The person, by asking the agent (the `scheduleRoutine` tool; they see the schedule, the prompt and the destination and approve), by `/routine`, `bxAgents routines` or the API.
+- Everyone sees and changes their own. An admin sees all, and can pause or delete any.
+- A routine run is not offered the tool that creates routines, so a prompt cannot make itself spread.
 
-- A person, through `/routine`, `bxAgents routines` or the API.
-- The agent, with a `scheduleRoutine` tool, which needs a person's approval like any write. A person sees the schedule and the prompt before it exists.
-- Admins see all routines; anyone else sees their own.
+## 3. The heartbeat
 
-## 2. The heartbeat
+A built-in scheduler, always registered when `routines.enabled` is true. Every minute it:
 
-- `<data home>/HEARTBEAT.md` is the checklist. Plain markdown, written by a person or by the agent (with approval). A starter file is made by `init`.
-- `heartbeat:` in `Agent.yaml` turns it on and sets how often. Off by default.
+1. Reads the routines that are enabled and due.
+2. Starts each one (a few at the same time, a small fixed limit).
+3. Deletes reports older than `results.keepDays`.
+4. Writes one line to `heartbeat.log` when it did something, and a warning when it could not.
 
-```yaml
-heartbeat:
-  every: 30m                 # 5m to 24h
-  channel: telegram          # where to speak up; empty means only its conversation
-  activeHours: 08:00-22:00   # optional, local time of the server
+It needs no dynamic scheduling: the schedule lives in the database, and the heartbeat reads it. Pausing, editing and deleting take effect at the next tick.
+
+## 4. Where a result goes
+
+The person chooses when they create the routine. Default: the conversation they were in when they asked.
+
+| Destination | Meaning |
+|---|---|
+| `here` (default) | A message in the conversation the routine was created from |
+| `routine` | Only the routine's own conversation; nothing is pushed |
+| `gateway:telegram`, `gateway:whatsapp`, ... | Also sent to that person on that chat app |
+
+- The result is always kept in the routine's conversation and results folder, whatever the destination.
+- A chat app can only be chosen if the person has talked to the agent from it (we need their chat id there). The agent says so when it is not possible.
+- A send that fails is logged in `routines.log` and shown in the routine's last status; it does not fail the run.
+
+## 5. Results in the data home
+
+```
+<data home>/
+  routines/
+    check-email/
+      2026-11-08T0800/report.md
+      2026-11-08T0800/links.json
+      ...
+  logs/
 ```
 
-Each beat runs a turn with a fixed instruction: read the checklist, do what is cheap and safe, and answer exactly `HEARTBEAT_OK` when nothing needs the person. An answer of exactly that is stored in the beat's conversation (`heartbeat`) but is not sent anywhere. Any other answer is sent to the channel, and is what the person sees.
+- The agent saves what a run produced with a `saveReport( file, content )` tool that can only write inside that routine's folder (the same path rules as volumes: no `..`, no links out).
+- A run's files go in a folder named by the run's time, so one run's files stay together.
+- `bxAgents routines results <name> [--clean --older-than=30d] [--wipe]`, `/routine <name> results`, `GET /routines/results?name=` and `POST /routines/results/delete` list, read and remove them. Removing a routine can remove its folder too (asked).
+- `backup` and `restore` already carry the data home, so reports are included.
 
-The heartbeat is a routine with the name `heartbeat` that cannot be deleted from the list, only turned off in `Agent.yaml`. It has the same overlap, failure and approval rules.
+## 6. Logs
 
-## 3. Surface
+BoxLang's `writeLog( log = "<absolute path>" )` makes a rolling file appender at that path, so no runtime setting is needed. A small `Logger` class writes through it:
+
+```
+<data home>/logs/
+  agent.log        startup, errors in turns, tool failures
+  gateways.log     every chat app: connect, disconnect, send failures, rate limits
+  routines.log     created, changed, run, skipped, failed, delivered
+  heartbeat.log    each tick that did something
+  api.log          refused calls, auth failures (never a token or a message body)
+```
+
+- Lines carry time, level, agent name, area and a short message. No secrets, tokens, passwords or message text: the logger redacts known secret names and keeps message bodies out.
+- Files roll by size and age (defaults 10 MB, 14 days, configurable under `logs:` in `Agent.yaml`).
+- `bxAgents logs [area] [--tail=100] [--level=warn]` prints them.
+- `GET /logs` lists the files; `GET /logs/<area>?tail=200&level=warn&q=text` returns lines. Admin only.
+
+### In the web page (admin only)
+
+A **Logs** section in Settings, with one tab per log:
+
+- Lines in a table: time, a coloured level chip (error, warn, info), area, message.
+- Filter by level, search box, "last 200 / 1000", auto-refresh toggle, download the file.
+- Errors and warnings in the last day show as a count on the Settings icon, so a broken gateway is noticed without opening anything.
+
+## 7. Surface for routines
 
 | Where | What |
 |---|---|
-| `/routines` | Lists them: name, schedule, enabled, last result, next run, origin (`stored` or `file`) |
-| `/routine <name> run\|pause\|resume\|delete` | Acts on one. Creating is by `bxAgents routines add` or by asking the agent |
-| `bxAgents routines [list\|add\|pause\|resume\|run\|delete]` | The same, from the shell. Works on the data home, so it needs the server stopped or reachable |
-| `GET /routines` | `{ routines : [ { name, schedule, prompt, enabled, channel, origin, lastRunAt, lastStatus, nextRunAt } ] }` |
-| `POST /routines` | `{ name, schedule, prompt, channel? }` creates |
-| `POST /routines/run`, `/routines/pause`, `/routines/resume`, `POST /routines/delete` | `{ name }`. `run` starts it now |
-| `GET /heartbeat` | `{ enabled, every, lastBeatAt, lastStatus }` |
-| Web page | A Routines section in Settings with the same list and the same actions |
+| Chat | `/routines` lists yours (an admin: all), `/routine <name> run|pause|resume|delete|results`. Creating is by asking the agent |
+| CLI | `bxAgents routines [list|add|edit|pause|resume|run|delete|results]` |
+| API | `GET /routines`, `POST /routines`, `POST /routines/update`, `/pause`, `/resume`, `/run`, `/delete`, `GET /routines/results`, `POST /routines/results/delete` |
+| Web page | A Routines section: list with next and last run and status; edit schedule, prompt and destination; pause, run now, delete; open a routine's conversation; browse and delete its reports |
 
-All of it goes through one `Routines` service (like `Conversations`), so the terminal, the web page, the API and the agent's tool cannot disagree.
+Everything goes through one `Routines` service (as `Conversations` does for conversations), so chat, CLI, API, web page and the agent's tools cannot disagree.
 
-## 4. Safety
+## 8. Safety
 
-- A routine can only do what its owner's chat could do. It gets no tool the agent does not have, and no extra volumes.
-- A tool that needs approval pauses the routine. The pending list shows which routine asked. Nothing is auto-approved because it ran from a schedule.
-- A routine cannot create routines (the `scheduleRoutine` tool is not offered to a run with `source = routine`), so a prompt cannot make itself spread.
-- The shortest interval is 5 minutes, and an owner may have up to 20 routines.
-- The result sent to a channel is the same text the person would read in the conversation. The channel send is recorded.
+- A routine can do only what its owner's chat could do: no extra tools, no extra volumes.
+- Approvals are never skipped because a run came from a schedule. A pending approval shows which routine asked.
+- A routine cannot create routines.
+- Shortest interval and most routines per person are set by the developer in `Agent.yaml`.
+- Reports and logs never contain a vault value.
 
 ## Tasks
 
-1. Spike: can BoxLang's scheduler add and remove a task while the app runs, and does `TurnRunner` run cleanly from a scheduler thread with no web request? Which gateways can send a message that nobody asked for?
-2. `ChatStore` migration (v10): `routines` table; `Routines` service (create, list, pause, resume, delete, due); specs.
-3. `RoutineRunner`: fires due routines, builds the `Caller`, runs the turn, records the result, skips overlaps, pauses after three failures, catches up once after downtime; specs with a mock model.
-4. Approvals from a routine: pause, show in the pending list with the routine's name, resume on answer; specs.
-5. Heartbeat: `heartbeat:` setting (loader, validator), `HEARTBEAT.md`, the fixed instruction, the silent rule, active hours; specs.
-6. `scheduleRoutine` tool (approval, not offered to routines); specs.
-7. Channel send through the gateway registry; specs.
-8. `/routines`, `/routine`, `bxAgents routines`, `GET`/`POST /routines`, `GET /heartbeat` in `ApiContract`, handler, client, OpenAPI; admin and owner rules; specs.
-9. Settings section in the web page.
-10. Docs (English and the `1.0.x` mirror), changelog, full suite, ColdBox integration run. One draft pull request per slice: tasks 2 to 4 (routines), then 5 to 7 (heartbeat and channels), then 8 to 9 (surface).
+1. Spike: can `TurnRunner` run on a scheduler thread with no web request? Which chat apps can send a message nobody asked for, and what do they need (a stored chat id per person)? Does `writeLog` with an absolute path roll and keep working under the app's logging config?
+2. `Logger` (areas, levels, redaction, rolling files in `<data home>/logs`), `logs:` setting, `bxAgents logs`; use it in the gateways, API errors and agent errors; specs.
+3. `GET /logs`, `GET /logs/<area>` (admin), contract, handler, client, OpenAPI; specs.
+4. Web page: Logs section (tabs, filter, search, tail, count badge).
+5. `routines:` setting (loader, validator, `doctor`); `ChatStore` migration (v10) and the `Routines` service; specs.
+6. Heartbeat scheduler and `RoutineRunner` (due, run as the owner, overlap, failures, catch-up, retention); specs with a mock model.
+7. `scheduleRoutine`, `saveReport` and routine management tools; approvals from a routine; specs.
+8. Destinations: `here`, `routine`, and chat apps through the gateway registry; specs.
+9. Results folder: layout, tools, `bxAgents routines results`, API; specs.
+10. `/routines`, `/routine`, `bxAgents routines`, the API routes (owner and admin rules), client, OpenAPI; specs.
+11. Web page: Routines section.
+12. Docs (English and the `1.0.x` mirror): a routines page that opens with the schedulers table and diagram, the `routines:` and `logs:` settings, the data home layout, the API; changelog; full suite; ColdBox integration run.
+
+Slices, one draft pull request each: logs (2 to 4), routines core (5 to 7), delivery and results (8 to 9), surface (10 to 12).
 
 ## Open questions
 
-1. **Channels.** Which of the gateways should a routine be able to send to first? Sending a message nobody asked for needs a stored destination (a chat id) per person, which we may not have yet. The spike (task 1) answers what exists.
-2. **Silent.** Is the exact answer `HEARTBEAT_OK` right, or do you want the agent to decide with a separate "needs attention" flag?
-3. **One heartbeat or one per person.** The plan above has one for the agent. A shared agent with several people might want one each.
+1. **Linking a person to a chat app.** A routine sent to Telegram needs that person's chat id there. Is "they have messaged the agent from it before" enough, or do you want an explicit link step?
+2. **Main chat.** I take it as the conversation the routine was created in. If the person asked from Telegram, the answer comes back to Telegram. Is that what you mean?
+3. **Logs in the web page.** One Logs section for the whole app (my pick, since the logs are per app and every line names the agent), or a logs view per agent?
+4. **Retention defaults.** Reports 30 days, logs 14 days. Right?
