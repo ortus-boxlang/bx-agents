@@ -246,7 +246,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-data-home">The data home</a></li><li class="toc-level-2"><a href="#volumes">Volumes</a></li><li class="toc-level-3"><a href="#how-the-agent-sees-them">How the agent sees them</a></li><li class="toc-level-3"><a href="#seeing-them">Seeing them</a></li><li class="toc-level-2"><a href="#bxagents-data">bxAgents data</a></li><li class="toc-level-2"><a href="#backups">Backups</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-data-home">The data home</a></li><li class="toc-level-2"><a href="#volumes">Volumes</a></li><li class="toc-level-3"><a href="#how-the-agent-sees-them">How the agent sees them</a></li><li class="toc-level-3"><a href="#seeing-them">Seeing them</a></li><li class="toc-level-2"><a href="#skills-the-agent-saves">Skills the agent saves</a></li><li class="toc-level-3"><a href="#seeing-the-skills">Seeing the skills</a></li><li class="toc-level-2"><a href="#bxagents-data">bxAgents data</a></li><li class="toc-level-2"><a href="#backups">Backups</a></li></ul></details>
 		
 
 		
@@ -316,6 +316,36 @@ volumes:
 <li><strong>Over the API:</strong> <code>GET /volumes</code> answers the same list to anyone who may call the API. <code>GET /data</code> answers the data home, the size of each part and the folder of each volume, and is for admins only, since it shows paths.</li>
 <li><strong>In <code>doctor</code>:</strong> it reports the data home, where it came from, and whether it can be written. It makes nothing.</li>
 </ul>
+<h2 id="skills-the-agent-saves"><a href="#skills-the-agent-saves" id="skills-the-agent-saves" name="skills-the-agent-saves" class="anchor"></a>Skills the agent saves</h2>
+<p>A skill is a folder with a <code>SKILL.md</code>: instructions the agent loads by name when a task calls for them. There are three levels:</p>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Level</th><th>Where</th><th>Written by</th><th><code>origin</code></th></tr>
+</thead>
+<tbody>
+<tr><td>Installed</td><td><code>.agents/skills/</code> in the project</td><td>The registry tools (<code>npx skills</code>, <code>bxAgents skills install</code>), restored at build time</td><td><code>installed</code></td></tr>
+<tr><td>Ships with the agent</td><td><code>skills/</code> in the project, and the skills extensions carry</td><td>You</td><td><code>project</code></td></tr>
+<tr><td>The agent's own</td><td><code>skills/</code> in the data home</td><td>The agent, with its <code>saveSkill</code> tool</td><td><code>agent</code></td></tr>
+</tbody>
+</table></div>
+<p>The build copies the first two into the app, and the app loads the third at start and the moment a skill is saved. A diagram of the levels is on the <a href="/next/conventions/skills/index.html#the-three-levels">skills page</a>. A skill that ships with the agent wins over an installed one of the same name.</p>
+<p>After a task that took real steps and is likely to come up again, the root agent can call <code>saveSkill( name, description, content )</code>. The skill is written to the data home and is in the agent's skill list at once, with no restart. Subagents are given the skills when they are built; they cannot save any.</p>
+<ul>
+<li><strong>The first two levels win.</strong> The agent cannot take the name of an installed skill or one that ships with the agent, or replace it. It can save over a skill it wrote itself, to improve it.</li>
+<li><strong>Approval.</strong> Each save is approved by a person, as for any tool that needs approval, unless <code>skills.autoApprove: true</code>.</li>
+<li><strong>Limits.</strong> A name is a folder name (letters, digits, <code>.</code>, <code>_</code>, <code>-</code>). A description is up to 500 characters and the content up to 20,000. The agent keeps up to 50 skills; saving over one it has is always allowed.</li>
+<li><strong>Off switch.</strong> <code>skills.agentCanSave: false</code> takes the tool away.</li>
+</ul>
+<pre><code class="language-yaml">skills:
+  agentCanSave: true     # default true; the root agent only
+  autoApprove: false     # default false
+</code></pre>
+<p>A saved skill is part of the data home, so <code>backup</code> and <code>restore</code> carry it. To remove one, delete its folder.</p>
+<h3 id="seeing-the-skills"><a href="#seeing-the-skills" id="seeing-the-skills" name="seeing-the-skills" class="anchor"></a>Seeing the skills</h3>
+<ul>
+<li><strong>In chat:</strong> <code>/skills</code> lists every skill with its level: installed, project or agent.</li>
+<li><strong>Over the API:</strong> <code>GET /skills</code> answers <code>{ skills: [ { name, description, origin } ] }</code> (<code>origin</code> is <code>installed</code>, <code>project</code> or <code>agent</code>) to anyone who may call the API. It never shows a folder on the machine.</li>
+</ul>
 <h2 id="bxagents-data"><a href="#bxagents-data" id="bxagents-data" name="bxagents-data" class="anchor"></a><code>bxAgents data</code></h2>
 <pre><code class="language-bash">bxAgents data [--json]
 </code></pre>
@@ -375,7 +405,7 @@ bxAgents restore FILE [--home=DIR] [--force]
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-data-home">The data home</a></li><li class="toc-level-2"><a href="#volumes">Volumes</a></li><li class="toc-level-3"><a href="#how-the-agent-sees-them">How the agent sees them</a></li><li class="toc-level-3"><a href="#seeing-them">Seeing them</a></li><li class="toc-level-2"><a href="#bxagents-data">bxAgents data</a></li><li class="toc-level-2"><a href="#backups">Backups</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-data-home">The data home</a></li><li class="toc-level-2"><a href="#volumes">Volumes</a></li><li class="toc-level-3"><a href="#how-the-agent-sees-them">How the agent sees them</a></li><li class="toc-level-3"><a href="#seeing-them">Seeing them</a></li><li class="toc-level-2"><a href="#skills-the-agent-saves">Skills the agent saves</a></li><li class="toc-level-3"><a href="#seeing-the-skills">Seeing the skills</a></li><li class="toc-level-2"><a href="#bxagents-data">bxAgents data</a></li><li class="toc-level-2"><a href="#backups">Backups</a></li></ul></nav>
 				</aside>
 			
 		</div>

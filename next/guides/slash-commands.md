@@ -39,6 +39,7 @@ On a gateway, `/new`, `/clear`, `/compact`, `/sessions` and `/resume` are off un
 | `/help` | T W G | List the commands you can run here | `/help` |
 | `/info` | T W G | Agent, model, conversation, message count, notes and database | `/info` |
 | `/tools` | T W G | List the agent's tools | `/tools` |
+| `/skills` | T W G | List the skills the agent can load, and its level: installed, project or agent | `/skills` |
 | `/context` | T W | How big the context is and what it is made of, and how many of the messages its memory keeps this conversation has (a warning near the limit). Worked out locally, no model call | `/context` |
 | `/stats [days] [--by=model\|provider\|day\|user]` | T | Tokens the model calls used. `/stats enable` turns usage recording on | `/stats 7 --by=day` |
 | `/keys` | T W | Which key does what, with the action name of each. `?` alone does the same | `/keys` |

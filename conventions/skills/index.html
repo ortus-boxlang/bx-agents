@@ -248,7 +248,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#naming">Naming</a></li><li class="toc-level-2"><a href="#skills-from-the-registry">Skills from the registry</a></li><li class="toc-level-2"><a href="#how-its-wired-at-runtime">How it&#x27;s wired at runtime</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#naming">Naming</a></li><li class="toc-level-2"><a href="#the-three-levels">The three levels</a></li><li class="toc-level-2"><a href="#skills-from-the-registry">Skills from the registry</a></li><li class="toc-level-2"><a href="#how-its-wired-at-runtime">How it&#x27;s wired at runtime</a></li></ul></details>
 		
 
 		
@@ -288,8 +288,56 @@ Always greet the user warmly and use their name if known.
 <h2 id="naming"><a href="#naming" id="naming" name="naming" class="anchor"></a>Naming</h2>
 <p>The skill's name is its frontmatter <code>name:</code> if present; otherwise it falls back to the folder name (<code>greeting/</code> with no frontmatter name would be discovered as <code>greeting</code> anyway, but an explicit <code>name:</code> always wins even if it differs from the folder). Two skills resolving to the same name fail validation with a duplicate-name error.</p>
 <p>A folder without a <code>SKILL.md</code> inside it is not discovered as a skill at all - it's simply ignored (useful for scratch subfolders, assets kept alongside a skill under a different structure, etc., as long as they don't sit directly under <code>skills/</code> themselves without a <code>SKILL.md</code>).</p>
+<h2 id="the-three-levels"><a href="#the-three-levels" id="the-three-levels" name="the-three-levels" class="anchor"></a>The three levels</h2>
+<p>An agent's skill list is made from three levels. The first two are built into the app; the third is written by the agent while it runs.</p>
+<pre><code class="language-mermaid">flowchart TB
+    GL[&quot;Global skills folder&lt;br/&gt;managed by a skills tool (npx, CommandBox)&quot;]
+
+    subgraph project[&quot;Your project&quot;]
+        direction TB
+        INS[&quot;.agents/skills/&lt;br/&gt;&lt;b&gt;1. Installed&lt;/b&gt;&lt;br/&gt;links to the global folder, or installed copies&quot;]
+        SHIP[&quot;skills/&lt;br/&gt;&lt;b&gt;2. Ships with the agent&lt;/b&gt;&lt;br/&gt;written by you&quot;]
+    end
+
+    subgraph app[&quot;The built app: skills/&quot;]
+        direction TB
+        A1[&quot;copies of the installed skills&lt;br/&gt;listed in .installed.json&quot;]
+        A2[&quot;copies of your skills&quot;]
+    end
+
+    subgraph home[&quot;The data home: skills/&quot;]
+        DH[&quot;&lt;b&gt;3. The agent's own&lt;/b&gt;&lt;br/&gt;written by the agent with saveSkill&quot;]
+    end
+
+    LIST([&quot;The agent's skill list&lt;br/&gt;loaded by name when a task needs one&quot;])
+
+    GL -. &quot;symbolic link&quot; .-&gt; INS
+    INS --&gt;|build| A1
+    SHIP --&gt;|build| A2
+    A1 --&gt; LIST
+    A2 --&gt; LIST
+    DH --&gt;|&quot;at start, and the moment it is saved&quot;| LIST
+</code></pre>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Level</th><th>Where</th><th>Written by</th><th><code>origin</code> in <code>/skills</code></th></tr>
+</thead>
+<tbody>
+<tr><td>1. Installed</td><td><code>.agents/skills/</code> in the project. A skills tool links a skill from its global folder into it, or <code>bxAgents skills install</code> copies one there. It stays out of source control and is restored at build time</td><td>A skills tool or the registry</td><td><code>installed</code></td></tr>
+<tr><td>2. Ships with the agent</td><td><code>skills/</code> in the project, and the skills <a href="/conventions/extensions/index.html">extensions</a> carry</td><td>You</td><td><code>project</code></td></tr>
+<tr><td>3. The agent's own</td><td><code>skills/</code> in the <a href="/conventions/data/index.html#skills-the-agent-saves">data home</a></td><td>The agent, with its <code>saveSkill</code> tool</td><td><code>agent</code></td></tr>
+</tbody>
+</table></div>
+<p>The rules between the levels:</p>
+<ul>
+<li><strong>Yours wins over installed.</strong> A skill in <code>skills/</code> and an installed one with the same name or folder: the one in <code>skills/</code> is used.</li>
+<li><strong>The agent never replaces the first two.</strong> <code>saveSkill</code> refuses the name of an installed skill or one that ships with the agent. It can save over a skill it wrote itself, to improve it.</li>
+<li><strong>A link is followed.</strong> The app gets a copy of what the link points at, so a deployed app does not depend on the global folder.</li>
+<li><strong>The app tells levels 1 and 2 apart</strong> by <code>skills/.installed.json</code>, which the build writes beside the skills. <code>/skills</code> and <code>GET /skills</code> use it to show each skill's level.</li>
+</ul>
+<p>Level 3 is described in <a href="/conventions/data/index.html#skills-the-agent-saves">data and volumes</a>: approval of each save, the limits, and the <code>skills</code> setting in <code>Agent.yaml</code>.</p>
 <h2 id="skills-from-the-registry"><a href="#skills-from-the-registry" id="skills-from-the-registry" name="skills-from-the-registry" class="anchor"></a>Skills from the registry</h2>
-<p>Skills from skills.boxlang.io are installed with <code>bxAgents skills install &lt;owner/repo/skill&gt;</code>, not copied by hand. They go in <code>.agents/skills/</code> (bx-ai's own default folder), out of source control; <code>.agents/skills.lock.json</code> is committed and <code>build</code> restores from it. Both folders go into the build, and a skill in <code>skills/</code> with the same name wins. See <a href="/cli-reference/index.html#skills"><code>skills</code></a>.</p>
+<p>Skills from skills.boxlang.io are installed with <code>bxAgents skills install &lt;owner/repo/skill&gt;</code>, not copied by hand. They go in <code>.agents/skills/</code> (bx-ai's own default folder), out of source control; <code>.agents/skills.lock.json</code> is committed and <code>build</code> restores from it. Both folders go into the build, and a skill in <code>skills/</code> with the same name wins. A global skills tool can link its skills into <code>.agents/skills/</code> instead; a link is followed and the app gets a copy. See <a href="/cli-reference/index.html#skills"><code>skills</code></a>.</p>
 <h2 id="how-its-wired-at-runtime"><a href="#how-its-wired-at-runtime" id="how-its-wired-at-runtime" name="how-its-wired-at-runtime" class="anchor"></a>How it's wired at runtime</h2>
 <p><code>skills/</code> is copied verbatim into the generated app (same wipe-then-write, dotfile-excluding copy as <a href="/conventions/tools/index.html"><code>tools/</code></a>). The generated app always points bx-ai's own <code>skillsDirectory</code> module setting at <code>/skills</code>. It is written to <code>config/bxai-settings.json</code> (not <code>config/ColdBox.bx</code>, because ColdBox's <code>moduleSettings</code> does not reach bx-ai, a BoxLang module) and applied when the app starts:</p>
 <pre><code class="language-json">{ &quot;skillsDirectory&quot;: &quot;/skills&quot; }
@@ -307,7 +355,7 @@ Always greet the user warmly and use their name if known.
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/skills.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/skills.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Nov 8, 2026, 7&#x3a;18&#x3a;11 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20skills%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fconventions%2Fskills%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/skills.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/skills.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Nov 8, 2026, 8&#x3a;16&#x3a;51 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20skills%2F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fconventions%2Fskills%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
@@ -351,7 +399,7 @@ Always greet the user warmly and use their name if known.
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#naming">Naming</a></li><li class="toc-level-2"><a href="#skills-from-the-registry">Skills from the registry</a></li><li class="toc-level-2"><a href="#how-its-wired-at-runtime">How it&#x27;s wired at runtime</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#naming">Naming</a></li><li class="toc-level-2"><a href="#the-three-levels">The three levels</a></li><li class="toc-level-2"><a href="#skills-from-the-registry">Skills from the registry</a></li><li class="toc-level-2"><a href="#how-its-wired-at-runtime">How it&#x27;s wired at runtime</a></li></ul></nav>
 				</aside>
 			
 		</div>

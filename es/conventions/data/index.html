@@ -248,7 +248,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-data-home">The data home</a></li><li class="toc-level-2"><a href="#volumes">Volumes</a></li><li class="toc-level-3"><a href="#how-the-agent-sees-them">How the agent sees them</a></li><li class="toc-level-3"><a href="#seeing-them">Seeing them</a></li><li class="toc-level-2"><a href="#bxagents-data">bxAgents data</a></li><li class="toc-level-2"><a href="#backups">Backups</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-data-home">The data home</a></li><li class="toc-level-2"><a href="#volumes">Volumes</a></li><li class="toc-level-3"><a href="#how-the-agent-sees-them">How the agent sees them</a></li><li class="toc-level-3"><a href="#seeing-them">Seeing them</a></li><li class="toc-level-2"><a href="#skills-the-agent-saves">Skills the agent saves</a></li><li class="toc-level-3"><a href="#seeing-the-skills">Seeing the skills</a></li><li class="toc-level-2"><a href="#bxagents-data">bxAgents data</a></li><li class="toc-level-2"><a href="#backups">Backups</a></li></ul></details>
 		
 
 		
@@ -318,6 +318,36 @@ volumes:
 <li><strong>Over the API:</strong> <code>GET /volumes</code> answers the same list to anyone who may call the API. <code>GET /data</code> answers the data home, the size of each part and the folder of each volume, and is for admins only, since it shows paths.</li>
 <li><strong>In <code>doctor</code>:</strong> it reports the data home, where it came from, and whether it can be written. It makes nothing.</li>
 </ul>
+<h2 id="skills-the-agent-saves"><a href="#skills-the-agent-saves" id="skills-the-agent-saves" name="skills-the-agent-saves" class="anchor"></a>Skills the agent saves</h2>
+<p>A skill is a folder with a <code>SKILL.md</code>: instructions the agent loads by name when a task calls for them. There are three levels:</p>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Level</th><th>Where</th><th>Written by</th><th><code>origin</code></th></tr>
+</thead>
+<tbody>
+<tr><td>Installed</td><td><code>.agents/skills/</code> in the project</td><td>The registry tools (<code>npx skills</code>, <code>bxAgents skills install</code>), restored at build time</td><td><code>installed</code></td></tr>
+<tr><td>Ships with the agent</td><td><code>skills/</code> in the project, and the skills extensions carry</td><td>You</td><td><code>project</code></td></tr>
+<tr><td>The agent's own</td><td><code>skills/</code> in the data home</td><td>The agent, with its <code>saveSkill</code> tool</td><td><code>agent</code></td></tr>
+</tbody>
+</table></div>
+<p>The build copies the first two into the app, and the app loads the third at start and the moment a skill is saved. A diagram of the levels is on the <a href="/conventions/skills/index.html#the-three-levels">skills page</a>. A skill that ships with the agent wins over an installed one of the same name.</p>
+<p>After a task that took real steps and is likely to come up again, the root agent can call <code>saveSkill( name, description, content )</code>. The skill is written to the data home and is in the agent's skill list at once, with no restart. Subagents are given the skills when they are built; they cannot save any.</p>
+<ul>
+<li><strong>The first two levels win.</strong> The agent cannot take the name of an installed skill or one that ships with the agent, or replace it. It can save over a skill it wrote itself, to improve it.</li>
+<li><strong>Approval.</strong> Each save is approved by a person, as for any tool that needs approval, unless <code>skills.autoApprove: true</code>.</li>
+<li><strong>Limits.</strong> A name is a folder name (letters, digits, <code>.</code>, <code>_</code>, <code>-</code>). A description is up to 500 characters and the content up to 20,000. The agent keeps up to 50 skills; saving over one it has is always allowed.</li>
+<li><strong>Off switch.</strong> <code>skills.agentCanSave: false</code> takes the tool away.</li>
+</ul>
+<pre><code class="language-yaml">skills:
+  agentCanSave: true     # default true; the root agent only
+  autoApprove: false     # default false
+</code></pre>
+<p>A saved skill is part of the data home, so <code>backup</code> and <code>restore</code> carry it. To remove one, delete its folder.</p>
+<h3 id="seeing-the-skills"><a href="#seeing-the-skills" id="seeing-the-skills" name="seeing-the-skills" class="anchor"></a>Seeing the skills</h3>
+<ul>
+<li><strong>In chat:</strong> <code>/skills</code> lists every skill with its level: installed, project or agent.</li>
+<li><strong>Over the API:</strong> <code>GET /skills</code> answers <code>{ skills: [ { name, description, origin } ] }</code> (<code>origin</code> is <code>installed</code>, <code>project</code> or <code>agent</code>) to anyone who may call the API. It never shows a folder on the machine.</li>
+</ul>
 <h2 id="bxagents-data"><a href="#bxagents-data" id="bxagents-data" name="bxagents-data" class="anchor"></a><code>bxAgents data</code></h2>
 <pre><code class="language-bash">bxAgents data [--json]
 </code></pre>
@@ -333,7 +363,7 @@ bxAgents restore FILE [--home=DIR] [--force]
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/data.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/data.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Nov 8, 2026, 7&#x3a;18&#x3a;11 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20data%20and%20volumes&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fdata%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/data.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/data.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Nov 8, 2026, 8&#x3a;16&#x3a;51 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20data%20and%20volumes&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fdata%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
@@ -377,7 +407,7 @@ bxAgents restore FILE [--home=DIR] [--force]
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="En esta p&aacute;gina"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-data-home">The data home</a></li><li class="toc-level-2"><a href="#volumes">Volumes</a></li><li class="toc-level-3"><a href="#how-the-agent-sees-them">How the agent sees them</a></li><li class="toc-level-3"><a href="#seeing-them">Seeing them</a></li><li class="toc-level-2"><a href="#bxagents-data">bxAgents data</a></li><li class="toc-level-2"><a href="#backups">Backups</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="En esta p&aacute;gina"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#the-data-home">The data home</a></li><li class="toc-level-2"><a href="#volumes">Volumes</a></li><li class="toc-level-3"><a href="#how-the-agent-sees-them">How the agent sees them</a></li><li class="toc-level-3"><a href="#seeing-them">Seeing them</a></li><li class="toc-level-2"><a href="#skills-the-agent-saves">Skills the agent saves</a></li><li class="toc-level-3"><a href="#seeing-the-skills">Seeing the skills</a></li><li class="toc-level-2"><a href="#bxagents-data">bxAgents data</a></li><li class="toc-level-2"><a href="#backups">Backups</a></li></ul></nav>
 				</aside>
 			
 		</div>
