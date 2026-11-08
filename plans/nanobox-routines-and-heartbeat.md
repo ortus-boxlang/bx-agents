@@ -41,6 +41,7 @@ flowchart LR
 - Logs: the data home gets a `logs/` folder with a log per area (gateways, routines, heartbeat, api, agent), written with BoxLang's own logging. We add no rotation or retention settings; BoxLang's rolling file handling does it. Admins read them in the web page.
 - One Logs section for the whole app, not one per agent. Every line names the agent.
 - "Main chat" means the conversation the routine was created in. Created from Telegram, the answer comes back to Telegram.
+- Chat apps belong to the owner. Checked in the code and docs: a gateway is developer configuration (`gateways/<name>.bx`, secrets from the environment, set up by the wizard), shared by the whole app. There is no table, API route or setting that lets a web user connect a chat app of their own; `/connect` is only for signing in to services (OAuth), not chat apps. So for now the person who runs the agent and set up its gateways, the local or admin user, is the only one who has chat apps. Other web users can send a routine's result to the chat it was created in, or to the web page.
 
 ## 1. Turning it on
 
@@ -99,10 +100,10 @@ The person chooses when they create the routine. Default: the conversation they 
 |---|---|
 | `here` (default) | A message in the conversation the routine was created from |
 | `routine` | Only the routine's own conversation; nothing is pushed |
-| `gateway:telegram`, `gateway:whatsapp`, ... | Also sent to that person on that chat app |
+| `gateway:telegram`, `gateway:whatsapp`, ... | Also sent to the owner on that chat app. Only the owner may choose it |
 
 - The result is always kept in the routine's conversation and results folder, whatever the destination.
-- A chat app can only be chosen if the person has talked to the agent from it (we need their chat id there). The agent says so when it is not possible.
+- A chat app can only be chosen by the owner, and only once the owner has claimed it (see the open question). The agent says so when it is not possible.
 - A send that fails is logged in `routines.log` and shown in the routine's last status; it does not fail the run.
 
 ## 5. Results in the data home
@@ -186,4 +187,6 @@ Slices, one draft pull request each: logs (2 to 4), routines core (5 to 7), deli
 
 ## Open questions
 
-1. **Sending a routine's result to a chat app.** The app knows a person on Telegram as `telegram:<their id>`, which is a different identity from their web login. A routine created *from* Telegram can answer back there with no extra step. A routine created from the web page and sent to Telegram needs a link between the two identities. Options: (a) v1 sends only to the chat the routine was created in, and the web page; (b) a link step, where the web page shows a short code and the person sends `/link <code>` to the bot once.
+1. **How the owner's chat id on a chat app is learned.** To push a result to Telegram, the app needs the owner's chat id there, and nothing records which `telegram:<id>` is the owner (anyone can message the bot today). Two ways:
+   - (a) **Claim code (my pick).** With routines on and a chat app set up, starting the agent prints a one-time code in the terminal. The owner sends `/claim <code>` to the bot once. The app stores that chat as the owner's for that app. It also marks the owner's `telegram:<id>` as the owner's own identity there.
+   - (b) **Config.** A `notifyTo` option on the gateway entry, filled in by the wizard. Simple, but people rarely know their chat id.
