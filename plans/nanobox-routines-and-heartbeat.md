@@ -204,9 +204,18 @@ Everything goes through one `Routines` service (as `Conversations` does for conv
 - Shortest interval and most routines per person are set by the developer in `Agent.yaml`.
 - Reports and logs never contain a vault value.
 
+## Spike results (task 1, done)
+
+Run against the real code with throwaway specs (not committed).
+
+1. **A turn runs off the web thread.** `TurnRunner.run` as a `Caller` with `source = routine`, on a worker thread with no web request, succeeds: the answer is stored, the conversation row has `source = routine` and two messages. The ColdBox integration suite also already runs a `schedules/*.bx` task that gets an answer from the agent under the real ColdBox scheduler. Not yet shown: an approval that pauses a run started by a schedule and resumes later. That is a risk for task 7 and gets its own spec there.
+2. **A gateway can be stopped and started again in place.** `stop()` removes its scheduler task and `isRunning()` turns false; `start()` registers the task again; the message callback the session registered stays attached, and a poll after the restart reaches it. Shown with Telegram. So Reconnect is the stop and start of one gateway (it does not re-read a changed token).
+3. **Unprompted delivery needs only the address.** With a context holding just the address, `deliver` succeeded for Telegram, Slack, Discord, Twilio, WhatsApp, Signal and Email. Teams refused: it needs the `serviceUrl` kept from the first inbound message, as the plan says. WhatsApp's reply-window rule belongs to Meta and cannot be shown here; `deliver` sends plain text only.
+4. **`writeLog` with an absolute path works for the data home.** It creates the folder and the file, one file per path, and the logger name comes from the file name (`GATEWAYS`, `HEARTBEAT`). Lines look like `[time] [thread] [LEVEL] [LOGNAME] [app] message`. They also print on the console. BoxLang's own rotation applies with its defaults: 100 MB a file, 90 days, 5 GB in all. Those are runtime settings (`logging` in `boxlang.json`), so we add none.
+
 ## Tasks
 
-1. Spike: can `TurnRunner` run on a scheduler thread with no web request? Which chat apps can send a message nobody asked for, and what do they need (a stored chat id per person)? Does `writeLog` with an absolute path roll and keep working under the app's logging config?
+1. Spike (done, see above).
 2. `Logger` (areas, levels, redaction, files in `<data home>/logs` through `writeLog`), `bxAgents logs`; use it in the gateways, API errors and agent errors; specs.
 3. `GET /logs`, `GET /logs/<area>` (admin), contract, handler, client, OpenAPI; specs.
 4. Web page: Logs section (tabs, filter, search, tail, count badge), and the Gateways section with `GET /gateways` and `bxAgents gateways`.
