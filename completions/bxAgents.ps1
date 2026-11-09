@@ -20,6 +20,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'hash-password' = 'Hash a password for a webui users entry'
 		'inspect' = 'Report how the agent is composed: agents, tools, skills, MCP, exposure, env'
 		'invoke' = 'Send one message to a built agent, print the response, exit'
+		'logs' = 'The agent''s logs in the data home: logs lists them, logs...'
 		'models' = 'List the models a project can talk to and test that they answer'
 		'new' = 'Scaffold a new agent project'
 		'notes' = 'Read and manage the notes of an agent'
@@ -174,6 +175,13 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'server'; Value = $false; Choices = @(); Dir = $false }
 		)
 		'invoke:positional' = 'dir'
+		'logs' = @(
+			@{ Name = 'grep'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'level'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'tail'; Value = $true; Choices = @(); Dir = $false }
+		)
+		'logs:positional' = 'dir'
 		'models' = @(
 			@{ Name = 'all'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'json'; Value = $false; Choices = @(); Dir = $false }

@@ -12,7 +12,7 @@ _bxagents_complete() {
 	fi
 	local count=${#words[@]}
 	local cur="${words[count-1]}"
-	local verbs="add backup build chat clean connect data deploy doctor extensions hash-password inspect invoke models new notes package restore serve sessions skills stats test token users vault help"
+	local verbs="add backup build chat clean connect data deploy doctor extensions hash-password inspect invoke logs models new notes package restore serve sessions skills stats test token users vault help"
 	local globals="--help -h --version -v"
 	COMPREPLY=()
 
@@ -47,6 +47,7 @@ _bxagents_complete() {
 			"hash-password --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"inspect --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"invoke --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"logs --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"models --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"new --channels") COMPREPLY=($(compgen -W "web api telegram slack discord whatsapp-cloud teams twilio github email signal" -- "$part")) ;;
 			"new --deploy") COMPREPLY=($(compgen -W "docker digitalocean ssh sftp ftp local" -- "$part")) ;;
@@ -93,6 +94,7 @@ _bxagents_complete() {
 			hash-password) flags="--password= --projectRoot=" ;;
 			inspect) flags="--ascii --environment= --json --md --no-color --projectRoot= --section=" ;;
 			invoke) flags="--json --message= --port= --projectRoot= --server" ;;
+			logs) flags="--grep= --level= --projectRoot= --tail=" ;;
 			models) flags="--all --json --profile= --projectRoot=" ;;
 			new) flags="--app= --channels= --class --deploy= --description= --destination= --files= --files-dir= --forgebox= --guard= --host= --max-tokens= --mcp= --memory= --model= --name= --no-tui --no-wizard --projectRoot= --prompt= --region= --registry= --remote-path= --repo= --search= --skipInstall --temperature= --template= --timeout= --user= --web-auth= --widgets= --widgets-bottom= --with= --wizard --yes" ;;
 			notes) flags="--file= --id= --json --projectRoot= --scope= --text= --user=" ;;
@@ -125,6 +127,7 @@ _bxagents_complete() {
 		doctor) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		inspect) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		invoke) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
+		logs) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		new) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		package) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		restore) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;

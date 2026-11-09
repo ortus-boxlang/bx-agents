@@ -1,0 +1,137 @@
+import bxModules.bxagents.models.logs.Logger;
+
+/**
+ * Reading the logs back: which there are, and the last lines of one with a level and a word to look for.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "logs.LogReader", function() {
+
+			beforeEach( function() {
+				variables.dir = replace( createTempDirectory( prefix = "bxagents-logreader-" ), "\", "/", "all" );
+				variables.folder = dir & "/logs";
+				Logger::reset();
+				Logger::use( folder );
+				variables.reader = new bxagents.models.logs.LogReader( folder );
+			} );
+
+			afterEach( function() {
+				Logger::reset();
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function write( required string area, required string level, required string message, string subject = "" ) {
+				Logger::log( arguments.area, arguments.level, arguments.message, arguments.subject );
+				sleep( 20 );
+			}
+
+			it( "lists the logs that exist, in the order of the areas", function() {
+				write( "routines", "info", "a" );
+				write( "gateways", "info", "b" );
+				sleep( 150 );
+
+				var found = reader.list();
+
+				expect( found.map( l => l.area ) ).toBe( [ "gateways", "routines" ] );
+				expect( found[ 1 ].file ).toBe( "gateways.log" );
+				expect( found[ 1 ].bytes ).toBeGT( 0 );
+			} );
+
+			it( "lists nothing before anything was logged", function() {
+				expect( reader.list() ).toBeEmpty();
+				expect( reader.tail( "gateways" ).lines ).toBeEmpty();
+			} );
+
+			it( "reads a line as time, level, subject and message", function() {
+				write( "gateways", "error", "send failed with status 429", "telegram" );
+				sleep( 150 );
+
+				var line = reader.tail( "gateways" ).lines[ 1 ];
+
+				expect( line.level ).toBe( "error" );
+				expect( line.subject ).toBe( "telegram" );
+				expect( line.message ).toBe( "send failed with status 429" );
+				expect( line.area ).toBe( "gateways" );
+				expect( line.time ).toMatch( "^\d{4}-\d\d-\d\dT" );
+			} );
+
+			it( "gives the last lines, oldest first", function() {
+				for ( var i = 1; i <= 10; i++ ) {
+					write( "agent", "info", "line #i#" );
+				}
+				sleep( 150 );
+
+				var lines = reader.tail( "agent", 3 ).lines;
+
+				expect( lines.map( l => l.message ) ).toBe( [ "line 8", "line 9", "line 10" ] );
+			} );
+
+			it( "shows only lines at or above a level", function() {
+				write( "api", "info", "fine" );
+				write( "api", "warn", "slow" );
+				write( "api", "error", "broke" );
+				sleep( 150 );
+
+				expect( reader.tail( "api", 50, "warn" ).lines.map( l => l.message ) ).toBe( [ "slow", "broke" ] );
+				expect( reader.tail( "api", 50, "error" ).lines.map( l => l.message ) ).toBe( [ "broke" ] );
+				expect( reader.tail( "api", 50, "info" ).lines ).toHaveLength( 3 );
+			} );
+
+			it( "finds a word in the message or the subject, whatever its case", function() {
+				write( "gateways", "info", "Connected", "telegram" );
+				write( "gateways", "info", "Connected", "slack" );
+				write( "gateways", "error", "Rate LIMITED", "slack" );
+				sleep( 150 );
+
+				expect( reader.tail( "gateways", 50, "", "telegram" ).lines ).toHaveLength( 1 );
+				expect( reader.tail( "gateways", 50, "", "limited" ).lines ).toHaveLength( 1 );
+				expect( reader.tail( "gateways", 50, "", "slack" ).lines ).toHaveLength( 2 );
+			} );
+
+			it( "keeps a continuation line with the level of the line before it", function() {
+				directoryCreate( folder, true, true );
+				fileWrite( folder & "/agent.log", "[2026-11-09T10:00:00,001] [main] [ERROR] [AGENT] [app] boom#char( 10 )#	at some.Class.method(Class.java:1)#char( 10 )#[2026-11-09T10:00:01,002] [main] [INFO ] [AGENT] [app] fine#char( 10 )#" );
+
+				var lines = reader.tail( "agent" ).lines;
+
+				expect( lines ).toHaveLength( 3 );
+				expect( lines[ 2 ].level ).toBe( "error" );
+				expect( lines[ 2 ].time ).toBe( "" );
+				expect( reader.tail( "agent", 50, "error" ).lines ).toHaveLength( 2 );
+			} );
+
+			it( "reads only the end of a big file", function() {
+				directoryCreate( folder, true, true );
+				var rows = [];
+				for ( var i = 1; i <= 30000; i++ ) {
+					rows.append( "[2026-11-09T10:00:00,001] [main] [INFO ] [AGENT] [app] row #i# padding padding padding" );
+				}
+				fileWrite( folder & "/agent.log", rows.toList( char( 10 ) ) & char( 10 ) );
+
+				var lines = reader.tail( "agent", 2 ).lines;
+
+				expect( lines.map( l => l.message ) ).toBe( [ "row 29999 padding padding padding", "row 30000 padding padding padding" ] );
+			} );
+
+			it( "caps the count at 1000 lines", function() {
+				directoryCreate( folder, true, true );
+				for ( var i = 1; i <= 30; i++ ) {
+					fileAppend( folder & "/agent.log", "[2026-11-09T10:00:00,001] [main] [INFO ] [AGENT] [app] row #i##char( 10 )#" );
+				}
+				// a request for a huge number is cut, and a small file simply has fewer
+				expect( reader.tail( "agent", 5000 ).lines ).toHaveLength( 30 );
+			} );
+
+			it( "refuses a name that is not one of the areas, so no other file can be read", function() {
+				expect( function() {
+					reader.tail( "../chat" );
+				} ).toThrow( "BxAgents.UnknownLog" );
+			} );
+
+		} );
+	}
+
+}
