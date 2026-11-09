@@ -28,11 +28,13 @@ class {
 	private boolean function refused( required any event ) {
 		var caller = callerOf( arguments.event )
 		if ( isNull( caller ) ) {
+			new "models.logs.Logger@bxagents"().write( "api", "warn", "Refused a call to #arguments.event.getCurrentAction()# with no valid sign in or token" )
 			answer( arguments.event, new "models.api.Authenticator@bxagents"().refusal() )
 			return true
 		}
 		// a route the contract marks admin only is refused here, before its action does anything
 		if ( !caller.isAdmin() && new "models.api.ApiContract@bxagents"().needsAdmin( arguments.event.getCurrentAction() ) ) {
+			new "models.logs.Logger@bxagents"().write( "api", "warn", "Refused #caller.id()# on the admin route #arguments.event.getCurrentAction()#" )
 			answer( arguments.event, failed( "forbidden", "This route is for admins" ) )
 			return true
 		}

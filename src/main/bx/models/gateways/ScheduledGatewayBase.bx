@@ -19,6 +19,8 @@
  * fills in BaseGateway's `onStart()`/`onStop()` extension points exactly once,
  * so every push-style gateway gets the scheduler wiring for free.
  */
+import bxModules.bxagents.models.logs.Logger;
+
 abstract class extends="bxModules.bxai.models.gateway.BaseGateway" {
 
 	/**
@@ -152,8 +154,14 @@ abstract class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	 */
 	public void function onStart() {
 		var scheduler = resolveScheduler()
-		onConnect()
-		registerScheduledTasks( scheduler )
+		try {
+			onConnect()
+			registerScheduledTasks( scheduler )
+		} catch ( any e ) {
+			// a gateway that cannot start is the first thing an operator looks for in the log
+			logEvent( "Could not start: #e.message#", "error" )
+			rethrow
+		}
 	}
 
 	/**
@@ -232,15 +240,15 @@ abstract class extends="bxModules.bxai.models.gateway.BaseGateway" {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Every gateway type writes to its own "gateway-<type>" log file (via
-	 * BoxLang's writeLog()) instead of one shared/default app log, so an
-	 * operator can tail exactly the platform they care about.
+	 * Every gateway writes to the one gateways log of the data home (see Logger), with
+	 * its own name at the start of each line, so an operator reads every chat app in
+	 * one place and filters to the one they care about.
 	 *
 	 * @text The message to log
 	 * @type BoxLang writeLog() type — "information" (default), "warning", "error", "debug", etc.
 	 */
 	public void function logEvent( required string text, string type = "information" ) {
-		writeLog( text: arguments.text, type: arguments.type, file: "gateway-#variables.name#" )
+		Logger::log( "gateways", arguments.type, arguments.text, variables.name )
 	}
 
 }
