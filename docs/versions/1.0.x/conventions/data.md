@@ -117,6 +117,10 @@ A saved skill is part of the data home, so `backup` and `restore` carry it. To r
 - **In chat:** `/skills` lists every skill with its level: installed, project or agent.
 - **Over the API:** `GET /skills` answers `{ skills: [ { name, description, origin } ] }` (`origin` is `installed`, `project` or `agent`) to anyone who may call the API. It never shows a folder on the machine.
 
+## Logs
+
+The `logs/` folder of the data home holds the agent's log files, one per area. They are not part of a backup. See [logs](logs.md).
+
 ## `bxAgents data`
 
 ```bash
