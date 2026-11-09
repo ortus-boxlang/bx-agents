@@ -1,0 +1,103 @@
+import bxModules.bxagents.models.logs.Logger;
+
+/**
+ * What an admin sees of the chat apps: state, which credentials are set, last activity, last error.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "gateways.GatewayInfo", function() {
+
+			beforeEach( function() {
+				variables.dir = replace( createTempDirectory( prefix = "bxagents-gwinfo-" ), "\", "/", "all" );
+				Logger::reset();
+				Logger::use( dir & "/logs" );
+				variables.registry = aiGatewayRegistry();
+				variables.keys = [];
+			} );
+
+			afterEach( function() {
+				for ( var key in keys ) {
+					try { registry.unregister( key ); } catch ( any e ) {}
+				}
+				Logger::reset();
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function telegram( boolean start = false ) {
+				var gateway = new bxagents.models.gateways.TelegramGateway();
+				gateway.setScheduler( new tests.support.FakeScheduler() );
+				gateway.configure( { botToken : "t" } );
+				gateway.setApiCaller( function( method, params ) { return { ok : true, result : { username : "bot" } }; } );
+				if ( start ) {
+					gateway.start();
+				}
+				registry.register( gateway );
+				keys.append( gateway.getName() );
+				return gateway;
+			}
+
+			function info( array entries ) {
+				return new bxagents.models.gateways.GatewayInfo( entries, nullValue(), registry );
+			}
+
+			it( "says a running gateway is connected, with its capabilities", function() {
+				telegram( true );
+
+				var row = info( [ { name : "telegram", type : "telegram", envVars : [] } ] ).listing()[ 1 ];
+
+				expect( row.state ).toBe( "connected" );
+				expect( row.running ).toBeTrue();
+				expect( row.capabilities ).toInclude( "outboundMessages" );
+			} );
+
+			it( "says a gateway that is not running is stopped, or failing once it logged an error", function() {
+				telegram( false );
+				var entries = [ { name : "telegram", type : "telegram", envVars : [] } ];
+
+				expect( info( entries ).listing()[ 1 ].state ).toBe( "stopped" );
+
+				Logger::log( "gateways", "error", "Could not start: Unauthorized", "telegram" );
+				var row = info( entries ).listing()[ 1 ];
+				expect( row.state ).toBe( "failing" );
+				expect( row.lastError.message ).toInclude( "Unauthorized" );
+			} );
+
+			it( "says a gateway the project names but the app did not register is missing", function() {
+				var row = info( [ { name : "ghost", type : "nosuchgateway", envVars : [] } ] ).listing()[ 1 ];
+
+				expect( row.state ).toBe( "missing" );
+				expect( row.capabilities ).toBeEmpty();
+			} );
+
+			it( "says which environment variables are set, and never shows a value", function() {
+				var jvm = createObject( "java", "java.lang.System" );
+				jvm.setProperty( "BXAGENTS_SPEC_GW_SET", "value-that-must-not-show" );
+				jvm.clearProperty( "BXAGENTS_SPEC_GW_UNSET" );
+				try {
+					var rows = info( [ { name : "t", type : "telegram", envVars : [ "BXAGENTS_SPEC_GW_SET", "BXAGENTS_SPEC_GW_UNSET" ] } ] ).listing();
+
+					expect( rows[ 1 ].credentials ).toBe( [ { env : "BXAGENTS_SPEC_GW_SET", set : true }, { env : "BXAGENTS_SPEC_GW_UNSET", set : false } ] );
+					expect( jsonSerialize( rows ) ).notToInclude( "value-that-must-not-show" );
+				} finally {
+					jvm.clearProperty( "BXAGENTS_SPEC_GW_SET" );
+				}
+			} );
+
+			it( "gives when the gateway last had a conversation", function() {
+				var store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				var sessions = new bxagents.models.store.SessionStore( store );
+				sessions.touch( "telegram:9", "telegram:55", "hello", 2, "telegram" );
+
+				var row = new bxagents.models.gateways.GatewayInfo( [ { name : "telegram", type : "telegram", envVars : [] }, { name : "slack", type : "slack", envVars : [] } ], sessions, registry ).listing();
+
+				expect( row[ 1 ].lastActiveAt ).notToBe( "" );
+				expect( row[ 2 ].lastActiveAt ).toBe( "" );
+			} );
+
+		} );
+	}
+
+}

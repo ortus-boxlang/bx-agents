@@ -160,6 +160,69 @@ class extends="testbox.system.BaseSpec" {
 					expect( who.agent ).toBe( "fake" );
 				} );
 
+				describe( "logs and gateways", function() {
+
+					beforeEach( function() {
+						variables.home = new bxagents.models.data.DataHome( projectRoot : dir, configured : dir & "/home", environment : {}, userHome : "/home/someone" );
+						bxModules.bxagents.models.logs.Logger::reset();
+						bxModules.bxagents.models.logs.Logger::use( dir & "/home/logs" );
+						variables.info = new bxagents.models.gateways.GatewayInfo( [ { name : "ghost", type : "nosuchgateway", envVars : [ "BXAGENTS_SPEC_NONE" ] } ] );
+						variables.shared = new bxagents.models.api.AgentService( agent, store, nullValue(), {
+							data : new bxagents.models.data.AppData( home, new bxagents.models.data.Volumes( {}, home ) ),
+							gateways : info
+						} );
+						variables.admin = new bxagents.models.api.Caller( id = "root", scope = "admin" );
+					} );
+
+					afterEach( function() {
+						bxModules.bxagents.models.logs.Logger::reset();
+					} );
+
+					it( "lists the logs for an admin, with how many errors were logged", function() {
+						bxModules.bxagents.models.logs.Logger::log( "gateways", "error", "broke", "telegram" );
+						sleep( 200 );
+
+						var answer = shared.logs( admin ).data();
+
+						expect( answer.logs.map( l => l.area ) ).toInclude( "gateways" );
+						expect( answer.errors ).toHaveKey( "gateways" );
+					} );
+
+					it( "gives the last lines of one log, filtered", function() {
+						bxModules.bxagents.models.logs.Logger::log( "api", "info", "fine" );
+						bxModules.bxagents.models.logs.Logger::log( "api", "warn", "slow" );
+						sleep( 200 );
+
+						var lines = shared.logs( admin, "api", 50, "warn" ).data().lines;
+
+						expect( lines.map( l => l.message ) ).toBe( [ "slow" ] );
+					} );
+
+					it( "refuses the logs to anyone but an admin, and says an unknown log is not found", function() {
+						expect( shared.logs( ada ).code() ).toBe( "forbidden" );
+						expect( shared.logs( admin, "chat" ).code() ).toBe( "not_found" );
+						expect( shared.logs( admin, "api", "lots" ).code() ).toBe( "invalid" );
+					} );
+
+					it( "says it is not found when the app does not know its data home", function() {
+						expect( service.logs( admin ).code() ).toBe( "not_found" );
+					} );
+
+					it( "lists the chat apps for an admin, and refuses everyone else", function() {
+						var gateways = shared.gateways( admin ).data().gateways;
+
+						expect( gateways ).toHaveLength( 1 );
+						expect( gateways[ 1 ].state ).toBe( "missing" );
+						expect( gateways[ 1 ].credentials[ 1 ].set ).toBeFalse();
+						expect( shared.gateways( ada ).code() ).toBe( "forbidden" );
+					} );
+
+					it( "lists no chat apps when the app has none to name", function() {
+						expect( service.gateways( admin ).data().gateways ).toBeEmpty();
+					} );
+
+				} );
+
 				describe( "skills", function() {
 
 					beforeEach( function() {
