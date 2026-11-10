@@ -117,6 +117,12 @@ class {
 			// its own approval prompts.
 			hasChannelGateway       : channelEntries.len() > 0,
 			hasPushGateway          : pushGatewayNames.len() > 0,
+			// what the admin view of the chat apps needs: each entry, its type and the environment variables it reads
+			channelInfo             : channelEntries.map( entry => {
+				"name"    : entry.name,
+				"type"    : entry.config.type ?: "",
+				"envVars" : entry.config.keyArray().filter( key => key.endsWith( "EnvVar" ) && isSimpleValue( entry.config[ key ] ) && len( entry.config[ key ] ) ).map( key => entry.config[ key ] )
+			} ),
 			hasEmailGateway         : hasEmailGateway,
 			hasWhatsAppCloudGateway : hasWhatsAppCloudGateway,
 			hasTeamsGateway         : hasTeamsGateway,

@@ -1,0 +1,170 @@
+import bxModules.bxagents.models.logs.Logger;
+
+/**
+ * The agent's log files: one per area in the data home's logs/ folder, one line each, with nothing secret in them.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "logs.Logger", function() {
+
+			beforeEach( function() {
+				variables.dir = replace( createTempDirectory( prefix = "bxagents-logger-" ), "\", "/", "all" );
+				Logger::reset();
+				Logger::use( dir & "/logs" );
+			} );
+
+			afterEach( function() {
+				Logger::reset();
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function linesOf( required string area ) {
+				sleep( 150 );
+				var file = dir & "/logs/" & arguments.area & ".log";
+				return fileExists( file ) ? fileRead( file ).listToArray( char( 10 ) ).filter( l => len( trim( l ) ) ) : [];
+			}
+
+			describe( "writing", function() {
+
+				it( "makes the logs folder and writes a line in the file of its area", function() {
+					Logger::log( "gateways", "info", "Connected", "telegram" );
+
+					var lines = linesOf( "gateways" );
+					expect( lines ).toHaveLength( 1 );
+					expect( lines[ 1 ] ).toInclude( "[INFO" );
+					expect( lines[ 1 ] ).toInclude( "[telegram] Connected" );
+				} );
+
+				it( "keeps each area in its own file", function() {
+					Logger::log( "gateways", "info", "one" );
+					Logger::log( "routines", "info", "two" );
+					Logger::log( "heartbeat", "info", "three" );
+
+					expect( linesOf( "gateways" ) ).toHaveLength( 1 );
+					expect( linesOf( "routines" ).toList() ).toInclude( "two" );
+					expect( linesOf( "heartbeat" ).toList() ).toInclude( "three" );
+					expect( linesOf( "gateways" ).toList() ).notToInclude( "two" );
+				} );
+
+				it( "marks the level of each line", function() {
+					Logger::log( "api", "warn", "refused" );
+					Logger::log( "api", "error", "broke" );
+
+					var text = linesOf( "api" ).toList( char( 10 ) );
+					expect( text ).toInclude( "[WARN" );
+					expect( text ).toInclude( "[ERROR" );
+				} );
+
+				it( "writes an unknown area to the agent log", function() {
+					Logger::log( "nonsense", "info", "somewhere" );
+
+					expect( linesOf( "agent" ).toList() ).toInclude( "somewhere" );
+				} );
+
+				it( "puts a message on one line, however many it was given", function() {
+					Logger::log( "agent", "info", "first#char( 10 )#second#char( 13 )#third" );
+
+					var lines = linesOf( "agent" );
+					expect( lines ).toHaveLength( 1 );
+					expect( lines[ 1 ] ).toInclude( "first second third" );
+				} );
+
+				it( "cuts a very long message", function() {
+					Logger::log( "agent", "info", repeatString( "x", 5000 ) );
+
+					expect( len( linesOf( "agent" )[ 1 ] ) ).toBeLT( 2300 );
+					expect( linesOf( "agent" )[ 1 ] ).toInclude( "..." );
+				} );
+
+				it( "never throws, even when the folder cannot be used", function() {
+					// a file where the folder should be
+					var blocker = dir & "/blocker";
+					fileWrite( blocker, "not a folder" );
+					Logger::use( blocker & "/logs" );
+
+					expect( function() {
+						Logger::log( "agent", "error", "still fine" );
+					} ).notToThrow();
+				} );
+
+				it( "falls back to BoxLang's own logs before use() is called", function() {
+					Logger::reset();
+
+					expect( function() {
+						Logger::log( "agent", "info", "before the folder was known" );
+					} ).notToThrow();
+					expect( Logger::folder() ).toBe( "" );
+				} );
+
+			} );
+
+			describe( "secrets", function() {
+
+				it( "removes a bearer token, a Telegram bot token and a Slack token", function() {
+					expect( Logger::redact( "sent with Bearer abcdef1234567890abcdef" ) ).toBe( "sent with Bearer ***" );
+					expect( Logger::redact( "POST /bot123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw/sendMessage" ) ).toBe( "POST /bot***/sendMessage" );
+					expect( Logger::redact( "token xoxb-1234567890-abcdefghij" ) ).notToInclude( "xoxb-1234567890" );
+					expect( Logger::redact( "app xapp-1-A0123456789-abcdefghij" ) ).notToInclude( "xapp-1-A0123456789" );
+				} );
+
+				it( "removes GitHub and OpenAI style keys", function() {
+					expect( Logger::redact( "key ghp_abcdefghijklmnopqrstuvwxyz0123456789" ) ).toBe( "key ***" );
+					expect( Logger::redact( "key sk-abcdefghijklmnop1234" ) ).toBe( "key ***" );
+				} );
+
+				it( "removes the value after a name that holds a secret, in the usual spellings", function() {
+					expect( Logger::redact( "password=hunter2 ok" ) ).toBe( "password=*** ok" );
+					expect( Logger::redact( "api_key: abc123def" ) ).toBe( "api_key: ***" );
+					expect( Logger::redact( '{"clientSecret":"s3cr3t"}' ) ).notToInclude( "s3cr3t" );
+					expect( Logger::redact( "GET /x?access_token=abc123&a=1" ) ).toBe( "GET /x?access_token=***&a=1" );
+				} );
+
+				it( "leaves ordinary text alone", function() {
+					var plain = "Connected as @mybot, polling every 30 seconds";
+					expect( Logger::redact( plain ) ).toBe( plain );
+				} );
+
+				it( "does not write a secret that was passed in a message", function() {
+					Logger::log( "gateways", "error", "send failed with Bearer abcdef1234567890abcdef", "slack" );
+
+					expect( linesOf( "gateways" ).toList() ).notToInclude( "abcdef1234567890abcdef" );
+				} );
+
+			} );
+
+			describe( "the last error", function() {
+
+				it( "remembers the last error of a subject, and nothing for one with no error", function() {
+					Logger::log( "gateways", "info", "Connected", "telegram" );
+					Logger::log( "gateways", "error", "Telegram rejected the token", "telegram" );
+					Logger::log( "gateways", "error", "Socket closed", "slack" );
+
+					expect( Logger::lastError( "gateways", "telegram" ).message ).toInclude( "rejected the token" );
+					expect( Logger::lastError( "gateways", "slack" ).message ).toInclude( "Socket closed" );
+					expect( Logger::lastError( "gateways", "discord" ) ).toBeEmpty();
+				} );
+
+				it( "counts the errors per area", function() {
+					Logger::log( "gateways", "error", "a", "telegram" );
+					Logger::log( "gateways", "error", "b", "slack" );
+					Logger::log( "routines", "error", "c", "daily" );
+
+					expect( Logger::errorCounts() ).toBe( { gateways : 2, routines : 1 } );
+				} );
+
+				it( "does not count warnings or information as errors", function() {
+					Logger::log( "gateways", "warn", "slow", "telegram" );
+					Logger::log( "gateways", "info", "ok", "telegram" );
+
+					expect( Logger::errorCounts() ).toBeEmpty();
+				} );
+
+			} );
+
+		} );
+	}
+
+}

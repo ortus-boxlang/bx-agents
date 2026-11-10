@@ -1,0 +1,185 @@
+/**
+ * The agent's own log files, one per area, in the `logs/` folder of the data home:
+ *
+ * ```
+ * <data home>/logs/
+ *   agent.log       startup, errors in turns, tool failures
+ *   gateways.log    every chat app: connect, disconnect, send failures. The gateway's name is on each line
+ *   routines.log    routines: created, changed, run, skipped, failed, delivered
+ *   heartbeat.log   each tick of the routine scheduler that did something
+ *   api.log         refused calls and sign-in failures (never a token or a message)
+ * ```
+ *
+ * The files are written with BoxLang's own `writeLog()` and an absolute path, so BoxLang makes the folder and the
+ * file, and rolls them by its own rules (100 MB a file, 90 days, 5 GB in all by default; the `logging` settings of
+ * the runtime change that). This class adds no settings of its own.
+ *
+ * Nothing here ever throws: a log that cannot be written must not stop the work it describes. And nothing secret is
+ * written: callers do not pass message text or tokens, and `redact()` removes the usual shapes of a secret from
+ * whatever is passed all the same.
+ *
+ * `Logger::use( folder )` is called once when the app (or the terminal chat) starts. Until then, lines go to
+ * BoxLang's default logs folder under `bxagents-<area>`, as before.
+ */
+class {
+
+	static {
+		AREA_NAMES = [ "agent", "gateways", "routines", "heartbeat", "api" ]
+		// our level names, and the type writeLog() takes for each
+		TYPES      = { debug : "debug", info : "information", warn : "warning", error : "error" }
+		MAX_LENGTH = 2000
+		logsFolder = ""
+		lastErrors = {}
+	}
+
+	/**
+	 * Says where the logs go. The folder is made by BoxLang when the first line is written.
+	 *
+	 * @folder The absolute path of the logs folder, normally `<data home>/logs`
+	 */
+	static void function use( required string folder ) {
+		static.logsFolder = replace( arguments.folder, "\", "/", "all" ).reReplace( "/+$", "" )
+	}
+
+	/**
+	 * use(), for code that makes a Logger with `new` (the generated application does).
+	 *
+	 * @folder The absolute path of the logs folder
+	 */
+	void function start( required string folder ) {
+		Logger::use( arguments.folder )
+	}
+
+	/**
+	 * log(), for code that makes a Logger with `new` (the generated application does).
+	 *
+	 * @area One of the areas
+	 * @level debug, info, warn or error
+	 * @message What happened
+	 * @subject Who it is about
+	 */
+	void function write( required string area, required string level, required string message, string subject = "" ) {
+		Logger::log( arguments.area, arguments.level, arguments.message, arguments.subject )
+	}
+
+	/**
+	 * @return The logs folder in use, or blank before use() is called
+	 */
+	static string function folder() {
+		return static.logsFolder
+	}
+
+	/**
+	 * Forgets the folder and the last errors. For tests.
+	 */
+	static void function reset() {
+		static.logsFolder = ""
+		static.lastErrors = {}
+	}
+
+	/**
+	 * @return The names of the areas, in the order the web page shows them
+	 */
+	static array function areas() {
+		return duplicate( static.AREA_NAMES )
+	}
+
+	/**
+	 * Writes one line.
+	 *
+	 * @area One of agent, gateways, routines, heartbeat, api. Anything else is written to agent
+	 * @level debug, info, warn or error
+	 * @message What happened, in one short line. No message text from a person, and no secret
+	 * @subject Who it is about, such as a gateway's name. It starts the line in brackets
+	 */
+	static void function log( required string area, required string level, required string message, string subject = "" ) {
+		try {
+			var where = static.AREA_NAMES.findNoCase( arguments.area ) ? lCase( arguments.area ) : "agent"
+			var type = Logger::typeOf( arguments.level )
+			var text = Logger::oneLine( ( len( arguments.subject ) ? "[" & arguments.subject & "] " : "" ) & arguments.message )
+			if ( type == "error" ) {
+				static.lastErrors[ where & ":" & arguments.subject ] = { at : dateTimeFormat( now(), "yyyy-mm-dd HH:nn:ss" ), message : text }
+			}
+			if ( len( static.logsFolder ) ) {
+				writeLog( text = text, type = type, log = static.logsFolder & "/" & where & ".log" )
+			} else {
+				writeLog( text = text, type = type, file = "bxagents-" & where )
+			}
+		} catch ( any e ) {
+			// a log that cannot be written must not stop the work it describes
+		}
+	}
+
+	/**
+	 * @area The area
+	 * @subject Who the error was about, such as a gateway's name
+	 *
+	 * @return { at, message } of the last error written for that subject since the app started, or an empty struct
+	 */
+	static struct function lastError( required string area, string subject = "" ) {
+		return duplicate( static.lastErrors[ lCase( arguments.area ) & ":" & arguments.subject ] ?: {} )
+	}
+
+	/**
+	 * @return How many errors were written since the app started, per area: { gateways : 2 }
+	 */
+	static struct function errorCounts() {
+		var counts = {}
+		for ( var key in static.lastErrors ) {
+			var area = listFirst( key, ":" )
+			counts[ area ] = ( counts[ area ] ?: 0 ) + 1
+		}
+		return counts
+	}
+
+	/**
+	 * Takes the usual shapes of a secret out of a line.
+	 *
+	 * @text Any text
+	 *
+	 * @return The text with each secret replaced by ***
+	 */
+	static string function redact( required string text ) {
+		var out = arguments.text
+		// a header value: Bearer abc..., Basic abc...
+		out = reReplaceNoCase( out, "\b(bearer|basic)\s+[A-Za-z0-9._~+/=\-]{8,}", "\1 ***", "all" )
+		// a Telegram bot token: 123456789:AAH... (also inside a URL)
+		out = reReplace( out, "\d{6,12}:[A-Za-z0-9_\-]{30,}", "***", "all" )
+		// Slack, GitHub, OpenAI style tokens
+		out = reReplace( out, "\bxox[abprs]-[A-Za-z0-9\-]{10,}", "***", "all" )
+		out = reReplace( out, "\bxapp-[A-Za-z0-9\-]{10,}", "***", "all" )
+		out = reReplace( out, "\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}", "***", "all" )
+		out = reReplace( out, "\bgithub_pat_[A-Za-z0-9_]{20,}", "***", "all" )
+		out = reReplace( out, "\bsk-[A-Za-z0-9_\-]{16,}", "***", "all" )
+		// name = value, name: value and "name":"value" for the names that hold a secret
+		out = reReplaceNoCase( out, "\b(token|secret|password|passwd|api[_\-]?key|authorization|access[_\-]?token|client[_\-]?secret|private[_\-]?key)([""']?\s*[:=]\s*[""']?)[^\s""',;&]+", "\1\2***", "all" )
+		return out
+	}
+
+	/**
+	 * @text A message
+	 *
+	 * @return The message on one line, with secrets removed and cut to a sensible length
+	 */
+	static string function oneLine( required string text ) {
+		var out = Logger::redact( reReplace( arguments.text, "[\r\n]+", " ", "all" ) )
+		return len( out ) > static.MAX_LENGTH ? left( out, static.MAX_LENGTH ) & "..." : out
+	}
+
+	/**
+	 * @level Our level name or a writeLog() type
+	 *
+	 * @return The type writeLog() takes
+	 */
+	static string function typeOf( required string level ) {
+		var wanted = lCase( arguments.level )
+		if ( static.TYPES.keyExists( wanted ) ) {
+			return static.TYPES[ wanted ]
+		}
+		if ( [ "information", "warning", "error", "debug" ].contains( wanted ) ) {
+			return wanted == "information" ? "information" : wanted
+		}
+		return "information"
+	}
+
+}

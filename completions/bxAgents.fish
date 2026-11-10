@@ -32,6 +32,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -a 'hash-password' -d 'Hash a password for a webui users entry'
     complete -c $cmd -n __bxagents_needs_verb -a 'inspect' -d 'Report how the agent is composed: agents, tools, skills, MCP, exposure, env'
     complete -c $cmd -n __bxagents_needs_verb -a 'invoke' -d 'Send one message to a built agent, print the response, exit'
+    complete -c $cmd -n __bxagents_needs_verb -a 'logs' -d 'The agent\'s logs in the data home: logs lists them, logs...'
     complete -c $cmd -n __bxagents_needs_verb -a 'models' -d 'List the models a project can talk to and test that they answer'
     complete -c $cmd -n __bxagents_needs_verb -a 'new' -d 'Scaffold a new agent project'
     complete -c $cmd -n __bxagents_needs_verb -a 'notes' -d 'Read and manage the notes of an agent'
@@ -160,6 +161,11 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb invoke' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb invoke' -l server
     complete -c $cmd -n '__bxagents_using_verb invoke' -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb logs' -l grep -x
+    complete -c $cmd -n '__bxagents_using_verb logs' -l level -x
+    complete -c $cmd -n '__bxagents_using_verb logs' -l projectRoot -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb logs' -l tail -x
+    complete -c $cmd -n '__bxagents_using_verb logs' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb models' -l all
     complete -c $cmd -n '__bxagents_using_verb models' -l json
     complete -c $cmd -n '__bxagents_using_verb models' -l profile -x
@@ -252,5 +258,5 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb vault' -l scope -x
     complete -c $cmd -n '__bxagents_using_verb vault' -l user -x
     complete -c $cmd -n '__bxagents_using_verb vault' -a '(__fish_complete_directories)'
-    complete -c $cmd -n '__bxagents_using_verb help' -a 'add backup build chat clean connect data deploy doctor extensions hash-password inspect invoke models new notes package restore serve sessions skills stats test token users vault help'
+    complete -c $cmd -n '__bxagents_using_verb help' -a 'add backup build chat clean connect data deploy doctor extensions hash-password inspect invoke logs models new notes package restore serve sessions skills stats test token users vault help'
 end

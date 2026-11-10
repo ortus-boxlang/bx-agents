@@ -1,0 +1,79 @@
+/**
+ * What an admin sees of the chat apps: for each gateway the project names, whether it is connected, which of its
+ * credentials are set (never their values), when it last had a conversation and the last error it logged.
+ *
+ * The list of gateways and the environment variables each one reads is stamped into the app when it is built (see
+ * GatewayGenerator); the state comes from the live gateway in bx-ai's registry.
+ */
+import bxModules.bxagents.models.logs.Logger;
+
+class {
+
+	/**
+	 * @entries [ { name, type, envVars : [ names ] } ] as the build found them
+	 * @sessions A SessionStore, for when each gateway last had a conversation. Optional
+	 * @registry The gateway registry. The live bx-ai one when left out
+	 */
+	function init( array entries = [], any sessions, any registry ) {
+		variables.entries = arguments.entries
+		variables.sessions = arguments.sessions ?: nullValue()
+		variables.registry = arguments.registry ?: nullValue()
+		return this
+	}
+
+	/**
+	 * @return [ { name, type, state, running, capabilities, credentials : [ { env, set } ], lastActiveAt, lastError : { at, message } } ].
+	 *         state is connected, stopped (not running, nothing wrong logged), failing (not running and an error was
+	 *         logged) or missing (the project names it but it was not registered)
+	 */
+	array function listing() {
+		return variables.entries.map( function( entry ) {
+			var live = liveGateway( entry.type )
+			var error = isNull( live ) ? {} : Logger::lastError( "gateways", live.getName() )
+			var running = !isNull( live ) && live.isRunning()
+			var state = isNull( live ) ? "missing" : ( running ? "connected" : ( error.isEmpty() ? "stopped" : "failing" ) )
+			return {
+				"name"         : entry.name,
+				"type"         : entry.type,
+				"state"        : state,
+				"running"      : running,
+				"capabilities" : isNull( live ) ? [] : live.getCapabilities(),
+				"credentials"  : ( entry.envVars ?: [] ).map( env => { "env" : env, "set" : len( trim( getSystemSetting( env, "" ) ) ) > 0 } ),
+				"lastActiveAt" : lastActive( entry.type ),
+				"lastError"    : error
+			}
+		} )
+	}
+
+	/**
+	 * @type The gateway type, which is the key it is registered under
+	 *
+	 * @return The live gateway, or null
+	 */
+	private any function liveGateway( required string type ) {
+		try {
+			var registry = isNull( variables.registry ) ? aiGatewayRegistry() : variables.registry
+			return registry.get( arguments.type )
+		} catch ( any e ) {
+			return nullValue()
+		}
+	}
+
+	/**
+	 * @type The gateway type, which is also the source of the conversations it started
+	 *
+	 * @return When a conversation on this gateway last changed, or blank
+	 */
+	private any function lastActive( required string type ) {
+		if ( isNull( variables.sessions ) ) {
+			return ""
+		}
+		try {
+			var latest = variables.sessions.listAll( 1, arguments.type )
+			return latest.len() ? latest[ 1 ].updatedAt : ""
+		} catch ( any e ) {
+			return ""
+		}
+	}
+
+}

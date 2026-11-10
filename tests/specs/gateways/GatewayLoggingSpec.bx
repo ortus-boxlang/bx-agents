@@ -1,0 +1,59 @@
+import bxModules.bxagents.models.logs.Logger;
+
+/**
+ * Every chat app writes to the one gateways log of the data home, with its own name at the start of the line.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "gateway logging", function() {
+
+			beforeEach( function() {
+				variables.dir = replace( createTempDirectory( prefix = "bxagents-gwlog-" ), "\", "/", "all" );
+				Logger::reset();
+				Logger::use( dir & "/logs" );
+			} );
+
+			afterEach( function() {
+				Logger::reset();
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "writes a Telegram event to gateways.log with the gateway's name, and remembers the last error", function() {
+				var gateway = new bxagents.models.gateways.TelegramGateway();
+				gateway.setScheduler( new tests.support.FakeScheduler() );
+				gateway.configure( { botToken : "123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw" } );
+				gateway.setApiCaller( function( method, params ) {
+					return method == "getMe" ? { ok : false, description : "Unauthorized" } : { ok : true, result : {} };
+				} );
+
+				try { gateway.start(); } catch ( any e ) {}
+				sleep( 200 );
+
+				var text = fileRead( dir & "/logs/gateways.log" );
+				expect( text ).toInclude( "[telegram]" );
+				expect( text ).notToInclude( "AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw" );
+				expect( Logger::lastError( "gateways", "telegram" ) ).notToBeEmpty();
+			} );
+
+			it( "puts two gateways in the same file", function() {
+				var one = new bxagents.models.gateways.TelegramGateway();
+				one.configure( { botToken : "t" } );
+				one.logEvent( "first", "information" );
+				var two = new bxagents.models.gateways.SlackGateway();
+				two.configure( { botToken : "t", appToken : "a" } );
+				two.logEvent( "second", "warning" );
+				sleep( 200 );
+
+				var lines = fileRead( dir & "/logs/gateways.log" ).listToArray( char( 10 ) ).filter( l => len( trim( l ) ) );
+				expect( lines ).toHaveLength( 2 );
+				expect( lines[ 1 ] ).toInclude( "[telegram] first" );
+				expect( lines[ 2 ] ).toInclude( "[slack] second" );
+			} );
+
+		} );
+	}
+
+}

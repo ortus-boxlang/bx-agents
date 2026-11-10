@@ -28,11 +28,13 @@ class {
 	private boolean function refused( required any event ) {
 		var caller = callerOf( arguments.event )
 		if ( isNull( caller ) ) {
+			new "models.logs.Logger@bxagents"().write( "api", "warn", "Refused a call to #arguments.event.getCurrentAction()# with no valid sign in or token" )
 			answer( arguments.event, new "models.api.Authenticator@bxagents"().refusal() )
 			return true
 		}
 		// a route the contract marks admin only is refused here, before its action does anything
 		if ( !caller.isAdmin() && new "models.api.ApiContract@bxagents"().needsAdmin( arguments.event.getCurrentAction() ) ) {
+			new "models.logs.Logger@bxagents"().write( "api", "warn", "Refused #caller.id()# on the admin route #arguments.event.getCurrentAction()#" )
 			answer( arguments.event, failed( "forbidden", "This route is for admins" ) )
 			return true
 		}
@@ -76,7 +78,7 @@ class {
 	private function service() {
 		// once per request: the probe for the shared database is a query
 		if ( !request.keyExists( "bxagentsService" ) ) {
-			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered(), { manageTokens : manageTokens(), data : appData(), connections : connectionService() } )
+			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered(), { manageTokens : manageTokens(), data : appData(), connections : connectionService(), gateways : gatewayInfo() } )
 		}
 		return request.bxagentsService
 	}
@@ -100,6 +102,17 @@ class {
 	private function appData() {
 		var home = new "models.data.DataHome@bxagents"( projectRoot : expandPath( "/" ), configured : "__DATA_HOME__", agentName : "__AGENT_NAME__" )
 		return new "models.data.AppData@bxagents"( home, new "models.data.Volumes@bxagents"( jsonDeserialize( "__VOLUMES__" ), home ) )
+	}
+
+	/**
+	 * The chat apps the build found, with the state of each live gateway. Their conversations say when each was last used.
+	 */
+	private function gatewayInfo() {
+		var store = sharedStore()
+		return new "models.gateways.GatewayInfo@bxagents"(
+			jsonDeserialize( "__GATEWAYS__" ),
+			isNull( store ) ? nullValue() : new "models.store.SessionStore@bxagents"( store )
+		)
 	}
 
 	/** Where this build serves the API, as agentApi.path (or the default) set it */
@@ -658,6 +671,26 @@ class {
 			return
 		}
 		answer( event, service().volumes( callerOf( event ) ) )
+	}
+
+	/**
+	 * The agent's logs: which there are, or the last lines of one (?area=gateways&tail=200&level=warn&q=text). Admin only.
+	 */
+	function logs( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().logs( callerOf( event ), rc.area ?: "", rc.tail ?: 200, rc.level ?: "", rc.q ?: "" ) )
+	}
+
+	/**
+	 * The chat apps and the state of each: { gateways : [ ... ] }. Admin only.
+	 */
+	function gateways( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().gateways( callerOf( event ) ) )
 	}
 
 	/**

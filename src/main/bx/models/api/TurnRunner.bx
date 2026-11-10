@@ -15,6 +15,7 @@
  * A request is { input, conversationId?, threadId?, params?, options?, attachments?, images? }.
  */
 import bxModules.bxagents.models.api.Outcome;
+import bxModules.bxagents.models.logs.Logger;
 
 import bxModules.bxagents.models.api.RunOwners;
 
@@ -204,6 +205,7 @@ class {
 		try {
 			return Outcome::done( { output : turn.run(), threadId : turn.threadId } )
 		} catch ( any e ) {
+			Logger::log( "agent", "error", "A turn failed (from #arguments.caller.source()#): #e.message#" )
 			return Outcome::failed( "internal", e.message )
 		} finally {
 			if ( recorded ) {
@@ -297,6 +299,7 @@ class {
 				send( "done", "[DONE]" )
 			}
 		} catch ( any e ) {
+			Logger::log( "agent", "error", "A streamed turn failed: #e.message#" )
 			if ( open() ) {
 				send( "error", { "message" : e.message } )
 			}

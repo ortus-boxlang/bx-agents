@@ -35,10 +35,14 @@ flowchart LR
 - Routines are stored in the chat database, per owner. Admins can see and manage all of them.
 - One built-in scheduler, the **heartbeat**, ticks every minute, finds the routines that are due and runs them. Nothing else runs routines. (The earlier idea of a `HEARTBEAT.md` checklist is dropped.)
 - Each routine chooses where its result goes when it is created: the main chat, or a chat app such as Telegram or WhatsApp.
-- Each routine has a results folder in the data home, with any number of files. It can be listed, read, cleaned up and wiped.
+- Each routine has a results folder in the data home, with any number of files. It can be listed, read, cleaned up and wiped. Nothing is deleted automatically: a person starts every clean-up.
 - A routine has the same approval rules as chat: a tool that needs approval waits until a person answers.
 - The web page manages routines: list, edit the schedule, prompt and destination, pause, run now, delete, read and delete results.
-- Logs: the data home gets a `logs/` folder with a log per area (gateways, routines, heartbeat, api, agent), written with BoxLang's own logging. Admins read them in the web page.
+- Logs: the data home gets a `logs/` folder with a log per area (gateways, routines, heartbeat, api, agent), written with BoxLang's own logging. We add no rotation or retention settings; BoxLang's rolling file handling does it. Admins read them in the web page.
+- One Logs section for the whole app, not one per agent. Every line names the agent.
+- "Main chat" means the conversation the routine was created in. Created from Telegram, the answer comes back to Telegram.
+- No identity linking and no claim code. The owner made the connection, so the app only needs the *address* to push to, and it already has it: every chat the gateway talks to is stored with its chat id (a conversation `telegram:<chat id>`). A chat-app destination uses that chat. If the gateway has talked with exactly one chat, that one. If more than one, the agent asks which and remembers the answer. If none, it tells the owner to message the bot once (Telegram and others do not allow a bot to write first anyway). Email, SMS and Signal use the address or number the owner gave when setting the gateway up.
+- Chat apps belong to the owner. Checked in the code and docs: a gateway is developer configuration (`gateways/<name>.bx`, secrets from the environment, set up by the wizard), shared by the whole app. There is no table, API route or setting that lets a web user connect a chat app of their own; `/connect` is only for signing in to services (OAuth), not chat apps. So for now the person who runs the agent and set up its gateways, the local or admin user, is the only one who has chat apps. Other web users can send a routine's result to the chat it was created in, or to the web page.
 
 ## 1. Turning it on
 
@@ -47,8 +51,6 @@ routines:
   enabled: true            # default false
   maxPerUser: 20           # default 20
   minInterval: 5m          # default 5m; the shortest a routine may repeat
-  results:
-    keepDays: 30           # reports older than this are deleted by the heartbeat; 0 keeps them
 ```
 
 With `enabled: false` (or no block) there is no tool, no command, no route that creates a routine, no heartbeat, and the Routines section of the web page is absent. `doctor` says which it is.
@@ -87,8 +89,7 @@ A built-in scheduler, always registered when `routines.enabled` is true. Every m
 
 1. Reads the routines that are enabled and due.
 2. Starts each one (a few at the same time, a small fixed limit).
-3. Deletes reports older than `results.keepDays`.
-4. Writes one line to `heartbeat.log` when it did something, and a warning when it could not.
+3. Writes one line to `heartbeat.log` when it did something, and a warning when it could not.
 
 It needs no dynamic scheduling: the schedule lives in the database, and the heartbeat reads it. Pausing, editing and deleting take effect at the next tick.
 
@@ -100,11 +101,35 @@ The person chooses when they create the routine. Default: the conversation they 
 |---|---|
 | `here` (default) | A message in the conversation the routine was created from |
 | `routine` | Only the routine's own conversation; nothing is pushed |
-| `gateway:telegram`, `gateway:whatsapp`, ... | Also sent to that person on that chat app |
+| `gateway:telegram`, `gateway:whatsapp`, ... | Also sent to the owner on that chat app. Only the owner may choose it |
 
 - The result is always kept in the routine's conversation and results folder, whatever the destination.
-- A chat app can only be chosen if the person has talked to the agent from it (we need their chat id there). The agent says so when it is not possible.
+- A chat app can only be chosen by the owner, and only when the gateway has a chat to send to (see above). The agent says so when it has none.
 - A send that fails is logged in `routines.log` and shown in the routine's last status; it does not fail the run.
+
+### How the app pushes into a chat app
+
+Verified in the code. Chat apps are bx-ai gateways (`IGateway`), registered in bx-ai's `aiGatewayRegistry()` and driven by one `aiGatewaySession()`. Today they are used one way round: a person writes, the agent answers through `gateway.deliver( event, context )` on the same chat. Approval questions are pushed the same way, but only into the chat that started the run.
+
+Nothing in bxAgents sends a message that nobody asked for yet, but the piece it needs works: `aiGatewayRegistry().get( "telegram" ).deliver( event, context )` needs only a context holding the target (`conversationID` is the chat id, channel id, phone number or address) and the text. A spike with the mock gateway delivered with no inbound message. So we add one small class:
+
+- `Notifier.send( gateway, address, text )` looks up the live gateway, builds the context and event, calls `deliver`, and returns an outcome. Failures go to `gateways.log` and to the routine's last status. Nothing else in the app calls `deliver` for an unprompted message.
+- The address comes from the stored conversations of that gateway (and, for email, SMS and Signal, from the gateway's own settings). The one the owner picks, when there are several, is remembered as a preference.
+- The agent can use the same class later for its own proactive messages (a `notifyMe` tool), with the same approval rules. Not in this plan.
+
+What each chat app needs to receive an unprompted message:
+
+| Chat app | Address | Works unprompted? |
+|---|---|---|
+| Telegram | chat id | Yes, once the owner has started the bot |
+| Slack | channel or DM id | Yes, with the bot in the channel |
+| Discord | channel id | Yes to a channel. A direct message needs the DM channel id, which an inbound DM gives |
+| Signal | phone number | Yes |
+| Twilio SMS | phone number | Yes (the owner's carrier cost) |
+| Email | address | Yes |
+| WhatsApp Cloud | wa_id | Only within the platform's reply window after the owner last wrote; sending text outside it needs approved templates, which `deliver` does not do. Reported as a failure with that reason |
+| Teams | conversation id and `serviceUrl` | Only after the owner has written once; both values must be stored from that first message |
+| GitHub | issue or PR | Not offered as a destination |
 
 ## 5. Results in the data home
 
@@ -137,17 +162,28 @@ BoxLang's `writeLog( log = "<absolute path>" )` makes a rolling file appender at
 ```
 
 - Lines carry time, level, agent name, area and a short message. No secrets, tokens, passwords or message text: the logger redacts known secret names and keeps message bodies out.
-- Files roll by size and age (defaults 10 MB, 14 days, configurable under `logs:` in `Agent.yaml`).
+- Rolling and retention are BoxLang's own; we do not add settings for them.
 - `bxAgents logs [area] [--tail=100] [--level=warn]` prints them.
-- `GET /logs` lists the files; `GET /logs/<area>?tail=200&level=warn&q=text` returns lines. Admin only.
+- `GET /logs` lists the files; `GET /logs?area=gateways&tail=200&level=warn&q=text` returns lines. Admin only. (Built this way: one route.)
 
 ### In the web page (admin only)
 
 A **Logs** section in Settings, with one tab per log:
 
 - Lines in a table: time, a coloured level chip (error, warn, info), area, message.
-- Filter by level, search box, "last 200 / 1000", auto-refresh toggle, download the file.
+- Filter by level, search box, "last 200 / 1000", auto-refresh toggle. (Download is not built; the terminal verb `bxAgents logs` covers it.)
 - Errors and warnings in the last day show as a count on the Settings icon, so a broken gateway is noticed without opening anything.
+
+### Which chat apps are connected
+
+Today nothing in the API or the web page says which gateways exist or whether they are up. The data is there: the registry lists the gateways, and each one knows whether it is running (`isRunning()`). So the same Settings area gets a **Gateways** section (admin only), next to Logs:
+
+- One row per gateway: name, type, state (connected, stopped, or failing), when it last received and last sent a message, and the last error with a link to its lines in `gateways.log`.
+- Which credentials are set, by the name of the environment variable and set or not set. Never a value.
+- The chats it has talked with (platform and chat id), which is also what a routine can send to.
+- `GET /gateways` (admin) returns the same, for the client. (No `bxAgents gateways` verb was built: the Chat apps panel and the API cover it.)
+
+Connections themselves are still made in `gateways/<name>.bx` and `.env`, not in the page.
 
 ## 7. Surface for routines
 
@@ -168,26 +204,32 @@ Everything goes through one `Routines` service (as `Conversations` does for conv
 - Shortest interval and most routines per person are set by the developer in `Agent.yaml`.
 - Reports and logs never contain a vault value.
 
+## Spike results (task 1, done)
+
+Run against the real code with throwaway specs (not committed).
+
+1. **A turn runs off the web thread.** `TurnRunner.run` as a `Caller` with `source = routine`, on a worker thread with no web request, succeeds: the answer is stored, the conversation row has `source = routine` and two messages. The ColdBox integration suite also already runs a `schedules/*.bx` task that gets an answer from the agent under the real ColdBox scheduler. Not yet shown: an approval that pauses a run started by a schedule and resumes later. That is a risk for task 7 and gets its own spec there.
+2. **A gateway can be stopped and started again in place.** `stop()` removes its scheduler task and `isRunning()` turns false; `start()` registers the task again; the message callback the session registered stays attached, and a poll after the restart reaches it. Shown with Telegram. So Reconnect is the stop and start of one gateway (it does not re-read a changed token).
+3. **Unprompted delivery needs only the address.** With a context holding just the address, `deliver` succeeded for Telegram, Slack, Discord, Twilio, WhatsApp, Signal and Email. Teams refused: it needs the `serviceUrl` kept from the first inbound message, as the plan says. WhatsApp's reply-window rule belongs to Meta and cannot be shown here; `deliver` sends plain text only.
+4. **`writeLog` with an absolute path works for the data home.** It creates the folder and the file, one file per path, and the logger name comes from the file name (`GATEWAYS`, `HEARTBEAT`). Lines look like `[time] [thread] [LEVEL] [LOGNAME] [app] message`. They also print on the console. BoxLang's own rotation applies with its defaults: 100 MB a file, 90 days, 5 GB in all. Those are runtime settings (`logging` in `boxlang.json`), so we add none.
+
 ## Tasks
 
-1. Spike: can `TurnRunner` run on a scheduler thread with no web request? Which chat apps can send a message nobody asked for, and what do they need (a stored chat id per person)? Does `writeLog` with an absolute path roll and keep working under the app's logging config?
-2. `Logger` (areas, levels, redaction, rolling files in `<data home>/logs`), `logs:` setting, `bxAgents logs`; use it in the gateways, API errors and agent errors; specs.
-3. `GET /logs`, `GET /logs/<area>` (admin), contract, handler, client, OpenAPI; specs.
-4. Web page: Logs section (tabs, filter, search, tail, count badge).
+1. Spike (done, see above).
+2. `Logger` (areas, levels, redaction, files in `<data home>/logs` through `writeLog`), `bxAgents logs`; use it in the gateways, API errors and agent errors; specs.
+3. `GET /logs` with `?area=` (admin), contract, handler, client, OpenAPI; specs.
+4. Web page: Logs section (tabs, filter, search, tail, count badge), and the Gateways section with `GET /gateways` (no CLI verb).
 5. `routines:` setting (loader, validator, `doctor`); `ChatStore` migration (v10) and the `Routines` service; specs.
-6. Heartbeat scheduler and `RoutineRunner` (due, run as the owner, overlap, failures, catch-up, retention); specs with a mock model.
+6. Heartbeat scheduler and `RoutineRunner` (due, run as the owner, overlap, failures, catch-up); specs with a mock model.
 7. `scheduleRoutine`, `saveReport` and routine management tools; approvals from a routine; specs.
-8. Destinations: `here`, `routine`, and chat apps through the gateway registry; specs.
+8. `Notifier` (look up the live gateway, build the context, `deliver`, log), finding a chat to send to from the stored conversations (and keeping the Teams `serviceUrl`); the destinations `here`, `routine` and `gateway:<name>`; specs with the mock gateway.
 9. Results folder: layout, tools, `bxAgents routines results`, API; specs.
 10. `/routines`, `/routine`, `bxAgents routines`, the API routes (owner and admin rules), client, OpenAPI; specs.
 11. Web page: Routines section.
-12. Docs (English and the `1.0.x` mirror): a routines page that opens with the schedulers table and diagram, the `routines:` and `logs:` settings, the data home layout, the API; changelog; full suite; ColdBox integration run.
+12. Docs (English and the `1.0.x` mirror): a routines page that opens with the schedulers table and diagram, the `routines:` setting, the data home layout, the API; changelog; full suite; ColdBox integration run.
 
 Slices, one draft pull request each: logs (2 to 4), routines core (5 to 7), delivery and results (8 to 9), surface (10 to 12).
 
 ## Open questions
 
-1. **Linking a person to a chat app.** A routine sent to Telegram needs that person's chat id there. Is "they have messaged the agent from it before" enough, or do you want an explicit link step?
-2. **Main chat.** I take it as the conversation the routine was created in. If the person asked from Telegram, the answer comes back to Telegram. Is that what you mean?
-3. **Logs in the web page.** One Logs section for the whole app (my pick, since the logs are per app and every line names the agent), or a logs view per agent?
-4. **Retention defaults.** Reports 30 days, logs 14 days. Right?
+None blocking. One risk to know about, left for later: a chat app's bot is usually findable by anyone, and gateways have no allowed-people list today, so a stranger who messages the bot becomes another chat on that gateway. That is why the agent asks which chat when there is more than one. An optional "only this chat may talk to the agent" setting on a gateway would remove the risk; it is not part of this plan.

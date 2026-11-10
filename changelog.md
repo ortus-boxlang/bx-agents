@@ -19,6 +19,24 @@ or package as a portable `.bxa`.
 
 ### Added
 
+#### Logs
+
+- **The agent keeps logs in its data home.** `logs/` holds one file per area: `agent.log`, `gateways.log`,
+  `routines.log`, `heartbeat.log` and `api.log`. They are written with BoxLang's own logging, so BoxLang
+  rolls and removes them (100 MB a file, 90 days, 5 GB in all by default) and BX Agents adds no settings
+  for it. Every chat app now writes to the one `gateways.log` with its name on each line, instead of a
+  file of its own in BoxLang's folder, and a gateway that cannot start says why. Failed turns go to
+  `agent.log` and refused API calls to `api.log`. No message from a person, and no token, password or key,
+  is ever written: lines are cleaned of the usual shapes of a secret.
+- **`bxAgents logs`** lists the logs and shows the last lines of one, with `--tail`, `--level`, `--grep`
+  and `--json`.
+- **`GET /logs` and `GET /gateways`** (admin) give the logs and the state of each chat app: connected,
+  stopped, failing or not registered, which credentials are set (names only), when it last had a
+  conversation and its last error. The client has `logs()` and `gateways()`.
+- **Logs and Chat apps in the web page.** For an admin, the Settings menu has a Logs panel (a tab per log,
+  level filter, search, refresh) and a Chat apps panel, and a red count on the Settings button says errors
+  were logged since the app started.
+
 #### Skills
 
 - **The agent can save skills of its own.** The root agent gets a `saveSkill( name, description, content )`

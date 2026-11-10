@@ -10,6 +10,8 @@
  *   service.whoami( caller )              who the server takes the caller to be
  *   service.volumes( caller )             the folders the agent may use, by name
  *   service.skills( caller )              the skills the agent can load, with who wrote each
+ *   service.logs( caller, area ... )      the agent's logs, for an admin
+ *   service.gateways( caller )            the chat apps and their state, for an admin
  *   service.data( caller )                where the agent keeps everything (admin only)
  *   service.accounts()                    the sign-in accounts and who is an admin (admin only), or null with no database
  *
@@ -18,6 +20,7 @@
 import bxModules.bxagents.models.api.Caller as CallerType;
 
 import bxModules.bxagents.models.api.Outcome;
+import bxModules.bxagents.models.logs.Logger;
 import bxModules.bxagents.models.api.OpenApiDocument;
 
 class {
@@ -32,6 +35,8 @@ class {
 		// an AppData: the data home and volumes of the app; without one the volume list is empty and there is no data report
 		variables.appData = arguments.options.data ?: nullValue()
 		variables.connectionService = arguments.options.connections ?: nullValue()
+		// a GatewayInfo: the chat apps and their state; without one the list is empty
+		variables.gatewayInfo = arguments.options.gateways ?: nullValue()
 		variables.agent = arguments.agent
 		variables.store = arguments.store ?: nullValue()
 		variables.offered = arguments.offered ?: new "models.runtime.OfferedProfiles@bxagents"( [] )
@@ -234,6 +239,8 @@ class {
 				"preferences"   : keepsSessions(),
 				"profiles"      : variables.offered.any(),
 				"tokens"        : keepsTokens() && arguments.caller.isAdmin(),
+				"logs"          : !isNull( variables.appData ) && arguments.caller.isAdmin(),
+				"gateways"      : !isNull( variables.gatewayInfo ) && arguments.caller.isAdmin(),
 				"status"        : new "models.extensions.ServedStatus@bxagents"().available(),
 				"slots"         : new "models.extensions.ServedSlots@bxagents"().available()
 			}
@@ -262,6 +269,53 @@ class {
 	any function skills( required any caller ) {
 		var library = new "models.skills.SkillLibrary@bxagents"( isNull( variables.appData ) ? "" : variables.appData.home() )
 		return Outcome::done( { "skills" : library.listing() } )
+	}
+
+	/**
+	 * The agent's logs. Without an area, which logs there are and how many errors were logged since the app started;
+	 * with one, its last lines.
+	 *
+	 * @caller The Caller; only an admin may read the logs
+	 * @area One of the log areas, or blank
+	 * @tail How many lines at most
+	 * @level Least serious level to show, or blank
+	 * @q Text a line must contain, or blank
+	 *
+	 * @return An Outcome: { logs : [ { area, file, bytes, modified } ], errors : { area : count } } or { area, lines : [ { time, level, area, subject, message } ] }
+	 */
+	any function logs( required any caller, string area = "", any tail = 200, string level = "", string q = "" ) {
+		if ( !arguments.caller.isAdmin() ) {
+			return Outcome::failed( "forbidden", "Only an admin may read the logs" )
+		}
+		if ( isNull( variables.appData ) ) {
+			return Outcome::failed( "not_found", "This server does not know its data home, so it has no logs folder" )
+		}
+		var reader = new "models.logs.LogReader@bxagents"( variables.appData.home().folder( "logs" ) )
+		if ( !len( trim( arguments.area ) ) ) {
+			return Outcome::done( { "logs" : reader.list(), "errors" : Logger::errorCounts() } )
+		}
+		if ( !isNumeric( arguments.tail ) || arguments.tail < 1 ) {
+			return Outcome::failed( "invalid", "tail must be a whole number of 1 or more" )
+		}
+		try {
+			return Outcome::done( reader.tail( arguments.area, int( arguments.tail ), arguments.level, arguments.q ) )
+		} catch ( "BxAgents.UnknownLog" e ) {
+			return Outcome::failed( "not_found", e.message )
+		}
+	}
+
+	/**
+	 * The chat apps the project names and the state of each. Their credentials are shown as set or not set, never as values.
+	 *
+	 * @caller The Caller; only an admin may see them
+	 *
+	 * @return An Outcome: { gateways : [ { name, type, state, running, capabilities, credentials, lastActiveAt, lastError } ] }
+	 */
+	any function gateways( required any caller ) {
+		if ( !arguments.caller.isAdmin() ) {
+			return Outcome::failed( "forbidden", "Only an admin may see the chat apps" )
+		}
+		return Outcome::done( { "gateways" : isNull( variables.gatewayInfo ) ? [] : variables.gatewayInfo.listing() } )
 	}
 
 	/**
