@@ -136,6 +136,6 @@ bxAgents backup [--to=FILE]
 bxAgents restore FILE [--home=DIR] [--force]
 ```
 
-`backup` writes one zip with the chat database, `files/` and `skills/`, plus a small `backup.json`. Without `--to` it goes in the home's `backups/` folder as `backup-<date>-<time>.zip`. The database is copied whole with SQLite's own `VACUUM INTO`, so it is safe to run while a server is using it. Volumes are not included: they are your folders.
+`backup` writes one zip with the chat database, `files/`, `skills/` and `routines/`, plus a small `backup.json`. Without `--to` it goes in the home's `backups/` folder as `backup-<date>-<time>.zip`. The database is copied whole with SQLite's own `VACUUM INTO`, so it is safe to run while a server is using it. Volumes are not included: they are your folders.
 
 `restore` puts a backup back. What was there is kept beside it as `chat.db.before-restore`, `files.before-restore` and `skills.before-restore` for one restore; the next restore replaces them. It stops when a server or chat looks to have the database open (SQLite leaves a `-wal` file while one does), unless you pass `--force`. `--home` restores into another data home. A zip with an entry that is not part of a backup, or that tries to leave the home, is refused before anything is changed.

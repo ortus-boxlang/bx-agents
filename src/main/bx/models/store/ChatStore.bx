@@ -186,6 +186,17 @@ class {
 					"CREATE TABLE IF NOT EXISTS routines ( id VARCHAR(64) NOT NULL PRIMARY KEY, ownerId VARCHAR(255) NOT NULL, name VARCHAR(40) NOT NULL, schedule VARCHAR(100) NOT NULL, prompt TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, status VARCHAR(16) NOT NULL DEFAULT 'idle', nextRunAt INTEGER, lastRunAt INTEGER, lastStatus VARCHAR(16) NOT NULL DEFAULT '', lastError VARCHAR(500) NOT NULL DEFAULT '', failures INTEGER NOT NULL DEFAULT 0, threadId VARCHAR(64) NOT NULL DEFAULT '', waitingSince INTEGER, createdAt INTEGER, updatedAt INTEGER, UNIQUE ( ownerId, name ) )",
 					"CREATE INDEX IF NOT EXISTS idx_routines_due ON routines ( enabled, status, nextRunAt )"
 				]
+			},
+			{
+				// where a routine's answer goes (see models/routines/Notifier): its own conversation, or a chat on a chat app. And the
+				// chats each chat app has talked to, written when a message arrives, so a routine can push to one later. Only addresses
+				// and what a gateway needs to send again (Teams' serviceUrl) are kept, never message text.
+				version    : 11,
+				statements : [
+					"ALTER TABLE routines ADD COLUMN destination VARCHAR(100) NOT NULL DEFAULT 'routine'",
+					"ALTER TABLE routines ADD COLUMN destinationChat VARCHAR(255) NOT NULL DEFAULT ''",
+					"CREATE TABLE IF NOT EXISTS gateway_chats ( gateway VARCHAR(64) NOT NULL, chatId VARCHAR(255) NOT NULL, threadId VARCHAR(255) NOT NULL DEFAULT '', userId VARCHAR(255) NOT NULL DEFAULT '', metadata TEXT NOT NULL DEFAULT '{}', firstSeen INTEGER, lastSeen INTEGER, PRIMARY KEY ( gateway, chatId, threadId ) )"
+				]
 			}
 		]
 	}

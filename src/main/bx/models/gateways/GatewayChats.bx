@@ -1,0 +1,116 @@
+/**
+ * The chats each chat app has talked to, so that something the agent starts itself (a routine) can write to one. A row is
+ * written when a message arrives; only the address, who last wrote and what a gateway needs to send again (Teams' serviceUrl)
+ * are kept, never message text.
+ *
+ * Telegram, Slack, Discord, Twilio, WhatsApp, Signal and email need only the chat id to send. Teams also needs the
+ * serviceUrl of the first message, which is why this is a table of its own: a stored conversation keeps neither.
+ */
+import bxModules.bxagents.models.logs.Logger;
+
+class {
+
+	static {
+		// the only metadata worth keeping; anything else in a context is not ours to store
+		KEPT_METADATA = [ "serviceUrl" ]
+	}
+
+	/**
+	 * @store A ChatStore at schema version 11 or later
+	 * @clock A function that returns now in epoch milliseconds; the system clock when left out
+	 */
+	function init( required any store, any clock ) {
+		variables.store = arguments.store
+		variables.clock = isNull( arguments.clock ) ? () => createObject( "java", "java.lang.System" ).currentTimeMillis() : arguments.clock
+		return this
+	}
+
+	/**
+	 * Notes that a chat just wrote. Never throws: a message must be answered whether or not this works.
+	 *
+	 * @context The inbound message's GatewayContext
+	 */
+	void function seen( required any context ) {
+		try {
+			var gateway = arguments.context.getGateway()
+			var chatId = arguments.context.getConversationID()
+			if ( !len( gateway ) || !len( chatId ) ) {
+				return
+			}
+			var thread = arguments.context.getThreadID() ?: ""
+			var kept = {}
+			var given = arguments.context.getMetadata() ?: {}
+			for ( var key in static.KEPT_METADATA ) {
+				if ( len( given[ key ] ?: "" ) ) {
+					kept[ key ] = given[ key ]
+				}
+			}
+			var now = variables.clock()
+			var params = {
+				gateway : gateway, chat : chatId, thread : thread, user : arguments.context.getUserID() ?: "",
+				meta : jsonSerialize( kept ), now : { value : now, cfsqltype : "bigint" }
+			}
+			var known = variables.store.rows( "SELECT 1 AS found FROM gateway_chats WHERE gateway = :gateway AND chatId = :chat AND threadId = :thread", params )
+			if ( known.len() ) {
+				variables.store.exec( "UPDATE gateway_chats SET userId = :user, metadata = :meta, lastSeen = :now WHERE gateway = :gateway AND chatId = :chat AND threadId = :thread", params )
+			} else {
+				variables.store.exec( "INSERT INTO gateway_chats ( gateway, chatId, threadId, userId, metadata, firstSeen, lastSeen ) VALUES ( :gateway, :chat, :thread, :user, :meta, :now, :now )", params )
+			}
+		} catch ( any e ) {
+			Logger::log( "gateways", "warn", "Could not note a chat: #e.message#" )
+		}
+	}
+
+	/**
+	 * @gateway The gateway's name
+	 *
+	 * @return [ { chatId, threadId, userId, lastSeen } ], the chat that wrote most recently first
+	 */
+	array function forGateway( required string gateway ) {
+		return variables.store.rows(
+			"SELECT chatId, threadId, userId, lastSeen FROM gateway_chats WHERE gateway = :gateway ORDER BY lastSeen DESC",
+			{ gateway : arguments.gateway }
+		)
+	}
+
+	/**
+	 * The chat a person last wrote from on a gateway: where they are talking to the agent.
+	 *
+	 * @gateway The gateway's name
+	 * @userId The platform's own id for the person
+	 *
+	 * @return The chat id, or blank when this person has not written there
+	 */
+	string function chatOf( required string gateway, required string userId ) {
+		var found = variables.store.rows(
+			"SELECT chatId FROM gateway_chats WHERE gateway = :gateway AND userId = :user ORDER BY lastSeen DESC LIMIT 1",
+			{ gateway : arguments.gateway, user : arguments.userId }
+		)
+		return found.len() ? found[ 1 ].chatId : ""
+	}
+
+	/**
+	 * @gateway The gateway's name
+	 * @chatId A chat from forGateway()
+	 *
+	 * @return A GatewayContext ready for the gateway's deliver(), with what was kept; null when the chat is not known
+	 */
+	any function contextFor( required string gateway, required string chatId ) {
+		var found = variables.store.rows(
+			"SELECT * FROM gateway_chats WHERE gateway = :gateway AND chatId = :chat ORDER BY lastSeen DESC LIMIT 1",
+			{ gateway : arguments.gateway, chat : arguments.chatId }
+		)
+		if ( !found.len() ) {
+			return nullValue()
+		}
+		var row = found[ 1 ]
+		return new bxModules.bxai.models.gateway.contracts.GatewayContext(
+			gateway        : arguments.gateway,
+			conversationID : row.chatId,
+			threadID       : row.threadId,
+			userID         : row.userId,
+			metadata       : jsonDeserialize( row.metadata )
+		)
+	}
+
+}

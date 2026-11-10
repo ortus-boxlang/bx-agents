@@ -86,10 +86,12 @@ class {
 	 * @name Folder-style, up to 40 characters, unique among their routines
 	 * @cadence A cron expression or every 30m
 	 * @prompt What to tell the agent when it fires
+	 * @destination routine, or gateway:<name> (the tools resolve it first, see Destinations)
+	 * @destinationChat The chat on that chat app
 	 *
 	 * @return An Outcome: { routine : summary }
 	 */
-	any function create( required any caller, required string name, required string cadence, required string prompt ) {
+	any function create( required any caller, required string name, required string cadence, required string prompt, string destination = "routine", string destinationChat = "" ) {
 		if ( !variables.settings.enabled ) {
 			return notOn()
 		}
@@ -105,6 +107,10 @@ class {
 		if ( len( problem ) ) {
 			return Outcome::failed( "bad_request", problem )
 		}
+		var whereTo = destinationProblem( arguments.destination, arguments.destinationChat )
+		if ( len( whereTo ) ) {
+			return Outcome::failed( "bad_request", whereTo )
+		}
 		var mine = variables.store.rows( "SELECT name FROM routines WHERE ownerId = :owner", { owner : arguments.caller.id() } )
 		if ( mine.filter( r => compareNoCase( r.name, routineName ) == 0 ).len() ) {
 			return Outcome::failed( "conflict", "You already have a routine named [#routineName#]. Change that one, or choose another name." )
@@ -115,8 +121,8 @@ class {
 		var now = variables.clock()
 		var id = createUUID()
 		variables.store.exec(
-			"INSERT INTO routines ( id, ownerId, name, schedule, prompt, enabled, status, nextRunAt, createdAt, updatedAt ) VALUES ( :id, :owner, :name, :schedule, :prompt, 1, 'idle', :next, :now, :now )",
-			{ id : id, owner : arguments.caller.id(), name : routineName, schedule : checked.value, prompt : trim( arguments.prompt ), next : big( nextRun( checked.value, now ) ), now : big( now ) }
+			"INSERT INTO routines ( id, ownerId, name, schedule, prompt, destination, destinationChat, enabled, status, nextRunAt, createdAt, updatedAt ) VALUES ( :id, :owner, :name, :schedule, :prompt, :destination, :chat, 1, 'idle', :next, :now, :now )",
+			{ id : id, owner : arguments.caller.id(), name : routineName, schedule : checked.value, prompt : trim( arguments.prompt ), destination : lCase( trim( arguments.destination ) ), chat : trim( arguments.destinationChat ), next : big( nextRun( checked.value, now ) ), now : big( now ) }
 		)
 		Logger::log( "routines", "info", "Created [#routineName#] (#checked.value#)", arguments.caller.id() )
 		return get( arguments.caller, routineName )
@@ -127,7 +133,7 @@ class {
 	 *
 	 * @caller The Caller
 	 * @ref The routine
-	 * @fields { schedule?, prompt? }
+	 * @fields { schedule?, prompt?, destination?, destinationChat? }
 	 *
 	 * @return An Outcome: { routine : summary }
 	 */
@@ -139,8 +145,8 @@ class {
 		if ( isNull( found ) ) {
 			return missing( arguments.ref )
 		}
-		if ( !arguments.fields.keyExists( "schedule" ) && !arguments.fields.keyExists( "prompt" ) ) {
-			return Outcome::failed( "bad_request", "Say what to change: the schedule, the prompt, or both." )
+		if ( !arguments.fields.keyExists( "schedule" ) && !arguments.fields.keyExists( "prompt" ) && !arguments.fields.keyExists( "destination" ) ) {
+			return Outcome::failed( "bad_request", "Say what to change: the schedule, the prompt or where the answer goes." )
 		}
 		var cadence = found.schedule
 		var prompt = found.prompt
@@ -158,10 +164,20 @@ class {
 			}
 			prompt = trim( arguments.fields.prompt )
 		}
+		var destination = found.destination
+		var destinationChat = found.destinationChat
+		if ( arguments.fields.keyExists( "destination" ) ) {
+			var whereTo = destinationProblem( arguments.fields.destination, arguments.fields.destinationChat ?: "" )
+			if ( len( whereTo ) ) {
+				return Outcome::failed( "bad_request", whereTo )
+			}
+			destination = lCase( trim( arguments.fields.destination ) )
+			destinationChat = trim( arguments.fields.destinationChat ?: "" )
+		}
 		var now = variables.clock()
 		variables.store.exec(
-			"UPDATE routines SET schedule = :schedule, prompt = :prompt, nextRunAt = :next, updatedAt = :now WHERE id = :id",
-			{ schedule : cadence, prompt : prompt, next : big( nextRun( cadence, now ) ), now : big( now ), id : found.id }
+			"UPDATE routines SET schedule = :schedule, prompt = :prompt, destination = :destination, destinationChat = :chat, nextRunAt = :next, updatedAt = :now WHERE id = :id",
+			{ schedule : cadence, prompt : prompt, destination : destination, chat : destinationChat, next : big( nextRun( cadence, now ) ), now : big( now ), id : found.id }
 		)
 		Logger::log( "routines", "info", "Changed [#found.name#]", found.ownerId )
 		return get( arguments.caller, found.id )
@@ -343,6 +359,22 @@ class {
 	}
 
 	/**
+	 * Which routine a run belongs to, by the run's thread id. Reads the table, so it still works after a restart, when a person
+	 * answers an approval that was waiting.
+	 *
+	 * @threadId A run's thread id
+	 *
+	 * @return The row of a routine whose run is going or waiting, or null
+	 */
+	any function byThread( required string threadId ) {
+		if ( !len( arguments.threadId ) ) {
+			return nullValue()
+		}
+		var rows = variables.store.rows( "SELECT * FROM routines WHERE threadId = :thread AND status IN ( 'running', 'waiting' )", { thread : arguments.threadId } )
+		return rows.len() ? rows[ 1 ] : nullValue()
+	}
+
+	/**
 	 * @return The next time after now this schedule fires, in the app's time zone
 	 */
 	numeric function nextAfter( required string cadence, numeric afterMs ) {
@@ -401,6 +433,20 @@ class {
 		return checked
 	}
 
+	private string function destinationProblem( required string destination, string chat = "" ) {
+		var where = lCase( trim( arguments.destination ) )
+		if ( where == "routine" ) {
+			return ""
+		}
+		if ( !reFind( "^gateway:[a-z][a-z0-9_-]{0,31}$", where ) ) {
+			return "The destination must be routine or gateway:<name>, such as gateway:telegram."
+		}
+		if ( !len( trim( arguments.chat ) ) || len( trim( arguments.chat ) ) > 255 ) {
+			return "A chat app destination needs the chat to send to."
+		}
+		return ""
+	}
+
 	private string function promptProblem( required string prompt ) {
 		var text = trim( arguments.prompt )
 		if ( !len( text ) ) {
@@ -429,6 +475,8 @@ class {
 			lastStatus  : row.lastStatus,
 			lastError   : row.lastError,
 			failures    : row.failures,
+			destination : row.destination,
+			destinationChat : row.destinationChat,
 			promptPreview : len( row.prompt ) > static.PREVIEW ? left( row.prompt, static.PREVIEW ) & "..." : row.prompt
 		}
 		if ( arguments.withOwner ) {

@@ -57,6 +57,8 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 		variables.sessions = arguments.commands.sessions ?: new "models.store.SessionStore@bxagents"( isNull( arguments.store ) ? new "models.store.ChatStore@bxagents"( "" ) : arguments.store )
 		// where each chat is now: /new and /resume move it to another thread
 		variables.threads = new "models.gateways.ChatThreads@bxagents"()
+		// the chats this app has heard from, so a routine can write to one later (see GatewayChats)
+		variables.chats = new "models.gateways.GatewayChats@bxagents"( isNull( arguments.store ) ? new "models.store.ChatStore@bxagents"( "" ) : arguments.store )
 		variables.service = new "models.chat.commands.CommandService@bxagents"( agent : arguments.agent, sessions : variables.sessions, registry : variables.registry )
 		// the choices last offered to each person in each chat, so "2" can answer a numbered list
 		variables.pendingChoices = {}
@@ -100,6 +102,9 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 	}
 
 	any function handleInbound( required GatewayMessage message, required IGateway sourceGateway ) {
+		if ( arguments.message.getType() == "message" ) {
+			variables.chats.seen( arguments.message.getContext() )
+		}
 		if ( variables.commandsOn && !( variables.menusPublished ?: false ) ) {
 			publishMenus()
 		}
@@ -176,7 +181,7 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 
 	private void function tell( required GatewayMessage message, required IGateway sourceGateway, required string text ) {
 		arguments.sourceGateway.deliver(
-			new GatewayEvent( type : GatewayEvent.TYPES.RESPONSE_COMPLETED, data : { content : arguments.text }, context : arguments.message.getContext() ),
+			new GatewayEvent( type : GatewayEvent.TYPES.RESPONSE_COMPLETED, data : { text : arguments.text, content : arguments.text }, context : arguments.message.getContext() ),
 			arguments.message.getContext()
 		)
 	}
@@ -233,7 +238,7 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 			deliverStreamEvent( arguments.sourceGateway, context, GatewayEvent.TYPES.RESPONSE_COMPLETED, accumulated )
 		} else {
 			arguments.sourceGateway.deliver(
-				new GatewayEvent( type : GatewayEvent.TYPES.RESPONSE_COMPLETED, data : { content : accumulated }, context : context ),
+				new GatewayEvent( type : GatewayEvent.TYPES.RESPONSE_COMPLETED, data : { text : accumulated, content : accumulated }, context : context ),
 				context
 			)
 		}
@@ -329,7 +334,7 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 			return
 		}
 		arguments.sourceGateway.deliver(
-			new GatewayEvent( type : GatewayEvent.TYPES.RESPONSE_COMPLETED, data : { content : text }, context : context ),
+			new GatewayEvent( type : GatewayEvent.TYPES.RESPONSE_COMPLETED, data : { text : text, content : text }, context : context ),
 			context
 		)
 	}

@@ -1,0 +1,97 @@
+/**
+ * Sends what a routine found to a chat app. Used by the runner after a run.
+ *
+ *   - The destination is on the routine: `routine` (its own conversation, so nothing is sent) or `gateway:<name>` with a chat.
+ *   - What is sent is a summary: the answer cut to `summaryLength` characters, and a last line naming the reports the run
+ *     saved. The whole answer is in the routine's conversation, and the reports are files.
+ *   - The outcome is logged to routines.log. The text never is.
+ *
+ * A failure is an answer, not an exception: { ok : false, reason } says why, and the runner counts the run as failed.
+ */
+import bxModules.bxagents.models.logs.Logger;
+
+class {
+
+	/**
+	 * @chats A GatewayChats
+	 * @settings A resolved routines block
+	 * @registry The gateway registry; the live bx-ai one when left out
+	 */
+	function init( required any chats, required struct settings, any registry ) {
+		variables.chats = arguments.chats
+		variables.settings = arguments.settings
+		variables.registry = arguments.registry ?: nullValue()
+		return this
+	}
+
+	/**
+	 * @row The routine's row
+	 * @text The answer
+	 * @files The names of the reports the run saved
+	 *
+	 * @return { ok : true, sent : boolean } or { ok : false, reason }
+	 */
+	struct function deliver( required struct row, required string text, array files = [] ) {
+		var destination = arguments.row.destination ?: "routine"
+		if ( destination == "routine" ) {
+			return { ok : true, sent : false }
+		}
+		var gatewayName = listRest( destination, ":" )
+		try {
+			var gateway = liveGateway( gatewayName )
+			if ( isNull( gateway ) || !gateway.isRunning() ) {
+				return failed( arguments.row, gatewayName, "The #gatewayName# chat app is not connected." )
+			}
+			var context = variables.chats.contextFor( gatewayName, arguments.row.destinationChat ?: "" )
+			if ( isNull( context ) ) {
+				return failed( arguments.row, gatewayName, "The #gatewayName# chat app has no chat with that id any more. Choose the chat again." )
+			}
+			var event = new bxModules.bxai.models.gateway.contracts.GatewayEvent(
+				type    : "response.completed",
+				data    : { text : message( arguments.row, arguments.text, arguments.files ) },
+				context : context
+			)
+			var result = gateway.deliver( event, context )
+			if ( !result.getSuccess() ) {
+				return failed( arguments.row, gatewayName, "#gatewayName# did not take the message: #result.getError()#" )
+			}
+		} catch ( any e ) {
+			return failed( arguments.row, gatewayName, "Could not send to #gatewayName#: #e.message#" )
+		}
+		Logger::log( "routines", "info", "Sent [#arguments.row.name#] to #gatewayName#", arguments.row.ownerId ?: "" )
+		return { ok : true, sent : true }
+	}
+
+	/**
+	 * What a chat app is sent: a heading, the answer cut to the summary length, and the reports saved.
+	 *
+	 * @row The routine's row
+	 * @text The answer
+	 * @files The names of the reports the run saved
+	 */
+	string function message( required struct row, required string text, array files = [] ) {
+		var limit = variables.settings.summaryLength
+		var body = trim( arguments.text )
+		if ( len( body ) > limit ) {
+			body = trim( left( body, limit - 3 ) ) & "..."
+		}
+		var lines = [ "Routine " & arguments.row.name & ":", body ]
+		if ( arguments.files.len() ) {
+			lines.append( "Full report: " & arguments.files.toList( ", " ) )
+		}
+		return lines.toList( char( 10 ) )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private struct function failed( required struct row, required string gatewayName, required string reason ) {
+		Logger::log( "routines", "error", "Could not send [#arguments.row.name#] to #arguments.gatewayName#: #arguments.reason#", arguments.row.ownerId ?: "" )
+		return { ok : false, reason : arguments.reason }
+	}
+
+	private any function liveGateway( required string name ) {
+		var registry = isNull( variables.registry ) ? aiGatewayRegistry() : variables.registry
+		return registry.get( arguments.name )
+	}
+
+}

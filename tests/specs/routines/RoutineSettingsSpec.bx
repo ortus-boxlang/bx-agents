@@ -10,7 +10,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "is off with sensible limits when nothing is set", function() {
 				var s = RoutineSettings::resolve( {} );
-				expect( s ).toBe( { enabled : false, maxPerUser : 20, minInterval : 5, maxParallel : 2, maxPromptLength : 4000, approvalTimeout : 1440, timezone : "" } );
+				expect( s ).toBe( { enabled : false, maxPerUser : 20, minInterval : 5, maxParallel : 2, maxPromptLength : 4000, approvalTimeout : 1440, timezone : "", summaryLength : 1500, maxReportSize : 262144, maxReportFiles : 500 } );
 			} );
 
 			it( "turns durations into minutes and keeps what was set", function() {
@@ -35,15 +35,23 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "names each value that is out of range or the wrong kind", function() {
 				var found = RoutineSettings::problems( {
-					enabled : "yes please", maxPerUser : 0, maxParallel : 99, maxPromptLength : 10, minInterval : "30s", approvalTimeout : "1m", timezone : "Mars/Olympus"
+					enabled : "yes please", maxPerUser : 0, maxParallel : 99, maxPromptLength : 10, minInterval : "30s", approvalTimeout : "1m", timezone : "Mars/Olympus",
+					summaryLength : 5, maxReportSize : "10gb", maxReportFiles : 1
 				} ).toList( " | " );
-				for ( var key in [ "enabled", "maxPerUser", "maxParallel", "maxPromptLength", "minInterval", "approvalTimeout", "timezone" ] ) {
+				for ( var key in [ "enabled", "maxPerUser", "maxParallel", "maxPromptLength", "minInterval", "approvalTimeout", "timezone", "summaryLength", "maxReportSize", "maxReportFiles" ] ) {
 					expect( found ).toInclude( "routines.#key#" );
 				}
 			} );
 
 			it( "refuses a block that is not a mapping", function() {
 				expect( RoutineSettings::problems( "on" ) ).toHaveLength( 1 );
+			} );
+
+			it( "reads sizes in kb and mb only", function() {
+				expect( RoutineSettings::bytes( "256kb" ) ).toBe( 262144 );
+				expect( RoutineSettings::bytes( "2MB" ) ).toBe( 2097152 );
+				expect( RoutineSettings::bytes( "100" ) ).toBe( 0 );
+				expect( RoutineSettings::bytes( "big" ) ).toBe( 0 );
 			} );
 
 			it( "reads durations in m, h and d only", function() {
