@@ -35,6 +35,19 @@ Tools that modules register with bx-ai (its built-ins, `bx-playwright`, ...) are
 
 The discovered entry name is the file's own base name (`Greeter.bx` → `Greeter`). Two tool files with the same base name (even in different subfolders, since discovery is flat by base name) fail validation with a duplicate-name error.
 
+## Names of the tools BX Agents adds
+
+The tools BX Agents itself gives an agent are all named `{type}_{action}` in lower case, so that tool permissions can match them by pattern (`routine_*`, `*_delete`) without a list of special cases:
+
+| Tool | From |
+|---|---|
+| `note_remember`, `note_forget` | [notes](agent-yaml.md#notes) |
+| `skill_save` | [skills](skills.md) |
+| `vault_list`, `vault_request` | [the vault](vault.md) |
+| `routine_schedule`, `routine_list`, `routine_update`, `routine_pause`, `routine_resume`, `routine_run`, `routine_delete` | [routines](routines.md) |
+
+Tools of bx-ai and tools you write keep the names you give them. Following the same shape in your own is a good idea.
+
 ## What's excluded
 
 - Dotfiles (anything starting with `.`) are ignored by discovery.

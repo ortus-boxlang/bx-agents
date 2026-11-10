@@ -19,6 +19,35 @@ or package as a portable `.bxa`.
 
 ### Added
 
+#### Routines
+
+- **Routines: prompts the agent runs on a schedule, made by asking it.** Turn them on with `routines.enabled: true`
+  in `Agent.yaml`; they are off by default. A person says "every weekday at 9, check the build", the agent
+  makes a routine and the person approves it. Routines are kept in the chat database per person and run as
+  the person who made them, in a conversation of their own, with the same notes, volumes and approvals as in
+  chat. They are not `schedules/*.bx` schedulers, which stay the developer's.
+- **One heartbeat runs them.** A scheduler the build adds ticks every minute, starts what is due (`maxParallel`
+  at a time), never overlaps a routine with itself, pauses a routine after three failures in a row, and runs
+  a missed routine once after downtime. A run that needs an approval waits for it, and after
+  `approvalTimeout` is cancelled and counts as a failure.
+- **Schedules** are a 5 field cron expression or `every 30m`, read in `routines.timezone`. The tools answer
+  with the English reading and the next run time.
+- **Settings:** `maxPerUser`, `minInterval`, `maxParallel`, `maxPromptLength`, `approvalTimeout` and
+  `timezone`, all checked at build time and by `doctor`.
+- `capabilities.routines` in the agent info says whether routines are on. A routine's conversation is listed
+  for its owner with source `routine`, and `routines.log` and `heartbeat.log` record what happens.
+- Not in this release of the feature: sending a routine's answer to a chat app, a results folder, the
+  `/routines` command, `bxAgents routines`, the API routes and the web page section.
+
+#### Tool names
+
+- **Every tool BX Agents gives an agent is named `{type}_{action}`**, so tool permissions can match them by
+  pattern later (`routine_*`, `*_delete`). `saveSkill` is now `skill_save`, and `remember` and `forget` are
+  `note_remember` and `note_forget`. The vault tools were already `vault_list` and `vault_request`, and the new
+  ones are `routine_schedule`, `routine_list`, `routine_update`, `routine_pause`, `routine_resume`,
+  `routine_run` and `routine_delete`. The slash commands (`/remember` and the rest) are unchanged. A rule in the
+  code and a spec keep new tools in line.
+
 #### Logs
 
 - **The agent keeps logs in its data home.** `logs/` holds one file per area: `agent.log`, `gateways.log`,
