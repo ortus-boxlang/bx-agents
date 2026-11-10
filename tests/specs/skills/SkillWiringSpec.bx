@@ -1,5 +1,5 @@
 /**
- * The saveSkill tool of the root agent: what it saves, who approves it, and that a saved skill reaches the agent
+ * The skill_save tool of the root agent: what it saves, who approves it, and that a saved skill reaches the agent
  * at once. bx-ai's global skill list is shared by the process, so each test puts it back as it found it.
  */
 class extends="testbox.system.BaseSpec" {
@@ -42,7 +42,7 @@ class extends="testbox.system.BaseSpec" {
 			}
 
 			function call( required any agent, required struct args ) {
-				return jsonDeserialize( agent.getTools().filter( t => t.getName() == "saveSkill" )[ 1 ].invoke( args, requestFor() ) );
+				return jsonDeserialize( agent.getTools().filter( t => t.getName() == "skill_save" )[ 1 ].invoke( args, requestFor() ) );
 			}
 
 			function approvalGuards( required any agent ) {
@@ -81,7 +81,7 @@ class extends="testbox.system.BaseSpec" {
 				it( "is on the agent by default, described for the model", function() {
 					var agent = wiring.attach( newAgent(), {}, "boss" );
 
-					var tool = agent.getTools().filter( t => t.getName() == "saveSkill" );
+					var tool = agent.getTools().filter( t => t.getName() == "skill_save" );
 					expect( tool ).toHaveLength( 1 );
 					expect( tool[ 1 ].getSchema().function.parameters.required.sort( "text" ) ).toBe( [ "content", "description", "name" ] );
 				} );
@@ -89,7 +89,7 @@ class extends="testbox.system.BaseSpec" {
 				it( "is left off when agentCanSave is false", function() {
 					var agent = wiring.attach( newAgent(), { agentCanSave : false }, "boss" );
 
-					expect( agent.getTools().filter( t => t.getName() == "saveSkill" ) ).toBeEmpty();
+					expect( agent.getTools().filter( t => t.getName() == "skill_save" ) ).toBeEmpty();
 					expect( approvalGuards( agent ) ).toBeEmpty();
 				} );
 

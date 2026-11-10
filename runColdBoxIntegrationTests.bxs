@@ -373,6 +373,31 @@ try {
 		)
 	}
 
+	// Routines are on in this project: the about says so, and the heartbeat (a scheduler the build added) starts on its own
+	if ( !rcAbout.fileContent.findNoCase( '"routines":true' ) ) {
+		throw(
+			type    = "BxAgents.RoutinesCapabilityMissing",
+			message = "GET /__bxagents/agent did not say routines are on: #left( rcAbout.fileContent ?: '', 600 )#"
+		)
+	}
+	heartbeatSeen = false
+	heartbeatWaited = 0
+	while ( !heartbeatSeen && heartbeatWaited < 90 ) {
+		bx:http url="http://127.0.0.1:#port#/__bxagents/logs?area=heartbeat&tail=20" method="GET" result="rcBeat" timeout=30 { bx:httpparam type="header" name="x-bxagents-token" value=coldboxToken; }
+		heartbeatSeen = rcBeat.status_code == 200 && rcBeat.fileContent.findNoCase( "Heartbeat started" ) > 0
+		if ( !heartbeatSeen ) {
+			sleep( 5000 )
+			heartbeatWaited += 5
+		}
+	}
+	if ( !heartbeatSeen ) {
+		throw(
+			type    = "BxAgents.HeartbeatDidNotStart",
+			message = "The routines heartbeat wrote nothing to heartbeat.log within #heartbeatWaited# seconds (HTTP #rcBeat.status_code#): #left( rcBeat.fileContent ?: '', 400 )#"
+		)
+	}
+	println( "+ Confirmed: routines are on and the heartbeat started on its own after #heartbeatWaited# seconds" )
+
 	bx:http url="http://127.0.0.1:#port#/__bxagents/events" method="POST" result="rcEvents" timeout=60 {
 		bx:httpparam type="header" name="x-bxagents-token" value=coldboxToken;
 		bx:httpparam type="header" name="Content-Type" value="application/json";

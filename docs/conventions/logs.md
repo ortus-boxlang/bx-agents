@@ -19,7 +19,7 @@ An agent writes what it does, and what goes wrong, to log files in the `logs/` f
   api.log         refused calls and sign-in failures
 ```
 
-A file appears when its first line is written. `routines.log` and `heartbeat.log` are for the routines feature, which is not in yet.
+A file appears when its first line is written. `routines.log` and `heartbeat.log` are written by [routines](routines.md).
 
 A line looks like this:
 

@@ -22,6 +22,7 @@
  */
 import bxModules.bxagents.models.util.Strings;
 import bxModules.bxagents.models.wizard.WizardCatalog;
+import bxModules.bxagents.models.routines.RoutineSettings;
 
 class {
 
@@ -142,7 +143,7 @@ class {
 		var database = arguments.webUiDatabase
 		// A vault (its tools, or a ${vault.NAME} in the config) lives in the same database.
 		// Every agent's default memory (MemoryWiring) lives in the same database.
-		if ( agentFactory.source.find( "NotesWiring@bxagents" ) || agentFactory.source.find( "VaultWiring@bxagents" ) || agentFactory.source.find( "MemoryWiring@bxagents" ) || agentFactory.source.find( "${vault." ) ) {
+		if ( agentFactory.source.find( "NotesWiring@bxagents" ) || agentFactory.source.find( "RoutineWiring@bxagents" ) || agentFactory.source.find( "VaultWiring@bxagents" ) || agentFactory.source.find( "MemoryWiring@bxagents" ) || agentFactory.source.find( "${vault." ) ) {
 			if ( database.isEmpty() ) {
 				database = { datasource : "bxagents", path : "./data/chat.db" }
 			}
@@ -155,6 +156,16 @@ class {
 		// The wiring lives in a generated base class, bxagents/Application.bx; the app's own Application.bx only
 		// extends it. The project's root Application.bx, when it has one, is copied as it is, so the developer owns
 		// the file the runtime loads and overrides whatever the base sets.
+		// Routines have one scheduler of their own, the heartbeat, added only when the feature is on
+		var schedulerClasses = duplicate( arguments.schedulerClasses )
+		if ( isStruct( arguments.resolvedConfig.routines ?: "" ) && RoutineSettings::resolve( arguments.resolvedConfig.routines ).enabled ) {
+			fileWrite(
+				appDir & "/bxagents/RoutinesScheduler.bx",
+				fileRead( getDirectoryFromPath( getCurrentTemplatePath() ) & "runtime/RoutinesScheduler.bx", "UTF-8" ).replace( "__ROUTINES__", Strings::bxLiteral( jsonSerialize( arguments.resolvedConfig.routines ) ) )
+			)
+			schedulerClasses.append( "bxagents.RoutinesScheduler" )
+		}
+
 		fileWrite(
 			baseApplicationPath,
 			renderApplication(
@@ -165,7 +176,7 @@ class {
 				databasePath       : database.path ?: "",
 				dataHome           : ( arguments.resolvedConfig.data ?: {} ).home ?: "",
 				agentName          : arguments.resolvedConfig.name ?: "",
-				schedulerClasses   : arguments.schedulerClasses
+				schedulerClasses   : schedulerClasses
 			)
 		)
 		if ( len( arguments.userApplicationPath ) ) {
@@ -940,13 +951,18 @@ class {
 
 		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery, thisName, arguments.defaultMemory, arguments.appDir, arguments.nodeRelativePath ) )
 		if ( structKeyExists( arguments.resolvedConfig, "notes" ) && isStruct( arguments.resolvedConfig.notes ) ) {
-			// the notes this agent keeps: a prompt block and the remember and forget tools
+			// the notes this agent keeps: a prompt block and the note_remember and note_forget tools
 			statements.append( 'new "models.notes.NotesWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.notes )#, "#Strings::bxLiteral( thisName )#" )' )
 		}
 
 		if ( arguments.accessorPath.isEmpty() ) {
-			// the root agent may save skills of its own (subagents never do): the saveSkill tool, unless skills.agentCanSave is false
+			// the root agent may save skills of its own (subagents never do): the skill_save tool, unless skills.agentCanSave is false
 			statements.append( 'new "models.skills.SkillWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( isStruct( arguments.resolvedConfig.skills ?: "" ) ? arguments.resolvedConfig.skills : {} )#, "#Strings::bxLiteral( thisName )#", "#Strings::bxLiteral( variables.projectDataHome )#" )' )
+		}
+
+		if ( arguments.accessorPath.isEmpty() && isStruct( arguments.resolvedConfig.routines ?: "" ) ) {
+			// routines (the routine_* tools), on the root agent only; off unless routines.enabled is true
+			statements.append( 'new "models.routines.RoutineWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.routines )#, "#Strings::bxLiteral( thisName )#" )' )
 		}
 
 		if ( structKeyExists( arguments.resolvedConfig, "vault" ) && isStruct( arguments.resolvedConfig.vault ) ) {

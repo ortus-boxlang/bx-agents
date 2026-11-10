@@ -647,6 +647,16 @@ class extends="testbox.system.BaseSpec" {
 				expect( validateFixture( "../with-skills" ).errors.filter( e => e.findNoCase( "skills" ) ) ).toBeEmpty();
 			} );
 
+			it( "rejects a routines block with an unknown key or a bad value, and accepts a good one", function() {
+				var text = validateFixture( "bad-routines" ).errors.filter( e => e.findNoCase( "routines" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "routines.checkOften is not a setting" );
+				expect( text ).toInclude( "routines.enabled must be true or false" );
+				expect( text ).toInclude( "routines.minInterval must be a duration" );
+				var good = expandPath( "/fixtures/with-routines" );
+				expect( validator.validate( good, discoverer.discover( good ), resolver.resolve( projectRoot = good ) ).errors.filter( e => e.findNoCase( "routines" ) ) ).toBeEmpty();
+			} );
+
 			it( "accepts a vault block, and a vault placeholder with no block", function() {
 				for ( var fixture in [ "with-vault", "with-vault-placeholder" ] ) {
 					var projectRoot = expandPath( "/fixtures/" & fixture );

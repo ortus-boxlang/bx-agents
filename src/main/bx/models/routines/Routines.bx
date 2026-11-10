@@ -1,0 +1,452 @@
+/**
+ * The routines of an agent: prompts it runs on a schedule, as the person who made them. This is the only door to the
+ * `routines` table. Chat, the terminal, the API, the web page and the agent's own tools all come through here, so they
+ * cannot disagree about who may do what.
+ *
+ *   - Everyone sees and changes their own. An admin sees all and can pause, resume, run or delete any.
+ *   - Every method that takes a Caller answers an Outcome. A failure carries a code (not_found, forbidden, bad_request,
+ *     conflict) and a reason in words for a person or a model.
+ *   - The methods at the end (due, claim, markWaiting, settle, waiting, recover) are for the runner and the heartbeat.
+ *
+ * Times are epoch milliseconds. `clock` is a function that returns now, so a spec can move time.
+ */
+import bxModules.bxagents.models.api.Outcome;
+import bxModules.bxagents.models.logs.Logger;
+import bxModules.bxagents.models.routines.Schedule;
+import bxModules.bxagents.models.util.NameRules;
+
+class {
+
+	static {
+		NAME_MAX      = 40
+		PREVIEW       = 200
+		// failures in a row after which a routine pauses itself
+		MAX_FAILURES  = 3
+	}
+
+	/**
+	 * @store A ChatStore at schema version 10 or later
+	 * @settings A resolved routines block (RoutineSettings::resolve)
+	 * @clock A function that returns the time now in epoch milliseconds; the system clock when left out
+	 */
+	function init( required any store, required struct settings, any clock ) {
+		variables.store = arguments.store
+		variables.settings = arguments.settings
+		variables.clock = isNull( arguments.clock ) ? () => createObject( "java", "java.lang.System" ).currentTimeMillis() : arguments.clock
+		return this
+	}
+
+	/** @return The settings in use */
+	struct function settings() {
+		return duplicate( variables.settings )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// For people and for the agent's tools
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @caller The Caller
+	 * @all An admin sees every owner's routines when true; anyone else only their own
+	 *
+	 * @return An Outcome: { routines : [ summary ] }
+	 */
+	any function list( required any caller, boolean all = false ) {
+		if ( !variables.settings.enabled ) {
+			return notOn()
+		}
+		var wantAll = arguments.all && arguments.caller.isAdmin()
+		var rows = wantAll
+			? variables.store.rows( "SELECT * FROM routines ORDER BY ownerId, name" )
+			: variables.store.rows( "SELECT * FROM routines WHERE ownerId = :owner ORDER BY name", { owner : arguments.caller.id() } )
+		return Outcome::done( { routines : rows.map( r => summary( r, wantAll ) ) } )
+	}
+
+	/**
+	 * @caller The Caller
+	 * @ref The routine's name (yours), or for an admin its id or a name only one owner has
+	 *
+	 * @return An Outcome: { routine : summary + prompt }
+	 */
+	any function get( required any caller, required string ref ) {
+		if ( !variables.settings.enabled ) {
+			return notOn()
+		}
+		var found = locate( arguments.caller, arguments.ref )
+		if ( isNull( found ) ) {
+			return missing( arguments.ref )
+		}
+		var s = summary( found, arguments.caller.isAdmin() )
+		s[ "prompt" ] = found.prompt
+		return Outcome::done( { routine : s } )
+	}
+
+	/**
+	 * @caller The Caller; the routine will be theirs
+	 * @name Folder-style, up to 40 characters, unique among their routines
+	 * @cadence A cron expression or every 30m
+	 * @prompt What to tell the agent when it fires
+	 *
+	 * @return An Outcome: { routine : summary }
+	 */
+	any function create( required any caller, required string name, required string cadence, required string prompt ) {
+		if ( !variables.settings.enabled ) {
+			return notOn()
+		}
+		var routineName = trim( arguments.name )
+		if ( !NameRules::isSafeFolder( routineName, static.NAME_MAX ) ) {
+			return Outcome::failed( "bad_request", "The name must be 1 to #static.NAME_MAX# characters: letters, digits, . _ and -, starting with a letter or digit. Use something like check-build." )
+		}
+		var checked = checkSchedule( arguments.cadence )
+		if ( !checked.ok ) {
+			return Outcome::failed( "bad_request", checked.reason )
+		}
+		var problem = promptProblem( arguments.prompt )
+		if ( len( problem ) ) {
+			return Outcome::failed( "bad_request", problem )
+		}
+		var mine = variables.store.rows( "SELECT name FROM routines WHERE ownerId = :owner", { owner : arguments.caller.id() } )
+		if ( mine.filter( r => compareNoCase( r.name, routineName ) == 0 ).len() ) {
+			return Outcome::failed( "conflict", "You already have a routine named [#routineName#]. Change that one, or choose another name." )
+		}
+		if ( mine.len() >= variables.settings.maxPerUser ) {
+			return Outcome::failed( "conflict", "You already have #variables.settings.maxPerUser# routines, which is the most allowed. Delete one first." )
+		}
+		var now = variables.clock()
+		var id = createUUID()
+		variables.store.exec(
+			"INSERT INTO routines ( id, ownerId, name, schedule, prompt, enabled, status, nextRunAt, createdAt, updatedAt ) VALUES ( :id, :owner, :name, :schedule, :prompt, 1, 'idle', :next, :now, :now )",
+			{ id : id, owner : arguments.caller.id(), name : routineName, schedule : checked.value, prompt : trim( arguments.prompt ), next : big( nextRun( checked.value, now ) ), now : big( now ) }
+		)
+		Logger::log( "routines", "info", "Created [#routineName#] (#checked.value#)", arguments.caller.id() )
+		return get( arguments.caller, routineName )
+	}
+
+	/**
+	 * Changes a routine's schedule, its prompt, or both.
+	 *
+	 * @caller The Caller
+	 * @ref The routine
+	 * @fields { schedule?, prompt? }
+	 *
+	 * @return An Outcome: { routine : summary }
+	 */
+	any function update( required any caller, required string ref, required struct fields ) {
+		if ( !variables.settings.enabled ) {
+			return notOn()
+		}
+		var found = locate( arguments.caller, arguments.ref )
+		if ( isNull( found ) ) {
+			return missing( arguments.ref )
+		}
+		if ( !arguments.fields.keyExists( "schedule" ) && !arguments.fields.keyExists( "prompt" ) ) {
+			return Outcome::failed( "bad_request", "Say what to change: the schedule, the prompt, or both." )
+		}
+		var cadence = found.schedule
+		var prompt = found.prompt
+		if ( arguments.fields.keyExists( "schedule" ) ) {
+			var checked = checkSchedule( arguments.fields.schedule )
+			if ( !checked.ok ) {
+				return Outcome::failed( "bad_request", checked.reason )
+			}
+			cadence = checked.value
+		}
+		if ( arguments.fields.keyExists( "prompt" ) ) {
+			var problem = promptProblem( arguments.fields.prompt )
+			if ( len( problem ) ) {
+				return Outcome::failed( "bad_request", problem )
+			}
+			prompt = trim( arguments.fields.prompt )
+		}
+		var now = variables.clock()
+		variables.store.exec(
+			"UPDATE routines SET schedule = :schedule, prompt = :prompt, nextRunAt = :next, updatedAt = :now WHERE id = :id",
+			{ schedule : cadence, prompt : prompt, next : big( nextRun( cadence, now ) ), now : big( now ), id : found.id }
+		)
+		Logger::log( "routines", "info", "Changed [#found.name#]", found.ownerId )
+		return get( arguments.caller, found.id )
+	}
+
+	/** @return An Outcome: { routine : summary } */
+	any function pause( required any caller, required string ref ) {
+		return switchOn( arguments.caller, arguments.ref, false )
+	}
+
+	/** Resuming clears the count of failures, so a routine paused by three failures starts fresh. */
+	any function resume( required any caller, required string ref ) {
+		return switchOn( arguments.caller, arguments.ref, true )
+	}
+
+	/**
+	 * @return An Outcome: { deleted : name }. The routine's conversation stays.
+	 */
+	any function delete( required any caller, required string ref ) {
+		if ( !variables.settings.enabled ) {
+			return notOn()
+		}
+		var found = locate( arguments.caller, arguments.ref )
+		if ( isNull( found ) ) {
+			return missing( arguments.ref )
+		}
+		variables.store.exec( "DELETE FROM routines WHERE id = :id", { id : found.id } )
+		Logger::log( "routines", "info", "Deleted [#found.name#]", found.ownerId )
+		return Outcome::done( { deleted : found.name } )
+	}
+
+	/**
+	 * Makes a routine due now. The heartbeat starts it on its next tick, within a minute.
+	 *
+	 * @return An Outcome: { routine : summary }
+	 */
+	any function runNow( required any caller, required string ref ) {
+		if ( !variables.settings.enabled ) {
+			return notOn()
+		}
+		var found = locate( arguments.caller, arguments.ref )
+		if ( isNull( found ) ) {
+			return missing( arguments.ref )
+		}
+		if ( !found.enabled ) {
+			return Outcome::failed( "bad_request", "[#found.name#] is paused. Resume it first." )
+		}
+		if ( found.status != "idle" ) {
+			return Outcome::failed( "conflict", "[#found.name#] is #found.status == 'waiting' ? 'waiting for an approval' : 'running'# right now." )
+		}
+		variables.store.exec( "UPDATE routines SET nextRunAt = :now, updatedAt = :now WHERE id = :id", { now : big( variables.clock() ), id : found.id } )
+		Logger::log( "routines", "info", "Run requested for [#found.name#]", found.ownerId )
+		return get( arguments.caller, found.id )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// For the runner and the heartbeat
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @limit How many at most
+	 *
+	 * @return The rows of routines that are enabled, idle and due, the longest overdue first
+	 */
+	array function due( numeric limit = 10 ) {
+		return variables.store.rows(
+			"SELECT * FROM routines WHERE enabled = 1 AND status = 'idle' AND nextRunAt <= :now ORDER BY nextRunAt LIMIT #int( arguments.limit )#",
+			{ now : big( variables.clock() ) }
+		)
+	}
+
+	/**
+	 * Takes a routine to run, if nobody else has. One statement decides, so two runners (or two servers on one database)
+	 * cannot both start it.
+	 *
+	 * @id The routine's id
+	 * @threadId The run's thread id; it is also how the claim is told apart from someone else's
+	 *
+	 * @return True when this caller now holds the routine
+	 */
+	boolean function claim( required string id, required string threadId ) {
+		var now = variables.clock()
+		variables.store.exec(
+			"UPDATE routines SET status = 'running', threadId = :thread, lastRunAt = :now WHERE id = :id AND status = 'idle'",
+			{ thread : arguments.threadId, now : big( now ), id : arguments.id }
+		)
+		var again = variables.store.rows( "SELECT status, threadId FROM routines WHERE id = :id", { id : arguments.id } )
+		return again.len() == 1 && again[ 1 ].status == "running" && again[ 1 ].threadId == arguments.threadId
+	}
+
+	/**
+	 * The run stopped for a person to approve a tool.
+	 *
+	 * @id The routine's id
+	 */
+	void function markWaiting( required string id ) {
+		variables.store.exec( "UPDATE routines SET status = 'waiting', waitingSince = :now WHERE id = :id AND status = 'running'", { now : big( variables.clock() ), id : arguments.id } )
+	}
+
+	/**
+	 * Ends a run, however it ended. Works out the next time, counts failures, and pauses a routine that failed too often.
+	 *
+	 * @id The routine's id
+	 * @status ok or failed
+	 * @error What went wrong, when it failed
+	 *
+	 * @return { paused : true when this failure paused the routine }
+	 */
+	struct function settle( required string id, required string status, string error = "" ) {
+		var rows = variables.store.rows( "SELECT * FROM routines WHERE id = :id", { id : arguments.id } )
+		if ( !rows.len() ) {
+			return { paused : false }
+		}
+		var row = rows[ 1 ]
+		var now = variables.clock()
+		var failures = arguments.status == "ok" ? 0 : row.failures + 1
+		var pauses = arguments.status != "ok" && failures >= static.MAX_FAILURES
+		variables.store.exec(
+			"UPDATE routines SET status = 'idle', threadId = '', waitingSince = NULL, lastStatus = :status, lastError = :error, failures = :failures, enabled = :enabled, nextRunAt = :next, updatedAt = :now WHERE id = :id",
+			{
+				status   : arguments.status,
+				error    : left( Logger::oneLine( arguments.error ), 500 ),
+				failures : failures,
+				enabled  : pauses ? 0 : row.enabled,
+				next     : big( nextRun( row.schedule, now ) ),
+				now      : big( now ),
+				id       : arguments.id
+			}
+		)
+		if ( arguments.status == "ok" ) {
+			Logger::log( "routines", "info", "Ran [#row.name#]", row.ownerId )
+		} else {
+			Logger::log( "routines", "error", "[#row.name#] failed (#failures# in a row): #arguments.error#", row.ownerId )
+		}
+		if ( pauses ) {
+			Logger::log( "routines", "warn", "Paused [#row.name#] after #failures# failures in a row", row.ownerId )
+		}
+		return { paused : pauses }
+	}
+
+	/**
+	 * Marks a routine's run as skipped because it was still going. Nothing else changes.
+	 */
+	void function noteSkipped( required string id ) {
+		var rows = variables.store.rows( "SELECT name, ownerId FROM routines WHERE id = :id", { id : arguments.id } )
+		if ( rows.len() ) {
+			Logger::log( "routines", "warn", "Skipped [#rows[ 1 ].name#]: the last run is still going", rows[ 1 ].ownerId )
+		}
+	}
+
+	/** @return The rows of runs waiting for an approval */
+	array function waiting() {
+		return variables.store.rows( "SELECT * FROM routines WHERE status = 'waiting'" )
+	}
+
+	/**
+	 * After a crash or restart: a run that was in flight is gone, so the routine goes back to idle. A routine waiting for an
+	 * approval stays, because its checkpoint is stored.
+	 *
+	 * @return How many were put back
+	 */
+	numeric function recover() {
+		var stuck = variables.store.rows( "SELECT id, name, ownerId FROM routines WHERE status = 'running'" )
+		for ( var row in stuck ) {
+			variables.store.exec( "UPDATE routines SET status = 'idle', threadId = '', lastStatus = 'failed', lastError = 'The server stopped while it was running.' WHERE id = :id", { id : row.id } )
+			Logger::log( "heartbeat", "warn", "[#row.name#] was running when the server stopped; it will run again at its next time", row.ownerId )
+		}
+		return stuck.len()
+	}
+
+	/**
+	 * @id The routine's id
+	 *
+	 * @return The row, or null
+	 */
+	any function byId( required string id ) {
+		var rows = variables.store.rows( "SELECT * FROM routines WHERE id = :id", { id : arguments.id } )
+		return rows.len() ? rows[ 1 ] : nullValue()
+	}
+
+	/**
+	 * @return The next time after now this schedule fires, in the app's time zone
+	 */
+	numeric function nextAfter( required string cadence, numeric afterMs ) {
+		return nextRun( arguments.cadence, isNull( arguments.afterMs ) ? variables.clock() : arguments.afterMs )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private any function switchOn( required any caller, required string ref, required boolean on ) {
+		if ( !variables.settings.enabled ) {
+			return notOn()
+		}
+		var found = locate( arguments.caller, arguments.ref )
+		if ( isNull( found ) ) {
+			return missing( arguments.ref )
+		}
+		var now = variables.clock()
+		if ( arguments.on ) {
+			variables.store.exec(
+				"UPDATE routines SET enabled = 1, failures = 0, lastError = '', nextRunAt = :next, updatedAt = :now WHERE id = :id",
+				{ next : big( nextRun( found.schedule, now ) ), now : big( now ), id : found.id }
+			)
+		} else {
+			variables.store.exec( "UPDATE routines SET enabled = 0, updatedAt = :now WHERE id = :id", { now : big( now ), id : found.id } )
+		}
+		Logger::log( "routines", "info", ( arguments.on ? "Resumed" : "Paused" ) & " [#found.name#]", found.ownerId )
+		return get( arguments.caller, found.id )
+	}
+
+	/**
+	 * Your routine by name; for an admin also any routine by id, or by a name only one owner has.
+	 */
+	private any function locate( required any caller, required string ref ) {
+		var wanted = trim( arguments.ref )
+		var own = variables.store.rows( "SELECT * FROM routines WHERE ownerId = :owner", { owner : arguments.caller.id() } )
+			.filter( r => compareNoCase( r.name, wanted ) == 0 || r.id == wanted )
+		if ( own.len() ) {
+			return own[ 1 ]
+		}
+		if ( !arguments.caller.isAdmin() ) {
+			return nullValue()
+		}
+		var others = variables.store.rows( "SELECT * FROM routines" ).filter( r => r.id == wanted || compareNoCase( r.name, wanted ) == 0 )
+		return others.len() == 1 ? others[ 1 ] : nullValue()
+	}
+
+	private struct function checkSchedule( required string text ) {
+		var checked = Schedule::check( arguments.text )
+		if ( !checked.ok ) {
+			return checked
+		}
+		var gap = Schedule::shortestGap( checked.value, variables.settings.timezone )
+		if ( gap < variables.settings.minInterval ) {
+			return { ok : false, reason : "[#checked.value#] can run as often as every #gap# minutes, and the shortest allowed is #variables.settings.minInterval# minutes. Choose a slower schedule." }
+		}
+		return checked
+	}
+
+	private string function promptProblem( required string prompt ) {
+		var text = trim( arguments.prompt )
+		if ( !len( text ) ) {
+			return "The prompt is empty. Say what the agent should do each time."
+		}
+		if ( len( text ) > variables.settings.maxPromptLength ) {
+			return "The prompt is longer than #variables.settings.maxPromptLength# characters. Keep it short and say 'follow the skill <name>' for the details; skills are for long instructions."
+		}
+		return ""
+	}
+
+	private numeric function nextRun( required string cadence, required numeric afterMs ) {
+		return Schedule::next( arguments.cadence, arguments.afterMs, variables.settings.timezone )
+	}
+
+	private struct function summary( required struct row, boolean withOwner = false ) {
+		var out = {
+			id          : row.id,
+			name        : row.name,
+			schedule    : row.schedule,
+			scheduleText : Schedule::describe( row.schedule ),
+			enabled     : row.enabled == 1,
+			status      : row.status,
+			nextRunAt   : isNumeric( row.nextRunAt ?: "" ) ? row.nextRunAt : 0,
+			lastRunAt   : isNumeric( row.lastRunAt ?: "" ) ? row.lastRunAt : 0,
+			lastStatus  : row.lastStatus,
+			lastError   : row.lastError,
+			failures    : row.failures,
+			promptPreview : len( row.prompt ) > static.PREVIEW ? left( row.prompt, static.PREVIEW ) & "..." : row.prompt
+		}
+		if ( arguments.withOwner ) {
+			out[ "ownerId" ] = row.ownerId
+		}
+		return out
+	}
+
+	private any function big( required numeric value ) {
+		return { value : arguments.value, cfsqltype : "bigint" }
+	}
+
+	private any function notOn() {
+		return Outcome::failed( "not_found", "Routines are not turned on for this agent." )
+	}
+
+	private any function missing( required string ref ) {
+		return Outcome::failed( "not_found", "There is no routine named [#arguments.ref#]. List your routines to see their names." )
+	}
+
+}

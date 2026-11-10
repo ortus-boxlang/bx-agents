@@ -1,0 +1,116 @@
+import bxModules.bxagents.models.routines.Schedule;
+
+/**
+ * Schedules: a 5 field cron expression or "every 30m", read, timed, and put in words.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "routines.Schedule", function() {
+
+			/** epoch ms of a local date and time in a zone */
+			function at( required string iso, string zone = "UTC" ) {
+				return createObject( "java", "java.time.LocalDateTime" ).parse( iso ).atZone( createObject( "java", "java.time.ZoneId" ).of( zone ) ).toInstant().toEpochMilli();
+			}
+
+			describe( "check", function() {
+
+				it( "accepts a cron expression and an interval, and tidies the spaces and case", function() {
+					expect( Schedule::check( "0  9 * * 1-5" ) ).toBe( { ok : true, value : "0 9 * * 1-5", kind : "cron" } );
+					expect( Schedule::check( "Every 30M" ) ).toBe( { ok : true, value : "every 30m", kind : "every" } );
+					expect( Schedule::check( "every 2h" ).value ).toBe( "every 2h" );
+					expect( Schedule::check( "*/5 * * * *" ).ok ).toBeTrue();
+				} );
+
+				it( "refuses what is not a schedule, saying what a good one looks like", function() {
+					for ( var bad in [ "", "every day", "every 0m", "every 5x", "daily", "0 9 * *", "0 0 9 * * *", "99 9 * * *", "@daily" ] ) {
+						var result = Schedule::check( bad );
+						expect( result.ok ).toBeFalse( "[#bad#] should be refused" );
+						expect( len( result.reason ) ).toBeGT( 10 );
+					}
+				} );
+
+			} );
+
+			describe( "next", function() {
+
+				it( "gives the next time a cron expression fires, in the zone it is read in", function() {
+					var after = at( "2026-11-09T10:00:00", "Europe/Madrid" );
+					expect( Schedule::next( "0 9 * * *", after, "Europe/Madrid" ) ).toBe( at( "2026-11-10T09:00:00", "Europe/Madrid" ) );
+					expect( Schedule::next( "30 10 * * *", after, "Europe/Madrid" ) ).toBe( at( "2026-11-09T10:30:00", "Europe/Madrid" ) );
+				} );
+
+				it( "always moves past the moment given, even when it is exactly a fire time", function() {
+					var onTheHour = at( "2026-11-09T09:00:00" );
+					expect( Schedule::next( "0 9 * * *", onTheHour, "UTC" ) ).toBe( at( "2026-11-10T09:00:00" ) );
+				} );
+
+				it( "skips the weekend for 1-5", function() {
+					var friday = at( "2026-11-13T09:00:00" );
+					expect( Schedule::next( "0 9 * * 1-5", friday, "UTC" ) ).toBe( at( "2026-11-16T09:00:00" ) );
+				} );
+
+				it( "adds the interval for every Nm", function() {
+					expect( Schedule::next( "every 30m", 1000000, "" ) ).toBe( 1000000 + 30 * 60000 );
+					expect( Schedule::next( "every 2h", 0, "" ) ).toBe( 2 * 3600000 );
+					expect( Schedule::next( "every 1d", 0, "" ) ).toBe( 86400000 );
+				} );
+
+				it( "follows the clock across a daylight saving change", function() {
+					// Europe/Madrid left summer time on 2026-10-25: 09:00 stays 09:00 on the wall
+					var before = at( "2026-10-24T09:00:00", "Europe/Madrid" );
+					expect( Schedule::next( "0 9 * * *", before, "Europe/Madrid" ) ).toBe( at( "2026-10-25T09:00:00", "Europe/Madrid" ) );
+				} );
+
+				it( "throws for a schedule that check() would refuse", function() {
+					expect( function() { Schedule::next( "nonsense", 0, "" ); } ).toThrow( "BxAgents.InvalidSchedule" );
+				} );
+
+			} );
+
+			describe( "shortestGap", function() {
+
+				it( "is the interval for every Nm and the closest two fires for cron", function() {
+					expect( Schedule::shortestGap( "every 30m" ) ).toBe( 30 );
+					expect( Schedule::shortestGap( "*/5 * * * *" ) ).toBe( 5 );
+					expect( Schedule::shortestGap( "0 9 * * 1-5" ) ).toBe( 1440 );
+					expect( Schedule::shortestGap( "0,10 * * * *" ) ).toBe( 10 );
+				} );
+
+			} );
+
+			describe( "describe", function() {
+
+				it( "puts the usual shapes in words", function() {
+					expect( Schedule::describe( "every 30m" ) ).toBe( "every 30 minutes" );
+					expect( Schedule::describe( "every 1h" ) ).toBe( "every hour" );
+					expect( Schedule::describe( "every 2d" ) ).toBe( "every 2 days" );
+					expect( Schedule::describe( "0 9 * * *" ) ).toBe( "every day at 09:00" );
+					expect( Schedule::describe( "30 8 * * 1-5" ) ).toBe( "weekdays at 08:30" );
+					expect( Schedule::describe( "0 10 * * 0,6" ) ).toBe( "weekends at 10:00" );
+					expect( Schedule::describe( "0 9 * * 1" ) ).toBe( "every Monday at 09:00" );
+					expect( Schedule::describe( "0 9 * * mon,fri" ) ).toBe( "Monday and Friday at 09:00" );
+					expect( Schedule::describe( "0 9 1 * *" ) ).toBe( "on day 1 of every month at 09:00" );
+					expect( Schedule::describe( "*/15 * * * *" ) ).toBe( "every 15 minutes" );
+					expect( Schedule::describe( "5 * * * *" ) ).toBe( "every hour at minute 5" );
+				} );
+
+				it( "falls back to the expression when it has no short reading", function() {
+					expect( Schedule::describe( "0 9 15 3 *" ) ).toInclude( "0 9 15 3 *" );
+				} );
+
+			} );
+
+			describe( "zones", function() {
+
+				it( "knows real zones and refuses made up ones", function() {
+					expect( Schedule::knownZone( "Europe/Madrid" ) ).toBeTrue();
+					expect( Schedule::knownZone( "Mars/Olympus" ) ).toBeFalse();
+				} );
+
+			} );
+
+		} );
+	}
+
+}

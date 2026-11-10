@@ -1,0 +1,169 @@
+/**
+ * The tools that let an agent keep routines for the person it is talking to. Every name is {type}_{action}:
+ *
+ *   routine_schedule   make one                       (a person approves)
+ *   routine_list       list the person's routines
+ *   routine_update     change a schedule or prompt    (a person approves)
+ *   routine_pause      stop one without deleting it
+ *   routine_resume     start a paused one again
+ *   routine_run        run one at the next heartbeat
+ *   routine_delete     remove one                     (a person approves)
+ *
+ * The tools act as the person in the conversation and never as an admin. They refuse to work inside a routine's own
+ * run, so a routine cannot make or change routines. Every answer says what happened or why not, in words the model can
+ * act on, and shows when a routine will next run in the app's time zone so the person can be told.
+ */
+import bxModules.bxagents.models.api.Caller;
+import bxModules.bxagents.models.routines.RoutineRunner;
+import bxModules.bxagents.models.util.ToolNames;
+
+class {
+
+	static {
+		// the tools that stop for a person's approval
+		NEEDS_APPROVAL = [ "routine_schedule", "routine_update", "routine_delete" ]
+	}
+
+	/**
+	 * @service A function that returns the Routines service (the database is not touched until a tool is used)
+	 * @settings The resolved routines block
+	 */
+	function init( required function service, required struct settings ) {
+		variables.service = arguments.service
+		variables.settings = arguments.settings
+		return this
+	}
+
+	/** @return The names of the tools that need a person's approval */
+	static array function approvalNames() {
+		return duplicate( static.NEEDS_APPROVAL )
+	}
+
+	/**
+	 * @return The seven tools as bx-ai tools, not entered in the global tool registry
+	 */
+	array function tools() {
+		var me = this
+		var out = []
+
+		var schedule = aiTool(
+			ToolNames::require( "routine_schedule" ),
+			"Make a routine: a prompt you will be given on a schedule, with no person watching, whose answer the person can read in the routine's own conversation. Use it when the person asks you to do something regularly, such as every weekday morning. The schedule is a 5 field cron expression (minute hour day-of-month month day-of-week), for example 0 9 * * 1-5 for weekdays at 9, or an interval such as every 30m, every 2h or every 1d. The prompt is what you will be told each time, so write it as a complete instruction that needs nothing from this conversation. The answer says when it will first run; tell the person. If it is refused, the reason says what to change.",
+			( required string name, required string schedule, required string prompt ) => {
+				var given = arguments
+				return me.act( arguments._chatRequest, ( who, routines ) => routines.create( who, given.name, given.schedule, given.prompt ) )
+			},
+			false
+		)
+		schedule.describeArg( "name", "A short folder-style name such as check-build: letters, digits, . _ and -, up to 40 characters." )
+		schedule.describeArg( "schedule", "Cron (5 fields) or every 30m / every 2h / every 1d. Times are read in the app's time zone." )
+		schedule.describeArg( "prompt", "The complete instruction to follow each time, in a few sentences." )
+
+		var list = aiTool(
+			ToolNames::require( "routine_list" ),
+			"List the person's routines: name, schedule in words, when each runs next, how the last run went, and whether it is paused.",
+			() => {
+				return me.act( arguments._chatRequest, ( who, routines ) => routines.list( who ) )
+			},
+			false
+		)
+
+		var update = aiTool(
+			ToolNames::require( "routine_update" ),
+			"Change a routine's schedule, its prompt, or both. Pass only what changes.",
+			( required string name, string schedule = "", string prompt = "" ) => {
+				var fields = {}
+				var theName = arguments.name
+				if ( len( trim( arguments.schedule ) ) ) {
+					fields[ "schedule" ] = arguments.schedule
+				}
+				if ( len( trim( arguments.prompt ) ) ) {
+					fields[ "prompt" ] = arguments.prompt
+				}
+				return me.act( arguments._chatRequest, ( who, routines ) => routines.update( who, theName, fields ) )
+			},
+			false
+		)
+		update.describeArg( "name", "The routine's name." )
+		update.describeArg( "schedule", "The new schedule. Leave out to keep it." )
+		update.describeArg( "prompt", "The new prompt. Leave out to keep it." )
+
+		var named = ( action, description, call ) => {
+			var one = aiTool(
+				ToolNames::require( "routine_" & action ),
+				description,
+				( required string name ) => {
+					var theName = arguments.name
+					return me.act( arguments._chatRequest, ( who, routines ) => call( routines, who, theName ) )
+				},
+				false
+			)
+			one.describeArg( "name", "The routine's name." )
+			return one
+		}
+		var pause = named( "pause", "Stop a routine from running until it is resumed. It is kept.", ( routines, who, name ) => routines.pause( who, name ) )
+		var resume = named( "resume", "Start a paused routine again. A routine that paused itself after three failures also needs this.", ( routines, who, name ) => routines.resume( who, name ) )
+		var runNow = named( "run", "Run a routine as soon as the next heartbeat, within a minute, instead of waiting for its time.", ( routines, who, name ) => routines.runNow( who, name ) )
+		var remove = named( "delete", "Delete a routine for good. Its conversation stays.", ( routines, who, name ) => routines.delete( who, name ) )
+
+		return [ schedule, list, update, pause, resume, runNow, remove ]
+	}
+
+	/**
+	 * Runs one tool call as the person: refuses inside a routine, finds the service, and turns the Outcome into the
+	 * plain struct a model reads.
+	 *
+	 * @chatRequest The bx-ai request of the run
+	 * @call A function( caller, routines ) that returns an Outcome
+	 *
+	 * @return { ok : true, ... } or { ok : false, reason }
+	 */
+	struct function act( required any chatRequest, required function call ) {
+		if ( RoutineRunner::isRoutineThread( arguments.chatRequest.getThreadId() ?: "" ) ) {
+			return { ok : false, reason : "You are running as a scheduled routine, and a routine cannot make or change routines. Put what you want changed in your report so the person can do it." }
+		}
+		var userId = arguments.chatRequest.getUserId() ?: ""
+		var who = new Caller( id = len( userId ) ? userId : Caller::localId(), scope = "chat", source = "agent" )
+		var outcome = arguments.call( who, variables.service() )
+		if ( !outcome.succeeded() ) {
+			return { ok : false, reason : outcome.reason() }
+		}
+		var answer = { ok : true }
+		answer.append( readable( outcome.data() ) )
+		return answer
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/** The data of an Outcome with every epoch time turned into text in the app's time zone */
+	private struct function readable( required any data ) {
+		var out = duplicate( arguments.data )
+		if ( out.keyExists( "routine" ) ) {
+			out.routine = dressed( out.routine )
+		}
+		if ( out.keyExists( "routines" ) ) {
+			out.routines = out.routines.map( r => dressed( r ) )
+		}
+		return out
+	}
+
+	private struct function dressed( required struct routine ) {
+		var r = duplicate( arguments.routine )
+		r[ "nextRun" ] = clockText( r.nextRunAt ?: 0 )
+		r[ "lastRun" ] = clockText( r.lastRunAt ?: 0 )
+		r.delete( "nextRunAt" )
+		r.delete( "lastRunAt" )
+		r.delete( "id" )
+		return r
+	}
+
+	private string function clockText( required numeric ms ) {
+		if ( arguments.ms <= 0 ) {
+			return ""
+		}
+		var zone = len( variables.settings.timezone ) ? createObject( "java", "java.time.ZoneId" ).of( variables.settings.timezone ) : createObject( "java", "java.time.ZoneId" ).systemDefault()
+		var moment = createObject( "java", "java.time.ZonedDateTime" ).ofInstant( createObject( "java", "java.time.Instant" ).ofEpochMilli( javacast( "long", arguments.ms ) ), zone )
+		return createObject( "java", "java.time.format.DateTimeFormatter" ).ofPattern( "yyyy-MM-dd HH:mm" ).format( moment ) & " (" & zone.getId() & ")"
+	}
+
+}

@@ -1,0 +1,137 @@
+import bxModules.bxagents.models.api.Outcome;
+import bxModules.bxagents.models.util.ToolNames;
+
+/**
+ * The routine_* tools: named {type}_{action}, acting as the person in the conversation, refusing inside a routine, and
+ * answering in words a model can act on.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "routines.RoutineTools", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-routinetools-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.clockNow = createObject( "java", "java.time.Instant" ).parse( "2026-11-09T07:00:00Z" ).toEpochMilli();
+				variables.settings = bxModules.bxagents.models.routines.RoutineSettings::resolve( { enabled : true, timezone : "Europe/Madrid", maxPerUser : 3 } );
+				variables.routines = new bxModules.bxagents.models.routines.Routines( store, settings, () => clockNow );
+				variables.tools = new bxModules.bxagents.models.routines.RoutineTools( () => routines, settings ).tools();
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function toolNamed( name ) {
+				return tools.filter( t => t.getName() == name )[ 1 ];
+			}
+
+			function requestFor( userId = "ada", threadId = "t-1" ) {
+				return new bxModules.bxai.models.requests.AiChatRequest( new bxModules.bxai.models.runnables.AiMessage(), {}, { userId : userId, threadId : threadId } );
+			}
+
+			function call( name, args = {}, userId = "ada", threadId = "t-1" ) {
+				return jsonDeserialize( toolNamed( name ).invoke( args, requestFor( userId, threadId ) ) );
+			}
+
+			function schedule( name = "check-build", when = "0 9 * * 1-5", prompt = "Check the build.", userId = "ada" ) {
+				return call( "routine_schedule", { name : name, schedule : when, prompt : prompt }, userId );
+			}
+
+			it( "are seven, every one named {type}_{action}, all of the type routine", function() {
+				var names = tools.map( t => t.getName() ).sort( "text" );
+				expect( names ).toBe( [ "routine_delete", "routine_list", "routine_pause", "routine_resume", "routine_run", "routine_schedule", "routine_update" ] );
+				for ( var name in names ) {
+					expect( ToolNames::valid( name ) ).toBeTrue();
+					expect( ToolNames::typeOf( name ) ).toBe( "routine" );
+				}
+			} );
+
+			it( "asks a person only before making, changing or deleting a routine", function() {
+				expect( bxModules.bxagents.models.routines.RoutineTools::approvalNames().sort( "text" ) ).toBe( [ "routine_delete", "routine_schedule", "routine_update" ] );
+			} );
+
+			it( "schedules a routine for the person and says when it first runs, in the app's time zone", function() {
+				var answer = schedule();
+				expect( answer.ok ).toBeTrue();
+				expect( answer.routine.name ).toBe( "check-build" );
+				expect( answer.routine.scheduleText ).toBe( "weekdays at 09:00" );
+				expect( answer.routine.nextRun ).toBe( "2026-11-09 09:00 (Europe/Madrid)" );
+				expect( answer.routine.keyExists( "id" ) ).toBeFalse();
+				expect( routines.list( new bxModules.bxagents.models.api.Caller( id = "ada" ) ).data().routines ).toHaveLength( 1 );
+			} );
+
+			it( "explains a refusal so the model can fix the call", function() {
+				var answer = schedule( when = "every 1m" );
+				expect( answer.ok ).toBeFalse();
+				expect( answer.reason ).toInclude( "shortest allowed" );
+				expect( schedule( when = "whenever" ).reason ).toInclude( "not a schedule" );
+			} );
+
+			it( "lists only the person's own routines", function() {
+				schedule( name = "mine" );
+				schedule( name = "bobs", userId = "bob" );
+				var answer = call( "routine_list" );
+				expect( answer.routines.map( r => r.name ) ).toBe( [ "mine" ] );
+				expect( answer.routines[ 1 ].keyExists( "ownerId" ) ).toBeFalse();
+			} );
+
+			it( "cannot touch another person's routine, and the answer does not say it exists", function() {
+				schedule( name = "bobs", userId = "bob" );
+				var answer = call( "routine_delete", { name : "bobs" } );
+				expect( answer.ok ).toBeFalse();
+				expect( answer.reason ).toInclude( "no routine named" );
+			} );
+
+			it( "never acts as an admin, even for someone who is one", function() {
+				schedule( name = "bobs", userId = "bob" );
+				expect( call( "routine_pause", { name : "bobs" }, "root" ).ok ).toBeFalse();
+			} );
+
+			it( "changes, pauses, resumes, runs now and deletes", function() {
+				schedule();
+				expect( call( "routine_update", { name : "check-build", schedule : "every 1h" } ).routine.schedule ).toBe( "every 1h" );
+				expect( call( "routine_update", { name : "check-build", prompt : "Look at the tests." } ).ok ).toBeTrue();
+				expect( call( "routine_update", { name : "check-build" } ).ok ).toBeFalse();
+				expect( call( "routine_pause", { name : "check-build" } ).routine.enabled ).toBeFalse();
+				expect( call( "routine_run", { name : "check-build" } ).ok ).toBeFalse();
+				expect( call( "routine_resume", { name : "check-build" } ).routine.enabled ).toBeTrue();
+				expect( call( "routine_run", { name : "check-build" } ).ok ).toBeTrue();
+				expect( call( "routine_delete", { name : "check-build" } ).ok ).toBeTrue();
+				expect( call( "routine_list" ).routines ).toBeEmpty();
+			} );
+
+			it( "uses the local user when the request names nobody, like every surface does", function() {
+				var answer = call( "routine_schedule", { name : "a", schedule : "every 1h", prompt : "x" }, "" );
+				expect( answer.ok ).toBeTrue();
+				expect( routines.list( new bxModules.bxagents.models.api.Caller( id = "local" ) ).data().routines ).toHaveLength( 1 );
+			} );
+
+			it( "refuse to work inside a routine's own run: a routine cannot make routines", function() {
+				schedule( name = "outer", when = "every 10m" );
+				clockNow += 10 * 60000;
+				var attempt = {};
+				var fakeTurns = {
+					run     : ( who, req ) => {
+						attempt.answer = call( "routine_schedule", { name : "spawn", schedule : "every 1h", prompt : "x" }, "ada", req.threadId );
+						return Outcome::done( { output : "ok", threadId : req.threadId } );
+					},
+					pending : ( who, threadId ) => Outcome::done( { pending : false } ),
+					cancel  : ( who, threadId, reason = "" ) => Outcome::done( {} )
+				};
+				var runner = new bxModules.bxagents.models.routines.RoutineRunner( routines, fakeTurns, settings, () => clockNow );
+
+				runner.run( routines.due()[ 1 ] );
+
+				expect( attempt.answer.ok ).toBeFalse();
+				expect( attempt.answer.reason ).toInclude( "cannot make or change routines" );
+				expect( routines.list( new bxModules.bxagents.models.api.Caller( id = "ada" ) ).data().routines.map( r => r.name ) ).toBe( [ "outer" ] );
+			} );
+
+		} );
+	}
+
+}
