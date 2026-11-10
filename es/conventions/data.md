@@ -93,11 +93,11 @@ A skill is a folder with a `SKILL.md`: instructions the agent loads by name when
 |---|---|---|---|
 | Installed | `.agents/skills/` in the project | The registry tools (`npx skills`, `bxAgents skills install`), restored at build time | `installed` |
 | Ships with the agent | `skills/` in the project, and the skills extensions carry | You | `project` |
-| The agent's own | `skills/` in the data home | The agent, with its `saveSkill` tool | `agent` |
+| The agent's own | `skills/` in the data home | The agent, with its `skill_save` tool | `agent` |
 
 The build copies the first two into the app, and the app loads the third at start and the moment a skill is saved. A diagram of the levels is on the [skills page](skills.md#the-three-levels). A skill that ships with the agent wins over an installed one of the same name.
 
-After a task that took real steps and is likely to come up again, the root agent can call `saveSkill( name, description, content )`. The skill is written to the data home and is in the agent's skill list at once, with no restart. Subagents are given the skills when they are built; they cannot save any.
+After a task that took real steps and is likely to come up again, the root agent can call `skill_save( name, description, content )`. The skill is written to the data home and is in the agent's skill list at once, with no restart. Subagents are given the skills when they are built; they cannot save any.
 
 - **The first two levels win.** The agent cannot take the name of an installed skill or one that ships with the agent, or replace it. It can save over a skill it wrote itself, to improve it.
 - **Approval.** Each save is approved by a person, as for any tool that needs approval, unless `skills.autoApprove: true`.
