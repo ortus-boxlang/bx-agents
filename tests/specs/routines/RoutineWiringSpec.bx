@@ -1,0 +1,60 @@
+/**
+ * Giving an agent its routine tools from the routines block of Agent.yaml: nothing when it is off, the seven tools and the
+ * approval guard when it is on, and the same words for a bad setting everywhere.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "routines.RoutineWiring", function() {
+
+			beforeEach( function() {
+				variables.wiring = new bxagents.models.routines.RoutineWiring();
+			} );
+
+			function newAgent() {
+				return aiAgent(
+					name         = "boss",
+					model        = aiModel( provider = "mock", options = { providerOptions : { responses : [ "ok" ] } } ),
+					checkpointer = aiMemory( memory = "cache", config = {} )
+				);
+			}
+
+			function routineTools( agent ) {
+				return agent.getTools().filter( t => left( t.getName(), 8 ) == "routine_" );
+			}
+
+			function approvalGuards( agent ) {
+				return agent.getMiddleware().filter( m => isInstanceOf( m, "bxModules.bxai.models.middleware.core.HumanInTheLoopMiddleware" ) );
+			}
+
+			it( "adds nothing when the block is missing or off", function() {
+				for ( var block in [ {}, { enabled : false }, { maxPerUser : 5 } ] ) {
+					var agent = wiring.attach( newAgent(), block, "boss" );
+					expect( routineTools( agent ) ).toBeEmpty();
+					expect( approvalGuards( agent ) ).toBeEmpty();
+				}
+			} );
+
+			it( "adds the seven tools and one approval guard when it is on", function() {
+				var agent = wiring.attach( newAgent(), { enabled : true }, "boss" );
+				expect( routineTools( agent ) ).toHaveLength( 7 );
+				expect( approvalGuards( agent ) ).toHaveLength( 1 );
+			} );
+
+			it( "describes every tool for the model", function() {
+				var agent = wiring.attach( newAgent(), { enabled : true }, "boss" );
+				var schedule = routineTools( agent ).filter( t => t.getName() == "routine_schedule" )[ 1 ];
+				expect( schedule.getSchema().function.parameters.required.sort( "text" ) ).toBe( [ "name", "prompt", "schedule" ] );
+			} );
+
+			it( "throws for a bad setting with the words problems() gives", function() {
+				expect( wiring.problems( { enabled : true, minInterval : "fast" } ) ).toHaveLength( 1 );
+				expect( function() {
+					wiring.attach( newAgent(), { enabled : "perhaps" }, "boss" );
+				} ).toThrow( "BxAgents.InvalidRoutines" );
+			} );
+
+		} );
+	}
+
+}

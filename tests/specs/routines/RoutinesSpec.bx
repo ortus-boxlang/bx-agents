@@ -1,0 +1,265 @@
+/**
+ * The Routines service: who may do what with a routine, the limits, and how a run is claimed and settled.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "routines.Routines", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-routines-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.clockNow = createObject( "java", "java.time.Instant" ).parse( "2026-11-09T08:00:00Z" ).toEpochMilli();
+				variables.settings = bxagents.models.routines.RoutineSettings::resolve( { enabled : true, maxPerUser : 3, timezone : "UTC" } );
+				variables.routines = newService( settings );
+				variables.ada = new bxagents.models.api.Caller( id = "ada" );
+				variables.bob = new bxagents.models.api.Caller( id = "bob" );
+				variables.root = new bxagents.models.api.Caller( id = "root", scope = "admin" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function newService( required struct config ) {
+				return new bxagents.models.routines.Routines( store, config, () => clockNow );
+			}
+
+			function make( who = ada, name = "check-build", schedule = "0 9 * * 1-5", prompt = "Check the build." ) {
+				return routines.create( who, name, schedule, prompt );
+			}
+
+			describe( "when routines are off", function() {
+
+				it( "answers not_found to everything", function() {
+					var off = newService( bxagents.models.routines.RoutineSettings::resolve( {} ) );
+					expect( off.create( ada, "a", "every 10m", "x" ).code() ).toBe( "not_found" );
+					expect( off.list( ada ).code() ).toBe( "not_found" );
+					expect( off.list( ada ).reason() ).toInclude( "not turned on" );
+				} );
+
+			} );
+
+			describe( "creating", function() {
+
+				it( "saves a routine for its owner with the next time it will run", function() {
+					var made = make();
+					expect( made.succeeded() ).toBeTrue();
+					var r = made.data().routine;
+					expect( r.name ).toBe( "check-build" );
+					expect( r.schedule ).toBe( "0 9 * * 1-5" );
+					expect( r.scheduleText ).toBe( "weekdays at 09:00" );
+					expect( r.enabled ).toBeTrue();
+					expect( r.status ).toBe( "idle" );
+					expect( r.nextRunAt ).toBe( createObject( "java", "java.time.Instant" ).parse( "2026-11-09T09:00:00Z" ).toEpochMilli() );
+				} );
+
+				it( "refuses a bad name, schedule or prompt, saying what to fix", function() {
+					expect( make( name = "../x" ).code() ).toBe( "bad_request" );
+					expect( make( name = repeatString( "n", 41 ) ).reason() ).toInclude( "40" );
+					expect( make( schedule = "whenever" ).reason() ).toInclude( "not a schedule" );
+					expect( make( prompt = "   " ).reason() ).toInclude( "empty" );
+					expect( make( prompt = repeatString( "p", 4001 ) ).reason() ).toInclude( "skill" );
+				} );
+
+				it( "refuses a schedule that repeats faster than minInterval", function() {
+					var result = make( schedule = "every 2m" );
+					expect( result.succeeded() ).toBeFalse();
+					expect( result.reason() ).toInclude( "shortest allowed is 5 minutes" );
+					expect( make( schedule = "*/3 * * * *" ).succeeded() ).toBeFalse();
+					expect( make( schedule = "every 5m" ).succeeded() ).toBeTrue();
+				} );
+
+				it( "keeps names unique per owner but lets two people use the same name", function() {
+					make();
+					expect( make().code() ).toBe( "conflict" );
+					expect( make( name = "CHECK-BUILD" ).code() ).toBe( "conflict" );
+					expect( make( who = bob ).succeeded() ).toBeTrue();
+				} );
+
+				it( "stops at maxPerUser", function() {
+					make( name = "a" ); make( name = "b" ); make( name = "c" );
+					var fourth = make( name = "d" );
+					expect( fourth.code() ).toBe( "conflict" );
+					expect( fourth.reason() ).toInclude( "3 routines" );
+					expect( make( who = bob, name = "a" ).succeeded() ).toBeTrue();
+				} );
+
+			} );
+
+			describe( "who sees what", function() {
+
+				beforeEach( function() {
+					make( who = ada, name = "ada-one" );
+					make( who = bob, name = "bob-one" );
+				} );
+
+				it( "lists only your own, and an admin can list everyone's", function() {
+					expect( routines.list( ada ).data().routines.map( r => r.name ) ).toBe( [ "ada-one" ] );
+					expect( routines.list( ada, true ).data().routines ).toHaveLength( 1 );
+					var all = routines.list( root, true ).data().routines;
+					expect( all.map( r => r.name ).sort( "text" ) ).toBe( [ "ada-one", "bob-one" ] );
+					expect( all[ 1 ].keyExists( "ownerId" ) ).toBeTrue();
+				} );
+
+				it( "hides someone else's routine as if it did not exist", function() {
+					expect( routines.get( ada, "bob-one" ).code() ).toBe( "not_found" );
+					expect( routines.pause( ada, "bob-one" ).code() ).toBe( "not_found" );
+					expect( routines.delete( ada, "bob-one" ).code() ).toBe( "not_found" );
+					var id = routines.get( bob, "bob-one" ).data().routine.id;
+					expect( routines.delete( ada, id ).code() ).toBe( "not_found" );
+				} );
+
+				it( "lets an admin manage anyone's by id or by a name only one owner has", function() {
+					expect( routines.pause( root, "bob-one" ).data().routine.enabled ).toBeFalse();
+					var id = routines.get( root, "ada-one" ).data().routine.id;
+					expect( routines.delete( root, id ).succeeded() ).toBeTrue();
+				} );
+
+				it( "will not guess when an admin names something two owners both have", function() {
+					make( who = ada, name = "same" );
+					make( who = bob, name = "same" );
+					expect( routines.pause( root, "same" ).code() ).toBe( "not_found" );
+				} );
+
+				it( "returns the prompt from get() but only a preview from list()", function() {
+					var long = repeatString( "word ", 100 );
+					make( name = "long", prompt = long );
+					expect( routines.get( ada, "long" ).data().routine.prompt ).toBe( trim( long ) );
+					var listed = routines.list( ada ).data().routines.filter( r => r.name == "long" )[ 1 ];
+					expect( listed.keyExists( "prompt" ) ).toBeFalse();
+					expect( len( listed.promptPreview ) ).toBeLTE( 203 );
+				} );
+
+			} );
+
+			describe( "changing", function() {
+
+				beforeEach( function() {
+					make();
+				} );
+
+				it( "changes the schedule and recomputes the next run", function() {
+					var r = routines.update( ada, "check-build", { schedule : "every 1h" } ).data().routine;
+					expect( r.schedule ).toBe( "every 1h" );
+					expect( r.nextRunAt ).toBe( clockNow + 3600000 );
+				} );
+
+				it( "changes the prompt and checks it like a new one", function() {
+					expect( routines.update( ada, "check-build", { prompt : "Look at the tests." } ).data().routine.prompt ).toBe( "Look at the tests." );
+					expect( routines.update( ada, "check-build", { prompt : "" } ).code() ).toBe( "bad_request" );
+					expect( routines.update( ada, "check-build", {} ).code() ).toBe( "bad_request" );
+				} );
+
+				it( "pauses and resumes, and resuming forgets earlier failures", function() {
+					expect( routines.pause( ada, "check-build" ).data().routine.enabled ).toBeFalse();
+					expect( routines.due() ).toBeEmpty();
+					var id = routines.get( ada, "check-build" ).data().routine.id;
+					store.exec( "UPDATE routines SET failures = 2, lastError = 'boom' WHERE id = :id", { id : id } );
+					var back = routines.resume( ada, "check-build" ).data().routine;
+					expect( back.enabled ).toBeTrue();
+					expect( back.failures ).toBe( 0 );
+					expect( back.lastError ).toBe( "" );
+				} );
+
+				it( "makes a routine due now with run now, but not a paused or busy one", function() {
+					expect( routines.runNow( ada, "check-build" ).data().routine.nextRunAt ).toBe( clockNow );
+					expect( routines.due( 5 ).map( r => r.name ) ).toBe( [ "check-build" ] );
+					routines.pause( ada, "check-build" );
+					expect( routines.runNow( ada, "check-build" ).reason() ).toInclude( "paused" );
+					routines.resume( ada, "check-build" );
+					routines.claim( routines.get( ada, "check-build" ).data().routine.id, "t-1" );
+					expect( routines.runNow( ada, "check-build" ).code() ).toBe( "conflict" );
+				} );
+
+				it( "deletes", function() {
+					expect( routines.delete( ada, "check-build" ).data().deleted ).toBe( "check-build" );
+					expect( routines.list( ada ).data().routines ).toBeEmpty();
+				} );
+
+			} );
+
+			describe( "running", function() {
+
+				beforeEach( function() {
+					make( schedule = "every 10m" );
+					variables.id = routines.get( ada, "check-build" ).data().routine.id;
+				} );
+
+				it( "finds a routine due only when its time has come", function() {
+					expect( routines.due() ).toBeEmpty();
+					variables.clockNow += 10 * 60000;
+					expect( routines.due().map( r => r.id ) ).toBe( [ id ] );
+				} );
+
+				it( "lets only one caller claim it", function() {
+					variables.clockNow += 10 * 60000;
+					expect( routines.claim( id, "first" ) ).toBeTrue();
+					expect( routines.claim( id, "second" ) ).toBeFalse();
+					expect( routines.due() ).toBeEmpty();
+					expect( routines.byId( id ).status ).toBe( "running" );
+				} );
+
+				it( "settles a good run: idle again, next time moved on, failures cleared", function() {
+					variables.clockNow += 10 * 60000;
+					routines.claim( id, "t-1" );
+					store.exec( "UPDATE routines SET failures = 2 WHERE id = :id", { id : id } );
+					var result = routines.settle( id, "ok" );
+					var row = routines.byId( id );
+					expect( result.paused ).toBeFalse();
+					expect( row.status ).toBe( "idle" );
+					expect( row.lastStatus ).toBe( "ok" );
+					expect( row.failures ).toBe( 0 );
+					expect( row.nextRunAt ).toBe( clockNow + 10 * 60000 );
+				} );
+
+				it( "counts failures and pauses on the third in a row", function() {
+					for ( var i = 1; i <= 2; i++ ) {
+						variables.clockNow += 10 * 60000;
+						routines.claim( id, "t-#i#" );
+						expect( routines.settle( id, "failed", "model down" ).paused ).toBeFalse();
+					}
+					variables.clockNow += 10 * 60000;
+					routines.claim( id, "t-3" );
+					var third = routines.settle( id, "failed", "model down" );
+					var row = routines.byId( id );
+					expect( third.paused ).toBeTrue();
+					expect( row.enabled ).toBe( 0 );
+					expect( row.failures ).toBe( 3 );
+					expect( row.lastError ).toBe( "model down" );
+				} );
+
+				it( "keeps a secret out of the stored error", function() {
+					variables.clockNow += 10 * 60000;
+					routines.claim( id, "t-1" );
+					routines.settle( id, "failed", "call failed with Bearer abcdef1234567890abcdef" );
+					expect( routines.byId( id ).lastError ).notToInclude( "abcdef1234567890abcdef" );
+				} );
+
+				it( "records a run waiting for approval, and lists it", function() {
+					variables.clockNow += 10 * 60000;
+					routines.claim( id, "t-1" );
+					routines.markWaiting( id );
+					expect( routines.waiting().map( r => r.id ) ).toBe( [ id ] );
+					expect( routines.byId( id ).status ).toBe( "waiting" );
+				} );
+
+				it( "puts runs that were in flight back to idle after a restart, but not the ones waiting for approval", function() {
+					variables.clockNow += 10 * 60000;
+					routines.claim( id, "t-1" );
+					expect( routines.recover() ).toBe( 1 );
+					expect( routines.byId( id ).status ).toBe( "idle" );
+					routines.claim( id, "t-2" );
+					routines.markWaiting( id );
+					expect( routines.recover() ).toBe( 0 );
+					expect( routines.byId( id ).status ).toBe( "waiting" );
+				} );
+
+			} );
+
+		} );
+	}
+
+}

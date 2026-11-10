@@ -1,0 +1,135 @@
+/**
+ * Runs one routine: as the person who made it, in a conversation of its own, through the same TurnRunner a chat uses,
+ * so memory, notes, volumes, usage and approvals all work as they do in chat.
+ *
+ *   1. claim the routine (one statement decides, so it never runs twice at once)
+ *   2. run a turn as the owner in the conversation `routine-<name>-<id>`
+ *   3. if a tool needs an approval the run stops and the routine WAITS; a person answers in that conversation
+ *   4. settle: ok, or failed (three failures in a row pause the routine)
+ *
+ * `turns` is a TurnRunner, or anything with run(), pending() and cancel() of the same shape. A routine's run is
+ * remembered by its thread id, so the routine tools can refuse to work inside one: a routine cannot make routines.
+ */
+import bxModules.bxagents.models.api.Caller;
+import bxModules.bxagents.models.logs.Logger;
+
+class {
+
+	static {
+		// thread ids of routine runs in flight or waiting for an approval
+		active = {}
+	}
+
+	/**
+	 * @routines The Routines service
+	 * @turns A TurnRunner
+	 * @settings The resolved routines block
+	 * @clock A function that returns now in epoch milliseconds; the system clock when left out
+	 */
+	function init( required any routines, required any turns, required struct settings, any clock ) {
+		variables.routines = arguments.routines
+		variables.turns = arguments.turns
+		variables.settings = arguments.settings
+		variables.clock = isNull( arguments.clock ) ? () => createObject( "java", "java.lang.System" ).currentTimeMillis() : arguments.clock
+		return this
+	}
+
+	/**
+	 * @threadId A run's thread id
+	 *
+	 * @return True when it is a routine's run
+	 */
+	static boolean function isRoutineThread( required string threadId ) {
+		return len( arguments.threadId ) && static.active.keyExists( arguments.threadId )
+	}
+
+	/**
+	 * @row A row from Routines.due() or byId()
+	 *
+	 * @return { started : false } when someone else holds it, otherwise { started : true, status : ok | failed | waiting, error? }
+	 */
+	struct function run( required struct row ) {
+		var threadId = createUUID()
+		if ( !variables.routines.claim( arguments.row.id, threadId ) ) {
+			variables.routines.noteSkipped( arguments.row.id )
+			return { started : false }
+		}
+		static.active[ threadId ] = true
+		var waiting = false
+		try {
+			var owner = ownerOf( arguments.row )
+			var outcome = variables.turns.run( owner, {
+				input          : framing( arguments.row ) & arguments.row.prompt,
+				conversationId : conversationOf( arguments.row ),
+				threadId       : threadId
+			} )
+			if ( !outcome.succeeded() ) {
+				variables.routines.settle( arguments.row.id, "failed", outcome.reason() )
+				return { started : true, status : "failed", error : outcome.reason() }
+			}
+			var asked = variables.turns.pending( owner, threadId )
+			if ( asked.succeeded() && ( asked.data().pending ?: false ) ) {
+				variables.routines.markWaiting( arguments.row.id )
+				waiting = true
+				Logger::log( "routines", "info", "[#arguments.row.name#] is waiting for an approval", arguments.row.ownerId )
+				return { started : true, status : "waiting" }
+			}
+			variables.routines.settle( arguments.row.id, "ok" )
+			return { started : true, status : "ok" }
+		} catch ( any e ) {
+			variables.routines.settle( arguments.row.id, "failed", e.message )
+			return { started : true, status : "failed", error : e.message }
+		} finally {
+			if ( !waiting ) {
+				structDelete( static.active, threadId )
+			}
+		}
+	}
+
+	/**
+	 * Looks at a run that was waiting for an approval: answered, still waiting, or waited too long.
+	 *
+	 * @row A row from Routines.waiting()
+	 *
+	 * @return ok | failed | waiting
+	 */
+	string function checkWaiting( required struct row ) {
+		var owner = ownerOf( arguments.row )
+		var threadId = arguments.row.threadId
+		var asked = variables.turns.pending( owner, threadId )
+		var stillPending = asked.succeeded() && ( asked.data().pending ?: false )
+		if ( !stillPending ) {
+			structDelete( static.active, threadId )
+			variables.routines.settle( arguments.row.id, "ok" )
+			return "ok"
+		}
+		var waitedMs = variables.clock() - ( isNumeric( arguments.row.waitingSince ?: "" ) ? arguments.row.waitingSince : variables.clock() )
+		if ( waitedMs >= variables.settings.approvalTimeout * 60000 ) {
+			try {
+				variables.turns.cancel( owner, threadId, "No one approved in time." )
+			} catch ( any e ) {
+				// the routine is settled either way
+			}
+			structDelete( static.active, threadId )
+			variables.routines.settle( arguments.row.id, "failed", "No one approved the request in time." )
+			return "failed"
+		}
+		return "waiting"
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private any function ownerOf( required struct row ) {
+		return new Caller( id = arguments.row.ownerId, name = arguments.row.ownerId, scope = "chat", source = "routine" )
+	}
+
+	/** One conversation per routine, visible to its owner like any other. Ids are 64 characters at most. */
+	private string function conversationOf( required struct row ) {
+		return "routine-" & arguments.row.name & "-" & left( arguments.row.id, 8 )
+	}
+
+	private string function framing( required struct row ) {
+		return "This is a scheduled routine named #arguments.row.name#. No person is watching right now: do the task and report the result." & char( 10 ) & char( 10 )
+	}
+
+}

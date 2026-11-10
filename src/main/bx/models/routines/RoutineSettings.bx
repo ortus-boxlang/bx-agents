@@ -1,0 +1,120 @@
+/**
+ * The `routines` block of Agent.yaml, checked and with its defaults filled in:
+ *
+ *   routines:
+ *     enabled: false           # default false: no tools, no heartbeat, nothing
+ *     maxPerUser: 20           # 1 to 200
+ *     minInterval: 5m          # 1m to 1d; the shortest a routine may repeat
+ *     maxParallel: 2           # 1 to 10; routines the heartbeat starts in one tick
+ *     maxPromptLength: 4000    # 200 to 20000 characters
+ *     approvalTimeout: 24h     # 5m to 7d; how long a run waits for a person to approve a tool
+ *     timezone: ""             # blank is the server's; or an IANA name such as Europe/Madrid
+ *
+ * A duration is a whole number and m, h or d.
+ */
+import bxModules.bxagents.models.routines.Schedule;
+
+class {
+
+	static {
+		DEFAULTS   = { enabled : false, maxPerUser : 20, minInterval : "5m", maxParallel : 2, maxPromptLength : 4000, approvalTimeout : "24h", timezone : "" }
+		KNOWN_KEYS = [ "enabled", "maxPerUser", "minInterval", "maxParallel", "maxPromptLength", "approvalTimeout", "timezone" ]
+	}
+
+	/**
+	 * @settings The `routines` block as written
+	 *
+	 * @return An array of messages for the author, empty when the block is fine
+	 */
+	static array function problems( required any settings ) {
+		if ( !isStruct( arguments.settings ) ) {
+			return [ "routines must be a mapping such as { enabled: true }." ]
+		}
+		var found = []
+		for ( var key in arguments.settings ) {
+			if ( !static.KNOWN_KEYS.findNoCase( key ) ) {
+				found.append( "routines.#key# is not a setting. The settings are #static.KNOWN_KEYS.toList( ', ' )#." )
+			}
+		}
+		var s = arguments.settings
+		if ( s.keyExists( "enabled" ) && !( isBoolean( s.enabled ) && !isNumeric( s.enabled ) ) ) {
+			found.append( "routines.enabled must be true or false." )
+		}
+		RoutineSettings::checkNumber( s, "maxPerUser", 1, 200, found )
+		RoutineSettings::checkNumber( s, "maxParallel", 1, 10, found )
+		RoutineSettings::checkNumber( s, "maxPromptLength", 200, 20000, found )
+		RoutineSettings::checkDuration( s, "minInterval", 1, 1440, found )
+		RoutineSettings::checkDuration( s, "approvalTimeout", 5, 10080, found )
+		if ( s.keyExists( "timezone" ) ) {
+			if ( !isSimpleValue( s.timezone ) || ( len( trim( s.timezone ) ) && !Schedule::knownZone( s.timezone ) ) ) {
+				found.append( "routines.timezone must be blank or a time zone name such as Europe/Madrid." )
+			}
+		}
+		return found
+	}
+
+	/**
+	 * @settings The `routines` block as written (it must pass problems())
+	 *
+	 * @return { enabled, maxPerUser, minInterval (minutes), maxParallel, maxPromptLength, approvalTimeout (minutes), timezone }
+	 */
+	static struct function resolve( any settings = {} ) {
+		var given = isStruct( arguments.settings ) ? arguments.settings : {}
+		var merged = duplicate( static.DEFAULTS )
+		for ( var key in static.KNOWN_KEYS ) {
+			if ( given.keyExists( key ) ) {
+				merged[ key ] = given[ key ]
+			}
+		}
+		return {
+			enabled         : isBoolean( merged.enabled ) && merged.enabled,
+			maxPerUser      : int( merged.maxPerUser ),
+			minInterval     : RoutineSettings::minutes( merged.minInterval ),
+			maxParallel     : int( merged.maxParallel ),
+			maxPromptLength : int( merged.maxPromptLength ),
+			approvalTimeout : RoutineSettings::minutes( merged.approvalTimeout ),
+			timezone        : trim( merged.timezone )
+		}
+	}
+
+	/**
+	 * @value 5m, 2h, 1d
+	 *
+	 * @return The duration in minutes, or 0 when it is not one
+	 */
+	static numeric function minutes( required any value ) {
+		var m = reFindNoCase( "^(\d{1,5})([mhd])$", trim( arguments.value & "" ), 1, true )
+		if ( !m.pos.len() || m.pos[ 1 ] == 0 ) {
+			return 0
+		}
+		var text = trim( arguments.value & "" )
+		var amount = int( mid( text, m.pos[ 2 ], m.len[ 2 ] ) )
+		var unit = lCase( mid( text, m.pos[ 3 ], m.len[ 3 ] ) )
+		return amount * ( unit == "m" ? 1 : ( unit == "h" ? 60 : 1440 ) )
+	}
+
+	private static void function checkNumber( required struct s, required string key, required numeric low, required numeric high, required array found ) {
+		if ( !arguments.s.keyExists( arguments.key ) ) {
+			return
+		}
+		var v = arguments.s[ arguments.key ]
+		if ( !isNumeric( v ) || v != int( v ) || v < arguments.low || v > arguments.high ) {
+			arguments.found.append( "routines.#arguments.key# must be a whole number from #arguments.low# to #arguments.high#." )
+		}
+	}
+
+	private static void function checkDuration( required struct s, required string key, required numeric lowMinutes, required numeric highMinutes, required array found ) {
+		if ( !arguments.s.keyExists( arguments.key ) ) {
+			return
+		}
+		var minutes = isSimpleValue( arguments.s[ arguments.key ] ) ? RoutineSettings::minutes( arguments.s[ arguments.key ] ) : 0
+		if ( minutes < arguments.lowMinutes || minutes > arguments.highMinutes ) {
+			arguments.found.append( "routines.#arguments.key# must be a duration such as 5m, 2h or 1d, between #RoutineSettings::say( arguments.lowMinutes )# and #RoutineSettings::say( arguments.highMinutes )#." )
+		}
+	}
+
+	private static string function say( required numeric minutes ) {
+		return arguments.minutes >= 1440 && arguments.minutes mod 1440 == 0 ? ( arguments.minutes / 1440 ) & "d" : ( arguments.minutes >= 60 && arguments.minutes mod 60 == 0 ? ( arguments.minutes / 60 ) & "h" : arguments.minutes & "m" )
+	}
+
+}

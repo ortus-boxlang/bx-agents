@@ -1,0 +1,112 @@
+import bxModules.bxagents.models.routines.RoutineRunner;
+
+/**
+ * The heartbeat: each beat lets go of waiting runs, starts what is due (a few at a time), and writes nothing when
+ * nothing happens.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "routines.Heartbeat", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-heartbeat-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.clockNow = createObject( "java", "java.time.Instant" ).parse( "2026-11-09T08:00:00Z" ).toEpochMilli();
+				variables.settings = bxagents.models.routines.RoutineSettings::resolve( { enabled : true, timezone : "UTC", maxParallel : 2 } );
+				variables.routines = new bxagents.models.routines.Routines( store, settings, () => clockNow );
+				variables.ada = new bxagents.models.api.Caller( id = "ada" );
+				variables.ran = [];
+				variables.waitingResult = "waiting";
+				variables.fakeRunner = {
+					run          : ( row ) => { ran.append( row.name ); routines.settle( row.id, "ok" ); return { started : true, status : "ok" }; },
+					checkWaiting : ( row ) => waitingResult
+				};
+				// jobs run at once, on this thread
+				variables.heartbeat = new bxagents.models.routines.Heartbeat( routines, fakeRunner, settings, ( work ) => work() );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function make( name, schedule = "every 10m" ) {
+				routines.create( ada, name, schedule, "Do #name#." );
+			}
+
+			it( "does nothing when nothing is due", function() {
+				make( "a" );
+				expect( heartbeat.tick() ).toBe( { started : [], settled : [] } );
+				expect( ran ).toBeEmpty();
+			} );
+
+			it( "starts a routine once its time has come, and not again until the next time", function() {
+				make( "a" );
+				clockNow += 10 * 60000;
+				expect( heartbeat.tick().started ).toBe( [ "a" ] );
+				expect( heartbeat.tick().started ).toBeEmpty();
+				clockNow += 10 * 60000;
+				expect( heartbeat.tick().started ).toBe( [ "a" ] );
+				expect( ran ).toBe( [ "a", "a" ] );
+			} );
+
+			it( "starts at most maxParallel in one beat, the longest overdue first, and the rest on the next", function() {
+				make( "first", "every 10m" );
+				make( "second", "every 20m" );
+				make( "third", "every 30m" );
+				clockNow += 60 * 60000;
+				expect( heartbeat.tick().started ).toBe( [ "first", "second" ] );
+				expect( heartbeat.tick().started ).toBe( [ "third" ] );
+			} );
+
+			it( "does not start a paused routine", function() {
+				make( "a" );
+				routines.pause( ada, "a" );
+				clockNow += 10 * 60000;
+				expect( heartbeat.tick().started ).toBeEmpty();
+			} );
+
+			it( "starts a routine that was asked to run now", function() {
+				make( "a", "0 3 * * *" );
+				routines.runNow( ada, "a" );
+				expect( heartbeat.tick().started ).toBe( [ "a" ] );
+			} );
+
+			it( "asks the runner about runs waiting for an approval and reports the ones that settled", function() {
+				make( "a" );
+				var rowId = routines.get( ada, "a" ).data().routine.id;
+				routines.claim( rowId, "t-1" );
+				routines.markWaiting( rowId );
+				expect( heartbeat.tick().settled ).toBeEmpty();
+				waitingResult = "ok";
+				expect( heartbeat.tick().settled ).toBe( [ "a" ] );
+			} );
+
+			it( "puts interrupted runs back in line when it starts", function() {
+				make( "a" );
+				routines.claim( routines.get( ada, "a" ).data().routine.id, "t-1" );
+				expect( heartbeat.start() ).toBe( 1 );
+				expect( routines.get( ada, "a" ).data().routine.status ).toBe( "idle" );
+			} );
+
+			it( "never throws, even when the table cannot be read", function() {
+				store.exec( "DROP TABLE routines" );
+				expect( function() { heartbeat.tick(); } ).notToThrow();
+			} );
+
+			it( "runs each routine on a thread of its own by default", function() {
+				make( "a" );
+				clockNow += 10 * 60000;
+				var real = new bxagents.models.routines.Heartbeat( routines, fakeRunner, settings );
+				real.tick();
+				var waited = 0;
+				while ( !ran.len() && waited < 50 ) { sleep( 100 ); waited++; }
+				expect( ran ).toBe( [ "a" ] );
+			} );
+
+		} );
+	}
+
+}

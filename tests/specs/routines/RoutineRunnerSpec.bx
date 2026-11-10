@@ -1,0 +1,184 @@
+import bxModules.bxagents.models.api.Outcome;
+import bxModules.bxagents.models.routines.RoutineRunner;
+
+/**
+ * Running one routine: as its owner, in a conversation of its own, claimed so it never overlaps itself, and settled
+ * ok, failed or waiting for an approval. The turns are a fake here; one spec runs a real agent.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "routines.RoutineRunner", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-runner-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.clockNow = createObject( "java", "java.time.Instant" ).parse( "2026-11-09T08:00:00Z" ).toEpochMilli();
+				variables.settings = bxagents.models.routines.RoutineSettings::resolve( { enabled : true, timezone : "UTC", approvalTimeout : "1h" } );
+				variables.routines = new bxagents.models.routines.Routines( store, settings, () => clockNow );
+				variables.ada = new bxagents.models.api.Caller( id = "ada" );
+				variables.seen = [];
+				variables.mode = "ok";
+				variables.pendingNow = false;
+				variables.cancelled = [];
+				variables.inFlight = [];
+				variables.fakeTurns = {
+					run     : ( caller, req ) => {
+						seen.append( { caller : caller, request : req } );
+						inFlight.append( RoutineRunner::isRoutineThread( req.threadId ) );
+						if ( mode == "throw" ) { throw( type = "Boom", message = "the model fell over" ); }
+						if ( mode == "fail" ) { return Outcome::failed( "internal", "model unavailable" ); }
+						if ( mode == "approval" ) { pendingNow = true; }
+						return Outcome::done( { output : "done", threadId : req.threadId } );
+					},
+					pending : ( caller, threadId ) => Outcome::done( { pending : pendingNow, threadId : threadId } ),
+					cancel  : ( caller, threadId, reason = "" ) => { cancelled.append( threadId ); pendingNow = false; return Outcome::done( { cancelled : true } ); }
+				};
+				variables.runner = new bxModules.bxagents.models.routines.RoutineRunner( routines, fakeTurns, settings, () => clockNow );
+				routines.create( ada, "check-build", "every 10m", "Check the build." );
+				variables.id = routines.get( ada, "check-build" ).data().routine.id;
+				variables.clockNow += 10 * 60000;
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function row() {
+				return routines.byId( id );
+			}
+
+			it( "runs the prompt as its owner, from the routine source, in a conversation of its own", function() {
+				var result = runner.run( row() );
+
+				expect( result ).toBe( { started : true, status : "ok" } );
+				expect( seen ).toHaveLength( 1 );
+				var call = seen[ 1 ];
+				expect( call.caller.id() ).toBe( "ada" );
+				expect( call.caller.source() ).toBe( "routine" );
+				expect( call.caller.isAdmin() ).toBeFalse();
+				expect( call.request.input ).toInclude( "scheduled routine named check-build" );
+				expect( call.request.input ).toInclude( "Check the build." );
+				expect( call.request.conversationId ).toBe( "routine-check-build-" & left( id, 8 ) );
+				expect( len( call.request.conversationId ) ).toBeLTE( 64 );
+			} );
+
+			it( "settles a good run: idle, ok, next time moved on", function() {
+				runner.run( row() );
+				var after = row();
+				expect( after.status ).toBe( "idle" );
+				expect( after.lastStatus ).toBe( "ok" );
+				expect( after.nextRunAt ).toBe( clockNow + 10 * 60000 );
+			} );
+
+			it( "knows a routine's thread while it runs, and forgets it after", function() {
+				runner.run( row() );
+				expect( inFlight ).toBe( [ true ] );
+				expect( RoutineRunner::isRoutineThread( seen[ 1 ].request.threadId ) ).toBeFalse();
+				expect( RoutineRunner::isRoutineThread( "someone-elses-thread" ) ).toBeFalse();
+			} );
+
+			it( "records a failed turn and the reason", function() {
+				mode = "fail";
+				var result = runner.run( row() );
+				expect( result.status ).toBe( "failed" );
+				expect( row().lastStatus ).toBe( "failed" );
+				expect( row().lastError ).toBe( "model unavailable" );
+				expect( row().failures ).toBe( 1 );
+			} );
+
+			it( "records an exception as a failure and never lets it out", function() {
+				mode = "throw";
+				expect( function() { runner.run( row() ); } ).notToThrow();
+				expect( row().lastError ).toBe( "the model fell over" );
+				expect( row().status ).toBe( "idle" );
+			} );
+
+			it( "pauses a routine after three failures in a row", function() {
+				mode = "fail";
+				for ( var i = 1; i <= 3; i++ ) {
+					clockNow += 10 * 60000;
+					runner.run( row() );
+				}
+				expect( row().enabled ).toBe( 0 );
+				expect( routines.due() ).toBeEmpty();
+			} );
+
+			it( "skips a routine that is already running instead of starting it twice", function() {
+				routines.claim( id, "someone-else" );
+				var result = runner.run( row() );
+				expect( result ).toBe( { started : false } );
+				expect( seen ).toBeEmpty();
+				expect( row().threadId ).toBe( "someone-else" );
+			} );
+
+			describe( "waiting for an approval", function() {
+
+				beforeEach( function() {
+					mode = "approval";
+					variables.result = runner.run( row() );
+				} );
+
+				it( "stops in waiting when the turn is paused for an approval, and still counts as a routine run", function() {
+					expect( result.status ).toBe( "waiting" );
+					expect( row().status ).toBe( "waiting" );
+					expect( RoutineRunner::isRoutineThread( row().threadId ) ).toBeTrue();
+					expect( routines.due() ).toBeEmpty();
+				} );
+
+				it( "stays waiting while the approval is open", function() {
+					expect( runner.checkWaiting( row() ) ).toBe( "waiting" );
+					expect( row().status ).toBe( "waiting" );
+				} );
+
+				it( "settles ok once a person has answered", function() {
+					var thread = row().threadId;
+					pendingNow = false;
+					expect( runner.checkWaiting( row() ) ).toBe( "ok" );
+					expect( row().status ).toBe( "idle" );
+					expect( row().lastStatus ).toBe( "ok" );
+					expect( RoutineRunner::isRoutineThread( thread ) ).toBeFalse();
+				} );
+
+				it( "gives up after approvalTimeout: cancels the run and counts a failure", function() {
+					var thread = row().threadId;
+					clockNow += 61 * 60000;
+					expect( runner.checkWaiting( row() ) ).toBe( "failed" );
+					expect( cancelled ).toBe( [ thread ] );
+					expect( row().lastStatus ).toBe( "failed" );
+					expect( row().lastError ).toInclude( "approved" );
+					expect( row().status ).toBe( "idle" );
+					expect( RoutineRunner::isRoutineThread( thread ) ).toBeFalse();
+				} );
+
+			} );
+
+			describe( "with a real agent", function() {
+
+				it( "answers in the routine's conversation, listed for its owner as a routine", function() {
+					var agent = aiAgent(
+						name         = "worker",
+						model        = aiModel( provider = "mock", options = { providerOptions : { responses : [ "Build is green." ] } } ),
+						checkpointer = aiMemory( memory = "cache", config = {} )
+					);
+					var sessions = new bxagents.models.store.SessionStore( store );
+					var real = new bxModules.bxagents.models.routines.RoutineRunner( routines, new bxagents.models.api.TurnRunner( agent, sessions ), settings, () => clockNow );
+
+					var result = real.run( row() );
+
+					expect( result.status ).toBe( "ok" );
+					var listed = sessions.list( "ada", 10 );
+					expect( listed ).toHaveLength( 1 );
+					expect( listed[ 1 ].id ).toBe( "routine-check-build-" & left( id, 8 ) );
+					expect( listed[ 1 ].source ).toBe( "routine" );
+					expect( row().lastStatus ).toBe( "ok" );
+				} );
+
+			} );
+
+		} );
+	}
+
+}

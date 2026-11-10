@@ -176,6 +176,16 @@ class {
 				statements : [
 					"ALTER TABLE users ADD COLUMN isAdmin INTEGER NOT NULL DEFAULT 0"
 				]
+			},
+			{
+				// routines: prompts an agent runs on a schedule, as their owner (see models/routines). Every time is epoch
+				// milliseconds, so the heartbeat compares numbers and no time zone is stored. status is idle, running or
+				// waiting (a person has to approve a tool); threadId and waitingSince belong to the waiting run.
+				version    : 10,
+				statements : [
+					"CREATE TABLE IF NOT EXISTS routines ( id VARCHAR(64) NOT NULL PRIMARY KEY, ownerId VARCHAR(255) NOT NULL, name VARCHAR(40) NOT NULL, schedule VARCHAR(100) NOT NULL, prompt TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, status VARCHAR(16) NOT NULL DEFAULT 'idle', nextRunAt INTEGER, lastRunAt INTEGER, lastStatus VARCHAR(16) NOT NULL DEFAULT '', lastError VARCHAR(500) NOT NULL DEFAULT '', failures INTEGER NOT NULL DEFAULT 0, threadId VARCHAR(64) NOT NULL DEFAULT '', waitingSince INTEGER, createdAt INTEGER, updatedAt INTEGER, UNIQUE ( ownerId, name ) )",
+					"CREATE INDEX IF NOT EXISTS idx_routines_due ON routines ( enabled, status, nextRunAt )"
+				]
 			}
 		]
 	}

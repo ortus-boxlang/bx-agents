@@ -1,0 +1,104 @@
+/**
+ * Connects an agent to routines, from the `routines` block of Agent.yaml (see RoutineSettings). With the block off, which is
+ * the default, nothing is added: no tools, no heartbeat, no table read.
+ *
+ * The generated agent factory calls attach() on the root agent only, so sub-agents never get the tools. The generated
+ * heartbeat scheduler calls service() and runner(); both share one store and one Routines per process.
+ */
+import bxModules.bxagents.models.routines.RoutineSettings;
+import bxModules.bxagents.models.routines.RoutineTools;
+
+class {
+
+	static {
+		stores = {}
+	}
+
+	/**
+	 * @settings The `routines` block
+	 *
+	 * @return Messages for the author, empty when it is fine
+	 */
+	array function problems( required any settings ) {
+		return RoutineSettings::problems( arguments.settings )
+	}
+
+	/**
+	 * Gives the agent the routine tools, and a person's approval before it makes, changes or deletes one.
+	 *
+	 * @agent The root AiAgent
+	 * @settings The `routines` block
+	 * @agentName The agent's name
+	 *
+	 * @return The agent
+	 */
+	any function attach( required any agent, any settings = {}, string agentName = "" ) {
+		var found = problems( arguments.settings )
+		if ( found.len() ) {
+			throw( type = "BxAgents.InvalidRoutines", message = "The routines settings of [#arguments.agentName#] are not valid: " & found.toList( " " ) )
+		}
+		var resolved = RoutineSettings::resolve( arguments.settings )
+		if ( !resolved.enabled ) {
+			return arguments.agent
+		}
+		var me = this
+		arguments.agent.withTools( new RoutineTools( () => me.service( resolved ), resolved ).tools() )
+		arguments.agent.withMiddleware( new bxModules.bxai.models.middleware.core.HumanInTheLoopMiddleware(
+			toolsRequiringApproval = RoutineTools::approvalNames(),
+			mode                   = "web"
+		) )
+		return arguments.agent
+	}
+
+	/**
+	 * @settings A resolved routines block
+	 *
+	 * @return The Routines service on the app's shared database
+	 */
+	any function service( required struct settings ) {
+		return new "models.routines.Routines@bxagents"( store(), arguments.settings )
+	}
+
+	/**
+	 * The shared chat database, opened and brought up to date once per process: the file named by BXAGENTS_DB when there
+	 * is one (the terminal chat and a served project), otherwise the application's default datasource.
+	 */
+	any function store() {
+		var file = new "models.store.DbSetting@bxagents"().file()
+		var key = len( file ) ? file : "default-datasource"
+		if ( !static.stores.keyExists( key ) ) {
+			lock name="bxagents-routines-store" type="exclusive" timeout="30" {
+				if ( !static.stores.keyExists( key ) ) {
+					var made = ""
+					if ( len( file ) ) {
+						directoryCreate( getDirectoryFromPath( file ), true, true )
+						made = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
+					} else {
+						made = new "models.store.ChatStore@bxagents"( "" )
+					}
+					made.migrate()
+					static.stores[ key ] = made
+				}
+			}
+		}
+		return static.stores[ key ]
+	}
+
+	/**
+	 * What the heartbeat needs, made once the app is running.
+	 *
+	 * @agent The root agent
+	 * @settings The `routines` block
+	 *
+	 * @return A Heartbeat
+	 */
+	any function heartbeat( required any agent, any settings = {} ) {
+		var resolved = RoutineSettings::resolve( arguments.settings )
+		var routines = service( resolved )
+		var sessions = new "models.store.SessionStore@bxagents"( store() )
+		var turns = new "models.api.TurnRunner@bxagents"( arguments.agent, sessions )
+		var runner = new "models.routines.RoutineRunner@bxagents"( routines, turns, resolved )
+		return new "models.routines.Heartbeat@bxagents"( routines, runner, resolved )
+	}
+
+}

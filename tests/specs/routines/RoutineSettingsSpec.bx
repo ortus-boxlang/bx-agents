@@ -1,0 +1,60 @@
+import bxModules.bxagents.models.routines.RoutineSettings;
+
+/**
+ * The routines block of Agent.yaml: what it may hold, and what each setting is when it is left out.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "routines.RoutineSettings", function() {
+
+			it( "is off with sensible limits when nothing is set", function() {
+				var s = RoutineSettings::resolve( {} );
+				expect( s ).toBe( { enabled : false, maxPerUser : 20, minInterval : 5, maxParallel : 2, maxPromptLength : 4000, approvalTimeout : 1440, timezone : "" } );
+			} );
+
+			it( "turns durations into minutes and keeps what was set", function() {
+				var s = RoutineSettings::resolve( { enabled : true, minInterval : "1h", approvalTimeout : "2d", maxPerUser : 5, timezone : "Europe/Madrid" } );
+				expect( s.enabled ).toBeTrue();
+				expect( s.minInterval ).toBe( 60 );
+				expect( s.approvalTimeout ).toBe( 2880 );
+				expect( s.maxPerUser ).toBe( 5 );
+				expect( s.timezone ).toBe( "Europe/Madrid" );
+			} );
+
+			it( "finds nothing wrong with a good block, or an empty one", function() {
+				expect( RoutineSettings::problems( {} ) ).toBeEmpty();
+				expect( RoutineSettings::problems( { enabled : true, maxPerUser : 20, minInterval : "5m", maxParallel : 3, maxPromptLength : 4000, approvalTimeout : "24h", timezone : "UTC" } ) ).toBeEmpty();
+			} );
+
+			it( "names a setting that does not exist", function() {
+				var found = RoutineSettings::problems( { enable : true } );
+				expect( found ).toHaveLength( 1 );
+				expect( found[ 1 ] ).toInclude( "routines.enable is not a setting" );
+			} );
+
+			it( "names each value that is out of range or the wrong kind", function() {
+				var found = RoutineSettings::problems( {
+					enabled : "yes please", maxPerUser : 0, maxParallel : 99, maxPromptLength : 10, minInterval : "30s", approvalTimeout : "1m", timezone : "Mars/Olympus"
+				} ).toList( " | " );
+				for ( var key in [ "enabled", "maxPerUser", "maxParallel", "maxPromptLength", "minInterval", "approvalTimeout", "timezone" ] ) {
+					expect( found ).toInclude( "routines.#key#" );
+				}
+			} );
+
+			it( "refuses a block that is not a mapping", function() {
+				expect( RoutineSettings::problems( "on" ) ).toHaveLength( 1 );
+			} );
+
+			it( "reads durations in m, h and d only", function() {
+				expect( RoutineSettings::minutes( "5m" ) ).toBe( 5 );
+				expect( RoutineSettings::minutes( "2H" ) ).toBe( 120 );
+				expect( RoutineSettings::minutes( "1d" ) ).toBe( 1440 );
+				expect( RoutineSettings::minutes( "5" ) ).toBe( 0 );
+				expect( RoutineSettings::minutes( "fast" ) ).toBe( 0 );
+			} );
+
+		} );
+	}
+
+}
