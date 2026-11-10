@@ -411,6 +411,15 @@ For anything the tokens don't cover - custom fonts, layout, per-element rules - 
 !!! warning
     **`apiKeyEnvVar` is a shared secret, not a login system.** It is the same thing as the agent API's `agentApi.tokenEnvVar` (a name in `Agent.yaml` wins if both are set). Left unset, the API is open (fine on your own machine, not for a public deployment; `serve` warns when an open API listens on every interface). Set it, and every call to `/__bxagents` must carry a matching `x-bxagents-token` header, compared in constant time. **The static shell (`<path>/index.html`) is not gated**, because a browser's plain page navigation can't send a custom header; the page asks for it in a form: a **Password** box that opens by itself when the server answers `401` and again from **Password** in the Settings menu. The password is kept in `localStorage` and sent on every call; a wrong one shows "That password was not accepted." For several people use [issued tokens](agent-bx.md#access-tokens-for-a-deployed-agent) or `users`.
 
+## Logs and chat apps
+
+For an admin, the **Server** group of the Settings menu has two more items when the server keeps a data home:
+
+- **Logs** opens a panel with a tab for each log that exists (agent, gateways, routines, heartbeat, API). Each line shows its time, its level (error, warn, info or debug, in words as well as colour), who it is about and what happened. Filter by level, search for a word, pick how many lines, and tick **Refresh every 5 s** to follow a log as it grows. See [logs](logs.md).
+- **Chat apps** lists each chat app the project names with its state (connected, stopped, failing or not registered), which of its credentials are set (the names only, never a value), when it last had a conversation, and its last error with a button that opens that gateway's lines in the log. The chat apps are still set up in `gateways/` and `.env`: the page only shows how they are doing.
+
+A small red count on the Settings button says how many sources logged an error since the app started.
+
 ## Settings and appearance
 
 The header keeps only what you use every minute: the **Chats** button, the context ring, the model picker and a **Settings** gear. The gear opens one menu, in three groups: **Conversation** (Fork this conversation, Export as Markdown, Clear messages, Compact older messages), **You** (Notes, Appearance, Dark or Light theme) and **Server** (Password, Access tokens). An item shows only where the server offers it, and a group with nothing in it is left out.

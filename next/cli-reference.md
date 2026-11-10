@@ -885,6 +885,18 @@ bxAgents connect [--user=NAME] [--json]
 - `--remove` forgets your sign in. `--user` is whose: `local` by default, the one user an open server has.
 - Tokens are sealed in the project's chat database. Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
 
+### `logs`
+
+The agent's logs, kept in the `logs/` folder of the [data home](conventions/data.md). See [logs](conventions/logs.md).
+
+```bash
+bxAgents logs [area] [--tail=N] [--level=warn] [--grep=TEXT] [--json]
+```
+
+- Without an area it lists the logs and their size. The areas are `agent`, `gateways`, `routines`, `heartbeat` and `api`.
+- With one it prints the last lines: `--tail` is how many (default 100, up to 1000), `--level` the least serious level to show, and `--grep` a word a line must contain.
+- Secrets are never in a log, and neither is what a person said.
+
 ### `models`
 
 The models of a built project, and whether they answer.
