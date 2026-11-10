@@ -637,6 +637,38 @@ class extends="testbox.system.BaseSpec" {
 				expect( factory ).toInclude( 'SkillWiring@bxagents"().attach( agent, {' );
 			} );
 
+			it( "attaches the routine tools and the heartbeat to an agent that turns routines on, and gives the app the shared database", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/with-routines", buildDir );
+
+				var factory = fileRead( result.agentFactory );
+				expect( factory.reMatch( 'RoutineWiring@bxagents"\(\)\.attach\(' ) ).toHaveLength( 1 );
+				expect( factory ).toInclude( '"minInterval" : "10m"' );
+				var beat = fileRead( buildDir & "/bxagents/RoutinesScheduler.bx" );
+				expect( beat ).toInclude( 'extends="bxagents.Scheduler"' );
+				expect( beat ).toInclude( '"timezone"' );
+				expect( beat ).notToInclude( "__ROUTINES__" );
+				var appSource = fileRead( buildDir & "/bxagents/Application.bx" );
+				expect( appSource ).toInclude( '"bxagents.RoutinesScheduler"' );
+				expect( appSource ).toInclude( 'new "models.store.ChatStore@bxagents"( "" ).migrate()' );
+			} );
+
+			it( "adds no heartbeat when routines are off, even if the block is there", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/with-routines-off", buildDir );
+
+				expect( fileExists( buildDir & "/bxagents/RoutinesScheduler.bx" ) ).toBeFalse();
+				expect( fileRead( buildDir & "/bxagents/Application.bx" ) ).notToInclude( "RoutinesScheduler" );
+			} );
+
+			it( "leaves routines out entirely when the agent has no routines block", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/subagents-chain", buildDir );
+
+				expect( fileRead( result.agentFactory ) ).notToInclude( "RoutineWiring" );
+				expect( fileExists( buildDir & "/bxagents/RoutinesScheduler.bx" ) ).toBeFalse();
+			} );
+
 			it( "attaches the vault tools to an agent that declares a vault, and gives the app the shared database", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/with-vault", buildDir );

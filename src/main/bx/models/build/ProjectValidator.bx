@@ -77,6 +77,7 @@ class {
 		validateVolumes( arguments.resolvedConfig, errors )
 		validateMemory( arguments.resolvedConfig, errors )
 		validateSkills( arguments.resolvedConfig, errors )
+		validateRoutines( arguments.resolvedConfig, errors )
 
 		return { errors : errors, warnings : warnings }
 	}
@@ -966,6 +967,27 @@ class {
 			return
 		}
 		for ( var problem in new "models.skills.SkillWiring@bxagents"().problems( arguments.resolvedConfig.skills ) ) {
+			arguments.errors.append( "Agent.bx's " & problem )
+		}
+	}
+
+	/**
+	 * Validates the optional `routines` block: prompts the agent runs on a schedule. Off unless `enabled: true`. See
+	 * RoutineSettings for every setting and its range.
+	 *
+	 *   routines:
+	 *     enabled: true
+	 *     minInterval: 5m
+	 *     timezone: Europe/Madrid
+	 *
+	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `routines` is used
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	private void function validateRoutines( required struct resolvedConfig, required array errors ) {
+		if ( !structKeyExists( arguments.resolvedConfig, "routines" ) ) {
+			return
+		}
+		for ( var problem in new "models.routines.RoutineWiring@bxagents"().problems( arguments.resolvedConfig.routines ) ) {
 			arguments.errors.append( "Agent.bx's " & problem )
 		}
 	}
