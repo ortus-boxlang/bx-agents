@@ -940,12 +940,12 @@ class {
 
 		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery, thisName, arguments.defaultMemory, arguments.appDir, arguments.nodeRelativePath ) )
 		if ( structKeyExists( arguments.resolvedConfig, "notes" ) && isStruct( arguments.resolvedConfig.notes ) ) {
-			// the notes this agent keeps: a prompt block and the remember and forget tools
+			// the notes this agent keeps: a prompt block and the note_remember and note_forget tools
 			statements.append( 'new "models.notes.NotesWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.notes )#, "#Strings::bxLiteral( thisName )#" )' )
 		}
 
 		if ( arguments.accessorPath.isEmpty() ) {
-			// the root agent may save skills of its own (subagents never do): the saveSkill tool, unless skills.agentCanSave is false
+			// the root agent may save skills of its own (subagents never do): the skill_save tool, unless skills.agentCanSave is false
 			statements.append( 'new "models.skills.SkillWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( isStruct( arguments.resolvedConfig.skills ?: "" ) ? arguments.resolvedConfig.skills : {} )#, "#Strings::bxLiteral( thisName )#", "#Strings::bxLiteral( variables.projectDataHome )#" )' )
 		}
 

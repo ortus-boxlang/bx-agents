@@ -9,6 +9,8 @@
  * There is no tool that reads, sends or changes a value: the runtime reads one itself when a tool or an MCP
  * server needs it.
  */
+import bxModules.bxagents.models.util.ToolNames;
+
 class {
 
 	/**
@@ -29,7 +31,7 @@ class {
 		var agentName = variables.agentName
 
 		var list = aiTool(
-			"vault_list",
+			ToolNames::require( "vault_list" ),
 			"List the secrets you can use, by name, with what each is for and which hosts it may be sent to. You never see a value. A tool or server that needs a secret reads it itself.",
 			() => {
 				var user = wiring.userOf( arguments )
@@ -41,7 +43,7 @@ class {
 		)
 
 		var askTool = aiTool(
-			"vault_request",
+			ToolNames::require( "vault_request" ),
 			"Ask the person to add a secret you need, such as an API key or a login. Give its name (letters, digits, underscore) and say why. You never receive the value and must never ask the person to type or paste it into the chat: they enter it in a private form that opens for them. When they tell you it is added, carry on.",
 			( required string name, required string why, string scope = "user" ) => {
 				var user = wiring.userOf( arguments )

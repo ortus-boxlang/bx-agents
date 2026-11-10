@@ -2,12 +2,14 @@
  * Connects an agent to the skills it can save, from the `skills` block of Agent.yaml:
  *
  *   skills:
- *     agentCanSave: true     # the root agent has the saveSkill tool (default true; subagents never get it)
+ *     agentCanSave: true     # the root agent has the skill_save tool (default true; subagents never get it)
  *     autoApprove: false     # a person approves each save (default false)
  *
  * The generated agent factory calls load() once before any agent is built, so the skills the agent saved earlier
  * are in every agent's list, and attach() on the root agent for the tool.
  */
+import bxModules.bxagents.models.util.ToolNames;
+
 class {
 
 	static {
@@ -46,7 +48,7 @@ class {
 	}
 
 	/**
-	 * Gives the agent its saveSkill tool, with a person's approval before each save unless the block turns that off.
+	 * Gives the agent its skill_save tool, with a person's approval before each save unless the block turns that off.
 	 *
 	 * @agent The root AiAgent
 	 * @settings The `skills` block
@@ -67,7 +69,7 @@ class {
 		if ( !( arguments.settings.autoApprove ?: false ) ) {
 			// the run pauses for a person like for any tool that needs approval
 			arguments.agent.withMiddleware( new bxModules.bxai.models.middleware.core.HumanInTheLoopMiddleware(
-				toolsRequiringApproval = [ "saveSkill" ],
+				toolsRequiringApproval = [ "skill_save" ],
 				mode                   = "web"
 			) )
 		}
@@ -78,14 +80,14 @@ class {
 	 * @agent The AiAgent that gets the skill the moment it is saved
 	 * @library A SkillLibrary
 	 *
-	 * @return The saveSkill tool, not entered in the global tool registry
+	 * @return The skill_save tool, not entered in the global tool registry
 	 */
 	any function tool( required any agent, required any library ) {
 		var target = arguments.agent
 		var skills = arguments.library
-		var saveSkill = aiTool(
-			"saveSkill",
-			"Save a skill: instructions you can load again in later conversations. Use it after a task that took real steps or knowledge and is likely to come up again, for example how a report is put together or how a system is checked. Do not save one-off facts about a person (use remember for those) and do not save a skill that is already in your skill list; save over your own to improve it. The skill is available at once. The answer says whether it was saved; if not, it says why, and you can fix the problem and try again.",
+		var skillSave = aiTool(
+			ToolNames::require( "skill_save" ),
+			"Save a skill: instructions you can load again in later conversations. Use it after a task that took real steps or knowledge and is likely to come up again, for example how a report is put together or how a system is checked. Do not save one-off facts about a person (use note_remember for those) and do not save a skill that is already in your skill list; save over your own to improve it. The skill is available at once. The answer says whether it was saved; if not, it says why, and you can fix the problem and try again.",
 			( required string name, required string description, required string content ) => {
 				var result = skills.save( arguments.name, arguments.description, arguments.content )
 				if ( !result.ok ) {
@@ -96,10 +98,10 @@ class {
 			},
 			false
 		)
-		saveSkill.describeArg( "name", "A short folder-style name such as release-notes: letters, digits, . _ and -." )
-		saveSkill.describeArg( "description", "What the skill does and when to use it, in a sentence or two. This is what you will see in your skill list." )
-		saveSkill.describeArg( "content", "The instructions, in markdown: the steps to follow or the knowledge to apply." )
-		return saveSkill
+		skillSave.describeArg( "name", "A short folder-style name such as release-notes: letters, digits, . _ and -." )
+		skillSave.describeArg( "description", "What the skill does and when to use it, in a sentence or two. This is what you will see in your skill list." )
+		skillSave.describeArg( "content", "The instructions, in markdown: the steps to follow or the knowledge to apply." )
+		return skillSave
 	}
 
 	private any function library( string dataHome = "", string agentName = "" ) {

@@ -53,7 +53,7 @@ environments:
 | `agentApi` | mapping | `{ enabled, access, tokenEnvVar, tokens, profiles, path, allowedIPs, rateLimit, manageTokens }`, all optional. `enabled` defaults to `true`, `access` to `open` (or `token` when `tokenEnvVar` or `tokens` is set), `tokens` and `manageTokens` to `false`, `path` to `/__bxagents`. See [`agentApi`](agent-bx.md#agentapi) for each key. |
 | `notes` | mapping | Short notes the agent keeps about the user and its own work. `notes: {}` turns them on with the defaults. See [Notes](#notes). |
 | `vault` | mapping | Gives the agent `vault_list` and `vault_request` and scrubs vault secrets from tool results. `vault: {}` turns it on. See [the vault](vault.md). |
-| `skills` | mapping | Skills the agent saves for itself. `agentCanSave` (default `true`) gives the root agent a `saveSkill` tool; `autoApprove` (default `false`) skips the person's approval of each save. Saved skills live in the data home and are in the agent's skill list at once. See [data and volumes](data.md#skills-the-agent-saves). |
+| `skills` | mapping | Skills the agent saves for itself. `agentCanSave` (default `true`) gives the root agent a `skill_save` tool; `autoApprove` (default `false`) skips the person's approval of each save. Saved skills live in the data home and are in the agent's skill list at once. See [data and volumes](data.md#skills-the-agent-saves). |
 | `data` | mapping | Where the agent keeps everything: `data: { home: ~/.nanobox }`. See [data and volumes](data.md). Only in the project's own `Agent.yaml`. |
 | `volumes` | mapping | Host folders the agent's file tools may use, by name: `volumes: { notes: { path: ~/Notes, mode: rw } }`. See [data and volumes](data.md#volumes). Only in the project's own `Agent.yaml`. |
 | `usage` | boolean | Records what each model call used (the time, who, the provider, the model and the tokens), for [`bxAgents stats`](../cli-reference.md#stats) and `/stats`. **Off by default**: set `usage: true` to turn it on. Counts only, never what was said. Only in the project's own `Agent.yaml`. Rebuild after changing it. |
@@ -145,7 +145,7 @@ notes:
   provider: sqlite        # built in. Or a class implementing INotesProvider
   user:  { limit: 1400 }  # characters of user notes that go into the prompt
   agent: { limit: 2200 }  # characters of agent notes
-  tool: true              # give the agent the remember and forget tools (default true)
+  tool: true              # give the agent the note_remember and note_forget tools (default true)
   approveForget: true     # a person approves what the agent forgets (default true)
 ```
 
