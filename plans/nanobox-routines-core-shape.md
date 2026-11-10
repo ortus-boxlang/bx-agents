@@ -160,3 +160,17 @@ Answered by the owner.
 2. **Schedule words:** stored forms are cron and `every Nm` only. The model translates and the approval shows the English reading.
 3. **Approval timeout:** 24 hours by default, set with `routines.approvalTimeout`. The other limits are settings too: `maxPerUser`, `minInterval`, `maxParallel`.
 4. **Prompt length:** 4000 characters by default, set with `routines.maxPromptLength`. Longer needs go in a skill.
+
+## 12. As built
+
+Where the code differs from the shape above, the code wins:
+
+- **Tool names are `{type}_{action}`**, for every tool BX Agents adds (`ToolNames`, enforced where tools are built and by a spec). The routine tools are seven, one per action: `routine_schedule`, `routine_list`, `routine_update`, `routine_pause`, `routine_resume`, `routine_run`, `routine_delete`. Approval is needed for `routine_schedule`, `routine_update` and `routine_delete`. Existing tools were renamed: `skill_save`, `note_remember`, `note_forget`.
+- **The approval shows the tool's arguments**, not an English reading. The English reading and the next run time are in the tool's answer, so the model tells the person.
+- **`Schedule::check( text )`** answers `{ ok, value, reason }` instead of throwing; `next`, `shortestGap` and `describe` are static, and times are epoch milliseconds everywhere (columns are `INTEGER`). A routine's name is at most 40 characters so its conversation id (`routine-<name>-<first 8 of the id>`) fits in 64.
+- **An approval does not block the run.** The turn returns when a tool needs approval; the runner sees it pending and marks the routine `waiting`. Each beat checks the waiting ones: answered, still waiting, or past `approvalTimeout` (then cancelled and counted as a failure). Migration 10 also has `threadId` and `waitingSince`.
+- **A run is claimed with one UPDATE** that also stores the run's thread id, then read back, so the claim needs no affected-row count.
+- **Routine runs are recognised by thread id** in a static set on `RoutineRunner`, which is how the tools refuse to work inside a routine.
+- **Error codes** are the existing ones: `not_found` (also when routines are off), `bad_request`, `conflict` (name taken, limit reached, busy), `forbidden`.
+- **The heartbeat** is `bxagents/RoutinesScheduler.bx`, written by the build only when routines are on and listed in `this.schedulers`; it starts itself on the first beat, which fires when the app starts. The ColdBox integration run checks that it does.
+- **Settings** added: `maxPromptLength` and `approvalTimeout`, both set in `Agent.yaml` as asked.
