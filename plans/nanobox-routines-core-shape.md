@@ -26,6 +26,7 @@ routines:
   maxPerUser: 20     # 1 to 200
   minInterval: 5m    # 1m to 1d; the shortest a routine may repeat
   maxParallel: 2     # 1 to 10; routines started in the same tick
+  maxPromptLength: 4000  # 200 to 20000 characters
   approvalTimeout: 24h  # 5m to 7d; how long a run waits for a person to approve a tool
   timezone: ""       # blank = the server's time zone; or an IANA name such as Europe/Madrid
 ```
@@ -151,11 +152,11 @@ Destinations and chat app delivery, the results folder and `saveReport`, `/routi
 7b. A routine run is not given the routine tools; `routines.enabled: false` gives no tools.
 7c. `capabilities.routines`, changelog entry, full suite, ColdBox integration run, draft PR.
 
-## 11. Questions
+## 11. Decisions
 
-Recommendations are what I will build unless you say otherwise.
+Answered by the owner.
 
-1. **Time zone.** One `routines.timezone` for the app, default the server's. Per routine time zones would be a later addition. Recommended.
-2. **Words in the schedule.** Stored forms are cron and `every Nm` only. The model does the translation, and the approval shows the English reading so a mistake is seen before it is saved. Recommended.
-3. **Approval timeout** of 24 hours by default, then the run is cancelled and counts as a failure.
-4. **A routine's prompt can be long.** Limit 4000 characters. A routine that needs more should say "follow the skill <name>", which is what skills are for.
+1. **Time zone:** one `routines.timezone` in `Agent.yaml`, default the server's.
+2. **Schedule words:** stored forms are cron and `every Nm` only. The model translates and the approval shows the English reading.
+3. **Approval timeout:** 24 hours by default, set with `routines.approvalTimeout`. The other limits are settings too: `maxPerUser`, `minInterval`, `maxParallel`.
+4. **Prompt length:** 4000 characters by default, set with `routines.maxPromptLength`. Longer needs go in a skill.
