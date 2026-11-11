@@ -1,0 +1,56 @@
+/**
+ * The routines of a project on this machine, for the terminal and the `routines` verb: the same RoutineManager a served app builds, on the
+ * project's chat database and data home. The person is the local operator (admin scope), as the terminal's chat is.
+ *
+ * Routines run only in a served app (its heartbeat starts them); here they are made due, listed, paused and read.
+ */
+import bxModules.bxagents.models.routines.RoutineSettings;
+
+class {
+
+	/**
+	 * @root The project root
+	 *
+	 * @return A RoutineManager, or null when the project has routines off or its database cannot be opened
+	 */
+	any function managerFor( required string root ) {
+		try {
+			var config = new "models.build.AgentConfigResolver@bxagents"().resolve( projectRoot = arguments.root )
+			if ( !isStruct( config.routines ?: "" ) ) {
+				return nullValue()
+			}
+			var settings = RoutineSettings::resolve( config.routines )
+			if ( !settings.enabled ) {
+				return nullValue()
+			}
+			var file = new "models.store.ChatStorePath@bxagents"().prepared( arguments.root )
+			var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
+			store.migrate()
+			var service = new "models.routines.Routines@bxagents"( store, settings )
+			var home = new "models.data.ProjectData@bxagents"().appDataOf( arguments.root ).home()
+			return new "models.routines.RoutineManager@bxagents"(
+				service,
+				new "models.routines.Destinations@bxagents"( new "models.gateways.GatewayChats@bxagents"( store ) ),
+				new "models.routines.RoutineReports@bxagents"( service, new "models.routines.RoutineResults@bxagents"( home, settings ) )
+			)
+		} catch ( any e ) {
+			return nullValue()
+		}
+	}
+
+	/**
+	 * @root The project root
+	 * @user The person's id; the local operator when blank
+	 *
+	 * @return A BoundRoutines for the terminal, or null when routines are off
+	 */
+	any function boundFor( required string root, string user = "" ) {
+		var manager = managerFor( arguments.root )
+		if ( isNull( manager ) ) {
+			return nullValue()
+		}
+		var who = new "models.api.Caller@bxagents"( id = len( trim( arguments.user ) ) ? trim( arguments.user ) : "local", scope = "admin", source = "terminal" )
+		return new "models.routines.BoundRoutines@bxagents"( manager, who )
+	}
+
+}

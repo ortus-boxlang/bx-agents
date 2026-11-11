@@ -1,0 +1,83 @@
+/**
+ * The routines of the person on the other end of a connected terminal, through the server's API. The same shape as
+ * BoundRoutines, so the /routines commands run unchanged. Every method answers an Outcome; a server that cannot be reached or that
+ * has routines off answers a failure with its reason.
+ */
+import bxModules.bxagents.models.api.Outcome;
+
+class {
+
+	/**
+	 * @client The AgentClient (the http helper of a terminal session)
+	 * @baseUrl The server's agent API address
+	 * @admin True when the token may see everyone's routines
+	 */
+	function init( required any client, required string baseUrl, boolean admin = false ) {
+		variables.client = arguments.client
+		variables.baseUrl = arguments.baseUrl
+		variables.admin = arguments.admin
+		return this
+	}
+
+	boolean function isAdmin() {
+		return variables.admin
+	}
+
+	any function list( boolean all = false ) {
+		return fetch( "routines", arguments.all ? { all : 1 } : {} )
+	}
+
+	any function get( required string ref ) {
+		return fetch( "routines/get", { name : arguments.ref } )
+	}
+
+	any function run( required string ref ) {
+		return send( "routines/run", { name : arguments.ref } )
+	}
+
+	any function pause( required string ref ) {
+		return send( "routines/pause", { name : arguments.ref } )
+	}
+
+	any function resume( required string ref ) {
+		return send( "routines/resume", { name : arguments.ref } )
+	}
+
+	any function delete( required string ref ) {
+		return send( "routines/delete", { name : arguments.ref } )
+	}
+
+	any function reports( required string ref ) {
+		return fetch( "routines/reports", { name : arguments.ref } )
+	}
+
+	any function report( required string ref, required string file ) {
+		return fetch( "routines/report", { name : arguments.ref, file : arguments.file } )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private any function fetch( required string route, struct query = {} ) {
+		try {
+			return outcomeOf( variables.client.getJson( variables.baseUrl, arguments.route, arguments.query ) )
+		} catch ( any e ) {
+			return Outcome::failed( "internal", "The server could not be asked about routines: " & e.message )
+		}
+	}
+
+	private any function send( required string route, struct body = {} ) {
+		try {
+			return outcomeOf( variables.client.postJson( variables.baseUrl, arguments.route, arguments.body ) )
+		} catch ( any e ) {
+			return Outcome::failed( "internal", "The server could not be asked about routines: " & e.message )
+		}
+	}
+
+	private any function outcomeOf( required struct answer ) {
+		if ( arguments.answer.success ?: false ) {
+			return Outcome::done( arguments.answer )
+		}
+		return Outcome::failed( arguments.answer.code ?: "internal", arguments.answer.error ?: "The server did not say why." )
+	}
+
+}

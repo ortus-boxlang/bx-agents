@@ -1,0 +1,43 @@
+/**
+ * /routines: the scheduled routines of the person asking, with the schedule in words, the status and the next run. An admin adds `all`
+ * to see everyone's. Making and changing a routine is asked of the agent, where it is seen and approved.
+ */
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "routines"
+	}
+
+	string function hint() {
+		return "list your scheduled routines"
+	}
+
+	any function run( required any context, required string args ) {
+		var routines = arguments.context.chat().routines() ?: nullValue()
+		if ( isNull( routines ) ) {
+			return arguments.context.reply().text( "Routines are not turned on for this agent." )
+		}
+		var all = trim( arguments.args ) == "all"
+		if ( all && !routines.isAdmin() ) {
+			return arguments.context.reply().warn( "Only an admin may list everyone's routines." )
+		}
+		var found = routines.list( all )
+		if ( !found.succeeded() ) {
+			return arguments.context.reply().warn( found.reason() )
+		}
+		var rows = found.data().routines
+		if ( !rows.len() ) {
+			return arguments.context.reply().text( "No routines yet. Ask the agent to schedule one, for example: check the build every weekday at 9." )
+		}
+		var cells = rows.map( function( r ) {
+			var row = [ r.name, r.scheduleText ?: r.schedule, r.statusText ?: r.status, len( r.nextRunText ?: "" ) ? r.nextRunText : "none" ]
+			if ( all ) {
+				row.prepend( r.ownerId )
+			}
+			return row
+		} )
+		var columns = all ? [ { width : 0 }, { width : 0 }, { width : 0 }, { width : 0 }, { width : 0 } ] : [ { width : 0 }, { width : 0 }, { width : 0 }, { width : 0 } ]
+		return arguments.context.reply().grid( columns, cells )
+	}
+
+}

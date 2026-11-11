@@ -479,8 +479,11 @@ class {
 			scheduleText : Schedule::describe( row.schedule ),
 			enabled     : row.enabled == 1,
 			status      : row.status,
+			statusText  : statusWords( row ),
 			nextRunAt   : isNumeric( row.nextRunAt ?: "" ) ? row.nextRunAt : 0,
 			lastRunAt   : isNumeric( row.lastRunAt ?: "" ) ? row.lastRunAt : 0,
+			nextRunText : clockText( row.nextRunAt ?: 0 ),
+			lastRunText : clockText( row.lastRunAt ?: 0 ),
 			lastStatus  : row.lastStatus,
 			lastError   : row.lastError,
 			failures    : row.failures,
@@ -493,6 +496,33 @@ class {
 			out[ "ownerId" ] = row.ownerId
 		}
 		return out
+	}
+
+	/** The state in words for a person: running, waiting for approval, paused, failed or ok */
+	private string function statusWords( required struct row ) {
+		if ( row.status == "running" ) {
+			return "running"
+		}
+		if ( row.status == "waiting" ) {
+			return "waiting for approval"
+		}
+		if ( row.enabled != 1 ) {
+			return row.lastStatus == "failed" ? "paused after failures" : "paused"
+		}
+		if ( row.lastStatus == "failed" ) {
+			return "failed last time"
+		}
+		return row.lastStatus == "ok" ? "ok" : "not run yet"
+	}
+
+	/** A time as text in the app's time zone, such as 2026-11-09 09:00 (Europe/Madrid); blank for no time */
+	private string function clockText( required any ms ) {
+		if ( !isNumeric( arguments.ms ) || arguments.ms <= 0 ) {
+			return ""
+		}
+		var zone = Schedule::zoneOf( variables.settings.timezone )
+		var moment = createObject( "java", "java.time.ZonedDateTime" ).ofInstant( createObject( "java", "java.time.Instant" ).ofEpochMilli( javacast( "long", arguments.ms ) ), zone )
+		return createObject( "java", "java.time.format.DateTimeFormatter" ).ofPattern( "yyyy-MM-dd HH:mm" ).format( moment ) & " (" & zone.getId() & ")"
 	}
 
 	private any function big( required numeric value ) {
