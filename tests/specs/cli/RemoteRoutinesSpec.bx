@@ -1,0 +1,61 @@
+/**
+ * The routines of a connected terminal go through the server's API and come back as the same Outcomes the commands read.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.chat.RemoteRoutines", function() {
+
+			beforeEach( function() {
+				variables.calls = [];
+				variables.client = {
+					getJson : function( baseUrl, route, query = {} ) {
+						calls.append( { method : "GET", route : route, query : query } );
+						if ( route == "routines/get" && query.name == "nope" ) {
+							return { success : false, error : "No routine called nope.", code : "not_found" };
+						}
+						return { success : true, routines : [ { name : "daily" } ], routine : { name : query.name ?: "" } };
+					},
+					postJson : function( baseUrl, route, body = {} ) {
+						calls.append( { method : "POST", route : route, body : body } );
+						return { success : true, routine : { name : body.name } };
+					}
+				};
+				variables.remote = new bxModules.bxagents.models.cli.chat.RemoteRoutines( client, "http://localhost:8080/api" );
+			} );
+
+			it( "lists, with all only when asked", function() {
+				expect( remote.list().data().routines ).toHaveLength( 1 );
+				remote.list( true );
+				expect( calls[ 1 ].query ).toBeEmpty();
+				expect( calls[ 2 ].query.all ).toBe( 1 );
+			} );
+
+			it( "reads one and turns a refusal into a failure with the server's words", function() {
+				expect( remote.get( "daily" ).data().routine.name ).toBe( "daily" );
+				var missing = remote.get( "nope" );
+				expect( missing.succeeded() ).toBeFalse();
+				expect( missing.code() ).toBe( "not_found" );
+				expect( missing.reason() ).toInclude( "nope" );
+			} );
+
+			it( "acts through the post routes", function() {
+				remote.pause( "daily" );
+				remote.resume( "daily" );
+				remote.run( "daily" );
+				remote.delete( "daily" );
+				expect( calls.map( c => c.route ) ).toBe( [ "routines/pause", "routines/resume", "routines/run", "routines/delete" ] );
+				expect( calls[ 1 ].body.name ).toBe( "daily" );
+			} );
+
+			it( "fails with a sentence when the server cannot be reached", function() {
+				var broken = new bxModules.bxagents.models.cli.chat.RemoteRoutines( { getJson : () => { throw( "boom" ); } }, "http://x" );
+				var out = broken.list();
+				expect( out.succeeded() ).toBeFalse();
+				expect( out.reason() ).toInclude( "could not be asked" );
+			} );
+
+		} );
+	}
+
+}

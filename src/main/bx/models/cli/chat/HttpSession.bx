@@ -226,15 +226,10 @@ class {
 	 * @return The routines of this person on the server, or null when the server does not have routines on
 	 */
 	any function routines() {
-		try {
-			var about = variables.client.getJson( variables.baseUrl, "agent" )
-			if ( !( about.capabilities.routines ?: false ) ) {
-				return nullValue()
-			}
-			return new "models.cli.chat.RemoteRoutines@bxagents"( variables.client, variables.baseUrl, about.capabilities.tokens ?: false )
-		} catch ( any e ) {
+		if ( !( ( describe().capabilities ?: {} ).routines ?: false ) ) {
 			return nullValue()
 		}
+		return new "models.cli.chat.RemoteRoutines@bxagents"( variables.client, variables.baseUrl )
 	}
 
 	/**
