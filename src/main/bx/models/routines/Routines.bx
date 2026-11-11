@@ -72,6 +72,26 @@ class {
 	}
 
 	/**
+	 * What a schedule means, before anything is saved: the same check a save does (the form, the cron fields, the shortest allowed gap), then the
+	 * reading in words and the next time it would run, in the routines time zone. Stores nothing.
+	 *
+	 * @cadence A cron expression or every 30m
+	 *
+	 * @return An Outcome: { value : the stored form, text : the reading in words, nextRunText : the next run } or bad_request with the sentence a save would give
+	 */
+	any function describeSchedule( required string cadence ) {
+		var checked = checkSchedule( arguments.cadence )
+		if ( !checked.ok ) {
+			return Outcome::failed( "bad_request", checked.reason )
+		}
+		return Outcome::done( {
+			value       : checked.value,
+			text        : Schedule::describe( checked.value ),
+			nextRunText : clockText( nextRun( checked.value, variables.clock() ) )
+		} )
+	}
+
+	/**
 	 * @caller The Caller
 	 * @ref The routine's name (yours), or for an admin its id or a name only one owner has
 	 *
