@@ -22,15 +22,15 @@ class {
 	}
 
 	/**
-	 * @caller The Caller; its id is `local`, or `<gateway>:<user>` for a person on a chat app
+	 * @person The Caller; its id is `local`, or `<gateway>:<user>` for a person on a chat app
 	 * @destination What was asked for: blank, routine, or gateway:<name>
 	 * @chat A chat id from the chat app, when the agent knows which
 	 *
 	 * @return { ok : true, destination, destinationChat } or { ok : false, reason }
 	 */
-	struct function resolve( required any caller, string destination = "", string chat = "" ) {
+	struct function resolve( required any person, string destination = "", string chat = "" ) {
 		var asked = lCase( trim( arguments.destination ) )
-		var origin = originOf( arguments.caller )
+		var origin = originOf( arguments.person )
 
 		if ( !len( asked ) ) {
 			return len( origin.chat )
@@ -53,7 +53,7 @@ class {
 			}
 			return { ok : true, destination : asked, destinationChat : origin.chat }
 		}
-		if ( arguments.caller.id() != Caller::localId() ) {
+		if ( arguments.person.id() != Caller::localId() ) {
 			return { ok : false, reason : "Only the person who runs this agent can send a routine to a chat app they are not writing from. Use routine, and read the answer in the routine's conversation." }
 		}
 		var known = variables.chats.forGateway( name )
@@ -75,8 +75,8 @@ class {
 	// ----------------------------------------------------------------------------------
 
 	/** The chat app and chat a person is writing from, when the caller is a person on a chat app */
-	private struct function originOf( required any caller ) {
-		var id = arguments.caller.id()
+	private struct function originOf( required any person ) {
+		var id = arguments.person.id()
 		if ( !id.find( ":" ) ) {
 			return { gateway : "", chat : "" }
 		}

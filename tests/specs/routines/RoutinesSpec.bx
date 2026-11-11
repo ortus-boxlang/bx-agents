@@ -89,6 +89,47 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "where the answer goes", function() {
+
+				it( "is the routine's own conversation unless said", function() {
+					var r = make().data().routine;
+					expect( r.destination ).toBe( "routine" );
+					expect( r.destinationChat ).toBe( "" );
+				} );
+
+				it( "can be a chat on a chat app, from the start or later", function() {
+					var made = routines.create( ada, "to-chat", "every 10m", "x", "gateway:telegram", "42" ).data().routine;
+					expect( made.destination ).toBe( "gateway:telegram" );
+					expect( made.destinationChat ).toBe( "42" );
+
+					var moved = routines.update( ada, "to-chat", { destination : "routine" } ).data().routine;
+					expect( moved.destination ).toBe( "routine" );
+					var back = routines.update( ada, "to-chat", { destination : "gateway:slack", destinationChat : "C1" } ).data().routine;
+					expect( back.destination ).toBe( "gateway:slack" );
+				} );
+
+				it( "refuses a destination of the wrong shape, or a chat app with no chat", function() {
+					expect( routines.create( ada, "a", "every 10m", "x", "telegram" ).code() ).toBe( "bad_request" );
+					expect( routines.create( ada, "a", "every 10m", "x", "gateway:telegram" ).reason() ).toInclude( "needs the chat" );
+					expect( make().succeeded() ).toBeTrue();
+					expect( routines.update( ada, "check-build", { destination : "gateway:telegram" } ).code() ).toBe( "bad_request" );
+				} );
+
+				it( "finds a routine by the thread of its run, going or waiting, and not after it is done", function() {
+					make( schedule = "every 10m" );
+					var id = routines.get( ada, "check-build" ).data().routine.id;
+					expect( isNull( routines.byThread( "run-1" ) ) ).toBeTrue();
+					routines.claim( id, "run-1" );
+					expect( routines.byThread( "run-1" ).name ).toBe( "check-build" );
+					routines.markWaiting( id );
+					expect( routines.byThread( "run-1" ).name ).toBe( "check-build" );
+					routines.settle( id, "ok" );
+					expect( isNull( routines.byThread( "run-1" ) ) ).toBeTrue();
+					expect( isNull( routines.byThread( "" ) ) ).toBeTrue();
+				} );
+
+			} );
+
 			describe( "who sees what", function() {
 
 				beforeEach( function() {

@@ -110,6 +110,67 @@ class extends="testbox.system.BaseSpec" {
 				expect( routines.list( new bxModules.bxagents.models.api.Caller( id = "local" ) ).data().routines ).toHaveLength( 1 );
 			} );
 
+			it( "refuse inside a run that this process did not start, such as one resumed after a restart, because the table says it is a routine's", function() {
+				schedule( name = "outer", when = "every 10m" );
+				routines.claim( routines.get( new bxModules.bxagents.models.api.Caller( id = "ada" ), "outer" ).data().routine.id, "resumed-thread" );
+
+				var answer = call( "routine_schedule", { name : "spawn", schedule : "every 1h", prompt : "x" }, "ada", "resumed-thread" );
+
+				expect( answer.ok ).toBeFalse();
+				expect( answer.reason ).toInclude( "cannot make or change routines" );
+			} );
+
+			describe( "where the answer goes", function() {
+
+				beforeEach( function() {
+					variables.asked = [];
+					variables.rules = { resolve : ( who, destination, chat ) => {
+						asked.append( { who : who.id(), destination : destination, chat : chat } );
+						return destination == "gateway:telegram"
+							? { ok : true, destination : "gateway:telegram", destinationChat : "42" }
+							: ( destination == "gateway:slack" ? { ok : false, reason : "Ask the person which chat." } : { ok : true, destination : "routine", destinationChat : "" } );
+					} };
+					variables.tools = new bxModules.bxagents.models.routines.RoutineTools( () => routines, settings, () => rules ).tools();
+				} );
+
+				it( "is worked out by the rules and stored with the routine", function() {
+					var answer = call( "routine_schedule", { name : "to-chat", schedule : "every 1h", prompt : "x", destination : "gateway:telegram" } );
+
+					expect( answer.ok ).toBeTrue();
+					expect( answer.routine.destination ).toBe( "gateway:telegram" );
+					expect( answer.routine.destinationChat ).toBe( "42" );
+					expect( asked[ 1 ] ).toBe( { who : "ada", destination : "gateway:telegram", chat : "" } );
+				} );
+
+				it( "is asked of the rules even when the model says nothing", function() {
+					call( "routine_schedule", { name : "plain", schedule : "every 1h", prompt : "x" } );
+					expect( asked[ 1 ].destination ).toBe( "" );
+				} );
+
+				it( "stops the call and passes on the rules' reason when they refuse", function() {
+					var answer = call( "routine_schedule", { name : "nope", schedule : "every 1h", prompt : "x", destination : "gateway:slack" } );
+
+					expect( answer.ok ).toBeFalse();
+					expect( answer.reason ).toBe( "Ask the person which chat." );
+					expect( routines.list( new bxModules.bxagents.models.api.Caller( id = "ada" ) ).data().routines ).toBeEmpty();
+				} );
+
+				it( "can be changed later, and is left alone when the update does not mention it", function() {
+					call( "routine_schedule", { name : "to-chat", schedule : "every 1h", prompt : "x", destination : "gateway:telegram" } );
+					expect( call( "routine_update", { name : "to-chat", prompt : "y" } ).routine.destination ).toBe( "gateway:telegram" );
+					expect( call( "routine_update", { name : "to-chat", destination : "routine" } ).routine.destination ).toBe( "routine" );
+					expect( asked ).toHaveLength( 2 );
+				} );
+
+			} );
+
+			it( "offers only the routine's own conversation when there are no destination rules", function() {
+				var answer = call( "routine_schedule", { name : "a", schedule : "every 1h", prompt : "x", destination : "gateway:telegram" } );
+				expect( answer.ok ).toBeFalse();
+				expect( answer.reason ).toInclude( "own conversation" );
+				expect( call( "routine_schedule", { name : "b", schedule : "every 1h", prompt : "x" } ).ok ).toBeTrue();
+			} );
+
 			it( "refuse to work inside a routine's own run: a routine cannot make routines", function() {
 				schedule( name = "outer", when = "every 10m" );
 				clockNow += 10 * 60000;

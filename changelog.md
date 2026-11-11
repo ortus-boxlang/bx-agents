@@ -39,6 +39,21 @@ or package as a portable `.bxa`.
 - Not in this release of the feature: sending a routine's answer to a chat app, a results folder, the
   `/routines` command, `bxAgents routines`, the API routes and the web page section.
 
+#### Routines: delivery and reports
+
+- **A routine's answer can go to a chat app.** Each routine has a destination: its own conversation, or a chat on a
+  chat app such as Telegram. If a routine is made from a chat app, its answer goes back to that chat. The chat app
+  gets a summary (`routines.summaryLength`) and a line naming the reports saved. Chat apps belong to the person who
+  runs the agent, so only they can pick another chat, and they name it when the chat app has talked to more than
+  one. A message that cannot be sent counts as a failed run.
+- **Reports.** A running routine can save files with `report_save` into `<data home>/routines/<name>-<id>/`. They are
+  never overwritten and never deleted automatically, they are in `bxAgents backup`, and `report_list` and
+  `report_read` give them back. `routines.maxReportSize` and `routines.maxReportFiles` set the limits.
+- **The app remembers the chats a chat app has talked to** (the chat id, who wrote and, for Teams, the `serviceUrl`;
+  never message text), so a routine can write to one later.
+- **Fixed: command replies to Telegram.** The gateway session sent its replies under `data.content`, and the chat apps
+  read `data.text`, so Telegram dropped them. It sends both now.
+
 #### Tool names
 
 - **Every tool BX Agents gives an agent is named `{type}_{action}`**, so tool permissions can match them by

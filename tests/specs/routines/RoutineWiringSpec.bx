@@ -35,10 +35,16 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
-			it( "adds the seven tools and one approval guard when it is on", function() {
+			it( "adds the seven tools, the three report tools and one approval guard when it is on", function() {
 				var agent = wiring.attach( newAgent(), { enabled : true }, "boss" );
 				expect( routineTools( agent ) ).toHaveLength( 7 );
+				expect( agent.getTools().filter( t => left( t.getName(), 7 ) == "report_" ).map( t => t.getName() ).sort( "text" ) ).toBe( [ "report_list", "report_read", "report_save" ] );
 				expect( approvalGuards( agent ) ).toHaveLength( 1 );
+			} );
+
+			it( "leaves the report tools off too when routines are off", function() {
+				var agent = wiring.attach( newAgent(), { enabled : false }, "boss" );
+				expect( agent.getTools().filter( t => left( t.getName(), 7 ) == "report_" ) ).toBeEmpty();
 			} );
 
 			it( "describes every tool for the model", function() {

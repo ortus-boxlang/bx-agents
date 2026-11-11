@@ -154,3 +154,16 @@ Taken from the recommended answers unless you say otherwise:
 2. Deleting a report: a person only, in slice 4.
 3. A delivery failure fails the run.
 4. Chat apps get a summary and a pointer to the file, not the whole report.
+
+## 11. As built
+
+Where the code differs from the shape above, the code wins:
+
+- **The event key is `text`.** All nine gateways read `event.data.text` (task 8a). Checking it also found that `CommandGatewaySession` sent its own replies under `content`, which Telegram drops (proved with a probe), so it now sends both `text` and `content`.
+- **A routine's results folder is `<name>-<first 8 of its id>`**, the same suffix as its conversation, so two owners with the same routine name never share a folder and the folder stays with the routine.
+- **`GatewayChats.chatOf( gateway, userId )`** says which chat a person last wrote from. A person on a chat app is `<gateway>:<user>`, so this is how "the chat you are in" is found, and `Destinations` is built on it. A chat is not forgotten when its gateway is removed (it just cannot be delivered to); pruning was left out.
+- **Who may pick a chat app:** the local user, or a person writing from that same chat app (their own chat only). The tools act as a chat-scope person, never as an admin, so an admin web account picks a chat app through the API in the next slice.
+- **`report_save` finds its routine from the table** (`Routines.byThread`), not only from memory, so it and the "no routine tools inside a routine" refusal both survive a restart while an approval is pending. A run's saved files are also noted in memory so the answer sent to a chat app can name them.
+- **A run that waited for an approval and was then answered** is not sent to a chat app, because the answer comes from the person's reply, not from the routine's turn. It is in the conversation.
+- **`backup` and `restore` include `routines/`.**
+- **`routines.maxReportSize`** is written as `256kb` or `1mb` and is stored in bytes.

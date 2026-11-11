@@ -18,6 +18,8 @@ An agent keeps its state in one place, the **data home**, and reaches the rest o
   chat.db        conversations and the agents' memory of them, notes, access tokens, secrets and usage counts
   files/         what the agent writes (the `files` volume)
   skills/        skills the agent saves
+  routines/      reports saved by routines, one folder each (see routines)
+  logs/          what the agent logs, one file per area (see logs)
   backups/       written by bxAgents backup
 ```
 
@@ -116,6 +118,10 @@ A saved skill is part of the data home, so `backup` and `restore` carry it. To r
 
 - **In chat:** `/skills` lists every skill with its level: installed, project or agent.
 - **Over the API:** `GET /skills` answers `{ skills: [ { name, description, origin } ] }` (`origin` is `installed`, `project` or `agent`) to anyone who may call the API. It never shows a folder on the machine.
+
+## Routine reports
+
+`routines/` holds one folder per routine, `<name>-<first 8 of its id>`, with the report files the routine saved. Nothing in it is ever deleted automatically: a person removes old reports. They are part of a backup. See [routines](routines.md#reports).
 
 ## Logs
 
