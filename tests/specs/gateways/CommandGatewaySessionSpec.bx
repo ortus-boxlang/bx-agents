@@ -66,6 +66,30 @@ class extends="testbox.system.BaseSpec" {
 				expect( new bxagents.models.store.SessionStore( store ).list( "mock:bob", 10 ) ).toBeEmpty();
 			} );
 
+			it( "sends its replies under the key the chat apps read (text) as well as the one bx-ai's own session uses (content)", function() {
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ] );
+				session.handleInbound( message( "/help" ), mock );
+				session.handleInbound( message( "hello" ), mock ).get();
+
+				var sent = mock.getDeliveredEvents();
+				expect( sent.len() ).toBeGTE( 2 );
+				for ( var event in sent ) {
+					expect( len( event.getData().text ) ).toBeGT( 0 );
+					expect( event.getData().text ).toBe( event.getData().content );
+				}
+			} );
+
+			it( "notes each chat it hears from, with the Teams serviceUrl and nothing else from the metadata", function() {
+				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ] );
+				var context = new GatewayContext( gateway : "mock", conversationID : "chat-a", userID : "ada", metadata : { serviceUrl : "https://smba.example/", token : "secret" } );
+				session.handleInbound( new GatewayMessage( text : "hi", context : context ), mock ).get();
+
+				var chats = new bxagents.models.gateways.GatewayChats( store );
+				expect( chats.forGateway( "mock" ).map( c => c.chatId ) ).toBe( [ "chat-a" ] );
+				var again = chats.contextFor( "mock", "chat-a" );
+				expect( again.getMetadata() ).toBe( { serviceUrl : "https://smba.example/" } );
+			} );
+
 			it( "answers /help itself, with the commands it offers, and never calls the agent", function() {
 				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ] );
 				var done = session.handleInbound( message( "/help" ), mock );

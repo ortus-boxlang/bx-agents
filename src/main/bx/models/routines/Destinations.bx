@@ -1,0 +1,101 @@
+/**
+ * Where a routine's answer may go, and who may choose. Used by the routine tools, so the same rules answer a person and a model.
+ *
+ *   nothing asked   the chat the person is talking in, when it is a chat app; otherwise the routine's own conversation
+ *   routine         the routine's own conversation
+ *   gateway:<name>  a chat app. A person writing from that chat app may choose their own chat. Beyond that, only the local user,
+ *                   who is the person that runs the agent: chat apps belong to them. With more than one chat the answer lists
+ *                   them so the agent can ask which; with none it says to message the bot once.
+ */
+import bxModules.bxagents.models.api.Caller;
+
+class {
+
+	/**
+	 * @chats A GatewayChats
+	 * @registry The gateway registry; the live bx-ai one when left out
+	 */
+	function init( required any chats, any registry ) {
+		variables.chats = arguments.chats
+		variables.registry = arguments.registry ?: nullValue()
+		return this
+	}
+
+	/**
+	 * @person The Caller; its id is `local`, or `<gateway>:<user>` for a person on a chat app
+	 * @destination What was asked for: blank, routine, or gateway:<name>
+	 * @chat A chat id from the chat app, when the agent knows which
+	 *
+	 * @return { ok : true, destination, destinationChat } or { ok : false, reason }
+	 */
+	struct function resolve( required any person, string destination = "", string chat = "" ) {
+		var asked = lCase( trim( arguments.destination ) )
+		var origin = originOf( arguments.person )
+
+		if ( !len( asked ) ) {
+			return len( origin.chat )
+				? { ok : true, destination : "gateway:" & origin.gateway, destinationChat : origin.chat }
+				: { ok : true, destination : "routine", destinationChat : "" }
+		}
+		if ( asked == "routine" ) {
+			return { ok : true, destination : "routine", destinationChat : "" }
+		}
+		if ( !reFind( "^gateway:[a-z][a-z0-9_-]{0,31}$", asked ) ) {
+			return { ok : false, reason : "The destination must be routine or gateway:<name>, such as gateway:telegram." }
+		}
+		var name = listRest( asked, ":" )
+		if ( isNull( liveGateway( name ) ) ) {
+			return { ok : false, reason : "There is no chat app named [#name#] on this agent." }
+		}
+		if ( origin.gateway == name && len( origin.chat ) ) {
+			if ( len( trim( arguments.chat ) ) && trim( arguments.chat ) != origin.chat ) {
+				return { ok : false, reason : "From a chat app a routine can only send to the chat you are writing in." }
+			}
+			return { ok : true, destination : asked, destinationChat : origin.chat }
+		}
+		if ( arguments.person.id() != Caller::localId() ) {
+			return { ok : false, reason : "Only the person who runs this agent can send a routine to a chat app they are not writing from. Use routine, and read the answer in the routine's conversation." }
+		}
+		var known = variables.chats.forGateway( name )
+		if ( len( trim( arguments.chat ) ) ) {
+			var wanted = trim( arguments.chat )
+			return known.filter( c => c.chatId == wanted ).len()
+				? { ok : true, destination : asked, destinationChat : wanted }
+				: { ok : false, reason : "#name# has no chat with the id [#wanted#]. Its chats are: #chatList( known )#." }
+		}
+		if ( known.len() == 1 ) {
+			return { ok : true, destination : asked, destinationChat : known[ 1 ].chatId }
+		}
+		if ( !known.len() ) {
+			return { ok : false, reason : "#name# has not talked to anyone yet, so there is no chat to send to. Ask the person to message the bot once, then try again." }
+		}
+		return { ok : false, reason : "#name# has talked to #known.len()# chats: #chatList( known )#. Ask the person which one, and pass its id as chat." }
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/** The chat app and chat a person is writing from, when the caller is a person on a chat app */
+	private struct function originOf( required any person ) {
+		var id = arguments.person.id()
+		if ( !id.find( ":" ) ) {
+			return { gateway : "", chat : "" }
+		}
+		var gateway = listFirst( id, ":" )
+		var chat = variables.chats.chatOf( gateway, listRest( id, ":" ) )
+		return { gateway : gateway, chat : chat }
+	}
+
+	private string function chatList( required array known ) {
+		return known.map( c => c.chatId ).toList( ", " )
+	}
+
+	private any function liveGateway( required string name ) {
+		try {
+			var registry = isNull( variables.registry ) ? aiGatewayRegistry() : variables.registry
+			return registry.get( arguments.name )
+		} catch ( any e ) {
+			return nullValue()
+		}
+	}
+
+}

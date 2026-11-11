@@ -1,0 +1,133 @@
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+
+/**
+ * Where a routine's answer may go, and who may choose.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "routines.Destinations", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-destinations-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.chats = new bxagents.models.gateways.GatewayChats( store );
+				variables.clockNow = 1000;
+				variables.chats = new bxagents.models.gateways.GatewayChats( store, () => clockNow );
+				variables.registry = { get : ( name ) => ( name == "telegram" || name == "slack" ) ? { isRunning : () => true } : javacast( "null", "" ) };
+				variables.rules = new bxagents.models.routines.Destinations( chats, registry );
+				variables.localUser = new bxagents.models.api.Caller( id = "local" );
+				variables.onTelegram = new bxagents.models.api.Caller( id = "telegram:ada" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function heard( gateway, chat, user ) {
+				clockNow += 1000;
+				chats.seen( new GatewayContext( gateway : gateway, conversationID : chat, userID : user ) );
+			}
+
+			describe( "when nothing is asked", function() {
+
+				it( "keeps the answer in the routine's own conversation for the web page and the terminal", function() {
+					expect( rules.resolve( localUser ) ).toBe( { ok : true, destination : "routine", destinationChat : "" } );
+				} );
+
+				it( "sends it to the chat the person is writing in, when that is a chat app", function() {
+					heard( "telegram", "chat-9", "ada" );
+					expect( rules.resolve( onTelegram ) ).toBe( { ok : true, destination : "gateway:telegram", destinationChat : "chat-9" } );
+				} );
+
+				it( "falls back to the routine's own conversation for a chat app person with no chat on record", function() {
+					expect( rules.resolve( onTelegram ).destination ).toBe( "routine" );
+				} );
+
+			} );
+
+			it( "takes routine as it is, for anyone", function() {
+				heard( "telegram", "chat-9", "ada" );
+				expect( rules.resolve( onTelegram, "routine" ).destination ).toBe( "routine" );
+				expect( rules.resolve( localUser, "Routine" ).destination ).toBe( "routine" );
+			} );
+
+			it( "refuses what is not routine or gateway:<name>, and a chat app that is not there", function() {
+				expect( rules.resolve( localUser, "telegram" ).reason ).toInclude( "gateway:<name>" );
+				expect( rules.resolve( localUser, "gateway:" ).ok ).toBeFalse();
+				expect( rules.resolve( localUser, "gateway:signal" ).reason ).toInclude( "no chat app named [signal]" );
+			} );
+
+			describe( "a person on a chat app", function() {
+
+				beforeEach( function() {
+					heard( "telegram", "chat-9", "ada" );
+					heard( "telegram", "chat-5", "bob" );
+				} );
+
+				it( "may send to their own chat, named or not", function() {
+					expect( rules.resolve( onTelegram, "gateway:telegram" ).destinationChat ).toBe( "chat-9" );
+					expect( rules.resolve( onTelegram, "gateway:telegram", "chat-9" ).ok ).toBeTrue();
+				} );
+
+				it( "may not name another chat of that chat app", function() {
+					var result = rules.resolve( onTelegram, "gateway:telegram", "chat-5" );
+					expect( result.ok ).toBeFalse();
+					expect( result.reason ).toInclude( "only send to the chat you are writing in" );
+				} );
+
+				it( "may not send to a chat app they are not writing from", function() {
+					heard( "slack", "C1", "someone" );
+					var result = rules.resolve( onTelegram, "gateway:slack" );
+					expect( result.ok ).toBeFalse();
+					expect( result.reason ).toInclude( "person who runs this agent" );
+				} );
+
+			} );
+
+			describe( "the local user, who runs the agent", function() {
+
+				it( "may send to the one chat a chat app has talked to", function() {
+					heard( "telegram", "chat-9", "ada" );
+					expect( rules.resolve( localUser, "gateway:telegram" ) ).toBe( { ok : true, destination : "gateway:telegram", destinationChat : "chat-9" } );
+				} );
+
+				it( "is told to message the bot first when the chat app has talked to nobody", function() {
+					var result = rules.resolve( localUser, "gateway:telegram" );
+					expect( result.ok ).toBeFalse();
+					expect( result.reason ).toInclude( "message the bot once" );
+				} );
+
+				it( "must say which chat when there is more than one, and is given the list", function() {
+					heard( "telegram", "chat-9", "ada" );
+					heard( "telegram", "chat-5", "bob" );
+					var result = rules.resolve( localUser, "gateway:telegram" );
+					expect( result.ok ).toBeFalse();
+					expect( result.reason ).toInclude( "chat-5, chat-9" );
+					expect( result.reason ).toInclude( "Ask the person which one" );
+				} );
+
+				it( "may name one of the chats, but not one that is not known", function() {
+					heard( "telegram", "chat-9", "ada" );
+					heard( "telegram", "chat-5", "bob" );
+					expect( rules.resolve( localUser, "gateway:telegram", "chat-5" ).destinationChat ).toBe( "chat-5" );
+					var unknown = rules.resolve( localUser, "gateway:telegram", "chat-1" );
+					expect( unknown.ok ).toBeFalse();
+					expect( unknown.reason ).toInclude( "no chat with the id [chat-1]" );
+				} );
+
+			} );
+
+			it( "does not let a person who is neither local nor on that chat app pick a chat app", function() {
+				heard( "telegram", "chat-9", "ada" );
+				var web = new bxagents.models.api.Caller( id = "acct-7" );
+				expect( rules.resolve( web, "gateway:telegram" ).ok ).toBeFalse();
+				expect( rules.resolve( web, "routine" ).ok ).toBeTrue();
+			} );
+
+		} );
+	}
+
+}

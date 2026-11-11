@@ -14,6 +14,7 @@
  * act on, and shows when a routine will next run in the app's time zone so the person can be told.
  */
 import bxModules.bxagents.models.api.Caller;
+import bxModules.bxagents.models.api.Outcome;
 import bxModules.bxagents.models.routines.RoutineRunner;
 import bxModules.bxagents.models.util.ToolNames;
 
@@ -27,10 +28,12 @@ class {
 	/**
 	 * @service A function that returns the Routines service (the database is not touched until a tool is used)
 	 * @settings The resolved routines block
+	 * @destinations A function that returns the Destinations rules; without it only the routine's own conversation is offered
 	 */
-	function init( required function service, required struct settings ) {
+	function init( required function service, required struct settings, function destinations ) {
 		variables.service = arguments.service
 		variables.settings = arguments.settings
+		variables.destinations = arguments.destinations ?: nullValue()
 		return this
 	}
 
@@ -49,15 +52,22 @@ class {
 		var schedule = aiTool(
 			ToolNames::require( "routine_schedule" ),
 			"Make a routine: a prompt you will be given on a schedule, with no person watching, whose answer the person can read in the routine's own conversation. Use it when the person asks you to do something regularly, such as every weekday morning. The schedule is a 5 field cron expression (minute hour day-of-month month day-of-week), for example 0 9 * * 1-5 for weekdays at 9, or an interval such as every 30m, every 2h or every 1d. The prompt is what you will be told each time, so write it as a complete instruction that needs nothing from this conversation. The answer says when it will first run; tell the person. If it is refused, the reason says what to change.",
-			( required string name, required string schedule, required string prompt ) => {
+			( required string name, required string schedule, required string prompt, string destination = "", string chat = "" ) => {
 				var given = arguments
-				return me.act( arguments._chatRequest, ( who, routines ) => routines.create( who, given.name, given.schedule, given.prompt ) )
+				return me.act( arguments._chatRequest, ( who, routines ) => {
+					var where = me.whereTo( who, given.destination, given.chat )
+					return where.succeeded()
+						? routines.create( who, given.name, given.schedule, given.prompt, where.data().destination, where.data().destinationChat )
+						: where
+				} )
 			},
 			false
 		)
 		schedule.describeArg( "name", "A short folder-style name such as check-build: letters, digits, . _ and -, up to 40 characters." )
 		schedule.describeArg( "schedule", "Cron (5 fields) or every 30m / every 2h / every 1d. Times are read in the app's time zone." )
 		schedule.describeArg( "prompt", "The complete instruction to follow each time, in a few sentences." )
+		schedule.describeArg( "destination", "Where the answer goes. Leave out for the chat you are in (a chat app) or the routine's own conversation. routine keeps it there, gateway:telegram (and so on) sends it to a chat app." )
+		schedule.describeArg( "chat", "The chat id on that chat app, only when the answer to a failed call said to ask which chat." )
 
 		var list = aiTool(
 			ToolNames::require( "routine_list" ),
@@ -70,23 +80,36 @@ class {
 
 		var update = aiTool(
 			ToolNames::require( "routine_update" ),
-			"Change a routine's schedule, its prompt, or both. Pass only what changes.",
-			( required string name, string schedule = "", string prompt = "" ) => {
+			"Change a routine's schedule, its prompt, where its answer goes, or any of them. Pass only what changes.",
+			( required string name, string schedule = "", string prompt = "", string destination = "", string chat = "" ) => {
 				var fields = {}
 				var theName = arguments.name
+				var given = arguments
 				if ( len( trim( arguments.schedule ) ) ) {
 					fields[ "schedule" ] = arguments.schedule
 				}
 				if ( len( trim( arguments.prompt ) ) ) {
 					fields[ "prompt" ] = arguments.prompt
 				}
-				return me.act( arguments._chatRequest, ( who, routines ) => routines.update( who, theName, fields ) )
+				return me.act( arguments._chatRequest, ( who, routines ) => {
+					if ( len( trim( given.destination ) ) ) {
+						var where = me.whereTo( who, given.destination, given.chat )
+						if ( !where.succeeded() ) {
+							return where
+						}
+						fields[ "destination" ] = where.data().destination
+						fields[ "destinationChat" ] = where.data().destinationChat
+					}
+					return routines.update( who, theName, fields )
+				} )
 			},
 			false
 		)
 		update.describeArg( "name", "The routine's name." )
 		update.describeArg( "schedule", "The new schedule. Leave out to keep it." )
 		update.describeArg( "prompt", "The new prompt. Leave out to keep it." )
+		update.describeArg( "destination", "Where the answer goes: routine, or gateway:<name> for a chat app. Leave out to keep it." )
+		update.describeArg( "chat", "The chat id on that chat app, when asked for." )
 
 		var named = ( action, description, call ) => {
 			var one = aiTool(
@@ -119,18 +142,40 @@ class {
 	 * @return { ok : true, ... } or { ok : false, reason }
 	 */
 	struct function act( required any chatRequest, required function call ) {
-		if ( RoutineRunner::isRoutineThread( arguments.chatRequest.getThreadId() ?: "" ) ) {
+		var threadId = arguments.chatRequest.getThreadId() ?: ""
+		if ( RoutineRunner::isRoutineThread( threadId ) || !isNull( variables.service().byThread( threadId ) ) ) {
 			return { ok : false, reason : "You are running as a scheduled routine, and a routine cannot make or change routines. Put what you want changed in your report so the person can do it." }
 		}
 		var userId = arguments.chatRequest.getUserId() ?: ""
 		var who = new Caller( id = len( userId ) ? userId : Caller::localId(), scope = "chat", source = "agent" )
-		var outcome = arguments.call( who, variables.service() )
-		if ( !outcome.succeeded() ) {
-			return { ok : false, reason : outcome.reason() }
+		var done = arguments.call( who, variables.service() )
+		if ( !done.succeeded() ) {
+			return { ok : false, reason : done.reason() }
 		}
 		var answer = { ok : true }
-		answer.append( readable( outcome.data() ) )
+		answer.append( readable( done.data() ) )
 		return answer
+	}
+
+	/**
+	 * Works out where an answer goes for the person, by the rules in Destinations.
+	 *
+	 * @who The Caller
+	 * @destination What the model asked for
+	 * @chat The chat it named
+	 *
+	 * @return An Outcome: { destination, destinationChat }, or a bad_request with the reason in words for the model
+	 */
+	any function whereTo( required any who, string destination = "", string chat = "" ) {
+		if ( isNull( variables.destinations ) ) {
+			return len( trim( arguments.destination ) ) && lCase( trim( arguments.destination ) ) != "routine"
+				? Outcome::failed( "bad_request", "Only the routine's own conversation is available here." )
+				: Outcome::done( { destination : "routine", destinationChat : "" } )
+		}
+		var picked = variables.destinations().resolve( arguments.who, arguments.destination, arguments.chat )
+		return picked.ok
+			? Outcome::done( { destination : picked.destination, destinationChat : picked.destinationChat } )
+			: Outcome::failed( "bad_request", picked.reason )
 	}
 
 	// ----------------------------------------------------------------------------------

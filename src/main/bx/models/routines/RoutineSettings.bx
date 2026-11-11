@@ -9,16 +9,19 @@
  *     maxPromptLength: 4000    # 200 to 20000 characters
  *     approvalTimeout: 24h     # 5m to 7d; how long a run waits for a person to approve a tool
  *     timezone: ""             # blank is the server's; or an IANA name such as Europe/Madrid
+ *     summaryLength: 1500      # 200 to 4000; characters of an answer sent to a chat app
+ *     maxReportSize: 256kb     # 1kb to 5mb; the largest report file a routine may save
+ *     maxReportFiles: 500      # 10 to 5000; the most files in one routine's results folder
  *
- * A duration is a whole number and m, h or d.
+ * A duration is a whole number and m, h or d. A size is a whole number and kb or mb.
  */
 import bxModules.bxagents.models.routines.Schedule;
 
 class {
 
 	static {
-		DEFAULTS   = { enabled : false, maxPerUser : 20, minInterval : "5m", maxParallel : 2, maxPromptLength : 4000, approvalTimeout : "24h", timezone : "" }
-		KNOWN_KEYS = [ "enabled", "maxPerUser", "minInterval", "maxParallel", "maxPromptLength", "approvalTimeout", "timezone" ]
+		DEFAULTS   = { enabled : false, maxPerUser : 20, minInterval : "5m", maxParallel : 2, maxPromptLength : 4000, approvalTimeout : "24h", timezone : "", summaryLength : 1500, maxReportSize : "256kb", maxReportFiles : 500 }
+		KNOWN_KEYS = [ "enabled", "maxPerUser", "minInterval", "maxParallel", "maxPromptLength", "approvalTimeout", "timezone", "summaryLength", "maxReportSize", "maxReportFiles" ]
 	}
 
 	/**
@@ -43,6 +46,9 @@ class {
 		RoutineSettings::checkNumber( s, "maxPerUser", 1, 200, found )
 		RoutineSettings::checkNumber( s, "maxParallel", 1, 10, found )
 		RoutineSettings::checkNumber( s, "maxPromptLength", 200, 20000, found )
+		RoutineSettings::checkNumber( s, "summaryLength", 200, 4000, found )
+		RoutineSettings::checkNumber( s, "maxReportFiles", 10, 5000, found )
+		RoutineSettings::checkSize( s, "maxReportSize", 1024, 5242880, found )
 		RoutineSettings::checkDuration( s, "minInterval", 1, 1440, found )
 		RoutineSettings::checkDuration( s, "approvalTimeout", 5, 10080, found )
 		if ( s.keyExists( "timezone" ) ) {
@@ -73,7 +79,10 @@ class {
 			maxParallel     : int( merged.maxParallel ),
 			maxPromptLength : int( merged.maxPromptLength ),
 			approvalTimeout : RoutineSettings::minutes( merged.approvalTimeout ),
-			timezone        : trim( merged.timezone )
+			timezone        : trim( merged.timezone ),
+			summaryLength   : int( merged.summaryLength ),
+			maxReportSize   : RoutineSettings::bytes( merged.maxReportSize ),
+			maxReportFiles  : int( merged.maxReportFiles )
 		}
 	}
 
@@ -91,6 +100,30 @@ class {
 		var amount = int( mid( text, m.pos[ 2 ], m.len[ 2 ] ) )
 		var unit = lCase( mid( text, m.pos[ 3 ], m.len[ 3 ] ) )
 		return amount * ( unit == "m" ? 1 : ( unit == "h" ? 60 : 1440 ) )
+	}
+
+	/**
+	 * @value 256kb, 2mb
+	 *
+	 * @return The size in bytes, or 0 when it is not one
+	 */
+	static numeric function bytes( required any value ) {
+		var text = trim( arguments.value & "" )
+		var m = reFindNoCase( "^(\d{1,5})(kb|mb)$", text, 1, true )
+		if ( !m.pos.len() || m.pos[ 1 ] == 0 ) {
+			return 0
+		}
+		return int( mid( text, m.pos[ 2 ], m.len[ 2 ] ) ) * ( lCase( mid( text, m.pos[ 3 ], m.len[ 3 ] ) ) == "kb" ? 1024 : 1048576 )
+	}
+
+	private static void function checkSize( required struct s, required string key, required numeric low, required numeric high, required array found ) {
+		if ( !arguments.s.keyExists( arguments.key ) ) {
+			return
+		}
+		var size = isSimpleValue( arguments.s[ arguments.key ] ) ? RoutineSettings::bytes( arguments.s[ arguments.key ] ) : 0
+		if ( size < arguments.low || size > arguments.high ) {
+			arguments.found.append( "routines.#arguments.key# must be a size such as 256kb or 2mb, between 1kb and 5mb." )
+		}
 	}
 
 	private static void function checkNumber( required struct s, required string key, required numeric low, required numeric high, required array found ) {

@@ -16,7 +16,7 @@ import bxModules.bxagents.models.logs.Logger;
 class {
 
 	static {
-		// thread ids of routine runs in flight or waiting for an approval
+		// routine runs in flight or waiting for an approval, by thread id: { id, name, ownerId, files : [ reports saved so far ] }
 		active = {}
 	}
 
@@ -25,8 +25,10 @@ class {
 	 * @turns A TurnRunner
 	 * @settings The resolved routines block
 	 * @clock A function that returns now in epoch milliseconds; the system clock when left out
+	 * @notifier A Notifier: sends the answer to the routine's destination. Without one nothing is sent
 	 */
-	function init( required any routines, required any turns, required struct settings, any clock ) {
+	function init( required any routines, required any turns, required struct settings, any clock, any notifier ) {
+		variables.notifier = arguments.notifier ?: nullValue()
 		variables.routines = arguments.routines
 		variables.turns = arguments.turns
 		variables.settings = arguments.settings
@@ -44,6 +46,27 @@ class {
 	}
 
 	/**
+	 * @threadId A run's thread id
+	 *
+	 * @return { id, name, ownerId, files } for a routine's run in this process, or an empty struct
+	 */
+	static struct function runOf( required string threadId ) {
+		return static.active[ arguments.threadId ] ?: {}
+	}
+
+	/**
+	 * Remembers that the run saved a report, so the answer sent to a chat app can point at it.
+	 *
+	 * @threadId A run's thread id
+	 * @file The name the report was saved under
+	 */
+	static void function noteFile( required string threadId, required string file ) {
+		if ( static.active.keyExists( arguments.threadId ) ) {
+			static.active[ arguments.threadId ].files.append( arguments.file )
+		}
+	}
+
+	/**
 	 * @row A row from Routines.due() or byId()
 	 *
 	 * @return { started : false } when someone else holds it, otherwise { started : true, status : ok | failed | waiting, error? }
@@ -54,7 +77,7 @@ class {
 			variables.routines.noteSkipped( arguments.row.id )
 			return { started : false }
 		}
-		static.active[ threadId ] = true
+		static.active[ threadId ] = { id : arguments.row.id, name : arguments.row.name, ownerId : arguments.row.ownerId, files : [] }
 		var waiting = false
 		try {
 			var owner = ownerOf( arguments.row )
@@ -73,6 +96,11 @@ class {
 				waiting = true
 				Logger::log( "routines", "info", "[#arguments.row.name#] is waiting for an approval", arguments.row.ownerId )
 				return { started : true, status : "waiting" }
+			}
+			var told = tell( arguments.row, outcome.data().output ?: "", static.active[ threadId ].files )
+			if ( !told.ok ) {
+				variables.routines.settle( arguments.row.id, "failed", told.reason )
+				return { started : true, status : "failed", error : told.reason }
 			}
 			variables.routines.settle( arguments.row.id, "ok" )
 			return { started : true, status : "ok" }
@@ -118,6 +146,15 @@ class {
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	/** Sends the answer to the routine's destination. A routine with no notifier, or that keeps its answer, sends nothing. */
+	private struct function tell( required struct row, required any output, required array files ) {
+		if ( isNull( variables.notifier ) ) {
+			return { ok : true }
+		}
+		var text = isSimpleValue( arguments.output ) ? arguments.output & "" : ( isStruct( arguments.output ) ? ( arguments.output.content ?: jsonSerialize( arguments.output ) ) : arguments.output.toString() )
+		return variables.notifier.deliver( arguments.row, text, arguments.files )
+	}
 
 	private any function ownerOf( required struct row ) {
 		return new Caller( id = arguments.row.ownerId, name = arguments.row.ownerId, scope = "chat", source = "routine" )

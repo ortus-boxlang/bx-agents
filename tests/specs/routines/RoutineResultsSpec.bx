@@ -1,0 +1,112 @@
+/**
+ * The results folder of a routine: files kept per routine in the data home, never overwritten, never deleted, never
+ * outside their folder.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "routines.RoutineResults", function() {
+
+			beforeEach( function() {
+				variables.dir = replace( createTempDirectory( prefix = "bxagents-results-" ), "\", "/", "all" );
+				variables.home = new bxagents.models.data.DataHome( projectRoot = dir, configured = dir & "/home", environment = {} );
+				variables.settings = bxagents.models.routines.RoutineSettings::resolve( { enabled : true, maxReportSize : "1kb", maxReportFiles : 10 } );
+				variables.results = new bxagents.models.routines.RoutineResults( home, settings );
+				variables.row = { id : "abcdef1234567890", name : "check-build" };
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "keeps each routine's files in a folder of its own under the data home", function() {
+				var saved = results.save( row, "report.md", "## Build is green" );
+
+				expect( saved.ok ).toBeTrue();
+				expect( saved.file ).toBe( "report.md" );
+				expect( fileExists( dir & "/home/routines/check-build-abcdef12/report.md" ) ).toBeTrue();
+				expect( fileRead( dir & "/home/routines/check-build-abcdef12/report.md" ) ).toBe( "## Build is green" );
+				expect( results.folderOf( { id : "ffffffffeeee", name : "check-build" } ) ).notToBe( results.folderOf( row ) );
+			} );
+
+			it( "never overwrites: the same name gets -2, -3", function() {
+				results.save( row, "report.md", "one" );
+				expect( results.save( row, "report.md", "two" ).file ).toBe( "report-2.md" );
+				expect( results.save( row, "report.md", "three" ).file ).toBe( "report-3.md" );
+				expect( fileRead( dir & "/home/routines/check-build-abcdef12/report.md" ) ).toBe( "one" );
+			} );
+
+			it( "refuses a name that could leave the folder or is not a report", function() {
+				for ( var bad in [ "../x.md", "a/b.md", ".hidden.md", "report", "run.sh", "report.exe", "a..b.md", "", repeatString( "x", 81 ) & ".md", "with space.md" ] ) {
+					var result = results.save( row, bad, "text" );
+					expect( result.ok ).toBeFalse( "[#bad#] should be refused" );
+					expect( len( result.reason ) ).toBeGT( 10 );
+				}
+				expect( directoryExists( dir & "/home/routines" ) ).toBeFalse();
+			} );
+
+			it( "refuses an empty report or one over the size limit", function() {
+				expect( results.save( row, "a.md", "" ).reason ).toInclude( "empty" );
+				var big = results.save( row, "a.md", repeatString( "x", 1025 ) );
+				expect( big.ok ).toBeFalse();
+				expect( big.reason ).toInclude( "1024" );
+				expect( results.save( row, "a.md", repeatString( "x", 1024 ) ).ok ).toBeTrue();
+			} );
+
+			it( "counts bytes, not characters", function() {
+				// 600 two-byte characters is 1200 bytes
+				expect( results.save( row, "a.md", repeatString( char( 233 ), 600 ) ).ok ).toBeFalse();
+			} );
+
+			it( "stops at maxReportFiles and says a person has to clean up", function() {
+				for ( var i = 1; i <= 10; i++ ) {
+					expect( results.save( row, "r#i#.md", "x" ).ok ).toBeTrue();
+				}
+				var eleventh = results.save( row, "r11.md", "x" );
+				expect( eleventh.ok ).toBeFalse();
+				expect( eleventh.reason ).toInclude( "person" );
+			} );
+
+			it( "lists what is there, newest first, and nothing for a routine with no results", function() {
+				expect( results.list( row ) ).toBeEmpty();
+				results.save( row, "old.md", "x" );
+				sleep( 1100 );
+				results.save( row, "new.md", "y" );
+				var listed = results.list( row );
+				expect( listed.map( f => f.file ) ).toBe( [ "new.md", "old.md" ] );
+				expect( listed[ 1 ].bytes ).toBe( 1 );
+			} );
+
+			it( "reads a file, cut when it is long, and refuses names outside the folder", function() {
+				results.save( row, "report.md", "hello" );
+				expect( results.read( row, "report.md" ) ).toBe( { ok : true, file : "report.md", text : "hello", cut : false } );
+				expect( results.read( row, "missing.md" ).ok ).toBeFalse();
+				expect( results.read( row, "../../README.md" ).ok ).toBeFalse();
+				var tall = bxagents.models.routines.RoutineSettings::resolve( { enabled : true, maxReportSize : "1mb" } );
+				var roomy = new bxagents.models.routines.RoutineResults( home, tall );
+				roomy.save( row, "long.txt", repeatString( "a", 30000 ) );
+				var long = roomy.read( row, "long.txt" );
+				expect( long.cut ).toBeTrue();
+				expect( len( long.text ) ).toBe( 20000 );
+			} );
+
+			it( "does not follow a link in the folder", function() {
+				results.save( row, "real.md", "x" );
+				var secret = dir & "/secret.md";
+				fileWrite( secret, "private" );
+				var folder = dir & "/home/routines/check-build-abcdef12";
+				createObject( "java", "java.nio.file.Files" ).createSymbolicLink(
+					createObject( "java", "java.nio.file.Paths" ).get( folder & "/link.md", [] ),
+					createObject( "java", "java.nio.file.Paths" ).get( secret, [] ),
+					[]
+				);
+				expect( results.read( row, "link.md" ).ok ).toBeFalse();
+				expect( results.list( row ).map( f => f.file ) ).toBe( [ "real.md" ] );
+			} );
+
+		} );
+	}
+
+}

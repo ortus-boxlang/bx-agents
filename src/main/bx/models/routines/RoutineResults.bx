@@ -1,0 +1,152 @@
+/**
+ * The files a routine keeps: `<data home>/routines/<name>-<first 8 of the routine's id>/`, any number of them. This is the
+ * only door to those folders.
+ *
+ *   - Nothing is ever deleted here. A person starts every clean-up.
+ *   - A file is never overwritten: a name already used gets -2, -3 before its extension.
+ *   - A name is letters, digits, . _ and -, up to 80 characters, ending in .md, .txt, .json, .csv or .html.
+ *   - A file is at most `maxReportSize` bytes and a folder holds at most `maxReportFiles` files; at the limit the answer says a
+ *     person has to clean up, because nothing here deletes.
+ *   - A symlink is never followed, in the folder or in a file.
+ *
+ * `row` is anything with an `id` and a `name`: a routine row, or the summary Routines gives for a person's own routine.
+ */
+class {
+
+	static {
+		EXTENSIONS = [ "md", "txt", "json", "csv", "html" ]
+		NAME_MAX   = 80
+		// what read() gives back at most, so a big file cannot fill the model's context
+		READ_MAX   = 20000
+	}
+
+	/**
+	 * @dataHome A DataHome
+	 * @settings A resolved routines block
+	 */
+	function init( required any dataHome, required struct settings ) {
+		variables.dataHome = arguments.dataHome
+		variables.settings = arguments.settings
+		return this
+	}
+
+	/**
+	 * @row A routine: { id, name }
+	 *
+	 * @return The absolute folder of that routine's results, with forward slashes. It is not made.
+	 */
+	string function folderOf( required struct row ) {
+		return replace( variables.dataHome.folder( "routines" ), "\", "/", "all" ) & "/" & arguments.row.name & "-" & left( arguments.row.id, 8 )
+	}
+
+	/**
+	 * Saves a new file.
+	 *
+	 * @row A routine: { id, name }
+	 * @file The file's name
+	 * @content The text
+	 *
+	 * @return { ok : true, file : the name it was saved under, bytes } or { ok : false, reason }
+	 */
+	struct function save( required struct row, required string file, required string content ) {
+		var problem = nameProblem( arguments.file )
+		if ( len( problem ) ) {
+			return { ok : false, reason : problem }
+		}
+		var bytes = createObject( "java", "java.lang.String" ).init( arguments.content ).getBytes( "UTF-8" ).len()
+		if ( !len( arguments.content ) ) {
+			return { ok : false, reason : "The report is empty. Write what you found." }
+		}
+		if ( bytes > variables.settings.maxReportSize ) {
+			return { ok : false, reason : "The report is #bytes# bytes and the most allowed is #variables.settings.maxReportSize#. Save a shorter one, or split it into files." }
+		}
+		var folder = folderOf( arguments.row )
+		if ( isLink( folder ) ) {
+			return { ok : false, reason : "The results folder of this routine cannot be used." }
+		}
+		var existing = directoryExists( folder ) ? files( folder ) : []
+		if ( existing.len() >= variables.settings.maxReportFiles ) {
+			return { ok : false, reason : "This routine already has #existing.len()# files, which is the most allowed. Mention it in your answer: a person has to remove old ones, because nothing deletes them." }
+		}
+		directoryCreate( folder, true, true )
+		var chosen = freeName( folder, arguments.file )
+		fileWrite( folder & "/" & chosen, arguments.content, "UTF-8" )
+		return { ok : true, file : chosen, bytes : bytes }
+	}
+
+	/**
+	 * @row A routine: { id, name }
+	 *
+	 * @return [ { file, bytes, savedAt } ], the newest first
+	 */
+	array function list( required struct row ) {
+		var folder = folderOf( arguments.row )
+		if ( !directoryExists( folder ) || isLink( folder ) ) {
+			return []
+		}
+		return files( folder )
+			.map( name => { file : name, bytes : getFileInfo( folder & "/" & name ).size, savedAt : getFileInfo( folder & "/" & name ).lastModified } )
+			.sort( ( a, b ) => dateCompare( b.savedAt, a.savedAt ) )
+	}
+
+	/**
+	 * @row A routine: { id, name }
+	 * @file A name from list()
+	 *
+	 * @return { ok : true, file, text, cut : true when only the start is given } or { ok : false, reason }
+	 */
+	struct function read( required struct row, required string file ) {
+		var problem = nameProblem( arguments.file )
+		if ( len( problem ) ) {
+			return { ok : false, reason : problem }
+		}
+		var path = folderOf( arguments.row ) & "/" & arguments.file
+		if ( !fileExists( path ) || isLink( path ) ) {
+			return { ok : false, reason : "There is no file [#arguments.file#] in this routine's results. List them to see the names." }
+		}
+		var text = fileRead( path, "UTF-8" )
+		var cut = len( text ) > static.READ_MAX
+		return { ok : true, file : arguments.file, text : cut ? left( text, static.READ_MAX ) : text, cut : cut }
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private string function nameProblem( required string file ) {
+		var name = trim( arguments.file )
+		if ( !reFind( "^[A-Za-z0-9][A-Za-z0-9._-]*$", name ) || len( name ) > static.NAME_MAX || name.find( ".." ) ) {
+			return "The file name must be letters, digits, . _ and -, up to #static.NAME_MAX# characters, starting with a letter or digit. Use something like report.md."
+		}
+		if ( !static.EXTENSIONS.findNoCase( listLast( name, "." ) ) || listLen( name, "." ) < 2 ) {
+			return "The file name must end in #static.EXTENSIONS.toList( ', .' )#, for example report.md."
+		}
+		return ""
+	}
+
+	/** The name itself when it is free, otherwise name-2.ext, name-3.ext ... */
+	private string function freeName( required string folder, required string file ) {
+		var name = trim( arguments.file )
+		if ( !fileExists( arguments.folder & "/" & name ) ) {
+			return name
+		}
+		var dot = name.lastIndexOf( "." )
+		var stem = left( name, dot )
+		var ext = mid( name, dot + 1, len( name ) )
+		var n = 2
+		while ( fileExists( arguments.folder & "/" & stem & "-" & n & ext ) ) {
+			n++
+		}
+		return stem & "-" & n & ext
+	}
+
+	/** The names of the files in a folder, leaving out folders, links and anything starting with a dot */
+	private array function files( required string folder ) {
+		var dir = arguments.folder
+		return directoryList( dir, false, "name", "", "name" )
+			.filter( name => left( name, 1 ) != "." && fileExists( dir & "/" & name ) && !isLink( dir & "/" & name ) )
+	}
+
+	private boolean function isLink( required string path ) {
+		return createObject( "java", "java.nio.file.Files" ).isSymbolicLink( createObject( "java", "java.nio.file.Paths" ).get( arguments.path, [] ) )
+	}
+
+}

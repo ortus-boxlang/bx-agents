@@ -1,0 +1,123 @@
+/**
+ * The tools for a routine's reports, named {type}_{action}:
+ *
+ *   report_save   save a file for the routine that is running. Refused anywhere else
+ *   report_list   list a routine's files
+ *   report_read   read one
+ *
+ * There is no tool that deletes a report: nothing in the results folder is ever removed except by a person. A routine's reports
+ * are its owner's. The tools find the owner from the conversation, as the routine tools do.
+ */
+import bxModules.bxagents.models.api.Caller;
+import bxModules.bxagents.models.logs.Logger;
+import bxModules.bxagents.models.routines.RoutineRunner;
+import bxModules.bxagents.models.util.ToolNames;
+
+class {
+
+	/**
+	 * @service A function that returns the Routines service
+	 * @results A function that returns the RoutineResults
+	 */
+	function init( required function service, required function results ) {
+		variables.service = arguments.service
+		variables.results = arguments.results
+		return this
+	}
+
+	/**
+	 * @return The three tools as bx-ai tools, not entered in the global tool registry
+	 */
+	array function tools() {
+		var me = this
+
+		var save = aiTool(
+			ToolNames::require( "report_save" ),
+			"Save a report file for the routine you are running now: what you found, in full, for the person to read later. It works only while you are running as a routine. The answer gives the name the file was saved under; a name already used gets -2, -3. Keep your final answer short, because it is what gets sent to a chat app, and say that the full report is saved.",
+			( required string file, required string content ) => {
+				return me.saveReport( arguments._chatRequest, arguments.file, arguments.content )
+			},
+			false
+		)
+		save.describeArg( "file", "A file name such as report.md: letters, digits, . _ and -, ending in .md, .txt, .json, .csv or .html." )
+		save.describeArg( "content", "The report, in full." )
+
+		var list = aiTool(
+			ToolNames::require( "report_list" ),
+			"List the report files of one of the person's routines, newest first. Inside a routine, leave the name out for your own.",
+			( string name = "" ) => {
+				return me.about( arguments._chatRequest, arguments.name, ( row ) => {
+					return { ok : true, reports : me.resultsOf().list( row ) }
+				} )
+			},
+			false
+		)
+		list.describeArg( "name", "The routine's name." )
+
+		var read = aiTool(
+			ToolNames::require( "report_read" ),
+			"Read one report file of one of the person's routines. A long file is cut, and the answer says so.",
+			( required string file, string name = "" ) => {
+				var theFile = arguments.file
+				return me.about( arguments._chatRequest, arguments.name, ( row ) => me.resultsOf().read( row, theFile ) )
+			},
+			false
+		)
+		read.describeArg( "file", "A file name from the list." )
+		read.describeArg( "name", "The routine's name. Inside a routine, leave out for your own." )
+
+		return [ save, list, read ]
+	}
+
+	/** @return The RoutineResults */
+	any function resultsOf() {
+		return variables.results()
+	}
+
+	/**
+	 * @chatRequest The bx-ai request of the run
+	 * @file The file name
+	 * @content The report
+	 *
+	 * @return { ok : true, file } or { ok : false, reason }
+	 */
+	struct function saveReport( required any chatRequest, required string file, required string content ) {
+		var threadId = arguments.chatRequest.getThreadId() ?: ""
+		var row = variables.service().byThread( threadId )
+		if ( isNull( row ) ) {
+			return { ok : false, reason : "Reports are saved by a routine while it runs, and this is not a routine's run. Ask the person to make a routine for it." }
+		}
+		var saved = variables.results().save( row, arguments.file, arguments.content )
+		if ( !saved.ok ) {
+			return saved
+		}
+		RoutineRunner::noteFile( threadId, saved.file )
+		Logger::log( "routines", "info", "Saved report #saved.file# for [#row.name#]", row.ownerId )
+		return { ok : true, file : saved.file }
+	}
+
+	/**
+	 * Runs a call on one of the person's routines: the one named, or the one that is running.
+	 *
+	 * @chatRequest The bx-ai request of the run
+	 * @name The routine's name, or blank inside a routine's run
+	 * @call A function( row ) that returns the answer
+	 */
+	struct function about( required any chatRequest, required string name, required function call ) {
+		var running = variables.service().byThread( arguments.chatRequest.getThreadId() ?: "" )
+		if ( !len( trim( arguments.name ) ) ) {
+			if ( isNull( running ) ) {
+				return { ok : false, reason : "Say which routine: pass its name." }
+			}
+			return arguments.call( running )
+		}
+		var userId = arguments.chatRequest.getUserId() ?: ""
+		var who = new Caller( id = len( userId ) ? userId : Caller::localId(), scope = "chat", source = "agent" )
+		var found = variables.service().get( who, arguments.name )
+		if ( !found.succeeded() ) {
+			return { ok : false, reason : found.reason() }
+		}
+		return arguments.call( found.data().routine )
+	}
+
+}

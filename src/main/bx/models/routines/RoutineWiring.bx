@@ -6,6 +6,7 @@
  * heartbeat scheduler calls service() and runner(); both share one store and one Routines per process.
  */
 import bxModules.bxagents.models.routines.RoutineSettings;
+import bxModules.bxagents.models.routines.ReportTools;
 import bxModules.bxagents.models.routines.RoutineTools;
 
 class {
@@ -29,10 +30,11 @@ class {
 	 * @agent The root AiAgent
 	 * @settings The `routines` block
 	 * @agentName The agent's name
+	 * @dataHome `data.home` from Agent.yaml, blank when not set
 	 *
 	 * @return The agent
 	 */
-	any function attach( required any agent, any settings = {}, string agentName = "" ) {
+	any function attach( required any agent, any settings = {}, string agentName = "", string dataHome = "" ) {
 		var found = problems( arguments.settings )
 		if ( found.len() ) {
 			throw( type = "BxAgents.InvalidRoutines", message = "The routines settings of [#arguments.agentName#] are not valid: " & found.toList( " " ) )
@@ -42,7 +44,11 @@ class {
 			return arguments.agent
 		}
 		var me = this
-		arguments.agent.withTools( new RoutineTools( () => me.service( resolved ), resolved ).tools() )
+		var theAgent = arguments.agentName
+		var theHome = arguments.dataHome
+		var tools = new RoutineTools( () => me.service( resolved ), resolved, () => me.destinations() ).tools()
+		tools.append( new ReportTools( () => me.service( resolved ), () => me.results( resolved, theAgent, theHome ) ).tools(), true )
+		arguments.agent.withTools( tools )
 		arguments.agent.withMiddleware( new bxModules.bxai.models.middleware.core.HumanInTheLoopMiddleware(
 			toolsRequiringApproval = RoutineTools::approvalNames(),
 			mode                   = "web"
@@ -85,6 +91,32 @@ class {
 	}
 
 	/**
+	 * The chats the chat apps have talked to, on the shared database.
+	 */
+	any function chats() {
+		return new "models.gateways.GatewayChats@bxagents"( store() )
+	}
+
+	/**
+	 * The rules for where an answer may go.
+	 */
+	any function destinations() {
+		return new "models.routines.Destinations@bxagents"( chats() )
+	}
+
+	/**
+	 * The folder of each routine's reports, in the data home.
+	 *
+	 * @settings A resolved routines block
+	 * @agentName The agent's name
+	 * @dataHome `data.home` from Agent.yaml, blank when not set
+	 */
+	any function results( required struct settings, string agentName = "", string dataHome = "" ) {
+		var home = new "models.data.DataHome@bxagents"( projectRoot : expandPath( "/" ), configured : arguments.dataHome, agentName : arguments.agentName )
+		return new "models.routines.RoutineResults@bxagents"( home, arguments.settings )
+	}
+
+	/**
 	 * What the heartbeat needs, made once the app is running.
 	 *
 	 * @agent The root agent
@@ -97,7 +129,8 @@ class {
 		var routines = service( resolved )
 		var sessions = new "models.store.SessionStore@bxagents"( store() )
 		var turns = new "models.api.TurnRunner@bxagents"( arguments.agent, sessions )
-		var runner = new "models.routines.RoutineRunner@bxagents"( routines, turns, resolved )
+		var notifier = new "models.routines.Notifier@bxagents"( chats(), resolved )
+		var runner = new "models.routines.RoutineRunner@bxagents"( routines = routines, turns = turns, settings = resolved, notifier = notifier )
 		return new "models.routines.Heartbeat@bxagents"( routines, runner, resolved )
 	}
 

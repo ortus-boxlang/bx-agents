@@ -45,6 +45,7 @@ The tools BX Agents itself gives an agent are all named `{type}_{action}` in low
 | `skill_save` | [skills](skills.md) |
 | `vault_list`, `vault_request` | [the vault](vault.md) |
 | `routine_schedule`, `routine_list`, `routine_update`, `routine_pause`, `routine_resume`, `routine_run`, `routine_delete` | [routines](routines.md) |
+| `report_save`, `report_list`, `report_read` | [routines](routines.md#reports) |
 
 Tools of bx-ai and tools you write keep the names you give them. Following the same shape in your own is a good idea.
 
