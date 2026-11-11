@@ -916,6 +916,26 @@ planner       claude/claude-opus-4            context ?  images ?  key MISSING
 - `test` sends each model one tiny question through bx-ai and reports `ok` with the time, or `FAILED` with the provider's own message. It tests the default model, one profile with `--profile`, or all of them with `--all`, and exits `1` when any does not answer, so it can gate a deploy. It spends a few tokens per model.
 - It uses the models the project was last built with: run `bxAgents build` first.
 
+### `routines`
+
+The scheduled [routines](conventions/routines.md) of a project, as the local operator (admin scope, so `--all` lists every owner's). It works on the project's chat database and data home, and needs `routines.enabled: true`.
+
+```bash
+bxAgents routines list [--all] [--json]
+bxAgents routines show <name>
+bxAgents routines add --name=<name> --schedule="0 9 * * 1-5" --prompt="..." [--destination=routine|gateway:<name>] [--chat=<id>]
+bxAgents routines edit <name> [--schedule=...] [--prompt=...] [--destination=...] [--chat=...]
+bxAgents routines pause|resume|run <name>
+bxAgents routines delete <name> --yes
+bxAgents routines reports <name>
+bxAgents routines report <name> <file>
+bxAgents routines clean <name> [--older-than=30d | --all] [--yes]
+```
+
+- A schedule is five cron fields or `every 30m`. `list` shows it in words and the next run.
+- `run` marks a routine due. It starts at the next minute of a served app, and the command says so.
+- `delete` asks for `--yes` and keeps the routine's reports. `clean` only lists what it would remove unless you add `--yes`.
+
 ### `sessions`
 
 The conversations in the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`, or the file named by `BXAGENTS_DB`), the same list `chat` and the web page show.

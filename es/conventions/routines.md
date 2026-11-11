@@ -130,6 +130,42 @@ A routine can save what it found as files: `report_save( file, content )` while 
 
 `routines.log` records each routine made, changed, run, skipped, failed, sent and paused, and each report saved (its name, never its text), and `heartbeat.log` the beats that started something. A prompt is never logged, only the routine's name and its owner. See [logs](logs.md).
 
-## Not yet
+## Managing routines
 
-The `/routines` command, `bxAgents routines` (with a way to read and clean up reports), the API routes and a Routines section in the web page come next. Until then a person reads a routine's reports by asking the agent, and removes old ones in the data home folder.
+Making and changing a routine is usually asked of the agent, where a person sees it and approves it. The terminal, the API and the web page can also make and change one directly. Everything else can be done from each surface, and every surface goes through the same service, so they cannot disagree.
+
+| Surface | Does |
+|---|---|
+| Chat: `/routines`, `/routine <name> [run \| pause \| resume \| delete confirm \| reports \| report <file>]` | List yours (an admin adds `all`), show one, run, pause, resume, delete (only with `confirm`), list and read reports |
+| Terminal: `bxAgents routines list \| show \| add \| edit \| pause \| resume \| run \| delete \| reports \| report \| clean` | The same, as the local operator, so `--all` lists every owner's. See [the CLI reference](../cli-reference.md#routines) |
+| [API](../guides/agent-api.md#routines) | `GET /routines` and the routes below, for your own program |
+| [Web page](web-ui.md#routines) | A **Routines** item in the Settings menu: a list with run, pause, edit, delete, reports and clean-up |
+
+`run` marks a routine due. It starts within a minute, by the heartbeat of a served app, so from a terminal that is not serving the app nothing starts until the app is running.
+
+The `/routines` and `/routine` commands are for the terminal and the web page. They are not on [chat apps](gateways/index.md) yet: a person there asks the agent, which has the `routine_*` tools.
+
+### Reports are removed by a person
+
+Nothing in a chat deletes a file, and the agent has no tool for it. A person removes one report, or the old ones, from the terminal, the API or the web page:
+
+- `bxAgents routines clean <name> --older-than=30d` (or `--all`) only says what it would remove. Add `--yes` to remove it.
+- The API's `POST /routines/reports/clean` does the same, and removes only with `"apply": true`.
+- The web page asks first how many files and bytes it would remove, then asks you to confirm.
+
+Deleting a routine keeps its reports. The count of what a clean-up removed is logged in `routines.log`, never a name or text.
+
+### Routes
+
+| Route | Does |
+|---|---|
+| `GET /routines` (`all=1` for an admin) | List, with the schedule in words, status, next and last run, destination and the routine's `conversationId` |
+| `GET /routines/get?name=` | One routine with its full prompt |
+| `POST /routines` | Make one: `name`, `schedule`, `prompt`, optional `destination` and `chat` |
+| `POST /routines/update` | Change `schedule`, `prompt` or `destination` |
+| `POST /routines/pause`, `/resume`, `/run`, `/delete` | As the tools, with `name` |
+| `GET /routines/reports?name=`, `GET /routines/report?name=&file=` | List and read reports |
+| `POST /routines/reports/delete` | Remove one report (`name`, `file`) |
+| `POST /routines/reports/clean` | `name`, `olderThanDays` or `all`; removes only with `apply` |
+
+Every route answers `404` with "Routines are not turned on" when the feature is off. People see only their own routines, and an admin may act on anyone's by id, or by a name only one owner has. An admin may also send a routine's answer to a chat app, which the tools do not allow for a chat-scope person.

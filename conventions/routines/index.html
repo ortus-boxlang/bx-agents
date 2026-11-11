@@ -248,7 +248,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#turn-it-on">Turn it on</a></li><li class="toc-level-2"><a href="#making-one">Making one</a></li><li class="toc-level-2"><a href="#the-tools">The tools</a></li><li class="toc-level-2"><a href="#a-run">A run</a></li><li class="toc-level-2"><a href="#where-the-answer-goes">Where the answer goes</a></li><li class="toc-level-2"><a href="#reports">Reports</a></li><li class="toc-level-2"><a href="#logs">Logs</a></li><li class="toc-level-2"><a href="#not-yet">Not yet</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#turn-it-on">Turn it on</a></li><li class="toc-level-2"><a href="#making-one">Making one</a></li><li class="toc-level-2"><a href="#the-tools">The tools</a></li><li class="toc-level-2"><a href="#a-run">A run</a></li><li class="toc-level-2"><a href="#where-the-answer-goes">Where the answer goes</a></li><li class="toc-level-2"><a href="#reports">Reports</a></li><li class="toc-level-2"><a href="#logs">Logs</a></li><li class="toc-level-2"><a href="#managing-routines">Managing routines</a></li><li class="toc-level-3"><a href="#reports-are-removed-by-a-person">Reports are removed by a person</a></li><li class="toc-level-3"><a href="#routes">Routes</a></li></ul></details>
 		
 
 		
@@ -364,14 +364,52 @@
 </ul>
 <h2 id="logs"><a href="#logs" id="logs" name="logs" class="anchor"></a>Logs</h2>
 <p><code>routines.log</code> records each routine made, changed, run, skipped, failed, sent and paused, and each report saved (its name, never its text), and <code>heartbeat.log</code> the beats that started something. A prompt is never logged, only the routine's name and its owner. See <a href="/conventions/logs/index.html">logs</a>.</p>
-<h2 id="not-yet"><a href="#not-yet" id="not-yet" name="not-yet" class="anchor"></a>Not yet</h2>
-<p>The <code>/routines</code> command, <code>bxAgents routines</code> (with a way to read and clean up reports), the API routes and a Routines section in the web page come next. Until then a person reads a routine's reports by asking the agent, and removes old ones in the data home folder.</p>
+<h2 id="managing-routines"><a href="#managing-routines" id="managing-routines" name="managing-routines" class="anchor"></a>Managing routines</h2>
+<p>Making and changing a routine is usually asked of the agent, where a person sees it and approves it. The terminal, the API and the web page can also make and change one directly. Everything else can be done from each surface, and every surface goes through the same service, so they cannot disagree.</p>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Surface</th><th>Does</th></tr>
+</thead>
+<tbody>
+<tr><td>Chat: <code>/routines</code>, <code>/routine &lt;name&gt; [run \| pause \| resume \| delete confirm \| reports \| report &lt;file&gt;]</code></td><td>List yours (an admin adds <code>all</code>), show one, run, pause, resume, delete (only with <code>confirm</code>), list and read reports</td></tr>
+<tr><td>Terminal: <code>bxAgents routines list \| show \| add \| edit \| pause \| resume \| run \| delete \| reports \| report \| clean</code></td><td>The same, as the local operator, so <code>--all</code> lists every owner's. See <a href="/cli-reference/index.html#routines">the CLI reference</a></td></tr>
+<tr><td><a href="/guides/agent-api/index.html#routines">API</a></td><td><code>GET /routines</code> and the routes below, for your own program</td></tr>
+<tr><td><a href="/conventions/web-ui/index.html#routines">Web page</a></td><td>A <strong>Routines</strong> item in the Settings menu: a list with run, pause, edit, delete, reports and clean-up</td></tr>
+</tbody>
+</table></div>
+<p><code>run</code> marks a routine due. It starts within a minute, by the heartbeat of a served app, so from a terminal that is not serving the app nothing starts until the app is running.</p>
+<p>The <code>/routines</code> and <code>/routine</code> commands are for the terminal and the web page. They are not on <a href="/conventions/gateways/index.html">chat apps</a> yet: a person there asks the agent, which has the <code>routine_*</code> tools.</p>
+<h3 id="reports-are-removed-by-a-person"><a href="#reports-are-removed-by-a-person" id="reports-are-removed-by-a-person" name="reports-are-removed-by-a-person" class="anchor"></a>Reports are removed by a person</h3>
+<p>Nothing in a chat deletes a file, and the agent has no tool for it. A person removes one report, or the old ones, from the terminal, the API or the web page:</p>
+<ul>
+<li><code>bxAgents routines clean &lt;name&gt; --older-than=30d</code> (or <code>--all</code>) only says what it would remove. Add <code>--yes</code> to remove it.</li>
+<li>The API's <code>POST /routines/reports/clean</code> does the same, and removes only with <code>&quot;apply&quot;: true</code>.</li>
+<li>The web page asks first how many files and bytes it would remove, then asks you to confirm.</li>
+</ul>
+<p>Deleting a routine keeps its reports. The count of what a clean-up removed is logged in <code>routines.log</code>, never a name or text.</p>
+<h3 id="routes"><a href="#routes" id="routes" name="routes" class="anchor"></a>Routes</h3>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Route</th><th>Does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>GET /routines</code> (<code>all=1</code> for an admin)</td><td>List, with the schedule in words, status, next and last run, destination and the routine's <code>conversationId</code></td></tr>
+<tr><td><code>GET /routines/get?name=</code></td><td>One routine with its full prompt</td></tr>
+<tr><td><code>POST /routines</code></td><td>Make one: <code>name</code>, <code>schedule</code>, <code>prompt</code>, optional <code>destination</code> and <code>chat</code></td></tr>
+<tr><td><code>POST /routines/update</code></td><td>Change <code>schedule</code>, <code>prompt</code> or <code>destination</code></td></tr>
+<tr><td><code>POST /routines/pause</code>, <code>/resume</code>, <code>/run</code>, <code>/delete</code></td><td>As the tools, with <code>name</code></td></tr>
+<tr><td><code>GET /routines/reports?name=</code>, <code>GET /routines/report?name=&amp;file=</code></td><td>List and read reports</td></tr>
+<tr><td><code>POST /routines/reports/delete</code></td><td>Remove one report (<code>name</code>, <code>file</code>)</td></tr>
+<tr><td><code>POST /routines/reports/clean</code></td><td><code>name</code>, <code>olderThanDays</code> or <code>all</code>; removes only with <code>apply</code></td></tr>
+</tbody>
+</table></div>
+<p>Every route answers <code>404</code> with &quot;Routines are not turned on&quot; when the feature is off. People see only their own routines, and an admin may act on anyone's by id, or by a name only one owner has. An admin may also send a routine's answer to a chat app, which the tools do not allow for a chat-scope person.</p>
 
 	
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/routines.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/routines.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Nov 11, 2026, 12&#x3a;17&#x3a;53 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20routines&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fconventions%2Froutines%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/routines.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/routines.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Nov 11, 2026, 10&#x3a;36&#x3a;14 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20routines&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fconventions%2Froutines%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
@@ -415,7 +453,7 @@
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#turn-it-on">Turn it on</a></li><li class="toc-level-2"><a href="#making-one">Making one</a></li><li class="toc-level-2"><a href="#the-tools">The tools</a></li><li class="toc-level-2"><a href="#a-run">A run</a></li><li class="toc-level-2"><a href="#where-the-answer-goes">Where the answer goes</a></li><li class="toc-level-2"><a href="#reports">Reports</a></li><li class="toc-level-2"><a href="#logs">Logs</a></li><li class="toc-level-2"><a href="#not-yet">Not yet</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#turn-it-on">Turn it on</a></li><li class="toc-level-2"><a href="#making-one">Making one</a></li><li class="toc-level-2"><a href="#the-tools">The tools</a></li><li class="toc-level-2"><a href="#a-run">A run</a></li><li class="toc-level-2"><a href="#where-the-answer-goes">Where the answer goes</a></li><li class="toc-level-2"><a href="#reports">Reports</a></li><li class="toc-level-2"><a href="#logs">Logs</a></li><li class="toc-level-2"><a href="#managing-routines">Managing routines</a></li><li class="toc-level-3"><a href="#reports-are-removed-by-a-person">Reports are removed by a person</a></li><li class="toc-level-3"><a href="#routes">Routes</a></li></ul></nav>
 				</aside>
 			
 		</div>
