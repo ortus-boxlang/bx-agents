@@ -1,0 +1,103 @@
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+
+/**
+ * What a person does with routines from the chat, the API and the terminal: make, change, run, pause, delete, and the reports,
+ * with where an answer goes decided by the Destinations rules.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "routines.RoutineManager", function() {
+
+			beforeEach( function() {
+				variables.dir = replace( createTempDirectory( prefix = "bxagents-manager-" ), "\", "/", "all" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.clockNow = createObject( "java", "java.time.Instant" ).parse( "2026-11-09T08:00:00Z" ).toEpochMilli();
+				variables.settings = bxModules.bxagents.models.routines.RoutineSettings::resolve( { enabled : true, timezone : "UTC" } );
+				variables.service = new bxModules.bxagents.models.routines.Routines( store, settings, () => clockNow );
+				variables.chats = new bxModules.bxagents.models.gateways.GatewayChats( store );
+				chats.seen( new GatewayContext( gateway : "telegram", conversationID : "42", userID : "ada" ) );
+				variables.registry = { get : ( name ) => name == "telegram" ? { isRunning : () => true } : javacast( "null", "" ) };
+				variables.home = new bxModules.bxagents.models.data.DataHome( projectRoot = dir, configured = dir & "/home", environment = {} );
+				variables.results = new bxModules.bxagents.models.routines.RoutineResults( home, settings );
+				variables.reports = new bxModules.bxagents.models.routines.RoutineReports( service, results, () => clockNow );
+				variables.manager = new bxModules.bxagents.models.routines.RoutineManager(
+					service, new bxModules.bxagents.models.routines.Destinations( chats, registry ), reports
+				);
+				variables.ada = new bxModules.bxagents.models.api.Caller( id = "ada" );
+				variables.localUser = new bxModules.bxagents.models.api.Caller( id = "local", scope = "admin" );
+				variables.web = new bxModules.bxagents.models.api.Caller( id = "acct-5" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "makes a routine that keeps its answer in its own conversation by default", function() {
+				var made = manager.create( web, "check-build", "0 9 * * 1-5", "Check the build." );
+				expect( made.succeeded() ).toBeTrue();
+				expect( made.data().routine.destination ).toBe( "routine" );
+			} );
+
+			it( "applies the destination rules: a chat app person gets their chat, the web user may not pick a chat app", function() {
+				var onChat = new bxModules.bxagents.models.api.Caller( id = "telegram:ada" );
+				expect( manager.create( onChat, "a", "every 1h", "x" ).data().routine.destinationChat ).toBe( "42" );
+				var refused = manager.create( web, "b", "every 1h", "x", "gateway:telegram" );
+				expect( refused.succeeded() ).toBeFalse();
+				expect( refused.code() ).toBe( "bad_request" );
+				expect( manager.create( localUser, "c", "every 1h", "x", "gateway:telegram" ).data().routine.destinationChat ).toBe( "42" );
+			} );
+
+			it( "changes the schedule and the prompt, and the destination through the same rules", function() {
+				manager.create( localUser, "a", "every 1h", "x" );
+				expect( manager.update( localUser, "a", { schedule : "every 2h", prompt : "y" } ).data().routine.schedule ).toBe( "every 2h" );
+				expect( manager.update( localUser, "a", { destination : "gateway:telegram" } ).data().routine.destination ).toBe( "gateway:telegram" );
+				manager.create( web, "w", "every 1h", "x" );
+				expect( manager.update( web, "w", { destination : "gateway:telegram" } ).succeeded() ).toBeFalse();
+				expect( manager.update( web, "w", { colour : "red" } ).code() ).toBe( "bad_request" );
+			} );
+
+			it( "pauses, resumes, runs and deletes, with the service's owner rules", function() {
+				manager.create( ada, "a", "every 1h", "x" );
+				expect( manager.pause( ada, "a" ).data().routine.enabled ).toBeFalse();
+				expect( manager.resume( ada, "a" ).data().routine.enabled ).toBeTrue();
+				expect( manager.run( ada, "a" ).succeeded() ).toBeTrue();
+				expect( manager.pause( web, "a" ).code() ).toBe( "not_found" );
+				expect( manager.delete( ada, "a" ).succeeded() ).toBeTrue();
+				expect( manager.list( ada ).data().routines ).toBeEmpty();
+			} );
+
+			it( "lists only your own, and everyone's for an admin who asks", function() {
+				manager.create( ada, "a", "every 1h", "x" );
+				manager.create( web, "w", "every 1h", "x" );
+				expect( manager.list( ada ).data().routines.map( r => r.name ) ).toBe( [ "a" ] );
+				expect( manager.list( localUser, true ).data().routines ).toHaveLength( 2 );
+				expect( manager.list( ada, true ).data().routines ).toHaveLength( 1 );
+			} );
+
+			it( "lists, reads, removes and cleans reports for the owner", function() {
+				manager.create( ada, "a", "every 1h", "x" );
+				var row = service.get( ada, "a" ).data().routine;
+				results.save( row, "r.md", "report" );
+
+				expect( manager.reports( ada, "a" ).data().count ).toBe( 1 );
+				expect( manager.report( ada, "a", "r.md" ).data().text ).toBe( "report" );
+				expect( manager.cleanReports( ada, "a", 0, true ).data().removed ).toBeFalse();
+				expect( manager.removeReport( web, "a", "r.md" ).code() ).toBe( "not_found" );
+				expect( manager.removeReport( ada, "a", "r.md" ).succeeded() ).toBeTrue();
+				expect( manager.reports( ada, "a" ).data().count ).toBe( 0 );
+			} );
+
+			it( "says there is nowhere for reports when it was given none, and offers only routine when it has no destination rules", function() {
+				var bare = new bxModules.bxagents.models.routines.RoutineManager( service );
+				expect( bare.reports( ada, "a" ).reason() ).toInclude( "nowhere to keep reports" );
+				expect( bare.create( ada, "a", "every 1h", "x" ).succeeded() ).toBeTrue();
+				expect( bare.create( ada, "b", "every 1h", "x", "gateway:telegram", "42" ).code() ).toBe( "bad_request" );
+			} );
+
+		} );
+	}
+
+}

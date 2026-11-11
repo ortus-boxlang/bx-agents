@@ -22,6 +22,7 @@ import bxModules.bxagents.models.api.Caller as CallerType;
 import bxModules.bxagents.models.api.Outcome;
 import bxModules.bxagents.models.logs.Logger;
 import bxModules.bxagents.models.api.OpenApiDocument;
+import bxModules.bxagents.models.routines.RoutineSettings;
 
 class {
 
@@ -37,6 +38,7 @@ class {
 		variables.connectionService = arguments.options.connections ?: nullValue()
 		// a GatewayInfo: the chat apps and their state; without one the list is empty
 		variables.gatewayInfo = arguments.options.gateways ?: nullValue()
+		// the resolved routines settings when the build turned routines on (a struct), or false
 		variables.routinesOn = arguments.options.routines ?: false
 		variables.agent = arguments.agent
 		variables.store = arguments.store ?: nullValue()
@@ -236,7 +238,7 @@ class {
 				"notes"         : notes( arguments.caller ).keeps(),
 				"vault"         : keepsSessions(),
 				"connections"   : hasConnections(),
-				"routines"      : variables.routinesOn,
+				"routines"      : !isNull( routinesSettings() ),
 				"conversations" : keepsSessions(),
 				"preferences"   : keepsSessions(),
 				"profiles"      : variables.offered.any(),
@@ -263,6 +265,33 @@ class {
 	 */
 	any function volumes( required any caller ) {
 		return Outcome::done( { "volumes" : isNull( variables.appData ) ? [] : variables.appData.listing() } )
+	}
+
+	/**
+	 * @return The resolved routines settings when they are on (the build stamps them; true means the defaults), otherwise null
+	 */
+	private any function routinesSettings() {
+		if ( isStruct( variables.routinesOn ) ) {
+			return variables.routinesOn.isEmpty() ? nullValue() : variables.routinesOn
+		}
+		return isBoolean( variables.routinesOn ) && variables.routinesOn ? RoutineSettings::resolve( { enabled : true } ) : nullValue()
+	}
+
+	/**
+	 * What a person can do with routines, or null when the build left them off or the app keeps no shared database.
+	 * The reports are included when the app knows its data home.
+	 *
+	 * @return A RoutineManager, or null
+	 */
+	any function routines() {
+		var resolved = routinesSettings()
+		if ( isNull( resolved ) || isNull( variables.store ) ) {
+			return nullValue()
+		}
+		var service = new "models.routines.Routines@bxagents"( variables.store, resolved )
+		var destinations = new "models.routines.Destinations@bxagents"( new "models.gateways.GatewayChats@bxagents"( variables.store ) )
+		var reports = isNull( variables.appData ) ? nullValue() : new "models.routines.RoutineReports@bxagents"( service, new "models.routines.RoutineResults@bxagents"( variables.appData.home(), resolved ) )
+		return new "models.routines.RoutineManager@bxagents"( service, destinations, reports ?: nullValue() )
 	}
 
 	/**
