@@ -87,6 +87,16 @@ class extends="testbox.system.BaseSpec" {
 				expect( jsonDeserialize( seen.bodies[ 12 ] ) ).toBe( { name : "check-build", all : true, apply : true } );
 			} );
 
+			it( "reaches the chat app and schedule routes", function() {
+				client.gateways();
+				client.reconnectGateway( "telegram" );
+				client.describeSchedule( "0 9 * * 1-5" );
+
+				expect( seen.paths.map( p => listFirst( p, "?" ) ) ).toBe( [ "/agent-api/gateways", "/agent-api/gateways/reconnect", "/agent-api/routines/schedule" ] );
+				expect( jsonDeserialize( seen.bodies[ 2 ] ) ).toBe( { name : "telegram" } );
+				expect( urlDecode( seen.paths[ 3 ] ) ).toInclude( "schedule=0 9 * * 1-5" );
+			} );
+
 			it( "sends the token, the source and the body to the path it was given, and returns the parsed answer", function() {
 				reply.body = '{"success":true,"output":"hello","threadId":"t-1"}';
 

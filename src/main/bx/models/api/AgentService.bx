@@ -351,6 +351,24 @@ class {
 	}
 
 	/**
+	 * Stops and starts one chat app in place. Admin only. A turn already running is not cancelled.
+	 *
+	 * @caller The Caller; only an admin may
+	 * @name The chat app's name, as gateways() lists it
+	 *
+	 * @return An Outcome: { gateway : the fresh row }, forbidden, not_found, or conflict when it will not start again
+	 */
+	any function reconnectGateway( required any caller, required string name ) {
+		if ( !arguments.caller.isAdmin() ) {
+			return Outcome::failed( "forbidden", "Only an admin may reconnect a chat app" )
+		}
+		if ( isNull( variables.gatewayInfo ) ) {
+			return Outcome::failed( "not_found", "This app has no chat apps." )
+		}
+		return variables.gatewayInfo.reconnect( arguments.name )
+	}
+
+	/**
 	 * Where the agent keeps everything and how big each part is. It shows folders on the machine, so only an admin gets it.
 	 *
 	 * @return An Outcome: the AppData report, or forbidden / not_found

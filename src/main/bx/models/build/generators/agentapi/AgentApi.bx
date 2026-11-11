@@ -111,7 +111,9 @@ class {
 		var store = sharedStore()
 		return new "models.gateways.GatewayInfo@bxagents"(
 			jsonDeserialize( "__GATEWAYS__" ),
-			isNull( store ) ? nullValue() : new "models.store.SessionStore@bxagents"( store )
+			isNull( store ) ? nullValue() : new "models.store.SessionStore@bxagents"( store ),
+			nullValue(),
+			isNull( store ) ? nullValue() : new "models.gateways.GatewayChats@bxagents"( store )
 		)
 	}
 
@@ -691,6 +693,17 @@ class {
 			return
 		}
 		answer( event, service().gateways( callerOf( event ) ) )
+	}
+
+	/**
+	 * POST: stops and starts one chat app in place. Body: { name }. Admin only.
+	 */
+	function reconnectGateway( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var body = bodyOf( event )
+		answer( event, service().reconnectGateway( callerOf( event ), toString( body.name ?: "" ) ) )
 	}
 
 	/**
