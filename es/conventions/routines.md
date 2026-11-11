@@ -8,7 +8,7 @@ tags: [conventions, routines, scheduling]
 
 # Routines
 
-A routine is a prompt the agent runs on a schedule, as the person who made it. "Every weekday at 9, check the build and tell me what broke" is a routine. A person makes it by asking the agent, and the agent keeps it in the chat database.
+A routine is a prompt the agent runs on a schedule, as the person who made it. "Every weekday at 9, check the build and tell me what broke" is a routine. A person makes it by asking the agent, and the agent keeps it in the chat database. The answer can go to a chat app, and a routine can keep reports as files.
 
 Routines are not [schedulers](schedules.md). They are for the people who use the agent, not for the developer.
 
@@ -52,8 +52,11 @@ With the feature off there are no routine tools, no heartbeat and no routines ca
 | `maxPromptLength` | `4000` | The longest prompt, in characters (200 to 20000). Longer instructions belong in a [skill](skills.md) |
 | `approvalTimeout` | `24h` | How long a run waits for a person to approve a tool (`5m` to `7d`) |
 | `timezone` | the server's | The time zone cron expressions are read in, an IANA name such as `Europe/Madrid` |
+| `summaryLength` | `1500` | How many characters of an answer are sent to a chat app (200 to 4000) |
+| `maxReportSize` | `256kb` | The largest report file a routine may save (`1kb` to `5mb`) |
+| `maxReportFiles` | `500` | The most files in one routine's results folder (10 to 5000) |
 
-A duration is a whole number with `m`, `h` or `d`. A bad value stops the build and `doctor` names it.
+A duration is a whole number with `m`, `h` or `d`, and a size a whole number with `kb` or `mb`. A bad value stops the build and `doctor` names it.
 
 ## Making one
 
@@ -72,15 +75,18 @@ Every tool the agent gets from BX Agents is named `{type}_{action}`, so permissi
 
 | Tool | Does | Needs a person's approval |
 |---|---|---|
-| `routine_schedule` | Makes a routine | Yes |
+| `routine_schedule` | Makes a routine, and says where its answer goes | Yes |
 | `routine_list` | Lists yours, with when each runs next and how the last run went | No |
-| `routine_update` | Changes the schedule, the prompt, or both | Yes |
+| `routine_update` | Changes the schedule, the prompt, where the answer goes, or any of them | Yes |
 | `routine_pause` | Stops one without deleting it | No |
 | `routine_resume` | Starts a paused one again, and clears its failures | No |
 | `routine_run` | Runs one at the next beat instead of waiting | No |
-| `routine_delete` | Deletes one. Its conversation stays | Yes |
+| `routine_delete` | Deletes one. Its conversation and reports stay | Yes |
+| `report_save` | Saves a report file, for the routine that is running. Refused anywhere else | No |
+| `report_list` | Lists a routine's report files | No |
+| `report_read` | Reads one | No |
 
-The tools act as the person in the conversation, never as an admin, and only the root agent has them. A routine's own run is refused them, so a routine cannot make or change routines.
+The tools act as the person in the conversation, never as an admin, and only the root agent has them. A routine's own run is refused the `routine_*` tools, so a routine cannot make or change routines. There is no tool that deletes a report.
 
 ## A run
 
@@ -95,10 +101,35 @@ Three failures in a row pause the routine. `routine_resume` starts it again. If 
 
 An admin sees and manages every person's routines. Nobody else can see yours.
 
+## Where the answer goes
+
+Each routine has a destination, set when it is made:
+
+| Destination | Meaning |
+|---|---|
+| nothing said | The chat app chat the person is writing in, if that is where they asked. Otherwise the routine's own conversation |
+| `routine` | The routine's own conversation only |
+| `gateway:telegram` (any chat app) | A chat on that [chat app](gateways/index.md) |
+
+Chat apps belong to the person who runs the agent. A person writing from a chat app may send a routine's answer to their own chat there. Anyone else is limited to the routine's own conversation, and the local user can choose a chat app, naming the chat when it has talked to more than one. A chat app can only write to a chat it has already heard from, because that is when the agent learns its address (and for Teams, the address it needs to reply). If the chat app has talked to nobody, the agent tells the owner to message the bot once.
+
+What is sent is a summary: the answer cut to `summaryLength` characters, headed `Routine <name>:`, and a last line naming the reports the run saved. The whole answer is in the routine's conversation. A message that cannot be sent (the chat app is not connected, the chat is unknown, the platform refuses) counts as a failed run, so three in a row pause the routine, and `routines.log` says why. The log never holds the text.
+
+A run that stopped for an approval is not sent anywhere once a person answers: its answer is in its conversation.
+
+## Reports
+
+A routine can save what it found as files: `report_save( file, content )` while it runs. They go in `<data home>/routines/<name>-<id>/`, are never overwritten (a name already used becomes `report-2.md`), and are never deleted automatically.
+
+- A file name is letters, digits, `.`, `_` and `-`, up to 80 characters, ending in `.md`, `.txt`, `.json`, `.csv` or `.html`.
+- A file is at most `maxReportSize`, and a folder holds at most `maxReportFiles`; at the limit the agent is told a person has to clean up.
+- The agent reads reports back with `report_list` and `report_read` for the person's own routines. A long file is cut when read.
+- The reports are in a [backup](data.md).
+
 ## Logs
 
-`routines.log` records each routine made, changed, run, skipped, failed and paused, and `heartbeat.log` the beats that started something. A prompt is never logged, only the routine's name and its owner. See [logs](logs.md).
+`routines.log` records each routine made, changed, run, skipped, failed, sent and paused, and each report saved (its name, never its text), and `heartbeat.log` the beats that started something. A prompt is never logged, only the routine's name and its owner. See [logs](logs.md).
 
 ## Not yet
 
-Sending a routine's answer to a chat app, a results folder for reports, the `/routines` command, `bxAgents routines`, the API routes and a Routines section in the web page come next. For now a person reads a routine's answer in its conversation.
+The `/routines` command, `bxAgents routines` (with a way to read and clean up reports), the API routes and a Routines section in the web page come next. Until then a person reads a routine's reports by asking the agent, and removes old ones in the data home folder.

@@ -18,6 +18,8 @@ An agent keeps its state in one place, the **data home**, and reaches the rest o
   chat.db        conversations and the agents' memory of them, notes, access tokens, secrets and usage counts
   files/         what the agent writes (the `files` volume)
   skills/        skills the agent saves
+  routines/      reports saved by routines, one folder each (see routines)
+  logs/          what the agent logs, one file per area (see logs)
   backups/       written by bxAgents backup
 ```
 
@@ -117,6 +119,10 @@ A saved skill is part of the data home, so `backup` and `restore` carry it. To r
 - **In chat:** `/skills` lists every skill with its level: installed, project or agent.
 - **Over the API:** `GET /skills` answers `{ skills: [ { name, description, origin } ] }` (`origin` is `installed`, `project` or `agent`) to anyone who may call the API. It never shows a folder on the machine.
 
+## Routine reports
+
+`routines/` holds one folder per routine, `<name>-<first 8 of its id>`, with the report files the routine saved. Nothing in it is ever deleted automatically: a person removes old reports. They are part of a backup. See [routines](routines.md#reports).
+
 ## Logs
 
 The `logs/` folder of the data home holds the agent's log files, one per area. They are not part of a backup. See [logs](logs.md).
@@ -136,6 +142,6 @@ bxAgents backup [--to=FILE]
 bxAgents restore FILE [--home=DIR] [--force]
 ```
 
-`backup` writes one zip with the chat database, `files/` and `skills/`, plus a small `backup.json`. Without `--to` it goes in the home's `backups/` folder as `backup-<date>-<time>.zip`. The database is copied whole with SQLite's own `VACUUM INTO`, so it is safe to run while a server is using it. Volumes are not included: they are your folders.
+`backup` writes one zip with the chat database, `files/`, `skills/` and `routines/`, plus a small `backup.json`. Without `--to` it goes in the home's `backups/` folder as `backup-<date>-<time>.zip`. The database is copied whole with SQLite's own `VACUUM INTO`, so it is safe to run while a server is using it. Volumes are not included: they are your folders.
 
 `restore` puts a backup back. What was there is kept beside it as `chat.db.before-restore`, `files.before-restore` and `skills.before-restore` for one restore; the next restore replaces them. It stops when a server or chat looks to have the database open (SQLite leaves a `-wal` file while one does), unless you pass `--force`. `--home` restores into another data home. A zip with an entry that is not part of a backup, or that tries to leave the home, is refused before anything is changed.
