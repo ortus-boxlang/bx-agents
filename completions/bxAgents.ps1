@@ -26,6 +26,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'notes' = 'Read and manage the notes of an agent'
 		'package' = 'Package a built project into a .bxa'
 		'restore' = 'Put a backup back into the data home: restore <FILE>'
+		'routines' = 'The scheduled routines of a project'
 		'serve' = 'Serve a built project via boxlang-miniserver'
 		'sessions' = 'List, rename, fork, delete, export and import the conversations in the chat database'
 		'skills' = 'Skills from skills.boxlang.io: skills <find|install|list|update|remove>'
@@ -246,6 +247,18 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 		)
 		'restore:positional' = 'dir'
+		'routines' = @(
+			@{ Name = 'all'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'chat'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'destination'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'json'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'older-than'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'prompt'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'schedule'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'yes'; Value = $false; Choices = @(); Dir = $false }
+		)
 		'serve' = @(
 			@{ Name = 'host'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'port'; Value = $true; Choices = @(); Dir = $false }

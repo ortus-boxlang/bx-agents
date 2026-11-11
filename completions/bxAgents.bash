@@ -12,7 +12,7 @@ _bxagents_complete() {
 	fi
 	local count=${#words[@]}
 	local cur="${words[count-1]}"
-	local verbs="add backup build chat clean connect data deploy doctor extensions hash-password inspect invoke logs models new notes package restore serve sessions skills stats test token users vault help"
+	local verbs="add backup build chat clean connect data deploy doctor extensions hash-password inspect invoke logs models new notes package restore routines serve sessions skills stats test token users vault help"
 	local globals="--help -h --version -v"
 	COMPREPLY=()
 
@@ -65,6 +65,8 @@ _bxagents_complete() {
 			"notes --scope") COMPREPLY=($(compgen -W "user agent" -- "$part")) ;;
 			"package --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"restore --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"routines --destination") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"routines --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"serve --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"sessions --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"skills --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
@@ -100,6 +102,7 @@ _bxagents_complete() {
 			notes) flags="--file= --id= --json --projectRoot= --scope= --text= --user=" ;;
 			package) flags="--projectRoot= --version=" ;;
 			restore) flags="--home= --projectRoot=" ;;
+			routines) flags="--all --chat= --destination= --json --name= --older-than= --projectRoot= --prompt= --schedule= --yes" ;;
 			serve) flags="--host= --port= --projectRoot=" ;;
 			sessions) flags="--file= --json --name= --projectRoot= --session= --user=" ;;
 			skills) flags="--dry-run --json --limit= --projectRoot= --registry=" ;;

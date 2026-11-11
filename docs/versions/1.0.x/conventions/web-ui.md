@@ -113,7 +113,7 @@ Identity is the API's: with no `users` the page is the one open `local` user, sh
 
 ### Slash commands
 
-Type `/` in the message box and a menu of commands appears (arrow keys, `Tab` to complete, `Esc` to close). They are the same commands as in [the terminal chat](../cli-reference.md#the-same-commands-in-the-web-page-and-in-chat-apps): `/help`, `/new`, `/tools`, `/volumes`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/context`, `/remember`, `/notes`, `/name`, `/fork`, `/export`, `/ping` and `/keys`. Pressing Enter runs the line on the server with `POST /command` and draws the answer: text, a table, or buttons to pick from. `/new`, `/resume` and `/fork` move the page to the conversation they name, `/clear` reloads the transcript, and `/export [file] [--format=md|html]` hands the conversation to the browser to save (**Fork this conversation** and **Export** in the Settings menu run `/fork` and `/export`).
+Type `/` in the message box and a menu of commands appears (arrow keys, `Tab` to complete, `Esc` to close). They are the same commands as in [the terminal chat](../cli-reference.md#the-same-commands-in-the-web-page-and-in-chat-apps): `/help`, `/new`, `/tools`, `/volumes`, `/skills`, `/routines`, `/routine`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/context`, `/remember`, `/notes`, `/name`, `/fork`, `/export`, `/ping` and `/keys`. Pressing Enter runs the line on the server with `POST /command` and draws the answer: text, a table, or buttons to pick from. `/new`, `/resume` and `/fork` move the page to the conversation they name, `/clear` reloads the transcript, and `/export [file] [--format=md|html]` hands the conversation to the browser to save (**Fork this conversation** and **Export** in the Settings menu run `/fork` and `/export`).
 
 The reply is data, so any client can use it:
 
@@ -491,3 +491,14 @@ The page is complete against its own API - every route it needs exists and is ex
 | Retry / regenerate | A failed turn has to be re-sent by hand |
 | Edit and resend | No editing a message already sent |
 | Token / cost display | The page shows none. `usage: true` in `Agent.yaml` records tokens for `bxAgents stats`, and `/stats` shows them in the terminal chat only |
+
+## Routines
+
+When the server has [routines](routines.md) on, the **You** group of the Settings menu has a **Routines** item that opens a panel:
+
+- A row for each routine: its name, a status chip in words (ok, failed last time, paused, running, waiting for approval, not run yet), the schedule in words with the stored form beside it, the next and last run, and where its answer goes. A failed or auto-paused routine shows its last error and a **Resume** button.
+- **Run now**, **Pause** or **Resume**, **Edit**, **Reports**, **Open conversation** (the routine's own, with its answers) and **Delete**, which asks first and keeps the reports. An admin gets **Show every owner's routines**.
+- **New routine** and **Edit** share one dialog: name, schedule (five cron fields such as `0 9 * * 1-5`, or `every 30m`), what the agent should do, and where the answer goes. For an admin that includes a [chat app](gateways/index.md) when the project has one; a chat id is asked for when the chat app has talked to more than one chat. A bad schedule or a limit reached is answered in words in the dialog. The reading of the schedule in words comes back when you save.
+- **Reports** lists a routine's files with their size and date, shows one, deletes one (after a confirmation), and **Clean up reports older than N days** first says how many files and bytes it would remove and asks before it removes them.
+
+The panel works with the keyboard, in light and dark, and on a phone.

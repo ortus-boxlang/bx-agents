@@ -1,0 +1,98 @@
+/**
+ * /routine <name> [run | pause | resume | delete confirm | reports | report <file>]: one routine of the person asking. Alone, the name shows it.
+ * Reports are read here and never removed: nothing said in a chat deletes a file.
+ */
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "routine"
+	}
+
+	/** Not on chat apps: a person there asks the agent, which has the routine tools */
+	array function transports() {
+		return [ "tui", "web" ]
+	}
+
+	string function hint() {
+		return "show or run one routine: /routine <name> [run|pause|resume|delete confirm|reports|report <file>]"
+	}
+
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		var routines = arguments.context.chat().routines() ?: nullValue()
+		if ( isNull( routines ) ) {
+			return reply.text( "Routines are not turned on for this agent." )
+		}
+		var words = listToArray( trim( arguments.args ), " " )
+		if ( !words.len() ) {
+			return reply.warn( "Which routine? Try /routines to see the names." )
+		}
+		var ref = words[ 1 ]
+		var action = words.len() > 1 ? lCase( words[ 2 ] ) : "show"
+		var found = ""
+		switch ( action ) {
+			case "show":
+				found = routines.get( ref )
+				if ( !found.succeeded() ) {
+					return reply.warn( found.reason() )
+				}
+				return show( reply, found.data().routine )
+			case "run":
+				found = routines.run( ref )
+				break
+			case "pause":
+				found = routines.pause( ref )
+				break
+			case "resume":
+				found = routines.resume( ref )
+				break
+			case "delete":
+				if ( ( words.len() > 2 ? lCase( words[ 3 ] ) : "" ) != "confirm" ) {
+					return reply.warn( "This removes the routine and keeps its reports. To go ahead, type: /routine #ref# delete confirm" )
+				}
+				found = routines.delete( ref )
+				break
+			case "reports":
+				found = routines.reports( ref )
+				if ( !found.succeeded() ) {
+					return reply.warn( found.reason() )
+				}
+				var files = found.data().files
+				if ( !files.len() ) {
+					return reply.text( "No reports saved yet." )
+				}
+				return reply.grid( [ { width : 0 }, { width : 0, align : "right" }, { width : 0 } ], files.map( f => [ f.file, f.bytes & " bytes", dateTimeFormat( f.savedAt, "yyyy-mm-dd HH:nn" ) ] ) )
+			case "report":
+				if ( words.len() < 3 ) {
+					return reply.warn( "Which file? Try /routine #ref# reports to see them." )
+				}
+				found = routines.report( ref, words[ 3 ] )
+				if ( !found.succeeded() ) {
+					return reply.warn( found.reason() )
+				}
+				return reply.text( found.data().text & ( found.data().cut ? char( 10 ) & "(cut: the file is longer)" : "" ), "plain" )
+			default:
+				return reply.warn( "Unknown action [#action#]. Use run, pause, resume, delete confirm, reports or report <file>." )
+		}
+		if ( !found.succeeded() ) {
+			return reply.warn( found.reason() )
+		}
+		return reply.ok( found.data().message ?: ( "Done: " & action & " " & ref ) )
+	}
+
+	private any function show( required any reply, required struct r ) {
+		var rows = [
+			[ "Name", r.name ],
+			[ "Schedule", ( r.scheduleText ?: r.schedule ) & " (" & r.schedule & ")" ],
+			[ "Status", r.statusText ?: r.status ],
+			[ "Next run", len( r.nextRunText ?: "" ) ? r.nextRunText : "none" ],
+			[ "Last run", len( r.lastRunText ?: "" ) ? r.lastRunText & ", " & r.lastStatus : "never" ],
+			[ "Answers go to", r.destination == "routine" ? "its own conversation" : r.destination & " " & r.destinationChat ]
+		]
+		if ( len( r.lastError ?: "" ) ) {
+			rows.append( [ "Last error", r.lastError ] )
+		}
+		return arguments.reply.keyValues( rows ).text( r.prompt ?: "", "plain" )
+	}
+
+}

@@ -78,7 +78,7 @@ class {
 	private function service() {
 		// once per request: the probe for the shared database is a query
 		if ( !request.keyExists( "bxagentsService" ) ) {
-			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered(), { manageTokens : manageTokens(), data : appData(), connections : connectionService(), gateways : gatewayInfo(), routines : "__ROUTINES_ON__" == "true" } )
+			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered(), { manageTokens : manageTokens(), data : appData(), connections : connectionService(), gateways : gatewayInfo(), routines : jsonDeserialize( "__ROUTINES__" ) } )
 		}
 		return request.bxagentsService
 	}
@@ -701,6 +701,109 @@ class {
 			return
 		}
 		answer( event, service().skills( callerOf( event ) ) )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Routines: prompts the agent runs on a schedule. Every action goes through the RoutineManager, which holds the owner and
+	// admin rules; a server that left routines off answers 404.
+	// ----------------------------------------------------------------------------------
+
+	private function noRoutines() {
+		return failed( "not_found", "Routines are not turned on for this agent." )
+	}
+
+	/** The body of a POST as a struct, empty when it is not one */
+	private struct function bodyOf( required any event ) {
+		var body = arguments.event.getHTTPContent( json : true )
+		return isStruct( body ) ? body : {}
+	}
+
+	/** True only for a real true: a JSON boolean, not the number 1 or a word */
+	private boolean function flag( any value = false ) {
+		return isBoolean( arguments.value ) && !isNumeric( arguments.value ) && arguments.value
+	}
+
+	/**
+	 * Runs one routine action: the manager, or the answer that routines are off.
+	 *
+	 * @event The request
+	 * @call A function( manager, caller ) that answers an Outcome
+	 */
+	private void function routineAction( required any event, required function call ) {
+		if ( refused( arguments.event ) ) {
+			return
+		}
+		var manager = service().routines()
+		answer( arguments.event, isNull( manager ) ? noRoutines() : arguments.call( manager, callerOf( arguments.event ) ) )
+	}
+
+	/**
+	 * GET: the caller's routines (all=1 adds everyone's for an admin). POST makes one. Body: { name, schedule, prompt, destination?, chat? }
+	 */
+	function routines( event, rc, prc ) {
+		var body = bodyOf( event )
+		var verb = event.getHTTPMethod()
+		routineAction( event, ( manager, who ) => verb == "POST"
+			? manager.create( who, toString( body.name ?: "" ), toString( body.schedule ?: "" ), toString( body.prompt ?: "" ), toString( body.destination ?: "" ), toString( body.chat ?: "" ) )
+			: manager.list( who, flag( rc.all ?: false ) ) )
+	}
+
+	/** One routine with its prompt. Query: name */
+	function routine( event, rc, prc ) {
+		routineAction( event, ( manager, who ) => manager.get( who, toString( rc.name ?: "" ) ) )
+	}
+
+	/** Body: { name, schedule?, prompt?, destination?, chat? } */
+	function updateRoutine( event, rc, prc ) {
+		var body = bodyOf( event )
+		routineAction( event, ( manager, who ) => manager.update( who, toString( body.name ?: "" ), body ) )
+	}
+
+	/** Body: { name } */
+	function pauseRoutine( event, rc, prc ) {
+		var body = bodyOf( event )
+		routineAction( event, ( manager, who ) => manager.pause( who, toString( body.name ?: "" ) ) )
+	}
+
+	/** Body: { name } */
+	function resumeRoutine( event, rc, prc ) {
+		var body = bodyOf( event )
+		routineAction( event, ( manager, who ) => manager.resume( who, toString( body.name ?: "" ) ) )
+	}
+
+	/** Body: { name } */
+	function runRoutine( event, rc, prc ) {
+		var body = bodyOf( event )
+		routineAction( event, ( manager, who ) => manager.run( who, toString( body.name ?: "" ) ) )
+	}
+
+	/** Body: { name } */
+	function deleteRoutine( event, rc, prc ) {
+		var body = bodyOf( event )
+		routineAction( event, ( manager, who ) => manager.delete( who, toString( body.name ?: "" ) ) )
+	}
+
+	/** The files of a routine's results. Query: name */
+	function routineReports( event, rc, prc ) {
+		routineAction( event, ( manager, who ) => manager.reports( who, toString( rc.name ?: "" ) ) )
+	}
+
+	/** One report file. Query: name, file */
+	function routineReport( event, rc, prc ) {
+		routineAction( event, ( manager, who ) => manager.report( who, toString( rc.name ?: "" ), toString( rc.file ?: "" ) ) )
+	}
+
+	/** Removes one report file. Body: { name, file } */
+	function deleteRoutineReport( event, rc, prc ) {
+		var body = bodyOf( event )
+		routineAction( event, ( manager, who ) => manager.removeReport( who, toString( body.name ?: "" ), toString( body.file ?: "" ) ) )
+	}
+
+	/** Removes old reports, or says what it would remove. Body: { name, olderThanDays?, all?, apply? } */
+	function cleanRoutineReports( event, rc, prc ) {
+		var body = bodyOf( event )
+		var days = isNumeric( body.olderThanDays ?: "" ) ? body.olderThanDays : 0
+		routineAction( event, ( manager, who ) => manager.cleanReports( who, toString( body.name ?: "" ), days, flag( body.all ?: false ), flag( body.apply ?: false ) ) )
 	}
 
 	/**

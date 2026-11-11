@@ -117,6 +117,19 @@ class extends="testbox.system.BaseSpec" {
 					expect( isNull( allowing.tokens() ) ).toBeFalse();
 				} );
 
+				it( "hands out the routine manager only when routines are on, and the reports only with a data home", function() {
+					expect( isNull( service.routines() ) ).toBeTrue();
+					var settings = bxagents.models.routines.RoutineSettings::resolve( { enabled : true } );
+					var on = new bxagents.models.api.AgentService( agent = agent, store = store, options = { routines : settings } );
+					expect( isNull( on.routines() ) ).toBeFalse();
+					expect( on.about( ada ).data().capabilities.routines ).toBeTrue();
+					expect( on.routines().reports( ada, "x" ).code() ).toBe( "not_found" );
+					expect( on.routines().reports( ada, "x" ).reason() ).toInclude( "nowhere to keep reports" );
+					var off = new bxagents.models.api.AgentService( agent = agent, store = store, options = { routines : {} } );
+					expect( isNull( off.routines() ) ).toBeTrue();
+					expect( off.about( ada ).data().capabilities.routines ).toBeFalse();
+				} );
+
 				it( "says routines are on only when the build turned them on", function() {
 					var on = new bxagents.models.api.AgentService( agent = agent, store = store, options = { routines : true } );
 
@@ -208,7 +221,7 @@ class extends="testbox.system.BaseSpec" {
 					it( "refuses the logs to anyone but an admin, and says an unknown log is not found", function() {
 						expect( shared.logs( ada ).code() ).toBe( "forbidden" );
 						expect( shared.logs( admin, "chat" ).code() ).toBe( "not_found" );
-						expect( shared.logs( admin, "api", "lots" ).code() ).toBe( "invalid" );
+						expect( shared.logs( admin, "api", "lots" ).code() ).toBe( "bad_request" );
 					} );
 
 					it( "says it is not found when the app does not know its data home", function() {

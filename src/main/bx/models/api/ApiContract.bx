@@ -76,6 +76,35 @@ class {
 				query : { area : "string?", tail : "integer?", level : "string?", q : "string?" }, returns : "json" } }, false, true ),
 			ApiContract::route( "/gateways", "gateways", "About the agent", { get : {
 				summary : "The chat apps and the state of each: connected, which credentials are set (never their values), last activity and last error. Admin only", returns : "json" } }, false, true ),
+			ApiContract::route( "/routines/reports/clean", "cleanRoutineReports", "Routines", { post : {
+				summary : "Removes the reports of a routine older than some days, or all of them. A dry run that only says what it would remove, unless apply is true",
+				body : { name : "string", olderThanDays : "integer?", all : "boolean?", apply : "boolean?" }, returns : "json" } } ),
+			ApiContract::route( "/routines/reports/delete", "deleteRoutineReport", "Routines", { post : {
+				summary : "Removes one report file of a routine", body : { name : "string", file : "string" }, returns : "json" } } ),
+			ApiContract::route( "/routines/reports", "routineReports", "Routines", { get : {
+				summary : "The report files of a routine, newest first", query : { name : "string" }, returns : "json" } } ),
+			ApiContract::route( "/routines/report", "routineReport", "Routines", { get : {
+				summary : "One report file of a routine as text; a long one is cut and says so", query : { name : "string", file : "string" }, returns : "json" } } ),
+			ApiContract::route( "/routines/update", "updateRoutine", "Routines", { post : {
+				summary : "Changes a routine's schedule, prompt or where its answer goes",
+				body : { name : "string", schedule : "string?", prompt : "string?", destination : "string?", chat : "string?" }, returns : "json" } } ),
+			ApiContract::route( "/routines/pause", "pauseRoutine", "Routines", { post : {
+				summary : "Stops a routine from running until it is resumed", body : { name : "string" }, returns : "json" } } ),
+			ApiContract::route( "/routines/resume", "resumeRoutine", "Routines", { post : {
+				summary : "Starts a paused routine again and forgets its failures", body : { name : "string" }, returns : "json" } } ),
+			ApiContract::route( "/routines/run", "runRoutine", "Routines", { post : {
+				summary : "Makes a routine due now; the heartbeat starts it within a minute", body : { name : "string" }, returns : "json" } } ),
+			ApiContract::route( "/routines/delete", "deleteRoutine", "Routines", { post : {
+				summary : "Deletes a routine. Its conversation and reports stay", body : { name : "string" }, returns : "json" } } ),
+			ApiContract::route( "/routines/get", "routine", "Routines", { get : {
+				summary : "One routine in full, with its prompt", query : { name : "string" }, returns : "json" } } ),
+			ApiContract::route( "/routines", "routines", "Routines", {
+				get : {
+					summary : "The caller's routines with the schedule in words, status, next and last run and where the answer goes. An admin may add all=1 for everyone's",
+					query : { all : "boolean?" }, returns : "json" },
+				post : {
+					summary : "Makes a routine",
+					body : { name : "string", schedule : "string", prompt : "string", destination : "string?", chat : "string?" }, returns : "json" } } ),
 			ApiContract::route( "/skills", "skills", "About the agent", { get : {
 				summary : "The skills the agent can load: name, description and whether the project or the agent wrote it. Never a folder on the machine", returns : "json" } } ),
 			ApiContract::route( "/data", "data", "About the agent", { get : {

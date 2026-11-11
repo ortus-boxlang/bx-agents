@@ -57,6 +57,36 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			it( "reaches each routines route with the verb and body it takes", function() {
+				client.routines();
+				client.routines( true );
+				client.routine( "check-build" );
+				client.createRoutine( "check-build", "0 9 * * 1-5", "Check it.", "gateway:telegram", "42" );
+				client.updateRoutine( "check-build", { schedule : "every 1h", ignored : 1 } );
+				client.pauseRoutine( "check-build" );
+				client.runRoutine( "check-build" );
+				client.routineReports( "check-build" );
+				client.routineReport( "check-build", "report.md" );
+				client.deleteRoutineReport( "check-build", "report.md" );
+				client.cleanRoutineReports( "check-build", 30 );
+				client.cleanRoutineReports( "check-build", 0, true, true );
+
+				expect( seen.paths.map( p => listFirst( p, "?" ) ) ).toBe( [
+					"/agent-api/routines", "/agent-api/routines", "/agent-api/routines/get", "/agent-api/routines",
+					"/agent-api/routines/update", "/agent-api/routines/pause", "/agent-api/routines/run",
+					"/agent-api/routines/reports", "/agent-api/routines/report",
+					"/agent-api/routines/reports/delete", "/agent-api/routines/reports/clean", "/agent-api/routines/reports/clean"
+				] );
+				expect( seen.paths[ 2 ] ).toInclude( "all=1" );
+				expect( seen.paths[ 3 ] ).toInclude( "name=check-build" );
+				expect( seen.paths[ 9 ] ).toInclude( "name=check-build" );
+				expect( seen.paths[ 9 ] ).toInclude( "file=report.md" );
+				expect( jsonDeserialize( seen.bodies[ 4 ] ) ).toBe( { name : "check-build", schedule : "0 9 * * 1-5", prompt : "Check it.", destination : "gateway:telegram", chat : "42" } );
+				expect( jsonDeserialize( seen.bodies[ 5 ] ) ).toBe( { name : "check-build", schedule : "every 1h" } );
+				expect( jsonDeserialize( seen.bodies[ 11 ] ) ).toBe( { name : "check-build", all : false, apply : false, olderThanDays : 30 } );
+				expect( jsonDeserialize( seen.bodies[ 12 ] ) ).toBe( { name : "check-build", all : true, apply : true } );
+			} );
+
 			it( "sends the token, the source and the body to the path it was given, and returns the parsed answer", function() {
 				reply.body = '{"success":true,"output":"hello","threadId":"t-1"}';
 

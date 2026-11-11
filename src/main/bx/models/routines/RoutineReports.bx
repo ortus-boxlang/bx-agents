@@ -1,0 +1,112 @@
+/**
+ * What a person does with a routine's reports: list them, read one, remove one, clean up the old ones. The same owner and admin
+ * rules as the routines themselves (a routine is found through the Routines service), and every answer is an Outcome.
+ *
+ * This is the only way a report is ever removed, and only a person starts it: the agent has no tool for it. A clean-up is a dry run
+ * (it lists what it would remove) unless `apply` is true.
+ */
+import bxModules.bxagents.models.api.Outcome;
+import bxModules.bxagents.models.logs.Logger;
+
+class {
+
+	/**
+	 * @service The Routines service
+	 * @results A RoutineResults
+	 * @clock A function that returns now in epoch milliseconds; the system clock when left out
+	 */
+	function init( required any service, required any results, any clock ) {
+		variables.service = arguments.service
+		variables.results = arguments.results
+		variables.clock = isNull( arguments.clock ) ? () => createObject( "java", "java.lang.System" ).currentTimeMillis() : arguments.clock
+		return this
+	}
+
+	/**
+	 * @who The Caller
+	 * @ref The routine's name (yours), or for an admin its id
+	 *
+	 * @return An Outcome: { files : [ { file, bytes, savedAt } ], count, totalBytes }
+	 */
+	any function list( required any who, required string ref ) {
+		var found = routineOf( arguments.who, arguments.ref )
+		if ( !found.succeeded() ) {
+			return found
+		}
+		var files = variables.results.list( found.data() ).map( f => { file : f.file, bytes : f.bytes, savedAt : f.savedAt } )
+		return Outcome::done( { files : files, count : files.len(), totalBytes : files.reduce( ( sum, f ) => sum + f.bytes, 0 ) } )
+	}
+
+	/**
+	 * @return An Outcome: { file, text, cut }
+	 */
+	any function read( required any who, required string ref, required string file ) {
+		var found = routineOf( arguments.who, arguments.ref )
+		if ( !found.succeeded() ) {
+			return found
+		}
+		var read = variables.results.read( found.data(), arguments.file )
+		return read.ok ? Outcome::done( { file : read.file, text : read.text, cut : read.cut } ) : Outcome::failed( "not_found", read.reason )
+	}
+
+	/**
+	 * Removes one file.
+	 *
+	 * @return An Outcome: { removed : file, bytes }
+	 */
+	any function remove( required any who, required string ref, required string file ) {
+		var found = routineOf( arguments.who, arguments.ref )
+		if ( !found.succeeded() ) {
+			return found
+		}
+		var gone = variables.results.remove( found.data(), arguments.file )
+		if ( !gone.ok ) {
+			return Outcome::failed( "not_found", gone.reason )
+		}
+		Logger::log( "routines", "info", "Removed 1 report of [#found.data().name#]", arguments.who.id() )
+		return Outcome::done( { removed : gone.file, bytes : gone.bytes } )
+	}
+
+	/**
+	 * Removes the reports older than some days, or all of them. Without apply it only says what it would remove.
+	 *
+	 * @who The Caller
+	 * @ref The routine
+	 * @olderThanDays Files saved more than this many days ago
+	 * @all Every file
+	 * @apply True to really remove them
+	 *
+	 * @return An Outcome: { removed : boolean, files : [ { file, bytes } ], count, bytes }
+	 */
+	any function clean( required any who, required string ref, numeric olderThanDays = 0, boolean all = false, boolean apply = false ) {
+		var found = routineOf( arguments.who, arguments.ref )
+		if ( !found.succeeded() ) {
+			return found
+		}
+		if ( !arguments.all && ( !isNumeric( arguments.olderThanDays ) || arguments.olderThanDays < 1 ) ) {
+			return Outcome::failed( "bad_request", "Say which to clean: olderThanDays (1 or more), or all." )
+		}
+		var cutoff = variables.clock() - ( arguments.olderThanDays * 86400000 )
+		var chosen = variables.results.list( found.data() ).filter( f => all || f.modifiedMs < cutoff )
+		var picked = chosen.map( f => { file : f.file, bytes : f.bytes } )
+		var bytes = picked.reduce( ( sum, f ) => sum + f.bytes, 0 )
+		if ( arguments.apply ) {
+			for ( var f in picked ) {
+				variables.results.remove( found.data(), f.file )
+			}
+			if ( picked.len() ) {
+				Logger::log( "routines", "info", "Cleaned #picked.len()# report(s) of [#found.data().name#]", arguments.who.id() )
+			}
+		}
+		return Outcome::done( { removed : arguments.apply, files : picked, count : picked.len(), bytes : bytes } )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/** The routine's { id, name } for this person, or the failure that says why not */
+	private any function routineOf( required any who, required string ref ) {
+		var found = variables.service.get( arguments.who, arguments.ref )
+		return found.succeeded() ? Outcome::done( found.data().routine ) : found
+	}
+
+}

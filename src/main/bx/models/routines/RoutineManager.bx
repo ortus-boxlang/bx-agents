@@ -1,0 +1,133 @@
+/**
+ * Everything a person can do with routines from outside the agent's own tools, in one place: the chat commands, the API, and
+ * through them the web page. The terminal verb uses the same class. It joins the Routines service (who may do what), the
+ * rules for where an answer may go (Destinations) and the reports (RoutineReports), and every answer is an Outcome.
+ *
+ * Making and changing a routine by asking the agent stays the way a person sees and approves it; here the person is the one
+ * acting, so nothing needs approving.
+ */
+import bxModules.bxagents.models.api.Outcome;
+
+class {
+
+	/**
+	 * @service The Routines service
+	 * @destinations The Destinations rules, or null to allow only the routine's own conversation
+	 * @reports A RoutineReports, or null when there is no data home to keep reports in
+	 */
+	function init( required any service, any destinations, any reports ) {
+		variables.service = arguments.service
+		variables.destinations = arguments.destinations ?: nullValue()
+		variables.reports = arguments.reports ?: nullValue()
+		return this
+	}
+
+	/** @return An Outcome: { routines : [ summary ] } */
+	any function list( required any who, boolean all = false ) {
+		return variables.service.list( arguments.who, arguments.all )
+	}
+
+	/** @return An Outcome: { routine : summary + prompt } */
+	any function get( required any who, required string ref ) {
+		return variables.service.get( arguments.who, arguments.ref )
+	}
+
+	/**
+	 * @who The Caller; the routine will be theirs
+	 * @name The routine's name
+	 * @cadence A cron expression or every 30m
+	 * @prompt What to tell the agent each time
+	 * @destination Blank, routine, or gateway:<name>
+	 * @chat The chat id on that chat app, when needed
+	 *
+	 * @return An Outcome: { routine : summary }
+	 */
+	any function create( required any who, required string name, required string cadence, required string prompt, string destination = "", string chat = "" ) {
+		var where = whereTo( arguments.who, arguments.destination, arguments.chat )
+		if ( !where.succeeded() ) {
+			return where
+		}
+		return variables.service.create( arguments.who, arguments.name, arguments.cadence, arguments.prompt, where.data().destination, where.data().destinationChat )
+	}
+
+	/**
+	 * @fields { schedule?, prompt?, destination?, chat? }
+	 *
+	 * @return An Outcome: { routine : summary }
+	 */
+	any function update( required any who, required string ref, required struct fields ) {
+		var changes = {}
+		for ( var key in [ "schedule", "prompt" ] ) {
+			if ( arguments.fields.keyExists( key ) ) {
+				changes[ key ] = arguments.fields[ key ]
+			}
+		}
+		if ( len( trim( arguments.fields.destination ?: "" ) ) ) {
+			var where = whereTo( arguments.who, arguments.fields.destination, arguments.fields.chat ?: "" )
+			if ( !where.succeeded() ) {
+				return where
+			}
+			changes[ "destination" ] = where.data().destination
+			changes[ "destinationChat" ] = where.data().destinationChat
+		}
+		return variables.service.update( arguments.who, arguments.ref, changes )
+	}
+
+	any function pause( required any who, required string ref ) {
+		return variables.service.pause( arguments.who, arguments.ref )
+	}
+
+	any function resume( required any who, required string ref ) {
+		return variables.service.resume( arguments.who, arguments.ref )
+	}
+
+	/** Makes the routine due now; the heartbeat starts it within a minute */
+	any function run( required any who, required string ref ) {
+		return variables.service.runNow( arguments.who, arguments.ref )
+	}
+
+	any function delete( required any who, required string ref ) {
+		return variables.service.delete( arguments.who, arguments.ref )
+	}
+
+	/** @return An Outcome: { files, count, totalBytes } */
+	any function reports( required any who, required string ref ) {
+		return isNull( variables.reports ) ? noReports() : variables.reports.list( arguments.who, arguments.ref )
+	}
+
+	/** @return An Outcome: { file, text, cut } */
+	any function report( required any who, required string ref, required string file ) {
+		return isNull( variables.reports ) ? noReports() : variables.reports.read( arguments.who, arguments.ref, arguments.file )
+	}
+
+	/** @return An Outcome: { removed, bytes } */
+	any function removeReport( required any who, required string ref, required string file ) {
+		return isNull( variables.reports ) ? noReports() : variables.reports.remove( arguments.who, arguments.ref, arguments.file )
+	}
+
+	/**
+	 * @return An Outcome: { removed : boolean, files, count, bytes }. Without apply it only says what it would remove.
+	 */
+	any function cleanReports( required any who, required string ref, numeric olderThanDays = 0, boolean all = false, boolean apply = false ) {
+		return isNull( variables.reports ) ? noReports() : variables.reports.clean( arguments.who, arguments.ref, arguments.olderThanDays, arguments.all, arguments.apply )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private any function noReports() {
+		return Outcome::failed( "not_found", "This agent has nowhere to keep reports." )
+	}
+
+	private any function whereTo( required any who, string destination = "", string chat = "" ) {
+		if ( isNull( variables.destinations ) ) {
+			return len( trim( arguments.destination ) ) && lCase( trim( arguments.destination ) ) != "routine"
+				? Outcome::failed( "bad_request", "Only the routine's own conversation is available here." )
+				: Outcome::done( { destination : "routine", destinationChat : "" } )
+		}
+		var picked = variables.destinations.resolve( arguments.who, arguments.destination, arguments.chat )
+		return picked.ok
+			? Outcome::done( { destination : picked.destination, destinationChat : picked.destinationChat } )
+			: Outcome::failed( "bad_request", picked.reason )
+	}
+
+}

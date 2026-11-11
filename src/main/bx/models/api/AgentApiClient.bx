@@ -215,6 +215,98 @@ class {
 		return get( "skills" )
 	}
 
+	/** The caller's routines: { routines : [ ... ] }. An admin may pass all to see everyone's. 404 when routines are off. */
+	struct function routines( boolean all = false ) {
+		return get( "routines", arguments.all ? { "all" : 1 } : {} )
+	}
+
+	/** One routine with its prompt: { routine }. */
+	struct function routine( required string name ) {
+		return get( "routines/get", { "name" : arguments.name } )
+	}
+
+	/**
+	 * Makes a routine.
+	 *
+	 * @name Folder-style, up to 40 characters
+	 * @schedule A cron expression or every 30m
+	 * @prompt What to tell the agent each time
+	 * @destination Blank for the default, routine, or gateway:<name>
+	 * @chat The chat id on that chat app, when asked for
+	 */
+	struct function createRoutine( required string name, required string schedule, required string prompt, string destination = "", string chat = "" ) {
+		var body = { "name" : arguments.name, "schedule" : arguments.schedule, "prompt" : arguments.prompt }
+		if ( len( arguments.destination ) ) {
+			body[ "destination" ] = arguments.destination
+		}
+		if ( len( arguments.chat ) ) {
+			body[ "chat" ] = arguments.chat
+		}
+		return post( "routines", body )
+	}
+
+	/** Changes a routine. Pass only what changes: schedule, prompt, destination, chat. */
+	struct function updateRoutine( required string name, struct changes = {} ) {
+		var body = { "name" : arguments.name }
+		for ( var key in [ "schedule", "prompt", "destination", "chat" ] ) {
+			if ( arguments.changes.keyExists( key ) ) {
+				body[ key ] = arguments.changes[ key ]
+			}
+		}
+		return post( "routines/update", body )
+	}
+
+	/** Stops a routine from running until it is resumed. */
+	struct function pauseRoutine( required string name ) {
+		return post( "routines/pause", { "name" : arguments.name } )
+	}
+
+	/** Starts a paused routine again. */
+	struct function resumeRoutine( required string name ) {
+		return post( "routines/resume", { "name" : arguments.name } )
+	}
+
+	/** Makes a routine due now; the heartbeat of the served app starts it within a minute. */
+	struct function runRoutine( required string name ) {
+		return post( "routines/run", { "name" : arguments.name } )
+	}
+
+	/** Deletes a routine. Its conversation and reports stay. */
+	struct function deleteRoutine( required string name ) {
+		return post( "routines/delete", { "name" : arguments.name } )
+	}
+
+	/** The report files of a routine: { files, count, totalBytes }. */
+	struct function routineReports( required string name ) {
+		return get( "routines/reports", { "name" : arguments.name } )
+	}
+
+	/** One report file: { file, text, cut }. */
+	struct function routineReport( required string name, required string file ) {
+		return get( "routines/report", { "name" : arguments.name, "file" : arguments.file } )
+	}
+
+	/** Removes one report file. */
+	struct function deleteRoutineReport( required string name, required string file ) {
+		return post( "routines/reports/delete", { "name" : arguments.name, "file" : arguments.file } )
+	}
+
+	/**
+	 * Removes the reports of a routine older than some days, or all of them. Without apply it only says what it would remove.
+	 *
+	 * @name The routine
+	 * @olderThanDays Files saved more than this many days ago
+	 * @all Every file
+	 * @apply True to really remove them
+	 */
+	struct function cleanRoutineReports( required string name, numeric olderThanDays = 0, boolean all = false, boolean apply = false ) {
+		var body = { "name" : arguments.name, "all" : arguments.all, "apply" : arguments.apply }
+		if ( arguments.olderThanDays > 0 ) {
+			body[ "olderThanDays" ] = arguments.olderThanDays
+		}
+		return post( "routines/reports/clean", body )
+	}
+
 	/** Where the agent keeps everything, and where each volume is. An admin token only. */
 	struct function data() {
 		return get( "data" )
