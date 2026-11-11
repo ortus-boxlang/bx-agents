@@ -36,8 +36,22 @@ or package as a portable `.bxa`.
   `timezone`, all checked at build time and by `doctor`.
 - `capabilities.routines` in the agent info says whether routines are on. A routine's conversation is listed
   for its owner with source `routine`, and `routines.log` and `heartbeat.log` record what happens.
-- Not in this release of the feature: sending a routine's answer to a chat app, a results folder, the
-  `/routines` command, `bxAgents routines`, the API routes and the web page section.
+
+#### Routines: commands, terminal, API and web page
+
+- **`/routines` and `/routine <name> [run|pause|resume|delete confirm|reports|report <file>]`** in the terminal chat and the
+  web page (not on chat apps yet, where the agent's `routine_*` tools do the work). Deleting needs `confirm`, and no command removes a
+  report.
+- **`bxAgents routines`** (`list`, `show`, `add`, `edit`, `pause`, `resume`, `run`, `delete`, `reports`, `report`, `clean`) as
+  the local operator; `--all` lists every owner's. `delete` and `clean` need `--yes`, and `clean` shows what it
+  would remove without it. Completions for bash, fish and PowerShell are regenerated.
+- **Routes** `/routines`, `/routines/get`, `/routines/update`, `/routines/pause`, `/routines/resume`, `/routines/run`,
+  `/routines/delete`, `/routines/reports`, `/routines/report`, `/routines/reports/delete` and `/routines/reports/clean`
+  (a dry run unless `apply`), with `AgentApiClient` methods, the OpenAPI document and `capabilities.admin`. An admin may
+  pick a chat app as a routine's destination through them.
+- **A Routines panel in the web page** to list, make, edit, run, pause, resume and delete routines, read and delete their
+  reports, and clean up old ones, with a confirmation before anything is removed.
+- **Fixed:** a bad `tail` on `GET /logs` answered `500`; it answers `400`.
 
 #### Routines: delivery and reports
 

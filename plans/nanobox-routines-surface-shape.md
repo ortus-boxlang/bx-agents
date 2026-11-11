@@ -130,3 +130,17 @@ Taken from the recommended answers unless you say otherwise:
 3. `/routines` is not in the default allow list of a chat app gateway.
 4. The terminal acts as the local operator (admin scope), with `--all` for every owner.
 5. Creating and editing in the web page is one dialog; chat app destinations are offered to admins.
+
+## 10. As built
+
+Where the code differs from the shape above, the code wins:
+
+- **The commands are for the terminal and the web page only.** `/routines` and `/routine` list only the `tui` and `web` transports, so a chat app never offers them (the gateway session has no routines manager). A chat app person asks the agent, which has the `routine_*` tools. Giving them to chat apps later means passing a manager to `CommandGatewaySession`.
+- **One adapter shape for every transport.** A command reads `context.chat().routines()`, which is a `BoundRoutines` (a `RoutineManager` with the person filled in; the server and the terminal) or a `RemoteRoutines` (a connected terminal, through the API). `RoutineManager` answers every `Outcome` the same way, so the commands are written once.
+- **`ProjectRoutines`** builds the manager for the terminal and the `routines` verb from the project's resolved `Agent.yaml`, its chat database and its data home. It answers null (and the verb says so) when routines are off.
+- **The summary gained `statusText`, `nextRunText` and `lastRunText`**, the time as `2026-11-09 09:00 (Europe/Madrid)` in the routines time zone, so no surface formats times itself.
+- **`capabilities.admin`** was added to `GET /agent` so the page can offer the all-owners switch.
+- **The page does not read the schedule back as you type.** There is no route for it, so the reading in words comes back when you save. Chat app destinations in the dialog list the project's chat apps from `/gateways` (admin only); that path was not exercised in the browser run because the demo project has no chat app, only the route and the plain destination were.
+- **Checked in a real browser** (desktop 1280 wide and phone 390 wide) against a served app with real HTTP calls: list, status chips, make, edit (a bad schedule answered in the dialog), pause, resume, reports (view, delete), clean-up with its confirmation, Escape closing a dialog, no sideways scroll.
+- **Fixed on the way:** a wrong `tail` on `GET /logs` answered `500` (an unlisted error code); it is `400` now.
+
