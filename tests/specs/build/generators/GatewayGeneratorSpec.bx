@@ -244,6 +244,19 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'aiGatewayRegistry().get( "whatsapp-cloud" )' );
 			} );
 
+			it( "stamps the routines settings into the session when routines are on, and an empty block when they are off", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-telegram" );
+
+				var off = generator.generate( discovery, newAppDir(), { name : "t", model : "openai/gpt-5" } ).sessionStartupStatement;
+				expect( reFind( "routines\s+:\s*\{\s*\}", off ) ).toBeGT( 0 );
+
+				var on = generator.generate( discovery, newAppDir(), { name : "t", model : "openai/gpt-5", routines : { enabled : true, timezone : "UTC" }, data : { home : "mydata" } } ).sessionStartupStatement;
+				expect( on ).toInclude( "routines" );
+				expect( on ).toInclude( "mydata" );
+				expect( on ).toInclude( "UTC" );
+				expect( reFind( "routines\s+:\s*\{\s*\}", on ) ).toBe( 0 );
+			} );
+
 			it( "registers a teams gateway via its bare class path, resolving every config value live", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-teams" );
 				var result = generator.generate( discovery, newAppDir() );

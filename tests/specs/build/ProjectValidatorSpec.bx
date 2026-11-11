@@ -502,6 +502,13 @@ class extends="testbox.system.BaseSpec" {
 				expect( validateFixture( "bad-gateway-commands" ).errors.filter( e => e.findNoCase( "gatewaySession.attachments' must be true or false" ) ) ).toHaveLength( 1 );
 			} );
 
+			it( "accepts /routines and /routine in gatewaySession.commands.allow only when routines are turned on", function() {
+				var off = validateFixture( "gateway-routines-commands-off" ).errors.filter( e => e.findNoCase( "gatewaySession.commands.allow" ) );
+				expect( off ).toHaveLength( 1 );
+				expect( off[ 1 ] ).toInclude( "routines are not turned on" );
+				expect( validateFixture( "gateway-routines-commands-on" ).errors.filter( e => e.findNoCase( "gatewaySession.commands" ) ) ).toBeEmpty();
+			} );
+
 			it( "rejects an mcp-exposure gateway entry missing its required target", function() {
 				var result = validateFixture( "mcp-exposure-missing-target" );
 				expect( result.errors.filter( e => e.findNoCase( "missing a 'target'" ) ).len() ).toBeGT( 0 );
