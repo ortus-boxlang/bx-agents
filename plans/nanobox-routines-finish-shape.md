@@ -72,3 +72,18 @@ Taken from the recommended answers unless you say otherwise:
 2. The gateway commands are opt-in through `commands.allow`, not on by default.
 3. The schedule route is open to anyone signed in (it stores nothing).
 4. The chat pick list shows ids and last-seen times only.
+
+## 7. As built
+
+Where the code differs from the shape above, the code wins:
+
+- **No CLI for reconnect.** The plan said a `bxAgents gateways` verb existed. It does not (only the API and the page list chat apps), and a CLI process has no live gateway to reconnect, so the item was dropped. The API client has `reconnectGateway`.
+- **A start that fails answers `conflict`** (409) with the gateway's own words, logs `Could not reconnect` at error level in `gateways.log` (so the row then says `failing`), and success logs `Reconnected`.
+- **Chats are found by the gateway's type** (`telegram`), because that is what a message's context records and what a routine's destination names (`gateway:telegram`); the entry's name (its file) is the fallback. The dialog therefore offers `gateway:<type>`, not `gateway:<name>`.
+- **The chat pick list** shows ids, the thread when there is one, and when it was last seen. With several chats the first option is "Choose a chat"; with one it is preselected; with none the box for an id stays.
+- **The live reading** also reads an existing routine's schedule when it is opened for editing. The parameter of `describeSchedule` is named `cadence` (a parameter named `schedule` clashes with the imported `Schedule` class).
+- **`RoutineManagerFactory`** builds the manager for the API, the terminal and the chat apps, so none assembles it differently.
+- **Routines on chat apps:** `CommandGatewaySession` takes a `routines` argument (a manager, or `{ settings, dataHome, agentName }` as the build stamps it). The two commands list `gateway` as a transport again but stay out of the default allow list. With routines off they are removed from the session even when allowed, and the build refuses `routines` or `routine` in `gatewaySession.commands.allow` when routines are not turned on.
+- **Fixed on the way:** a `hidden` label in the routine dialog was still shown because the form's `label { display: grid }` rule overrode it.
+- **Not checked in a browser or against a real chat app:** a reconnect that fails (a telegram gateway with a bad token stops the whole demo app from starting, which is existing behaviour outside this plan, so that path is covered by a spec with a gateway that refuses to start), and the routines commands on a real chat app (specs use the mock gateway).
+
