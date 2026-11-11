@@ -39,6 +39,7 @@
  * these gateways to the agent.
  */
 import bxModules.bxagents.models.util.Strings;
+import bxModules.bxagents.models.routines.RoutineSettings;
 
 import bxModules.bxagents.models.util.EntryConfigReader;
 
@@ -329,6 +330,8 @@ class {
 			"	policy       : #renderLiteral( policy )#,",
 			"	maxQueueDepth: #maxQueueDepth#,",
 			"	commands     : #renderLiteral( sessionConfig.commands ?: {} )#,",
+			// /routines and /routine on a chat app, when routines are on and the developer allows them (commands.allow)
+			"	routines     : #renderLiteral( routinesStamp( arguments.resolvedConfig ) )#,",
 			"	attachments  : #renderLiteral( sessionConfig.attachments ?: true )#,",
 			// the shared chat database: the chats are listed with the web page's and the terminal's
 			'	store        : new "models.store.ChatStore@bxagents"( "" )',
@@ -338,6 +341,28 @@ class {
 			"application.bxaiGatewaySession = gatewaySession"
 		]
 		return lines.toList( char( 10 ) & "		" )
+	}
+
+	/**
+	 * What CommandGatewaySession needs to build the routines manager when the project turned routines on, else nothing.
+	 *
+	 * @resolvedConfig The root project's resolved config
+	 *
+	 * @return { settings, dataHome, agentName }, or {} when routines are off
+	 */
+	private struct function routinesStamp( required struct resolvedConfig ) {
+		if ( !isStruct( arguments.resolvedConfig.routines ?: "" ) ) {
+			return {}
+		}
+		var settings = RoutineSettings::resolve( arguments.resolvedConfig.routines )
+		if ( !settings.enabled ) {
+			return {}
+		}
+		return {
+			settings  : settings,
+			dataHome  : ( isStruct( arguments.resolvedConfig.data ?: "" ) ? arguments.resolvedConfig.data : {} ).home ?: "",
+			agentName : arguments.resolvedConfig.name ?: ""
+		}
 	}
 
 	/**

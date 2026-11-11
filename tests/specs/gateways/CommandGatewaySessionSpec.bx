@@ -306,6 +306,68 @@ class extends="testbox.system.BaseSpec" {
 				expect( replies() ).toBeEmpty();
 			} );
 
+			describe( "routines", function() {
+
+				beforeEach( function() {
+					variables.settings = bxModules.bxagents.models.routines.RoutineSettings::resolve( { enabled : true, timezone : "UTC" } );
+					variables.manager = new bxModules.bxagents.models.routines.RoutineManagerFactory().build( store, settings );
+					manager.create( new bxModules.bxagents.models.api.Caller( id = "mock:ada", scope = "chat", source = "mock" ), "daily", "0 9 * * 1-5", "Check the build." );
+				} );
+
+				function routineSession( struct commands = { allow : [ "routines", "routine" ] }, any routines = manager ) {
+					return new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], commands : commands, routines : routines );
+				}
+
+				it( "answers /routines and /routine for the person on the chat app, once the developer allows them", function() {
+					var session = routineSession();
+					expect( session.commandMenu().map( c => c.name ) ).toBe( [ "/routines", "/routine" ] );
+
+					session.handleInbound( message( "/routines", "ada" ), mock );
+					expect( replies()[ 1 ] ).toInclude( "daily" );
+					expect( replies()[ 1 ] ).toInclude( "weekdays at 09:00" );
+
+					session.handleInbound( message( "/routine daily pause", "ada" ), mock );
+					expect( replies()[ 2 ] ).toInclude( "Done" );
+					session.handleInbound( message( "/routines", "ada" ), mock );
+					expect( replies()[ 3 ] ).toInclude( "paused" );
+				} );
+
+				it( "shows nobody else's routines, and everyone's only to a gateway admin", function() {
+					var session = routineSession( { allow : [ "routines", "routine" ], admins : [ "root" ] } );
+
+					session.handleInbound( message( "/routines", "bob" ), mock );
+					expect( replies()[ 1 ] ).notToInclude( "daily" );
+					session.handleInbound( message( "/routines all", "bob" ), mock );
+					expect( replies()[ 2 ] ).toInclude( "Only an admin" );
+					session.handleInbound( message( "/routines all", "root" ), mock );
+					expect( replies()[ 3 ] ).toInclude( "daily" );
+				} );
+
+				it( "does not offer them by default, even when routines are on", function() {
+					var session = routineSession( {} );
+					expect( session.commandMenu().map( c => c.name ) ).notToInclude( "/routines" );
+					expect( session.commandMenu().map( c => c.name ) ).notToInclude( "/routine" );
+					session.handleInbound( message( "/routines", "ada" ), mock ).get();
+					expect( replies().filter( r => r.findNoCase( "daily" ) ) ).toBeEmpty();
+				} );
+
+				it( "does not have them at all when routines are off, even when the developer allowed them", function() {
+					var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], commands : { allow : [ "help", "routines", "routine" ] } );
+					expect( session.commandMenu().map( c => c.name ) ).toBe( [ "/help" ] );
+
+					var stamped = routineSession( { allow : [ "help", "routines" ] }, { settings : { enabled : false } } );
+					expect( stamped.commandMenu().map( c => c.name ) ).toBe( [ "/help" ] );
+				} );
+
+				it( "builds the manager itself from what the build stamps", function() {
+					var session = routineSession( { allow : [ "routines" ] }, { settings : settings, dataHome : dir & "/home", agentName : "helper" } );
+					expect( session.commandMenu().map( c => c.name ) ).toBe( [ "/routines" ] );
+					session.handleInbound( message( "/routines", "ada" ), mock );
+					expect( replies()[ 1 ] ).toInclude( "daily" );
+				} );
+
+			} );
+
 			it( "tells the person when a command fails, instead of throwing into the gateway", function() {
 				var registry = new bxagents.models.chat.commands.CommandRegistry().register( new BrokenCommand() );
 				var broken = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], commands : { registry : registry } );

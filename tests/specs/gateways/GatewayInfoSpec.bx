@@ -65,6 +65,75 @@ class extends="testbox.system.BaseSpec" {
 				expect( row.lastError.message ).toInclude( "Unauthorized" );
 			} );
 
+			it( "reconnects a running gateway in place and answers its fresh row", function() {
+				var gateway = telegram( true );
+				var out = info( [ { name : "telegram", type : "telegram", envVars : [] } ] ).reconnect( "telegram" );
+
+				expect( out.succeeded() ).toBeTrue();
+				expect( out.data().gateway.name ).toBe( "telegram" );
+				expect( out.data().gateway.state ).toBe( "connected" );
+				expect( gateway.isRunning() ).toBeTrue();
+			} );
+
+			it( "reconnects a stopped gateway by starting it", function() {
+				var gateway = telegram( false );
+				var out = info( [ { name : "telegram", type : "telegram", envVars : [] } ] ).reconnect( "telegram" );
+
+				expect( out.succeeded() ).toBeTrue();
+				expect( gateway.isRunning() ).toBeTrue();
+				expect( out.data().gateway.state ).toBe( "connected" );
+			} );
+
+			it( "says a name the project does not have, and a gateway the app did not register, are not found", function() {
+				var list = [ { name : "ghost", type : "nosuchgateway", envVars : [] } ];
+
+				var nameless = info( list ).reconnect( "nobody" );
+				expect( nameless.succeeded() ).toBeFalse();
+				expect( nameless.code() ).toBe( "not_found" );
+
+				var missing = info( list ).reconnect( "ghost" );
+				expect( missing.succeeded() ).toBeFalse();
+				expect( missing.code() ).toBe( "not_found" );
+				expect( missing.reason() ).toInclude( "not registered" );
+			} );
+
+			it( "answers a conflict with the gateway's own words when it will not start again, and the row then says failing", function() {
+				var gateway = new tests.support.FailingGateway();
+				gateway.start();
+				registry.register( gateway );
+				keys.append( gateway.getName() );
+				gateway.refuseToStart();
+				var entries = [ { name : "failing", type : "failing", envVars : [] } ];
+
+				var out = info( entries ).reconnect( "failing" );
+				sleep( 200 );
+
+				expect( out.succeeded() ).toBeFalse();
+				expect( out.code() ).toBe( "conflict" );
+				expect( out.reason() ).toInclude( "Unauthorized token" );
+				expect( info( entries ).listing()[ 1 ].state ).toBe( "failing" );
+			} );
+
+			it( "lists the chats a gateway has talked to, ids and when, never text", function() {
+				telegram( true );
+				var store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				var chats = new bxagents.models.gateways.GatewayChats( store );
+				chats.seen( new bxModules.bxai.models.gateway.contracts.GatewayContext( gateway : "telegram", conversationID : "42", userID : "ada" ) );
+				var gateways = new bxagents.models.gateways.GatewayInfo( [ { name : "telegram", type : "telegram", envVars : [] } ], nullValue(), registry, chats );
+
+				var row = gateways.listing()[ 1 ];
+
+				expect( row.chats ).toHaveLength( 1 );
+				expect( row.chats[ 1 ].chatId ).toBe( "42" );
+				expect( row.chats[ 1 ] ).toHaveKey( "lastSeen" );
+				expect( row.chats[ 1 ] ).notToHaveKey( "userId" );
+			} );
+
+			it( "has no chats when it keeps none", function() {
+				telegram( true );
+				expect( info( [ { name : "telegram", type : "telegram", envVars : [] } ] ).listing()[ 1 ].chats ).toBeEmpty();
+			} );
+
 			it( "says a gateway the project names but the app did not register is missing", function() {
 				var row = info( [ { name : "ghost", type : "nosuchgateway", envVars : [] } ] ).listing()[ 1 ];
 

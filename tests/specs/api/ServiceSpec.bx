@@ -237,6 +237,13 @@ class extends="testbox.system.BaseSpec" {
 						expect( shared.gateways( ada ).code() ).toBe( "forbidden" );
 					} );
 
+					it( "reconnects a chat app for an admin only, and says when the app has none or the name is unknown", function() {
+						expect( shared.reconnectGateway( ada, "ghost" ).code() ).toBe( "forbidden" );
+						expect( shared.reconnectGateway( admin, "nobody" ).code() ).toBe( "not_found" );
+						expect( shared.reconnectGateway( admin, "ghost" ).code() ).toBe( "not_found" );
+						expect( service.reconnectGateway( admin, "ghost" ).code() ).toBe( "not_found" );
+					} );
+
 					it( "lists no chat apps when the app has none to name", function() {
 						expect( service.gateways( admin ).data().gateways ).toBeEmpty();
 					} );

@@ -935,9 +935,14 @@ __CUSTOM_CSS__
 	#routinesList .rt-empty { color: var(--muted); border: none; }
 	#routineForm, #routineReportsBody { display: grid; gap: 0.6rem; padding: 0.7rem 0.9rem; overflow-y: auto; max-height: 64vh; }
 	#routineForm label { display: grid; gap: 0.2rem; font-size: 0.82rem; color: var(--muted); }
+	#routineForm label[hidden] { display: none; }
 	#routineForm input, #routineForm select, #routineForm textarea, #routineReportsBody input { font: inherit; color: var(--fg); background: var(--input-bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.4rem; min-width: 0; }
 	#routineForm textarea { min-height: 7rem; resize: vertical; }
 	#routineForm .rt-hint { font-size: 0.75rem; color: var(--muted); }
+	#routineForm .rt-reading { min-height: 1.2em; color: var(--fg); }
+	#routineForm .rt-reading.bad { color: var(--bubble-error); }
+	#gatewaysList .gw-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.2rem; }
+	#gatewaysList button:disabled { opacity: 0.55; cursor: default; }
 	#routineForm .rt-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 	#routineForm .rt-row > label { flex: 1 1 10rem; }
 	#routineForm .rt-buttons { display: flex; gap: 0.5rem; justify-content: flex-end; }
@@ -1161,11 +1166,12 @@ __ICON_SPRITE__
 		</div>
 		<form id="routineForm" autocomplete="off">
 			<label>Name<input id="routineName" maxlength="40" required placeholder="check-build"><span class="rt-hint">Letters, digits and dashes.</span></label>
-			<label>Schedule<input id="routineSchedule" maxlength="100" required placeholder="0 9 * * 1-5"><span class="rt-hint">Either five cron fields (minute hour day month weekday), such as 0 9 * * 1-5 for weekdays at 9, or an interval: every 30m, every 2h, every 1d. The reading in words comes back when you save.</span></label>
+			<label>Schedule<input id="routineSchedule" maxlength="100" required placeholder="0 9 * * 1-5"><span class="rt-hint">Either five cron fields (minute hour day month weekday), such as 0 9 * * 1-5 for weekdays at 9, or an interval: every 30m, every 2h, every 1d.</span><span class="rt-hint rt-reading" id="routineScheduleReading" aria-live="polite"></span></label>
 			<label>What the agent should do<textarea id="routinePrompt" required placeholder="Check the build and tell me if anything is red."></textarea><span class="rt-hint" id="routinePromptCount"></span></label>
 			<div class="rt-row">
 				<label>Where the answer goes<select id="routineWhere"><option value="routine">Its own conversation</option></select></label>
-				<label id="routineChatLabel" hidden>Chat id (only if the chat app has several)<input id="routineChat" maxlength="255"></label>
+				<label id="routineChatPickLabel" hidden>Chat<select id="routineChatPick"></select></label>
+				<label id="routineChatLabel" hidden>Chat id (the chat app has not talked to anyone yet)<input id="routineChat" maxlength="255"></label>
 			</div>
 			<p class="notes-foot" id="routineFormFoot" role="status"></p>
 			<div class="rt-buttons"><button type="button" id="routineCancel">Cancel</button><button type="submit" class="primary" id="routineSave">Save</button></div>
@@ -3447,9 +3453,33 @@ __MARKDOWN_SCRIPTS__
 				error.appendChild( open );
 				li.appendChild( error );
 			}
+			var actions = document.createElement( "div" );
+			actions.className = "gw-actions";
+			var reconnect = document.createElement( "button" );
+			reconnect.type = "button";
+			reconnect.textContent = "Reconnect";
+			reconnect.setAttribute( "aria-label", "Reconnect " + gateway.name );
+			if ( gateway.state === "missing" ) {
+				reconnect.disabled = true;
+				reconnect.title = "This chat app is not registered in the running app, so there is nothing to reconnect";
+			}
+			reconnect.addEventListener( "click", function () {
+				reconnect.disabled = true;
+				gatewaysSay( "Reconnecting " + gateway.name + "..." );
+				routinesCall( "POST", "/gateways/reconnect", { name: gateway.name } ).then( function ( result ) {
+					var message = result.ok ? "Reconnected " + gateway.name + "." : failureText( result, "Could not reconnect " + gateway.name + "." );
+					return loadGateways().then( function () { gatewaysSay( message ); } );
+				} );
+			} );
+			actions.appendChild( reconnect );
+			li.appendChild( actions );
 			gatewaysList.appendChild( li );
 		} );
 	}
+
+	var gatewaysFootEl = document.getElementById( "gatewaysFoot" );
+	var gatewaysFootDefault = gatewaysFootEl.textContent;
+	function gatewaysSay( text ) { gatewaysFootEl.textContent = text || gatewaysFootDefault; }
 
 	function loadGateways() {
 		return apiGet( "/gateways" ).then( function ( payload ) {
@@ -3462,7 +3492,7 @@ __MARKDOWN_SCRIPTS__
 		} );
 	}
 
-	gatewaysBtn.addEventListener( "click", function () { gatewaysPanel.showModal(); loadGateways(); } );
+	gatewaysBtn.addEventListener( "click", function () { gatewaysSay( "" ); gatewaysPanel.showModal(); loadGateways(); } );
 	document.getElementById( "gatewaysClose" ).addEventListener( "click", function () { gatewaysPanel.close(); } );
 	document.getElementById( "gatewaysRefresh" ).addEventListener( "click", loadGateways );
 
@@ -3609,6 +3639,18 @@ __MARKDOWN_SCRIPTS__
 
 	function routineFormSay( text ) { document.getElementById( "routineFormFoot" ).textContent = text || ""; }
 
+	var routineGateways = [];
+	var routineChatPick = document.getElementById( "routineChatPick" );
+	var routineChatPickLabel = document.getElementById( "routineChatPickLabel" );
+	var routineSchedule = document.getElementById( "routineSchedule" );
+	var routineReading = document.getElementById( "routineScheduleReading" );
+	var routineReadingTimer = null;
+	var routineReadingSeq = 0;
+
+	function seenText( ms ) {
+		return ms && !isNaN( Number( ms ) ) ? new Date( Number( ms ) ).toISOString().replace( "T", " " ).slice( 0, 16 ) : "";
+	}
+
 	function fillWhereOptions( chosen ) {
 		routineWhere.textContent = "";
 		var own = document.createElement( "option" );
@@ -3620,18 +3662,58 @@ __MARKDOWN_SCRIPTS__
 			return Promise.resolve();
 		}
 		return apiGet( "/gateways" ).then( function ( payload ) {
-			( ( payload && payload.gateways ) || [] ).forEach( function ( g ) {
+			routineGateways = ( payload && payload.gateways ) || [];
+			routineGateways.forEach( function ( g ) {
 				var option = document.createElement( "option" );
-				option.value = "gateway:" + g.name;
-				option.textContent = "Chat app: " + g.name + " (" + g.type + ")";
+				option.value = "gateway:" + g.type;
+				option.textContent = "Chat app: " + g.type + ( g.name !== g.type ? " (" + g.name + ")" : "" );
 				routineWhere.appendChild( option );
 			} );
 			if ( chosen ) { routineWhere.value = chosen; }
 		} );
 	}
 
-	function syncRoutineChat() { routineChatLabel.hidden = routineWhere.value === "routine"; }
-	routineWhere.addEventListener( "change", syncRoutineChat );
+	/** The chat of a chat app: a pick list of the chats it has talked to, or a box for an id when there are none yet */
+	function syncRoutineChat( wantedChat ) {
+		var wanted = routineWhere.value;
+		var gateway = routineGateways.filter( function ( g ) { return "gateway:" + g.type === wanted; } )[ 0 ];
+		var chats = ( gateway && gateway.chats ) || [];
+		routineChatPickLabel.hidden = wanted === "routine" || !chats.length;
+		routineChatLabel.hidden = wanted === "routine" || chats.length > 0;
+		routineChatPick.textContent = "";
+		if ( chats.length > 1 ) {
+			var ask = document.createElement( "option" );
+			ask.value = "";
+			ask.textContent = "Choose a chat";
+			routineChatPick.appendChild( ask );
+		}
+		chats.forEach( function ( c ) {
+			var option = document.createElement( "option" );
+			option.value = c.chatId;
+			option.textContent = "Chat " + c.chatId + ( c.threadId ? ", thread " + c.threadId : "" ) + ", last seen " + seenText( c.lastSeen );
+			routineChatPick.appendChild( option );
+		} );
+		if ( typeof wantedChat === "string" && wantedChat ) { routineChatPick.value = wantedChat; }
+	}
+
+	/** Reads the schedule back in words, from the server, so a typo is seen before saving */
+	function readSchedule() {
+		var text = routineSchedule.value.trim();
+		var seq = ++routineReadingSeq;
+		routineReading.className = "rt-hint rt-reading";
+		if ( !text ) { routineReading.textContent = ""; return Promise.resolve(); }
+		return routinesCall( "GET", "/routines/schedule?schedule=" + encodeURIComponent( text ) ).then( function ( result ) {
+			if ( seq !== routineReadingSeq ) { return; }
+			if ( result.ok ) {
+				routineReading.textContent = result.body.text + ", next run " + result.body.nextRunText;
+			} else {
+				routineReading.className = "rt-hint rt-reading bad";
+				routineReading.textContent = failureText( result, "That is not a schedule." );
+			}
+		} );
+	}
+	routineSchedule.addEventListener( "input", function () { clearTimeout( routineReadingTimer ); routineReadingTimer = setTimeout( readSchedule, 300 ); } );
+	routineWhere.addEventListener( "change", function () { syncRoutineChat( "" ); } );
 	routinePrompt.addEventListener( "input", function () { document.getElementById( "routinePromptCount" ).textContent = routinePrompt.value.length + " characters"; } );
 
 	function openRoutineEditor( row, ref ) {
@@ -3639,7 +3721,9 @@ __MARKDOWN_SCRIPTS__
 		document.getElementById( "routineEditorTitle" ).textContent = row ? "Edit " + row.name : "New routine";
 		document.getElementById( "routineName" ).value = row ? row.name : "";
 		document.getElementById( "routineName" ).disabled = !!row;
-		document.getElementById( "routineSchedule" ).value = row ? row.schedule : "";
+		routineSchedule.value = row ? row.schedule : "";
+		routineReading.textContent = "";
+		routineReading.className = "rt-hint rt-reading";
 		routinePrompt.value = "";
 		document.getElementById( "routineChat" ).value = row ? row.destinationChat || "" : "";
 		routineFormSay( "" );
@@ -3648,9 +3732,10 @@ __MARKDOWN_SCRIPTS__
 			routinePrompt.value = result.ok && result.body.routine ? result.body.routine.prompt || "" : "";
 		} ) : Promise.resolve();
 		Promise.all( [ loading, fillWhereOptions( row && row.destination !== "routine" ? row.destination : "" ) ] ).then( function () {
-			syncRoutineChat();
+			syncRoutineChat( row ? row.destinationChat || "" : "" );
 			routinePrompt.dispatchEvent( new Event( "input" ) );
-			( row ? document.getElementById( "routineSchedule" ) : document.getElementById( "routineName" ) ).focus();
+			if ( row ) { readSchedule(); }
+			( row ? routineSchedule : document.getElementById( "routineName" ) ).focus();
 		} );
 	}
 
@@ -3666,7 +3751,9 @@ __MARKDOWN_SCRIPTS__
 			prompt     : routinePrompt.value,
 			destination: routineWhere.value
 		};
-		if ( routineWhere.value !== "routine" ) { body.chat = document.getElementById( "routineChat" ).value.trim(); }
+		if ( routineWhere.value !== "routine" ) {
+			body.chat = routineChatPickLabel.hidden ? document.getElementById( "routineChat" ).value.trim() : routineChatPick.value;
+		}
 		routineFormSay( "Saving..." );
 		routinesCall( "POST", routineEditing ? "/routines/update" : "/routines", body ).then( function ( result ) {
 			if ( !result.ok ) {

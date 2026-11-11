@@ -26,13 +26,7 @@ class {
 			var file = new "models.store.ChatStorePath@bxagents"().prepared( arguments.root )
 			var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
 			store.migrate()
-			var service = new "models.routines.Routines@bxagents"( store, settings )
-			var home = new "models.data.ProjectData@bxagents"().appDataOf( arguments.root ).home()
-			return new "models.routines.RoutineManager@bxagents"(
-				service,
-				new "models.routines.Destinations@bxagents"( new "models.gateways.GatewayChats@bxagents"( store ) ),
-				new "models.routines.RoutineReports@bxagents"( service, new "models.routines.RoutineResults@bxagents"( home, settings ) )
-			)
+			return new "models.routines.RoutineManagerFactory@bxagents"().build( store, settings, new "models.data.ProjectData@bxagents"().appDataOf( arguments.root ).home() )
 		} catch ( any e ) {
 			return nullValue()
 		}

@@ -35,6 +35,30 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			it( "says what a schedule means before it is saved, in the routines time zone, and stores nothing", function() {
+				var out = manager.describeSchedule( "0 9 * * 1-5" );
+
+				expect( out.succeeded() ).toBeTrue();
+				expect( out.data().value ).toBe( "0 9 * * 1-5" );
+				expect( out.data().text ).toBe( "weekdays at 09:00" );
+				expect( out.data().nextRunText ).toBe( "2026-11-09 09:00 (UTC)" );
+				expect( manager.list( web ).data().routines ).toBeEmpty();
+				expect( manager.describeSchedule( "every   30M" ).data().text ).toBe( "every 30 minutes" );
+			} );
+
+			it( "answers a schedule problem with the sentence a save would give, including a gap that is too short", function() {
+				var bad = manager.describeSchedule( "every banana" );
+				expect( bad.succeeded() ).toBeFalse();
+				expect( bad.code() ).toBe( "bad_request" );
+				expect( bad.reason() ).toInclude( "is not a schedule" );
+
+				var tooOften = manager.describeSchedule( "* * * * *" );
+				expect( tooOften.succeeded() ).toBeFalse();
+				expect( tooOften.reason() ).toInclude( "shortest allowed" );
+				expect( manager.create( web, "x", "* * * * *", "y" ).reason() ).toBe( tooOften.reason() );
+				expect( manager.describeSchedule( "" ).code() ).toBe( "bad_request" );
+			} );
+
 			it( "makes a routine that keeps its answer in its own conversation by default", function() {
 				var made = manager.create( web, "check-build", "0 9 * * 1-5", "Check the build." );
 				expect( made.succeeded() ).toBeTrue();

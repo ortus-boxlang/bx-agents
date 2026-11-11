@@ -21,6 +21,7 @@
  * the same list the web page and the terminal show, marked with the platform they started on.
  */
 import bxModules.bxai.models.gateway.IGateway;
+import bxModules.bxagents.models.logs.Logger;
 import bxModules.bxai.models.gateway.contracts.GatewayMessage;
 import bxModules.bxai.models.gateway.contracts.GatewayEvent;
 
@@ -31,14 +32,18 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 		SAFE_COMMANDS = [ "help", "info", "tools", "model", "ping", "notes", "remember", "connect" ]
 		// they act on the chat's one shared conversation, so they are opt-in (commands.conversation: true)
 		CONVERSATION_COMMANDS = [ "new", "clear", "compact", "sessions", "resume" ]
+		// they act on the person's own routines, so a developer opts in with commands.allow
+		ROUTINE_COMMANDS = [ "routines", "routine" ]
 	}
 
 	/**
 	 * @commands { enabled, prefix, prefixes, conversation, allow, admins, registry, sessions }, all optional
+	 * @routines Turns /routines and /routine on for the chat apps that allow them: a RoutineManager, or { settings, dataHome, agentName }
+	 *           (what the build stamps) to build one on the shared chat store. Without it those two commands do not exist here
 	 *
 	 * The other arguments are GatewaySession's own.
 	 */
-	function init( required any agent, required any gateways, string policy = "queue", numeric maxQueueDepth = 50, any checkpointer, struct commands = {}, boolean attachments = true, any intake, any store ) {
+	function init( required any agent, required any gateways, string policy = "queue", numeric maxQueueDepth = 50, any checkpointer, struct commands = {}, boolean attachments = true, any intake, any store, any routines ) {
 		var own = { agent : arguments.agent, gateways : arguments.gateways, policy : arguments.policy, maxQueueDepth : arguments.maxQueueDepth }
 		if ( !isNull( arguments.checkpointer ) ) {
 			own.checkpointer = arguments.checkpointer
@@ -52,14 +57,24 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 		variables.prefixes = arguments.commands.prefixes ?: {}
 		variables.admins = arguments.commands.admins ?: []
 		// a registry can be handed in whole (a module's own commands); otherwise the app's commands (the built-ins and its extensions'), narrowed to the allowed ones
-		variables.registry = arguments.commands.registry ?: new "models.chat.commands.CommandCatalog@bxagents"().forApplication().only( arguments.commands.allow ?: ( ( arguments.commands.conversation ?: false ) ? static.SAFE_COMMANDS.merge( static.CONVERSATION_COMMANDS ) : static.SAFE_COMMANDS ) )
+		variables.routineManager = routineManagerOf( arguments.routines ?: nullValue(), arguments.store ?: nullValue() )
+		var allowed = arguments.commands.allow ?: ( ( arguments.commands.conversation ?: false ) ? static.SAFE_COMMANDS.merge( static.CONVERSATION_COMMANDS ) : static.SAFE_COMMANDS )
+		// with routines off there is nothing for /routines and /routine to work on, so they are not offered even when allowed
+		if ( isNull( variables.routineManager ) ) {
+			allowed = allowed.filter( n => !static.ROUTINE_COMMANDS.containsNoCase( n ) )
+		}
+		variables.registry = arguments.commands.registry ?: new "models.chat.commands.CommandCatalog@bxagents"().forApplication().only( allowed )
 		// the conversations, for /sessions and /resume: the shared chat database, the same list the web page and the terminal show
 		variables.sessions = arguments.commands.sessions ?: new "models.store.SessionStore@bxagents"( isNull( arguments.store ) ? new "models.store.ChatStore@bxagents"( "" ) : arguments.store )
 		// where each chat is now: /new and /resume move it to another thread
 		variables.threads = new "models.gateways.ChatThreads@bxagents"()
 		// the chats this app has heard from, so a routine can write to one later (see GatewayChats)
 		variables.chats = new "models.gateways.GatewayChats@bxagents"( isNull( arguments.store ) ? new "models.store.ChatStore@bxagents"( "" ) : arguments.store )
-		variables.service = new "models.chat.commands.CommandService@bxagents"( agent : arguments.agent, sessions : variables.sessions, registry : variables.registry )
+		var serviceArgs = { agent : arguments.agent, sessions : variables.sessions, registry : variables.registry }
+		if ( !isNull( variables.routineManager ) ) {
+			serviceArgs.routines = variables.routineManager
+		}
+		variables.service = new "models.chat.commands.CommandService@bxagents"( argumentCollection = serviceArgs )
 		// the choices last offered to each person in each chat, so "2" can answer a numbered list
 		variables.pendingChoices = {}
 		return this
@@ -247,6 +262,32 @@ class extends="bxModules.bxai.models.gateway.GatewaySession" {
 	/**
 	 * @return Who a message is from, as the conversation list, the notes and the agent's memory know them: the platform and the user there, `slack:U123`
 	 */
+	/**
+	 * @given A RoutineManager, or { settings, dataHome, agentName } as the build stamps it, or nothing
+	 * @store The shared chat store when one was handed in
+	 *
+	 * @return The manager the routine commands work on, or null when routines are off
+	 */
+	private any function routineManagerOf( any given, any store ) {
+		if ( isNull( arguments.given ) ) {
+			return nullValue()
+		}
+		if ( isObject( arguments.given ) ) {
+			return arguments.given
+		}
+		if ( !isStruct( arguments.given ) || !isStruct( arguments.given.settings ?: "" ) || !( arguments.given.settings.enabled ?: false ) ) {
+			return nullValue()
+		}
+		try {
+			var shared = isNull( arguments.store ) ? new "models.store.ChatStore@bxagents"( "" ) : arguments.store
+			var home = new "models.data.DataHome@bxagents"( projectRoot : expandPath( "/" ), configured : arguments.given.dataHome ?: "", agentName : arguments.given.agentName ?: "" )
+			return new "models.routines.RoutineManagerFactory@bxagents"().build( shared, arguments.given.settings, home )
+		} catch ( any e ) {
+			Logger::log( "gateways", "error", "Routines are not available to the chat apps: #e.message#" )
+			return nullValue()
+		}
+	}
+
 	private string function personOf( required any context ) {
 		var user = len( arguments.context.getUserID() ) ? arguments.context.getUserID() : arguments.context.getConversationID()
 		return arguments.context.getGateway() & ":" & user

@@ -74,8 +74,11 @@ class {
 			ApiContract::route( "/logs", "logs", "About the agent", { get : {
 				summary : "The agent's logs: which there are, or the last lines of one. Admin only",
 				query : { area : "string?", tail : "integer?", level : "string?", q : "string?" }, returns : "json" } }, false, true ),
+			ApiContract::route( "/gateways/reconnect", "reconnectGateway", "About the agent", { post : {
+				summary : "Stops and starts one chat app in place, so a fixed credential or a dropped connection does not need an app restart. A turn already running is not cancelled. Admin only",
+				body : { name : "string" }, returns : "json" } }, false, true ),
 			ApiContract::route( "/gateways", "gateways", "About the agent", { get : {
-				summary : "The chat apps and the state of each: connected, which credentials are set (never their values), last activity and last error. Admin only", returns : "json" } }, false, true ),
+				summary : "The chat apps and the state of each: connected, which credentials are set (never their values), last activity, last error and the chats each has talked to (ids and when, never text). Admin only", returns : "json" } }, false, true ),
 			ApiContract::route( "/routines/reports/clean", "cleanRoutineReports", "Routines", { post : {
 				summary : "Removes the reports of a routine older than some days, or all of them. A dry run that only says what it would remove, unless apply is true",
 				body : { name : "string", olderThanDays : "integer?", all : "boolean?", apply : "boolean?" }, returns : "json" } } ),
@@ -96,6 +99,8 @@ class {
 				summary : "Makes a routine due now; the heartbeat starts it within a minute", body : { name : "string" }, returns : "json" } } ),
 			ApiContract::route( "/routines/delete", "deleteRoutine", "Routines", { post : {
 				summary : "Deletes a routine. Its conversation and reports stay", body : { name : "string" }, returns : "json" } } ),
+			ApiContract::route( "/routines/schedule", "describeSchedule", "Routines", { get : {
+				summary : "What a schedule means before it is saved: the stored form, the reading in words and the next run. The same check a save does. Stores nothing", query : { schedule : "string" }, returns : "json" } } ),
 			ApiContract::route( "/routines/get", "routine", "Routines", { get : {
 				summary : "One routine in full, with its prompt", query : { name : "string" }, returns : "json" } } ),
 			ApiContract::route( "/routines", "routines", "Routines", {

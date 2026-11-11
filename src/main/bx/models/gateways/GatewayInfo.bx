@@ -5,6 +5,7 @@
  * The list of gateways and the environment variables each one reads is stamped into the app when it is built (see
  * GatewayGenerator); the state comes from the live gateway in bx-ai's registry.
  */
+import bxModules.bxagents.models.api.Outcome;
 import bxModules.bxagents.models.logs.Logger;
 
 class {
@@ -13,36 +14,97 @@ class {
 	 * @entries [ { name, type, envVars : [ names ] } ] as the build found them
 	 * @sessions A SessionStore, for when each gateway last had a conversation. Optional
 	 * @registry The gateway registry. The live bx-ai one when left out
+	 * @chats A GatewayChats, for the chats each gateway has talked to. Optional
 	 */
-	function init( array entries = [], any sessions, any registry ) {
+	function init( array entries = [], any sessions, any registry, any chats ) {
 		variables.entries = arguments.entries
 		variables.sessions = arguments.sessions ?: nullValue()
 		variables.registry = arguments.registry ?: nullValue()
+		variables.chats = arguments.chats ?: nullValue()
 		return this
 	}
 
 	/**
-	 * @return [ { name, type, state, running, capabilities, credentials : [ { env, set } ], lastActiveAt, lastError : { at, message } } ].
+	 * @return [ { name, type, state, running, capabilities, credentials : [ { env, set } ], lastActiveAt, lastError : { at, message }, chats : [ { chatId, threadId, lastSeen } ] } ].
 	 *         state is connected, stopped (not running, nothing wrong logged), failing (not running and an error was
 	 *         logged) or missing (the project names it but it was not registered)
 	 */
 	array function listing() {
 		return variables.entries.map( function( entry ) {
-			var live = liveGateway( entry.type )
-			var error = isNull( live ) ? {} : Logger::lastError( "gateways", live.getName() )
-			var running = !isNull( live ) && live.isRunning()
-			var state = isNull( live ) ? "missing" : ( running ? "connected" : ( error.isEmpty() ? "stopped" : "failing" ) )
-			return {
-				"name"         : entry.name,
-				"type"         : entry.type,
-				"state"        : state,
-				"running"      : running,
-				"capabilities" : isNull( live ) ? [] : live.getCapabilities(),
-				"credentials"  : ( entry.envVars ?: [] ).map( env => { "env" : env, "set" : len( trim( getSystemSetting( env, "" ) ) ) > 0 } ),
-				"lastActiveAt" : lastActive( entry.type ),
-				"lastError"    : error
-			}
+			return rowOf( entry )
 		} )
+	}
+
+	/**
+	 * Stops and starts one chat app in place, so a fixed credential or a dropped connection does not need an app restart. A turn
+	 * already running is not cancelled, and the session keeps its message handler, so messages arrive again once it is started.
+	 *
+	 * @name The gateway's name, as listing() gives it
+	 *
+	 * @return An Outcome: { gateway : the fresh row }, not_found for a name the project does not have or a gateway the app did not
+	 *         register, conflict (with the gateway's own words) when it will not start again
+	 */
+	any function reconnect( required string name ) {
+		var wanted = arguments.name
+		var found = variables.entries.filter( e => e.name == wanted )
+		if ( !found.len() ) {
+			return Outcome::failed( "not_found", "There is no chat app called [#arguments.name#]." )
+		}
+		var entry = found[ 1 ]
+		var live = liveGateway( entry.type )
+		if ( isNull( live ) ) {
+			return Outcome::failed( "not_found", "The #entry.name# chat app is not registered in this app, so there is nothing to reconnect." )
+		}
+		try {
+			live.stop()
+			live.start()
+		} catch ( any e ) {
+			Logger::log( "gateways", "error", "Could not reconnect: #e.message#", live.getName() )
+			return Outcome::failed( "conflict", "Could not reconnect #entry.name#: #e.message#" )
+		}
+		Logger::log( "gateways", "info", "Reconnected", live.getName() )
+		return Outcome::done( { "gateway" : rowOf( entry ) } )
+	}
+
+	/** One gateway's row, as listing() describes it */
+	private struct function rowOf( required struct entry ) {
+		var live = liveGateway( arguments.entry.type )
+		var error = isNull( live ) ? {} : Logger::lastError( "gateways", live.getName() )
+		var running = !isNull( live ) && live.isRunning()
+		var state = isNull( live ) ? "missing" : ( running ? "connected" : ( error.isEmpty() ? "stopped" : "failing" ) )
+		return {
+			"name"         : arguments.entry.name,
+			"type"         : arguments.entry.type,
+			"state"        : state,
+			"running"      : running,
+			"capabilities" : isNull( live ) ? [] : live.getCapabilities(),
+			"credentials"  : ( arguments.entry.envVars ?: [] ).map( env => { "env" : env, "set" : len( trim( getSystemSetting( env, "" ) ) ) > 0 } ),
+			"lastActiveAt" : lastActive( arguments.entry.type ),
+			"lastError"    : error,
+			"chats"        : chatsOf( arguments.entry )
+		}
+	}
+
+	/**
+	 * The chats the gateway has talked to, newest first: ids and when, never any text. Only a chat app that has heard from someone has
+	 * any, and a routine can only write to one of these.
+	 *
+	 * @entry The gateway as the build found it
+	 */
+	private array function chatsOf( required struct entry ) {
+		if ( isNull( variables.chats ) ) {
+			return []
+		}
+		try {
+			// a chat is recorded under the gateway's type (what its context says), which is also what a routine's destination names
+			var found = variables.chats.forGateway( arguments.entry.type )
+			if ( !found.len() ) {
+				found = variables.chats.forGateway( arguments.entry.name )
+			}
+			return found.map( c => { "chatId" : c.chatId, "threadId" : c.threadId, "lastSeen" : c.lastSeen } )
+		} catch ( any e ) {
+			return []
+		}
 	}
 
 	/**

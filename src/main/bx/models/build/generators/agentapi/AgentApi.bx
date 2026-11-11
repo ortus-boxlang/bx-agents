@@ -111,7 +111,9 @@ class {
 		var store = sharedStore()
 		return new "models.gateways.GatewayInfo@bxagents"(
 			jsonDeserialize( "__GATEWAYS__" ),
-			isNull( store ) ? nullValue() : new "models.store.SessionStore@bxagents"( store )
+			isNull( store ) ? nullValue() : new "models.store.SessionStore@bxagents"( store ),
+			nullValue(),
+			isNull( store ) ? nullValue() : new "models.gateways.GatewayChats@bxagents"( store )
 		)
 	}
 
@@ -694,6 +696,17 @@ class {
 	}
 
 	/**
+	 * POST: stops and starts one chat app in place. Body: { name }. Admin only.
+	 */
+	function reconnectGateway( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var body = bodyOf( event )
+		answer( event, service().reconnectGateway( callerOf( event ), toString( body.name ?: "" ) ) )
+	}
+
+	/**
 	 * The skills the agent can load, as { skills : [ { name, description, origin } ] }. Never a folder on the machine.
 	 */
 	function skills( event, rc, prc ) {
@@ -757,6 +770,13 @@ class {
 	function updateRoutine( event, rc, prc ) {
 		var body = bodyOf( event )
 		routineAction( event, ( manager, who ) => manager.update( who, toString( body.name ?: "" ), body ) )
+	}
+
+	/**
+	 * GET: what a schedule means before it is saved: { value, text, nextRunText }, or 400 with the sentence a save would give. Stores nothing.
+	 */
+	function describeSchedule( event, rc, prc ) {
+		routineAction( event, ( manager, who ) => manager.describeSchedule( toString( rc.schedule ?: "" ) ) )
 	}
 
 	/** Body: { name } */
