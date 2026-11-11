@@ -36,6 +36,15 @@ class {
 		return this
 	}
 
+	/**
+	 * The conversation a routine's runs happen in, visible to its owner like any other. Ids are 64 characters at most.
+	 *
+	 * @row Anything with a name and an id
+	 */
+	static string function conversationIdOf( required struct row ) {
+		return "routine-" & arguments.row.name & "-" & left( arguments.row.id, 8 )
+	}
+
 	/** @return The settings in use */
 	struct function settings() {
 		return duplicate( variables.settings )
@@ -477,6 +486,7 @@ class {
 			failures    : row.failures,
 			destination : row.destination,
 			destinationChat : row.destinationChat,
+			conversationId : Routines::conversationIdOf( row ),
 			promptPreview : len( row.prompt ) > static.PREVIEW ? left( row.prompt, static.PREVIEW ) & "..." : row.prompt
 		}
 		if ( arguments.withOwner ) {

@@ -85,8 +85,13 @@ class {
 			return []
 		}
 		return files( folder )
-			.map( name => { file : name, bytes : getFileInfo( folder & "/" & name ).size, savedAt : getFileInfo( folder & "/" & name ).lastModified } )
-			.sort( ( a, b ) => dateCompare( b.savedAt, a.savedAt ) )
+			.map( name => {
+				file       : name,
+				bytes      : getFileInfo( folder & "/" & name ).size,
+				savedAt    : getFileInfo( folder & "/" & name ).lastModified,
+				modifiedMs : createObject( "java", "java.io.File" ).init( folder & "/" & name ).lastModified()
+			} )
+			.sort( ( a, b ) => b.modifiedMs - a.modifiedMs )
 	}
 
 	/**
@@ -107,6 +112,28 @@ class {
 		var text = fileRead( path, "UTF-8" )
 		var cut = len( text ) > static.READ_MAX
 		return { ok : true, file : arguments.file, text : cut ? left( text, static.READ_MAX ) : text, cut : cut }
+	}
+
+	/**
+	 * Removes one file. Only a person starts this: the agent has no tool that calls it.
+	 *
+	 * @row A routine: { id, name }
+	 * @file A name from list()
+	 *
+	 * @return { ok : true, file, bytes } or { ok : false, reason }
+	 */
+	struct function remove( required struct row, required string file ) {
+		var problem = nameProblem( arguments.file )
+		if ( len( problem ) ) {
+			return { ok : false, reason : problem }
+		}
+		var path = folderOf( arguments.row ) & "/" & arguments.file
+		if ( !fileExists( path ) || isLink( path ) ) {
+			return { ok : false, reason : "There is no file [#arguments.file#] in this routine's results." }
+		}
+		var bytes = getFileInfo( path ).size
+		fileDelete( path )
+		return { ok : true, file : arguments.file, bytes : bytes }
 	}
 
 	// ----------------------------------------------------------------------------------

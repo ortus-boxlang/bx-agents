@@ -4,7 +4,7 @@
  *   nothing asked   the chat the person is talking in, when it is a chat app; otherwise the routine's own conversation
  *   routine         the routine's own conversation
  *   gateway:<name>  a chat app. A person writing from that chat app may choose their own chat. Beyond that, only the local user,
- *                   who is the person that runs the agent: chat apps belong to them. With more than one chat the answer lists
+ *                   who is the person that runs the agent, or an admin: chat apps belong to them. With more than one chat the answer lists
  *                   them so the agent can ask which; with none it says to message the bot once.
  */
 import bxModules.bxagents.models.api.Caller;
@@ -53,8 +53,8 @@ class {
 			}
 			return { ok : true, destination : asked, destinationChat : origin.chat }
 		}
-		if ( arguments.person.id() != Caller::localId() ) {
-			return { ok : false, reason : "Only the person who runs this agent can send a routine to a chat app they are not writing from. Use routine, and read the answer in the routine's conversation." }
+		if ( arguments.person.id() != Caller::localId() && !arguments.person.isAdmin() ) {
+			return { ok : false, reason : "Only the person who runs this agent, or an admin, can send a routine to a chat app they are not writing from. Use routine, and read the answer in the routine's conversation." }
 		}
 		var known = variables.chats.forGateway( name )
 		if ( len( trim( arguments.chat ) ) ) {
