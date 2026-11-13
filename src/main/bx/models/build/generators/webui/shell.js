@@ -8,6 +8,7 @@
 	var pageOrder = [];
 	var pageBadges = {};
 	var currentPageId = "";
+	var shownPageId = "";
 	var renderSeq = 0;
 	var currentLeave = null;
 	var shellReady = false;
@@ -24,7 +25,7 @@
 
 	/**
 	 * def: { id, title, icon, group ("main" | "admin"), cap(capabilities) -> bool,
-	 *        render(host, route), leave(), replaces: [ ids of today's menu buttons it makes redundant ],
+	 *        order (menu position), render(host, route), leave(), replaces: [ ids of today's menu buttons it makes redundant ],
 	 *        badgeWord (spoken after a badge count) }
 	 */
 	function registerPage( def ) {
@@ -117,7 +118,7 @@
 		[ [ "main", "Main" ], [ "admin", "Admin" ] ].forEach( function ( group ) {
 			var defs = pageOrder.map( function ( id ) { return pageDefs[ id ]; } ).filter( function ( def ) {
 				return ( def.group || "main" ) === group[ 0 ] && pageAvailable( def );
-			} );
+			} ).sort( function ( a, b ) { return ( a.order || 50 ) - ( b.order || 50 ); } );
 			if ( !defs.length ) {
 				return;
 			}
@@ -259,13 +260,26 @@
 
 	// ---- the router ----
 	function parseRoute() {
-		var parts = String( window.location.hash || "" ).replace( /^#\/?/, "" ).split( "/" );
-		return { id: parts[ 0 ] || "chat", sub: parts[ 1 ] || "", rest: parts.slice( 2 ) };
+		// #/logs/gateways?q=telegram : the page, a section of it, and a few words for it to open with
+		var hash = String( window.location.hash || "" ).replace( /^#\/?/, "" );
+		var cut = hash.indexOf( "?" );
+		var parts = ( cut < 0 ? hash : hash.slice( 0, cut ) ).split( "/" );
+		var params = {};
+		if ( cut >= 0 ) {
+			hash.slice( cut + 1 ).split( "&" ).forEach( function ( pair ) {
+				var kv = pair.split( "=" );
+				if ( kv[ 0 ] ) {
+					try { params[ decodeURIComponent( kv[ 0 ] ) ] = decodeURIComponent( kv[ 1 ] || "" ); } catch ( err ) { /* a broken escape is ignored */ }
+				}
+			} );
+		}
+		return { id: parts[ 0 ] || "chat", sub: parts[ 1 ] || "", rest: parts.slice( 2 ), params: params };
 	}
 
 	/** Moves to a page (and a section of it) the way a link would: shellGo( "routines", "reports" ) */
-	function shellGo( id, sub ) {
-		window.location.hash = "#/" + id + ( sub ? "/" + sub : "" );
+	function shellGo( id, sub, params ) {
+		var query = Object.keys( params || {} ).map( function ( key ) { return encodeURIComponent( key ) + "=" + encodeURIComponent( params[ key ] ); } ).join( "&" );
+		window.location.hash = "#/" + id + ( sub ? "/" + sub : "" ) + ( query ? "?" + query : "" );
 	}
 
 	function showRoute( moveFocus ) {
@@ -273,7 +287,7 @@
 		var def = pageDefs[ route.id ];
 		if ( !def || !pageAvailable( def ) ) {
 			// a member opening an admin address, or a page this server does not offer: the chat
-			route = { id: "chat", sub: "", rest: [] };
+			route = { id: "chat", sub: "", rest: [], params: {} };
 			def = pageDefs.chat;
 			if ( window.history && window.history.replaceState ) {
 				window.history.replaceState( null, "", "#/chat" );
@@ -285,6 +299,8 @@
 		}
 		var seq = ++renderSeq;
 		route.stale = function () { return seq !== renderSeq; };
+		var samePage = shownPageId === def.id;
+		shownPageId = def.id;
 		currentPageId = def.id;
 		document.body.setAttribute( "data-page", def.id );
 		document.title = ( def.id === "chat" ? "" : def.title + " · " ) + appTitleText;
@@ -309,7 +325,8 @@
 		} catch ( err ) {
 			pageViewEl.appendChild( pageNote( "This page could not be drawn: " + err.message, "error" ) );
 		}
-		if ( moveFocus ) {
+		// moving between the sections of one page keeps the focus where it is
+		if ( moveFocus && !samePage ) {
 			var heading = pageViewEl.querySelector( "h1" );
 			if ( heading ) {
 				heading.focus( { preventScroll: true } );
@@ -317,7 +334,7 @@
 		}
 	}
 
-	registerPage( { id: "chat", title: "Chat", icon: "chat-circle-text", group: "main" } );
+	registerPage( { id: "chat", title: "Chat", icon: "chat-circle-text", group: "main", order: 10 } );
 
 	/**
 	 * Called once the capabilities are known (after GET /agent): builds the menu from them,

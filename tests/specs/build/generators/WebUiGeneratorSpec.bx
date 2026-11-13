@@ -697,6 +697,59 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "pages", function() {
+
+				it( "registers a page per area, in the Main and Admin groups, each shown by a capability", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					for ( var id in [ "routines", "registry", "memory", "vault", "settings", "gateways", "logs", "access" ] ) {
+						expect( html ).toInclude( "id: ""#id#""," );
+					}
+					expect( html ).toInclude( "group: ""admin""" );
+					// an admin page is not offered to a member: it needs a capability the server only grants an admin
+					expect( html ).toInclude( "cap: function ( caps ) { return !!caps.gateways; }" );
+					expect( html ).toInclude( "cap: function ( caps ) { return !!caps.logs; }" );
+				} );
+
+				it( "says gateways, not chat apps, and hides the Settings buttons a page replaces", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "title: ""Gateways""" );
+					expect( html ).toInclude( "replaces: [ ""gatewaysBtn"" ]" );
+					expect( html ).toInclude( "replaces: [ ""routinesBtn"" ]" );
+					expect( html ).toInclude( "legacy.hidden = true" );
+				} );
+
+				it( "keeps both routine dialogs and sends the agent's vault ask to the Vault page", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( 'id="routineEditor"' );
+					expect( html ).toInclude( 'id="routineReports"' );
+					expect( html ).toInclude( "var routinesHook = null;" );
+					expect( html ).toInclude( "shellGo( ""vault"" )" );
+				} );
+
+				it( "draws the Appearance controls in the Settings page as well as in the popup", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "function drawAppearanceInto( el, inPage )" );
+					expect( html ).toInclude( ".appearance-ui.in-page" );
+				} );
+
+			} );
+
 			it( "recovers when the remembered conversation no longer exists", function() {
 				// Deleted from another tab, or a fresh store - rehydrating to
 				// nothing would leave the sidebar with no active row
