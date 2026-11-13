@@ -1,0 +1,130 @@
+/**
+ * The agent and its sub-agents, as a tree a client can pick from: the web page's Talk to list, the terminal's
+ * `--agent` and `/agent`. Every node is an agent that can be talked to directly, each with its own conversation
+ * memory (its own memory key, see MemoryWiring).
+ *
+ *   tree = new AgentTree( rootAgent )
+ *   tree.nodes()       [ { name, parent, description, tools, skills, model } ], the main agent first
+ *   tree.find( "x" )   the agent called x at any depth; blank or the main agent's name is the main agent; null when none
+ */
+class {
+
+	/**
+	 * @root The built agent (a bx-ai AiAgent)
+	 */
+	function init( required any root ) {
+		variables.root = arguments.root
+		return this
+	}
+
+	/**
+	 * @return The main agent's name
+	 */
+	string function mainName() {
+		return variables.root.getAgentName() ?: ""
+	}
+
+	/**
+	 * @return True when the name is blank or the main agent's own
+	 */
+	boolean function isMain( string name = "" ) {
+		return !len( trim( arguments.name ) ) || trim( arguments.name ) == mainName()
+	}
+
+	/**
+	 * @return The agent called `name`, or null when the tree has none
+	 */
+	any function find( string name = "" ) {
+		if ( isMain( arguments.name ) ) {
+			return variables.root
+		}
+		return look( variables.root, trim( arguments.name ) )
+	}
+
+	/**
+	 * @return The names of every agent in the tree, the main agent first
+	 */
+	array function names() {
+		return nodes().map( ( node ) => node.name )
+	}
+
+	/**
+	 * @return [ { name, parent, description, tools : [ names ], skills : [ names ], model } ], parent blank for the main agent
+	 */
+	array function nodes() {
+		var out = []
+		walk( variables.root, "", out )
+		return out
+	}
+
+	/**
+	 * Every agent object in the tree, the main agent first.
+	 */
+	array function agents() {
+		return gather( variables.root )
+	}
+
+	private array function gather( required any node ) {
+		var found = [ arguments.node ]
+		for ( var name in subNames( arguments.node ) ) {
+			found.append( gather( arguments.node.getSubAgent( name ) ), true )
+		}
+		return found
+	}
+
+	private any function look( required any parent, required string name ) {
+		for ( var subName in subNames( arguments.parent ) ) {
+			var sub = arguments.parent.getSubAgent( subName )
+			if ( subName == arguments.name ) {
+				return sub
+			}
+			var deeper = look( sub, arguments.name )
+			if ( !isNull( deeper ) ) {
+				return deeper
+			}
+		}
+		return nullValue()
+	}
+
+	/**
+	 * An agent with no sub-agents to name (a stand-in, in a spec) has none.
+	 */
+	private array function subNames( required any node ) {
+		try {
+			return arguments.node.getSubAgentNames()
+		} catch ( any e ) {
+			return []
+		}
+	}
+
+	private void function walk( required any node, required string parent, required array out ) {
+		var config = arguments.node.getConfig()
+		var skills = config.skills ?: {}
+		arguments.out.append( {
+			"name"        : config.name ?: "",
+			"parent"      : arguments.parent,
+			"description" : config.description ?: "",
+			"tools"       : ( config.tools ?: [] ).map( ( tool ) => tool.name ?: "" ),
+			"skills"      : ( skills.activeSkills ?: [] ).map( ( skill ) => skill.name ?: "" ).append( ( skills.availableSkills ?: [] ).map( ( skill ) => skill.name ?: "" ), true ),
+			"model"       : modelLabel( config )
+		} )
+		for ( var subName in subNames( arguments.node ) ) {
+			walk( arguments.node.getSubAgent( subName ), config.name ?: "", arguments.out )
+		}
+	}
+
+	/**
+	 * AiAgent.getConfig().model is the AiModel's whole config struct; a client wants provider/model
+	 *
+	 * @config An agent's getConfig()
+	 */
+	string function modelLabel( required struct config ) {
+		var modelConfig = arguments.config.model ?: {}
+		if ( !isStruct( modelConfig ) ) {
+			return modelConfig
+		}
+		var modelId = ( modelConfig.params ?: {} ).model ?: ( modelConfig.name ?: "" )
+		return [ modelConfig.provider ?: "", modelId ].filter( ( part ) => len( part ) ).toList( "/" )
+	}
+
+}

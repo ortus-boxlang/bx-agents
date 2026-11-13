@@ -34,6 +34,45 @@ class extends="testbox.system.BaseSpec" {
 				return skill;
 			}
 
+			describe( "reading one skill", function() {
+
+				it( "gives the text with its origin, size and when it was saved, and never a folder", function() {
+					projectSkill( "release" );
+
+					var found = library.read( "release" );
+
+					expect( found.name ).toBe( "release" );
+					expect( found.origin ).toBe( "project" );
+					expect( found.body ).toInclude( "Do it our way." );
+					expect( found.size ).toBe( len( found.body ) );
+					expect( found.truncated ).toBeFalse();
+					expect( found.savedAt ).toMatch( "^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$" );
+					expect( jsonSerialize( found ) ).notToInclude( dir );
+				} );
+
+				it( "finds what the agent saved, and cuts a text longer than the read limit", function() {
+					library.save( "mine", "Agent one.", repeatString( "x", 19000 ) );
+
+					expect( library.read( "MINE" ).origin ).toBe( "agent" );
+
+					var long = dir & "/project-skills/long";
+					directoryCreate( long, true, true );
+					fileWrite( long & "/SKILL.md", "---#char( 10 )#name: long#char( 10 )#description: Big#char( 10 )#---#char( 10 )##repeatString( 'y', 70000 )#", "UTF-8" );
+					aiGlobalSkills().append( bxModules.bxai.models.skills.AiSkill::fromPath( long & "/SKILL.md" ) );
+					var cut = library.read( "long" );
+
+					expect( cut.truncated ).toBeTrue();
+					expect( len( cut.body ) ).toBe( 60000 );
+					expect( cut.size ).toBeGT( 60000 );
+				} );
+
+				it( "answers an empty struct for a name that is not a skill", function() {
+					expect( library.read( "nope" ) ).toBeEmpty();
+					expect( library.read( "" ) ).toBeEmpty();
+				} );
+
+			} );
+
 			describe( "the three levels", function() {
 
 				it( "tells installed skills from the ones that ship with the agent, and from the agent's own", function() {

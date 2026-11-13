@@ -22,7 +22,7 @@ class extends="testbox.system.BaseSpec" {
 				var tables = store.rows( "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name" ).map( r => r.name );
 
 				expect( fileExists( file ) ).toBeTrue();
-				expect( store.schemaVersion() ).toBe( 12 );
+				expect( store.schemaVersion() ).toBe( 13 );
 				expect( store.rows( "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'routines'" ) ).toHaveLength( 1 );
 				expect( tables ).toInclude( "conversations" );
 				expect( tables ).toInclude( "preferences" );
@@ -44,9 +44,9 @@ class extends="testbox.system.BaseSpec" {
 
 				var again = bxagents.models.store.ChatStore::forFile( file );
 
-				expect( again.schemaVersion() ).toBe( 12 );
+				expect( again.schemaVersion() ).toBe( 13 );
 				expect( again.rows( "SELECT prefValue FROM preferences WHERE userId = 'luis'" )[ 1 ].prefValue ).toBe( "dark" );
-				expect( again.rows( "SELECT COUNT(*) AS n FROM bxagents_schema_version" )[ 1 ].n ).toBe( 12 );
+				expect( again.rows( "SELECT COUNT(*) AS n FROM bxagents_schema_version" )[ 1 ].n ).toBe( 13 );
 			} );
 
 			it( "recognises a database the web chat created before the store existed", function() {
@@ -61,7 +61,7 @@ class extends="testbox.system.BaseSpec" {
 
 				var store = new bxagents.models.store.ChatStore( ds );
 
-				expect( store.migrate() ).toBe( 12 );
+				expect( store.migrate() ).toBe( 13 );
 				expect( store.rows( "SELECT title FROM conversations WHERE id = 'c1'" )[ 1 ].title ).toBe( "Old chat" );
 			} );
 
@@ -72,7 +72,7 @@ class extends="testbox.system.BaseSpec" {
 
 				var store = new bxagents.models.store.ChatStore( ds );
 
-				expect( store.migrate() ).toBe( 12 );
+				expect( store.migrate() ).toBe( 13 );
 				expect( store.rows( "SELECT name FROM sqlite_master WHERE name = 'users'" ) ).toHaveLength( 1 );
 			} );
 
@@ -95,8 +95,29 @@ class extends="testbox.system.BaseSpec" {
 				expect( first.rows( "SELECT COUNT(*) AS n FROM preferences" )[ 1 ].n ).toBe( 80 );
 			} );
 
+			it( "moves the agent's old notes to the one owner every agent shares, and leaves people's notes alone", function() {
+				var store = bxagents.models.store.ChatStore::forFile( file );
+				// as a database from before version 13 holds them: the agent's notes under the agent's own name
+				store.exec( "INSERT INTO notes ( id, scope, owner, text ) VALUES ( 'a1', 'agent', 'helper', 'old agent note' )" );
+				store.exec( "INSERT INTO notes ( id, scope, owner, text ) VALUES ( 'a2', 'agent', 'researcher', 'another agent' )" );
+				store.exec( "INSERT INTO notes ( id, scope, owner, text ) VALUES ( 'u1', 'user', 'helper', 'a person called helper' )" );
+				store.exec( "DELETE FROM bxagents_schema_version WHERE version = 13" );
+
+				expect( store.migrate() ).toBe( 13 );
+
+				expect( store.rows( "SELECT id, owner FROM notes WHERE scope = 'agent' ORDER BY id" ).map( n => n.id & ":" & n.owner ) ).toBe( [ "a1:agent", "a2:agent" ] );
+				expect( store.rows( "SELECT owner FROM notes WHERE id = 'u1'" )[ 1 ].owner ).toBe( "helper" );
+			} );
+
+			it( "adds the agent a conversation belongs to, blank for the ones from before", function() {
+				var store = bxagents.models.store.ChatStore::forFile( file );
+				store.exec( "INSERT INTO conversations ( id, userId, title ) VALUES ( 'c1', 'alice', 'old' )" );
+
+				expect( store.rows( "SELECT agent FROM conversations WHERE id = 'c1'" )[ 1 ].agent ).toBe( "" );
+			} );
+
 			it( "reports the newest version it knows", function() {
-				expect( new bxagents.models.store.ChatStore( "ignored" ).latestVersion() ).toBe( 12 );
+				expect( new bxagents.models.store.ChatStore( "ignored" ).latestVersion() ).toBe( 13 );
 			} );
 
 		} );

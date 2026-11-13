@@ -20,6 +20,8 @@ class {
 		variables.seen = {};
 		variables.cancelled = [];
 		variables.clearedMemory = [];
+		variables.agentName = "fake";
+		variables.subs = [];
 		return this;
 	}
 
@@ -31,8 +33,22 @@ class {
 	function seen() { return variables.seen; }
 	function cancelled() { return variables.cancelled; }
 
-	function getConfig() { return { name : "fake", profile : "" }; }
-	function getAgentName() { return "fake"; }
+	function getConfig() {
+		return {
+			name : variables.agentName, profile : "", description : "I am " & variables.agentName,
+			tools : [ { name : variables.agentName & "_tool", description : "" } ],
+			skills : { activeSkills : [], availableSkills : [ { name : variables.agentName & "-skill", description : "" } ] },
+			model : { provider : "fakeai", params : { model : "m-" & variables.agentName } }
+		};
+	}
+	function named( required string name ) { variables.agentName = arguments.name; return this; }
+	function withSubAgent( required any sub ) { variables.subs.append( arguments.sub ); return this; }
+	function getSubAgentNames() { return variables.subs.map( ( s ) => s.getAgentName() ); }
+	function getSubAgent( required string name ) {
+		var wanted = arguments.name;
+		return variables.subs.filter( ( s ) => s.getAgentName() == wanted ).first();
+	}
+	function getAgentName() { return variables.agentName; }
 
 	function getCheckpointer() {
 		var held = variables.state;

@@ -67,7 +67,7 @@ class {
 		]
 		if ( arguments.method.keyExists( "query" ) ) {
 			var query = arguments.method.query
-			made[ "parameters" ] = query.keyArray().map( ( field ) => {
+			var listed = query.keyArray().map( ( field ) => {
 				return {
 					"name"     : field,
 					"in"       : "query",
@@ -75,6 +75,9 @@ class {
 					"schema"   : typeOf( query[ field ] )
 				}
 			} )
+			// the ones a call must have come first, each group by name
+			made[ "parameters" ] = listed.filter( ( p ) => p.required ).sort( ( a, b ) => compare( a.name, b.name ) )
+				.append( listed.filter( ( p ) => !p.required ).sort( ( a, b ) => compare( a.name, b.name ) ), true )
 		}
 		if ( arguments.method.keyExists( "body" ) ) {
 			made[ "requestBody" ] = {

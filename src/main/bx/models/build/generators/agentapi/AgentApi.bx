@@ -347,7 +347,12 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		var answered = service().turns().run( callerOf( event ), event.getHTTPContent( json : true ) )
+		var body = event.getHTTPContent( json : true )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		var answered = turns.run( callerOf( event ), body )
 		if ( answered.succeeded() ) {
 			event.setHTTPHeader( name : "X-Thread-Id", value : answered.data().threadId )
 		}
@@ -362,7 +367,12 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		answer( event, service().turns().batch( callerOf( event ), event.getHTTPContent( json : true ) ) )
+		var body = event.getHTTPContent( json : true )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		answer( event, turns.batch( callerOf( event ), body ) )
 	}
 
 	/**
@@ -373,7 +383,12 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		var prepared = service().turns().prepareTurn( callerOf( event ), event.getHTTPContent( json : true ) )
+		var body = event.getHTTPContent( json : true )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		var prepared = turns.prepareTurn( callerOf( event ), body )
 		if ( !prepared.succeeded() ) {
 			answer( event, prepared )
 			return
@@ -418,7 +433,12 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		var prepared = service().turns().prepareTurn( callerOf( event ), event.getHTTPContent( json : true ) )
+		var body = event.getHTTPContent( json : true )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		var prepared = turns.prepareTurn( callerOf( event ), body )
 		if ( !prepared.succeeded() ) {
 			answer( event, prepared )
 			return
@@ -437,7 +457,11 @@ class {
 			return
 		}
 		var body = event.getHTTPContent( json : true )
-		answer( event, service().turns().cancel( callerOf( event ), body.threadId ?: "", body.reason ?: "Cancelled by the user." ) )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		answer( event, turns.cancel( callerOf( event ), body.threadId ?: "", body.reason ?: "Cancelled by the user." ) )
 	}
 
 	/**
@@ -450,7 +474,11 @@ class {
 			return
 		}
 		var body = event.getHTTPContent( json : true )
-		answer( event, service().turns().steer( callerOf( event ), body.threadId ?: "", body.input ?: "" ) )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		answer( event, turns.steer( callerOf( event ), body.threadId ?: "", body.input ?: "" ) )
 	}
 
 	/**
@@ -462,7 +490,11 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		answer( event, service().turns().pending( callerOf( event ), rc.threadId ?: "" ) )
+		var turns = turnsFor( event, rc.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		answer( event, turns.pending( callerOf( event ), rc.threadId ?: "" ) )
 	}
 
 	/**
@@ -475,12 +507,30 @@ class {
 			return
 		}
 		var body = event.getHTTPContent( json : true )
-		var prepared = service().turns().prepareResume( callerOf( event ), body.threadId ?: "", body )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		var prepared = turns.prepareResume( callerOf( event ), body.threadId ?: "", body )
 		if ( !prepared.succeeded() ) {
 			answer( event, prepared )
 			return
 		}
 		return streamTurn( prepared.data() )
+	}
+
+	/**
+	 * The turn runner for the agent a request names. An unknown agent is answered here (400) and null comes back.
+	 *
+	 * @agentName A name from the agent tree; blank is the main agent
+	 */
+	private any function turnsFor( required any event, string agentName = "" ) {
+		var checked = service().checkAgent( arguments.agentName )
+		if ( !checked.succeeded() ) {
+			answer( arguments.event, checked )
+			return nullValue()
+		}
+		return service().turns( arguments.agentName )
 	}
 
 	/**
@@ -535,7 +585,13 @@ class {
 			return
 		}
 		if ( event.getHTTPMethod() == "POST" ) {
-			answer( event, all.create( callerOf( event ), event.getHTTPContent( json : true ).title ?: "" ) )
+			var body = event.getHTTPContent( json : true )
+			var checked = service().checkAgent( body.agent ?: "" )
+			if ( !checked.succeeded() ) {
+				answer( event, checked )
+				return
+			}
+			answer( event, all.create( callerOf( event ), body.title ?: "", body.agent ?: "" ) )
 			return
 		}
 		answer(
@@ -729,6 +785,17 @@ class {
 			return
 		}
 		answer( event, service().skills( callerOf( event ) ) )
+	}
+
+	/**
+	 * One skill's SKILL.md text, as { name, description, origin, size, savedAt, body, truncated }. A long one is cut and
+	 * says so; the answer never holds a folder on the machine. Query: name
+	 */
+	function readSkill( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().skill( callerOf( event ), toString( rc.name ?: "" ) ) )
 	}
 
 	// ----------------------------------------------------------------------------------
@@ -976,6 +1043,42 @@ class {
 			return
 		}
 		answer( event, kept.all() )
+	}
+
+	/**
+	 * Removes every note of one scope: the caller's own, or the agent's (admin only). { cleared : count }.
+	 *
+	 * Body: { scope : "user" | "agent" }
+	 */
+	function clearNotes( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().notes( callerOf( event ) ).clear( toString( event.getHTTPContent( json : true ).scope ?: "" ) ) )
+	}
+
+	/**
+	 * Clears conversation memory and keeps the conversations: one of the caller's, or (admin only) all of them or all of
+	 * one agent's. { conversations, messages }.
+	 *
+	 * Body: { conversationId?, all?, agent? }
+	 */
+	function clearMemory( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var all = service().conversations()
+		if ( isNull( all ) ) {
+			answer( event, noSessions() )
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		var checked = service().checkAgent( body.agent ?: "" )
+		if ( !checked.succeeded() ) {
+			answer( event, checked )
+			return
+		}
+		answer( event, all.clearMemory( callerOf( event ), toString( body.conversationId ?: "" ), isBoolean( body.all ?: "" ) && body.all, toString( body.agent ?: "" ) ) )
 	}
 
 	// ----------------------------------------------------------------------------------

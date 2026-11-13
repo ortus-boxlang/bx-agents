@@ -57,6 +57,32 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			it( "reaches the clear and skill reading routes, and names the agent a turn is for", function() {
+				client.clearNotes( "agent" );
+				client.clearMemory( all = true, agent = "researcher" );
+				client.clearMemory( conversationId = "c1" );
+				client.readSkill( "release notes" );
+				client.invoke( input = "hi", agent = "researcher" );
+				client.invoke( input = "hello" );
+				client.cancel( "t1", "stop", "researcher" );
+				client.pending( "t1", "researcher" );
+				client.createSession( "Dig", "scout" );
+
+				expect( seen.paths[ 1 ] ).toBe( "/agent-api/notes/clear" );
+				expect( seen.methods[ 1 ] ).toBe( "POST" );
+				expect( jsonDeserialize( seen.bodies[ 1 ] ) ).toBe( { scope : "agent" } );
+				expect( jsonDeserialize( seen.bodies[ 2 ] ) ).toBe( { all : true, agent : "researcher" } );
+				expect( jsonDeserialize( seen.bodies[ 3 ] ) ).toBe( { conversationId : "c1" } );
+				expect( seen.paths[ 2 ] ).toBe( "/agent-api/memory/clear" );
+				expect( seen.paths[ 4 ] ).toInclude( "/agent-api/skills/read?name=release" );
+				expect( seen.methods[ 4 ] ).toBe( "GET" );
+				expect( jsonDeserialize( seen.bodies[ 5 ] ).agent ).toBe( "researcher" );
+				expect( jsonDeserialize( seen.bodies[ 6 ] ).keyExists( "agent" ) ).toBeFalse();
+				expect( jsonDeserialize( seen.bodies[ 7 ] ).agent ).toBe( "researcher" );
+				expect( seen.paths[ 8 ] ).toInclude( "agent=researcher" );
+				expect( jsonDeserialize( seen.bodies[ 9 ] ) ).toBe( { title : "Dig", agent : "scout" } );
+			} );
+
 			it( "reaches each routines route with the verb and body it takes", function() {
 				client.routines();
 				client.routines( true );

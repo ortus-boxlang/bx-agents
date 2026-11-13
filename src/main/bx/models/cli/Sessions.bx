@@ -2,7 +2,8 @@
  * `sessions` CLI verb - the conversations in the project's shared chat database (`data/chat.db`, or the file
  * named by BXAGENTS_DB), the same list `chat` and the web page show.
  *
- *   bxAgents sessions list [--user=NAME] [--json]
+ *   bxAgents sessions list [--user=NAME] [--agent=NAME] [--q=TEXT] [--json]
+ *   bxAgents sessions clear --session=<number or id> | --all [--agent=NAME]   forgets the messages, keeps the conversations
  *   bxAgents sessions rename --session=<number or id> --name="New name" [--user=NAME]
  *   bxAgents sessions fork --session=<number or id> [--name="Other approach"] [--user=NAME]
  *   bxAgents sessions delete --session=<number or id> [--user=NAME]
@@ -23,7 +24,7 @@ import bxModules.bxagents.models.api.Caller;
 class {
 
 	static {
-		ACTIONS = [ "list", "rename", "fork", "delete", "export", "import" ]
+		ACTIONS = [ "list", "rename", "fork", "delete", "clear", "export", "import" ]
 	}
 
 	/**
@@ -55,6 +56,10 @@ class {
 			return importFile( root, sessions, user, arguments.options )
 		}
 
+		if ( action == "clear" && ( arguments.options.all ?: false ) ) {
+			return clearAll( root, sessions, user, trim( arguments.options.agent ?: "" ) )
+		}
+
 		var reference = trim( arguments.options.session ?: "" )
 		if ( !len( reference ) ) {
 			throw( type = "BxAgents.MissingSession", message = "`sessions #action#` needs --session=<number or id> (see `bxAgents sessions list`)." )
@@ -76,6 +81,8 @@ class {
 				return fork( root, sessions, user, found, name )
 			case "delete":
 				return remove( root, sessions, user, found )
+			case "clear":
+				return clearOne( root, sessions, user, found )
 			case "export":
 				return exportFile( root, sessions, user, found, arguments.options )
 		}
@@ -177,6 +184,43 @@ class {
 		}
 		var note = len( data.agent ?: "" ) && data.agent != conversation.agentName() ? " It was exported from the agent [#data.agent#], and this one is [#conversation.agentName()#]." : ""
 		return { exitCode : 0, message : "Imported as [#outcome.title#] (#left( outcome.id, 8 )#): #outcome.messages# messages.#note#" }
+	}
+
+	/**
+	 * Forgets the messages of one conversation and keeps the conversation, which needs the agent: a built project.
+	 */
+	private struct function clearOne( required string root, required any sessions, required string user, required struct found ) {
+		var loader = new "models.cli.support.BuiltAgent@bxagents"()
+		if ( !loader.isBuilt( arguments.root ) ) {
+			return { exitCode : 1, message : "`sessions clear` forgets the messages, which the agent holds: run `bxAgents build` first." }
+		}
+		var done = new "models.api.Conversations@bxagents"( loader.load( arguments.root ), arguments.sessions ).clearMemory( owner( arguments.user ), arguments.found.id )
+		return done.succeeded()
+			? { exitCode : 0, message : "Cleared the messages of [#arguments.found.title ?: ''#] (#done.data().messages# messages). The conversation stays in the list." }
+			: { exitCode : 1, message : done.reason() }
+	}
+
+	/**
+	 * Forgets the messages of every conversation (of one agent, with --agent) and keeps the conversations. Whoever is at
+	 * the terminal owns this machine's database, so it is the admin's call.
+	 */
+	private struct function clearAll( required string root, required any sessions, required string user, string agent = "" ) {
+		var loader = new "models.cli.support.BuiltAgent@bxagents"()
+		if ( !loader.isBuilt( arguments.root ) ) {
+			return { exitCode : 1, message : "`sessions clear` forgets the messages, which the agent holds: run `bxAgents build` first." }
+		}
+		var agent = loader.load( arguments.root )
+		if ( len( arguments.agent ) && isNull( new "models.api.AgentTree@bxagents"( agent ).find( arguments.agent ) ) ) {
+			return { exitCode : 1, message : "There is no agent called [#arguments.agent#]." }
+		}
+		var done = new "models.api.Conversations@bxagents"( agent, arguments.sessions ).clearMemory( caller = owner( arguments.user, true ), all = true, agent = arguments.agent )
+		return done.succeeded()
+			? { exitCode : 0, message : "Cleared #done.data().messages# messages in #done.data().conversations# conversation#done.data().conversations == 1 ? '' : 's'#. The conversations stay in the list." }
+			: { exitCode : 1, message : done.reason() }
+	}
+
+	private any function owner( required string user, boolean admin = false ) {
+		return new "models.api.Caller@bxagents"( id = arguments.user, name = arguments.user, scope = arguments.admin ? "admin" : "chat", source = "terminal" )
 	}
 
 	/**

@@ -22,6 +22,8 @@ class {
 	static {
 		MAX_DESCRIPTION = 500
 		MAX_CONTENT     = 20000
+		// How much of a SKILL.md a reader gets; longer is cut and says so
+		READ_LIMIT      = 60000
 		// How many skills the agent may keep; saving over one it already has is always allowed
 		MAX_SKILLS      = 50
 	}
@@ -83,6 +85,34 @@ class {
 		return aiGlobalSkills()
 			.map( s => { name : s.getName(), description : s.getDescription(), origin : originOf( s ) } )
 			.sort( ( a, b ) => compareNoCase( a.name, b.name ) )
+	}
+
+	/**
+	 * One skill to read: what listing() says, with the SKILL.md text. The file's folder is never in the answer.
+	 *
+	 * @name The skill's name
+	 *
+	 * @return { name, description, origin, size (characters in the file), savedAt (ISO 8601), body, truncated }, or an empty struct when there is no skill by that name
+	 */
+	struct function read( required string name ) {
+		var wanted = trim( arguments.name )
+		var at = positionOf( aiGlobalSkills(), wanted )
+		if ( !len( wanted ) || at == 0 ) {
+			return {}
+		}
+		var skill = aiGlobalSkills()[ at ]
+		var path = skill.getFilePath() ?: ""
+		var text = len( path ) && fileExists( path ) ? fileRead( path, "UTF-8" ) : ""
+		var saved = len( path ) && fileExists( path ) ? getFileInfo( path ).lastModified : ""
+		return {
+			"name"        : skill.getName(),
+			"description" : skill.getDescription(),
+			"origin"      : originOf( skill ),
+			"size"        : len( text ),
+			"savedAt"     : isDate( saved ) ? dateTimeFormat( saved, "yyyy-MM-dd'T'HH:mm:ss" ) : "",
+			"body"        : len( text ) > static.READ_LIMIT ? left( text, static.READ_LIMIT ) : text,
+			"truncated"   : len( text ) > static.READ_LIMIT
+		}
 	}
 
 	/**

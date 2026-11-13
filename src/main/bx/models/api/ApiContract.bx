@@ -20,7 +20,7 @@ class {
 	 *         even on a closed API; `admin` is true for a route only an admin may call.
 	 */
 	static array function operations( struct options = {} ) {
-		var turn = { input : "string", conversationId : "string?", threadId : "string?", options : "object?", attachments : "array?" }
+		var turn = { input : "string", conversationId : "string?", threadId : "string?", options : "object?", attachments : "array?", agent : "string?" }
 		var list = [
 			ApiContract::route( "/invoke", "invoke", "Turns", { post : {
 				summary : "One whole turn: the agent's answer once it is done", body : turn, returns : "json" } } ),
@@ -28,25 +28,25 @@ class {
 				summary : "One turn as a stream of thread, chunk and done frames (the small subset of events)", body : turn, returns : "sse" } } ),
 			ApiContract::route( "/batch", "batch", "Turns", { post : {
 				summary : "Several inputs, one after another, in one conversation",
-				body : { inputs : "array", conversationId : "string?", threadId : "string?", options : "object?" }, returns : "json" } } ),
+				body : { inputs : "array", conversationId : "string?", threadId : "string?", options : "object?", agent : "string?" }, returns : "json" } } ),
 			ApiContract::route( "/info", "info", "About the agent", { get : {
 				summary : "What is served: name, model and the routes of the agent", returns : "json" } } ),
 			ApiContract::route( "/events", "events", "Turns", { post : {
 				summary : "One turn as the full stream: thread, chunk, tool, suspended, error and done frames", body : turn, returns : "sse" } } ),
 			ApiContract::route( "/cancel", "cancel", "Runs", { post : {
 				summary : "Stops a run. Only the caller who started it, or an admin",
-				body : { threadId : "string", reason : "string?" }, returns : "json" } } ),
+				body : { threadId : "string", reason : "string?", agent : "string?" }, returns : "json" } } ),
 			ApiContract::route( "/steer", "steer", "Runs", { post : {
 				summary : "Adds a message to a run that is going",
-				body : { threadId : "string", input : "string" }, returns : "json" } } ),
+				body : { threadId : "string", input : "string", agent : "string?" }, returns : "json" } } ),
 			ApiContract::route( "/resume", "resume", "Runs", { post : {
 				summary : "Carries on a run that paused for approval, as a stream",
-				body : { threadId : "string", decision : "string?", editedData : "object?", reason : "string?" }, returns : "sse" } } ),
+				body : { threadId : "string", decision : "string?", editedData : "object?", reason : "string?", agent : "string?" }, returns : "sse" } } ),
 			ApiContract::route( "/pending", "pending", "Runs", { get : {
-				summary : "What a paused run is waiting to have approved", query : { threadId : "string" }, returns : "json" } } ),
+				summary : "What a paused run is waiting to have approved", query : { threadId : "string", agent : "string?" }, returns : "json" } } ),
 			ApiContract::route( "/tools", "tools", "About the agent", { get : { summary : "The tools the agent has", returns : "json" } } ),
 			ApiContract::route( "/agent", "about", "About the agent", { get : {
-				summary : "The agent in full: model, window, tools and what this server can do (capabilities)", returns : "json" } } ),
+				summary : "The agent in full: model, window, tools, the agent tree (agents, each sub-agent a caller may talk to directly) and what this server can do (capabilities)", returns : "json" } } ),
 			ApiContract::route( "/health", "health", "About the agent", { get : {
 				summary : "Is the server up. Needs no token and says nothing else", returns : "json" } }, true ),
 			ApiContract::route( "/profiles", "profiles", "About the agent", { get : {
@@ -63,7 +63,7 @@ class {
 				get : {
 					summary : "A page of the caller's conversations, newest first, with the total that match. Filter by title text, source, agent and dates; facets=1 adds the counts per source and agent. An admin may add all=1 for everyone's",
 					query : { limit : "integer?", offset : "integer?", q : "string?", source : "string?", agent : "string?", since : "string?", before : "string?", facets : "boolean?", all : "boolean?" }, returns : "json" },
-				post : { summary : "Starts a conversation", body : { title : "string?" }, returns : "json" } } ),
+				post : { summary : "Starts a conversation, for the main agent or one named in agent", body : { title : "string?", agent : "string?" }, returns : "json" } } ),
 			ApiContract::route( "/export", "export", "Conversations", { get : {
 				summary : "One conversation as a file, Markdown or a page of HTML",
 				query : { conversationId : "string", format : "string?" }, returns : "file" } } ),
@@ -110,6 +110,9 @@ class {
 				post : {
 					summary : "Makes a routine",
 					body : { name : "string", schedule : "string", prompt : "string", destination : "string?", chat : "string?" }, returns : "json" } } ),
+			ApiContract::route( "/skills/read", "readSkill", "About the agent", { get : {
+				summary : "One skill's SKILL.md text with its origin, size and when it was saved. A long one is cut and says so. Never a folder on the machine",
+				query : { name : "string" }, returns : "json" } } ),
 			ApiContract::route( "/skills", "skills", "About the agent", { get : {
 				summary : "The skills the agent can load: name, description and whether the project or the agent wrote it. Never a folder on the machine", returns : "json" } } ),
 			ApiContract::route( "/data", "data", "About the agent", { get : {
@@ -164,6 +167,12 @@ class {
 			ApiContract::route( "/connect", "connections", "Connections", {
 				get : { summary : "The servers that ask people to sign in, and which the caller has connected. Never a token", returns : "json" },
 				post : { summary : "Starts a sign in for the caller and answers with the address to send them to", body : { name : "string" }, returns : "json" } } ),
+			ApiContract::route( "/notes/clear", "clearNotes", "Notes", { post : {
+				summary : "Removes every note of one scope and says how many: the caller's own (user) or the agent's (agent, which takes an admin)",
+				body : { scope : "string" }, returns : "json" } } ),
+			ApiContract::route( "/memory/clear", "clearMemory", "Conversations", { post : {
+				summary : "Forgets the messages of conversations and keeps the conversations: one of the caller's (conversationId), or with all (an admin) every conversation, or those of one agent. Says how many conversations and messages",
+				body : { conversationId : "string?", all : "boolean?", agent : "string?" }, returns : "json" } } ),
 			ApiContract::route( "/notes/update", "updateNote", "Notes", { post : {
 				summary : "Changes a note", body : { scope : "string", id : "string", text : "string" }, returns : "json" } } ),
 			ApiContract::route( "/notes/remove", "removeNote", "Notes", { post : {

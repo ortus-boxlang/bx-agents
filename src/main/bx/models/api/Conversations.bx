@@ -128,12 +128,14 @@ class {
 	 *
 	 * @caller The Caller; the conversation records the surface it came in on
 	 * @title What to call it; the first message names it when blank
+	 * @agent The agent it belongs to (a name from the agent tree); blank for the main agent. A conversation keeps the agent it started with.
 	 *
 	 * @return An Outcome: { conversationId }
 	 */
-	any function create( required any caller, string title = "" ) {
+	any function create( required any caller, string title = "", string agent = "" ) {
 		var id = createUUID()
-		variables.sessions.touch( arguments.caller.id(), id, trim( arguments.title ), 0, arguments.caller.source() )
+		var owner = trim( arguments.agent )
+		variables.sessions.touch( arguments.caller.id(), id, trim( arguments.title ), 0, arguments.caller.source(), owner == mainName() ? "" : owner )
 		return Outcome::done( { "conversationId" : id } )
 	}
 
@@ -150,9 +152,7 @@ class {
 		if ( !variables.sessions.delete( arguments.caller.id(), arguments.conversationId ) ) {
 			return Outcome::failed( "not_found", "There is no such conversation" )
 		}
-		var userId = arguments.caller.id()
-		var id = arguments.conversationId
-		variables.agent.getMemories().each( ( memory ) => memory.clear( userId, id ) )
+		forget( arguments.caller.id(), arguments.conversationId )
 		return Outcome::done( { "deleted" : true } )
 	}
 
@@ -167,11 +167,68 @@ class {
 		if ( !opened.succeeded() ) {
 			return opened
 		}
-		var userId = arguments.caller.id()
-		var id = arguments.conversationId
-		variables.agent.getMemories().each( ( memory ) => memory.clear( userId, id ) )
-		variables.sessions.setCount( userId, id, 0 )
+		forget( arguments.caller.id(), arguments.conversationId )
+		variables.sessions.setCount( arguments.caller.id(), arguments.conversationId, 0 )
 		return Outcome::done( { "cleared" : true } )
+	}
+
+	/**
+	 * Clears conversation memory and keeps the conversations: one of the caller's, or (an admin's call) every
+	 * conversation of one agent or of all of them. Each conversation's count in the list goes to zero with its messages.
+	 *
+	 * @caller The Caller
+	 * @conversationId One of the caller's conversations; blank when `all` is set
+	 * @all True to clear every conversation of every user: admin only
+	 * @agent With `all`: only the conversations that belong to this agent (a name from the agent tree); every agent when blank
+	 *
+	 * @return An Outcome: { conversations, messages } (how many were cleared), bad_request, not_found or forbidden
+	 */
+	any function clearMemory( required any caller, string conversationId = "", boolean all = false, string agent = "" ) {
+		if ( !arguments.all ) {
+			if ( !len( arguments.conversationId ) ) {
+				return Outcome::failed( "bad_request", "Say which conversation (conversationId), or all : true for every conversation" )
+			}
+			var opened = open( arguments.caller, arguments.conversationId )
+			if ( !opened.succeeded() ) {
+				return opened
+			}
+			var held = val( variables.sessions.byId( arguments.caller.id(), arguments.conversationId ).messageCount ?: 0 )
+			clear( arguments.caller, arguments.conversationId )
+			return Outcome::done( { "conversations" : 1, "messages" : held } )
+		}
+		if ( !arguments.caller.isAdmin() ) {
+			return Outcome::failed( "forbidden", "Clearing the memory of every conversation needs an admin" )
+		}
+		// read every row first: clearing moves a row to the front of the list, which would shift the pages
+		var rows = []
+		var offset = 0
+		while ( true ) {
+			var page = variables.sessions.search( "", { limit : 100, offset : offset, agent : trim( arguments.agent ), mainAgent : mainName() } )
+			rows.append( page.rows, true )
+			offset += 100
+			if ( offset >= page.total ) {
+				break
+			}
+		}
+		var messages = 0
+		for ( var row in rows ) {
+			messages += val( row.messageCount ?: 0 )
+			forget( row.userId, row.id )
+			variables.sessions.setCount( row.userId, row.id, 0 )
+		}
+		return Outcome::done( { "conversations" : rows.len(), "messages" : messages } )
+	}
+
+	/**
+	 * Empties what every agent holds for one conversation: the agent it belongs to, and the sub-agents it delegated to
+	 * (they keep their own memory under their own key, with the same conversation id).
+	 */
+	private void function forget( required string userId, required string conversationId ) {
+		var userId = arguments.userId
+		var id = arguments.conversationId
+		for ( var node in new AgentTree( variables.agent ).agents() ) {
+			node.getMemories().each( ( memory ) => memory.clear( userId, id ) )
+		}
 	}
 
 	/**

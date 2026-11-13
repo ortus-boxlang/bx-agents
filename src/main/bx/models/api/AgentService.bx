@@ -94,8 +94,49 @@ class {
 		return variables.sessions ?: nullValue()
 	}
 
-	any function turns() {
-		return new TurnRunner( variables.agent, variables.sessions ?: nullValue(), variables.offered )
+	/**
+	 * @agentName The agent to run the turns on: a name from the tree (`agents()`), or blank for the main agent. Check it
+	 *            with checkAgent() first: an unknown name falls back to the main agent here.
+	 */
+	any function turns( string agentName = "" ) {
+		var chosen = agentFor( arguments.agentName )
+		var stamp = isNull( chosen ) || tree().isMain( arguments.agentName ) ? "" : trim( arguments.agentName )
+		return new TurnRunner( isNull( chosen ) ? variables.agent : chosen, variables.sessions ?: nullValue(), variables.offered, stamp, tree().mainName() )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// The agent tree
+	// ----------------------------------------------------------------------------------
+
+	private any function tree() {
+		return new AgentTree( variables.agent )
+	}
+
+	/**
+	 * @name A name from the agent tree; blank or the main agent's name is the main agent
+	 *
+	 * @return The agent, or null when the tree has none by that name
+	 */
+	any function agentFor( string name = "" ) {
+		return tree().find( arguments.name )
+	}
+
+	/**
+	 * @return An Outcome: done, or bad_request for a name that is not in the agent tree
+	 */
+	any function checkAgent( string name = "" ) {
+		return isNull( agentFor( arguments.name ) )
+			? Outcome::failed( "bad_request", "There is no agent called [#trim( arguments.name )#]. Ask for one of: #tree().names().toList( ', ' )#" )
+			: Outcome::done( { "agent" : trim( arguments.name ) } )
+	}
+
+	/**
+	 * Every agent in the tree, the main agent first and each sub-agent after its parent.
+	 *
+	 * @return [ { name, parent, description, tools : [ names ], skills : [ names ], model } ], parent blank for the main agent
+	 */
+	array function agents() {
+		return tree().nodes()
 	}
 
 	/**
@@ -112,7 +153,13 @@ class {
 	 * @return An AgentConversation for the caller. The model is picked per message here, not changed for everyone.
 	 */
 	any function conversation( required any caller, string conversationId = "" ) {
-		var found = new "models.chat.ServerConversation@bxagents"( variables.agent, arguments.caller.id(), variables.sessions ?: nullValue(), arguments.conversationId )
+		var owner = variables.agent
+		// a conversation with a sub-agent keeps its messages in that agent's memory
+		if ( len( arguments.conversationId ) && keepsSessions() ) {
+			var kept = variables.sessions.byId( arguments.caller.id(), arguments.conversationId ).agent ?: ""
+			owner = len( kept ) ? ( agentFor( kept ) ?: variables.agent ) : variables.agent
+		}
+		var found = new "models.chat.ServerConversation@bxagents"( owner, arguments.caller.id(), variables.sessions ?: nullValue(), arguments.conversationId )
 			.withOfferedProfiles( variables.offered.names() )
 		return isNull( variables.appData ) ? found : found.withData( variables.appData )
 	}
@@ -213,13 +260,7 @@ class {
 	 */
 	any function about( required any caller ) {
 		var config = variables.agent.getConfig()
-		// AiAgent.getConfig().model is the AiModel's whole config struct; a client wants provider/model
-		var modelConfig = config.model ?: {}
-		var modelLabel = modelConfig
-		if ( isStruct( modelConfig ) ) {
-			var modelId = ( modelConfig.params ?: {} ).model ?: ( modelConfig.name ?: "" )
-			modelLabel = [ modelConfig.provider ?: "", modelId ].filter( ( part ) => len( part ) ).toList( "/" )
-		}
+		var modelLabel = tree().modelLabel( config )
 		var facts = new "models.runtime.ModelFacts@bxagents"().of( config.profile ?: "" )
 		return Outcome::done( {
 			"name"          : config.name ?: "",
@@ -230,6 +271,7 @@ class {
 			"toolCount"     : config.toolCount ?: 0,
 			"memoryCount"   : config.memoryCount ?: 0,
 			"subAgents"     : ( config.subAgents ?: [] ).map( ( sub ) => sub.name ?: "" ),
+			"agents"        : agents(),
 			"capabilities"  : {
 				"streaming"     : true, "reasoning" : true, "toolCalls" : true, "history" : true,
 				"events"        : true, "cancel" : true, "steer" : true, "approvals" : true, "attachments" : true,
@@ -298,6 +340,22 @@ class {
 	any function skills( required any caller ) {
 		var library = new "models.skills.SkillLibrary@bxagents"( isNull( variables.appData ) ? "" : variables.appData.home() )
 		return Outcome::done( { "skills" : library.listing() } )
+	}
+
+	/**
+	 * One skill's text, for anyone who may list the skills.
+	 *
+	 * @name The skill's name
+	 *
+	 * @return An Outcome: { name, description, origin, size, savedAt, body, truncated }, bad_request or not_found. Never a folder on the machine.
+	 */
+	any function skill( required any caller, required string name ) {
+		if ( !len( trim( arguments.name ) ) ) {
+			return Outcome::failed( "bad_request", "name is required" )
+		}
+		var library = new "models.skills.SkillLibrary@bxagents"( isNull( variables.appData ) ? "" : variables.appData.home() )
+		var found = library.read( arguments.name )
+		return found.isEmpty() ? Outcome::failed( "not_found", "There is no skill called [#trim( arguments.name )#]" ) : Outcome::done( found )
 	}
 
 	/**

@@ -206,6 +206,14 @@ class {
 					"ALTER TABLE conversations ADD COLUMN agent VARCHAR(64) NOT NULL DEFAULT ''",
 					"CREATE INDEX IF NOT EXISTS idx_conversations_agent ON conversations ( userId, agent, updatedAt )"
 				]
+			},
+			{
+				// the agent's notes are global: one set that every agent and sub-agent of the app shares, under one fixed owner
+				// (see SqliteNotesProvider.AGENT_OWNER). Notes the agent made before were kept under its own name.
+				version    : 13,
+				statements : [
+					"UPDATE notes SET owner = 'agent' WHERE scope = 'agent' AND owner <> 'agent'"
+				]
 			}
 		]
 	}

@@ -56,8 +56,8 @@ class {
 	 *
 	 * @return { success, output, threadId }
 	 */
-	struct function invoke( required string input, string conversationId = "", struct options = {} ) {
-		return post( "invoke", turn( arguments.input, arguments.conversationId, arguments.options ), variables.timeout )
+	struct function invoke( required string input, string conversationId = "", struct options = {}, string agent = "" ) {
+		return post( "invoke", turn( arguments.input, arguments.conversationId, arguments.options, arguments.agent ), variables.timeout )
 	}
 
 	/**
@@ -70,14 +70,14 @@ class {
 	 *
 	 * @return { output, threadId, suspended, pending, error }
 	 */
-	struct function stream( required string input, any onChunk, string conversationId = "", struct options = {} ) {
+	struct function stream( required string input, any onChunk, string conversationId = "", struct options = {}, string agent = "" ) {
 		var sink = arguments.onChunk ?: nullValue()
 		var onEvent = ( event ) => {
 			if ( !isNull( sink ) && ( event.type ?: "" ) == "delta" ) {
 				sink( event.text )
 			}
 		}
-		return variables.http.events( variables.url, "stream", turn( arguments.input, arguments.conversationId, arguments.options ), variables.timeout, onEvent )
+		return variables.http.events( variables.url, "stream", turn( arguments.input, arguments.conversationId, arguments.options, arguments.agent ), variables.timeout, onEvent )
 	}
 
 	/**
@@ -90,11 +90,11 @@ class {
 	 *
 	 * @return { output, threadId, suspended, pending, error }; when `suspended` is true, answer with resume()
 	 */
-	struct function events( required string input, any onEvent, string conversationId = "", struct options = {} ) {
+	struct function events( required string input, any onEvent, string conversationId = "", struct options = {}, string agent = "" ) {
 		return variables.http.events(
 			variables.url,
 			"events",
-			turn( arguments.input, arguments.conversationId, arguments.options ),
+			turn( arguments.input, arguments.conversationId, arguments.options, arguments.agent ),
 			variables.timeout,
 			arguments.onEvent ?: nullValue()
 		)
@@ -107,8 +107,11 @@ class {
 	 *
 	 * @return { success, outputs, threadId }
 	 */
-	struct function batch( required array inputs, string conversationId = "", struct options = {} ) {
+	struct function batch( required array inputs, string conversationId = "", struct options = {}, string agent = "" ) {
 		var body = { "inputs" : arguments.inputs, "options" : arguments.options }
+		if ( len( arguments.agent ) ) {
+			body[ "agent" ] = arguments.agent
+		}
 		if ( len( arguments.conversationId ) ) {
 			body[ "conversationId" ] = arguments.conversationId
 		}
@@ -126,8 +129,11 @@ class {
 	 *
 	 * @return As events()
 	 */
-	struct function resume( required string threadId, required string decision, any onEvent, struct editedData = {}, string reason = "" ) {
+	struct function resume( required string threadId, required string decision, any onEvent, struct editedData = {}, string reason = "", string agent = "" ) {
 		var body = { "threadId" : arguments.threadId, "decision" : arguments.decision }
+		if ( len( arguments.agent ) ) {
+			body[ "agent" ] = arguments.agent
+		}
 		if ( !arguments.editedData.isEmpty() ) {
 			body[ "editedData" ] = arguments.editedData
 		}
@@ -137,19 +143,19 @@ class {
 		return variables.http.events( variables.url, "resume", body, variables.timeout, arguments.onEvent ?: nullValue() )
 	}
 
-	/** Stops a run. Only the caller who started it may, or an admin. */
-	struct function cancel( required string threadId, string reason = "" ) {
-		return post( "cancel", { "threadId" : arguments.threadId, "reason" : arguments.reason } )
+	/** Stops a run. Only the caller who started it may, or an admin. `agent` names the sub-agent the run was talking to, if any. */
+	struct function cancel( required string threadId, string reason = "", string agent = "" ) {
+		return post( "cancel", { "threadId" : arguments.threadId, "reason" : arguments.reason }.append( withAgent( arguments.agent ) ) )
 	}
 
 	/** Adds a message to a run that is going. */
-	struct function steer( required string threadId, required string input ) {
-		return post( "steer", { "threadId" : arguments.threadId, "input" : arguments.input } )
+	struct function steer( required string threadId, required string input, string agent = "" ) {
+		return post( "steer", { "threadId" : arguments.threadId, "input" : arguments.input }.append( withAgent( arguments.agent ) ) )
 	}
 
 	/** What a paused run waits to have approved. */
-	struct function pending( required string threadId ) {
-		return get( "pending", { threadId : arguments.threadId } )
+	struct function pending( required string threadId, string agent = "" ) {
+		return get( "pending", { threadId : arguments.threadId }.append( withAgent( arguments.agent ) ) )
 	}
 
 	// ---- About the agent -----------------------------------------------------------
@@ -218,6 +224,11 @@ class {
 	/** The skills the agent can load: { skills : [ { name, description, origin } ] }, origin being project or agent. Never a folder on the machine. */
 	struct function skills() {
 		return get( "skills" )
+	}
+
+	/** One skill's text: { name, description, origin, size, savedAt, body, truncated }. 404 when there is none by that name. */
+	struct function readSkill( required string name ) {
+		return get( "skills/read", { name : arguments.name } )
 	}
 
 	/** The caller's routines: { routines : [ ... ] }. An admin may pass all to see everyone's. 404 when routines are off. */
@@ -422,8 +433,9 @@ class {
 	}
 
 	/** Starts a conversation. */
-	struct function createSession( string title = "" ) {
-		return post( "sessions", len( arguments.title ) ? { "title" : arguments.title } : {} )
+	struct function createSession( string title = "", string agent = "" ) {
+		var body = len( arguments.title ) ? { "title" : arguments.title } : {}
+		return post( "sessions", body.append( withAgent( arguments.agent ) ) )
 	}
 
 	/** Names a conversation. */
@@ -462,6 +474,24 @@ class {
 		return post( "clear", len( arguments.conversationId ) ? { "conversationId" : arguments.conversationId } : {} )
 	}
 
+	/**
+	 * Forgets the messages of conversations and keeps the conversations: one of the caller's, or with `all` (an admin's call)
+	 * every conversation, or those that belong to one agent. Answers { conversations, messages }.
+	 */
+	struct function clearMemory( string conversationId = "", boolean all = false, string agent = "" ) {
+		var body = {}
+		if ( len( arguments.conversationId ) ) {
+			body[ "conversationId" ] = arguments.conversationId
+		}
+		if ( arguments.all ) {
+			body[ "all" ] = true
+		}
+		if ( len( arguments.agent ) ) {
+			body[ "agent" ] = arguments.agent
+		}
+		return post( "memory/clear", body )
+	}
+
 	/** Summarizes older messages and keeps the recent ones. */
 	struct function compact( string conversationId = "", numeric keepRecent = 0 ) {
 		var body = {}
@@ -495,6 +525,11 @@ class {
 	/** A note of the agent takes an admin. */
 	struct function removeNote( required string scope, required string id ) {
 		return post( "notes/remove", { "scope" : arguments.scope, "id" : arguments.id } )
+	}
+
+	/** Removes every note of one scope: user (the caller's own) or agent (an admin's). Answers { cleared : how many }. */
+	struct function clearNotes( required string scope ) {
+		return post( "notes/clear", { "scope" : arguments.scope } )
 	}
 
 	// ---- Connections ---------------------------------------------------------------------
@@ -617,7 +652,7 @@ class {
 	}
 
 	/** The body every turn route takes: only what was given is sent */
-	private struct function turn( required string input, string conversationId, struct options ) {
+	private struct function turn( required string input, string conversationId, struct options, string agent = "" ) {
 		var body = { "input" : arguments.input }
 		if ( len( arguments.conversationId ?: "" ) ) {
 			body[ "conversationId" ] = arguments.conversationId
@@ -625,7 +660,14 @@ class {
 		if ( !( arguments.options ?: {} ).isEmpty() ) {
 			body[ "options" ] = arguments.options
 		}
+		if ( len( arguments.agent ?: "" ) ) {
+			body[ "agent" ] = arguments.agent
+		}
 		return body
+	}
+
+	private struct function withAgent( required string agent ) {
+		return len( arguments.agent ) ? { agent : arguments.agent } : {}
 	}
 
 	private struct function withConversation( required string conversationId ) {

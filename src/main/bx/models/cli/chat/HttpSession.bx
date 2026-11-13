@@ -29,6 +29,8 @@ class {
 		variables.conversationId = createUUID()
 		variables.about = nullValue()
 		variables.profileName = ""
+		// the sub-agent being talked to, blank for the main agent (see withAgent)
+		variables.selected = ""
 		variables.offeredProfiles = nullValue()
 		variables.legacy = false
 		variables.summary = new "models.cli.chat.ToolSummary@bxagents"()
@@ -67,7 +69,54 @@ class {
 	}
 
 	string function agentName() {
-		return describe().name ?: "agent"
+		return len( variables.selected ) ? variables.selected : ( describe().name ?: "agent" )
+	}
+
+	/**
+	 * @return The name of the sub-agent being talked to, blank for the main agent
+	 */
+	string function selectedAgent() {
+		return variables.selected
+	}
+
+	/**
+	 * @return Every agent the server lets this chat talk to: [ { name, parent, description, ... } ], the main agent first; just the main agent from a server that has no tree
+	 */
+	array function agents() {
+		var tree = describe().agents ?: []
+		return tree.len() ? tree : [ { name : describe().name ?: "agent", parent : "", description : describe().description ?: "" } ]
+	}
+
+	/**
+	 * Talks to a sub-agent of the server from here on. A conversation belongs to the agent it started with, so call newThread() or resumeSession() after.
+	 *
+	 * @name A name from agents(); blank or the main agent's name is the main agent
+	 *
+	 * @return This, or throws when the server has no agent by that name
+	 */
+	any function withAgent( required string name ) {
+		var wanted = trim( arguments.name )
+		var known = agents().map( ( node ) => node.name )
+		if ( len( wanted ) && !known.contains( wanted ) ) {
+			throw( type = "BxAgents.UnknownAgent", message = "There is no agent called [#wanted#]. Ask for one of: #known.toList( ', ' )#" )
+		}
+		variables.selected = wanted == ( describe().name ?: "" ) ? "" : wanted
+		return this
+	}
+
+	/**
+	 * Switches to another agent and starts a new conversation with it.
+	 *
+	 * @return { ok, agent, id } or { ok : false, reason }
+	 */
+	struct function switchAgent( required string name ) {
+		try {
+			withAgent( arguments.name )
+		} catch ( "BxAgents.UnknownAgent" e ) {
+			return { ok : false, reason : e.message }
+		}
+		newThread()
+		return { ok : true, agent : agentName(), id : variables.conversationId }
 	}
 
 	string function modelName() {
@@ -243,6 +292,19 @@ class {
 		}
 	}
 
+	/**
+	 * @name A skill's name
+	 *
+	 * @return { name, description, origin, size, savedAt, body, truncated }, or an empty struct when the server has no such skill (or cannot say)
+	 */
+	struct function skillText( required string name ) {
+		try {
+			return variables.client.getJson( variables.baseUrl, "skills/read", { name : arguments.name } )
+		} catch ( any e ) {
+			return {}
+		}
+	}
+
 	void function newThread() {
 		variables.threadId = ""
 		variables.conversationId = createUUID()
@@ -305,6 +367,8 @@ class {
 		if ( found.isEmpty() ) {
 			return { ok : false, reason : len( ref ) ? "There is no conversation [#ref#]. Type /sessions to see them." : "There are no earlier conversations." }
 		}
+		// a conversation belongs to the agent it started with: carry on with that one
+		withAgent( found.agent ?: "" )
 		variables.conversationId = found.id
 		variables.threadId = ""
 		return { ok : true, id : found.id, title : found.title ?: "", history : history() }
@@ -477,6 +541,11 @@ class {
 		var client = variables.client
 		var target = variables.baseUrl
 		var summary = variables.summary
+		// the run is on the sub-agent being talked to, which cancel and steer must name as well
+		var aboutAgent = len( variables.selected ) ? { "agent" : variables.selected } : {}
+		if ( len( variables.selected ) ) {
+			arguments.payload[ "agent" ] = variables.selected
+		}
 		var run = { cancelled : false, text : "", pending : [], suspended : false, error : "", threadId : variables.threadId }
 
 		try {
@@ -512,7 +581,7 @@ class {
 					if ( screen.cancelRequested() && !run.cancelled ) {
 						run.cancelled = true
 						try {
-							client.postJson( target, "cancel", { "threadId" : run.threadId, "reason" : "Stopped by the user." } )
+							client.postJson( target, "cancel", { "threadId" : run.threadId, "reason" : "Stopped by the user." }.append( aboutAgent ) )
 						} catch ( any ignored ) {
 							// the turn is left either way
 						}
@@ -521,7 +590,7 @@ class {
 					var steer = screen.takeSteer()
 					if ( !isNull( steer ) && len( run.threadId ) ) {
 						try {
-							client.postJson( target, "steer", { "threadId" : run.threadId, "input" : steer } )
+							client.postJson( target, "steer", { "threadId" : run.threadId, "input" : steer }.append( aboutAgent ) )
 						} catch ( any ignored ) {
 							screen.push( { type : "notice", text : "The server did not take that message." } )
 						}

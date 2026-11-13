@@ -46,6 +46,24 @@ class {
 		return { ok : variables.provider.remove( scope, ownerOf( scope ), arguments.id ) }
 	}
 
+	/**
+	 * Removes every note of one scope.
+	 *
+	 * @scope user or agent
+	 *
+	 * @return { ok : true, cleared : how many }
+	 */
+	struct function clear( required string scope ) {
+		var owner = ownerOf( arguments.scope )
+		var removed = 0
+		for ( var note in variables.provider.list( arguments.scope, owner ) ) {
+			if ( variables.provider.remove( arguments.scope, owner, note.id ) ) {
+				removed++
+			}
+		}
+		return { ok : true, cleared : removed }
+	}
+
 	struct function stats() {
 		return {
 			provider : variables.providerName,
