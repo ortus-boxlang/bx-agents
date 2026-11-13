@@ -1,0 +1,74 @@
+/**
+ * /agent: lists the agents of the tree, switches to one with a new conversation, and says when there is nobody else to talk to.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "/agent", function() {
+
+			function chatWith( required array tree ) {
+				var chat = { current : "", id : "c-main" };
+				chat.agents = () => tree;
+				chat.selectedAgent = () => chat.current;
+				chat.conversationId = () => chat.id;
+				chat.switchAgent = ( name ) => {
+					if ( !tree.map( a => a.name ).contains( name ) ) {
+						return { ok : false, reason : "There is no agent called [" & name & "]." };
+					}
+					chat.current = name;
+					chat.id = "c-new";
+					return { ok : true, agent : name, id : chat.id };
+				};
+				return chat;
+			}
+
+			function runWith( required struct chat, required string args ) {
+				var registry = new bxagents.models.chat.commands.CommandCatalog().standard();
+				var context = new bxagents.models.chat.commands.CommandContext( chat, "tui", true );
+				return registry.lookup( "agent" ).run( context, args );
+			}
+
+			it( "is for the terminal only: the page asks for the agent with each message and a chat app talks to the main one", function() {
+				var registry = new bxagents.models.chat.commands.CommandCatalog().standard();
+
+				expect( registry.menu( "tui" ).map( c => c.name ) ).toInclude( "/agent" );
+				expect( registry.menu( "web" ).map( c => c.name ) ).notToInclude( "/agent" );
+				expect( registry.menu( "gateway" ).map( c => c.name ) ).notToInclude( "/agent" );
+			} );
+
+			it( "says there is nobody else when the agent has no sub-agents", function() {
+				var reply = runWith( chatWith( [ { name : "lead", parent : "", description : "" } ] ), "" );
+
+				expect( reply.blocks()[ 1 ].text ).toInclude( "no sub-agents" );
+			} );
+
+			it( "offers every agent to pick from, marking the main one and the one in use", function() {
+				var reply = runWith( chatWith( [ { name : "lead", parent : "", description : "the boss" }, { name : "scout", parent : "lead", description : "finds things" } ] ), "" );
+				var choose = reply.blocks()[ 1 ];
+
+				expect( choose.type ).toBe( "choose" );
+				expect( choose.options.map( i => i.line ) ).toBe( [ "/agent lead", "/agent scout" ] );
+				expect( choose.options[ 1 ].hint ).toInclude( "(talking to)" );
+				expect( choose.options[ 2 ].hint ).toInclude( "under lead" );
+			} );
+
+			it( "switches to the agent named, in a new conversation", function() {
+				var chat = chatWith( [ { name : "lead", parent : "", description : "" }, { name : "scout", parent : "lead", description : "" } ] );
+				var reply = runWith( chat, "scout" );
+
+				expect( chat.current ).toBe( "scout" );
+				expect( reply.hasEffect( "reset" ) ).toBeTrue();
+				expect( reply.blocks()[ 1 ].text ).toBe( "Now talking to scout, in a new conversation." );
+			} );
+
+			it( "warns when the name is not in the tree", function() {
+				var reply = runWith( chatWith( [ { name : "lead", parent : "", description : "" }, { name : "scout", parent : "lead", description : "" } ] ), "ghost" );
+
+				expect( reply.blocks()[ 1 ].style ).toBe( "warn" );
+				expect( reply.blocks()[ 1 ].text ).toInclude( "ghost" );
+			} );
+
+		} );
+	}
+
+}

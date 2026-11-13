@@ -86,7 +86,7 @@ _bxagents_complete() {
 			add) flags="--agent= --api-key-env= --args= --auth= --cors= --description= --direction= --dry-run --env= --files= --files-dir= --force --format= --function= --guard= --header= --instructions= --layout= --max-tokens= --mcp= --memory= --model= --name= --no-tui --parent= --path= --points= --policy= --profile= --profiles= --projectRoot= --prompt= --provider= --quality= --scope= --search= --server= --size= --style= --temperature= --timeout= --tools= --type= --url= --user= --users= --version= --voice= --when= --with= --yes" ;;
 			backup) flags="--projectRoot= --to=" ;;
 			build) flags="--environment= --generatorVersion= --projectRoot= --verbose" ;;
-			chat) flags="--api-path= --connect= --continue --no-tui --port= --projectRoot= --record --server --session= --token= --user=" ;;
+			chat) flags="--agent= --api-path= --connect= --continue --no-tui --port= --projectRoot= --record --server --session= --token= --user=" ;;
 			clean) flags="--force --projectRoot=" ;;
 			connect) flags="--port= --projectRoot= --timeout= --user=" ;;
 			data) flags="--projectRoot=" ;;
@@ -104,7 +104,7 @@ _bxagents_complete() {
 			restore) flags="--home= --projectRoot=" ;;
 			routines) flags="--all --chat= --destination= --json --name= --older-than= --projectRoot= --prompt= --schedule= --yes" ;;
 			serve) flags="--host= --port= --projectRoot=" ;;
-			sessions) flags="--file= --json --name= --projectRoot= --session= --user=" ;;
+			sessions) flags="--agent= --file= --json --name= --projectRoot= --q= --session= --user=" ;;
 			skills) flags="--dry-run --json --limit= --projectRoot= --registry=" ;;
 			stats) flags="--by= --days= --projectRoot= --user=" ;;
 			test) flags="--projectRoot=" ;;

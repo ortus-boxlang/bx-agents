@@ -523,6 +523,61 @@ try {
 		)
 	}
 	println( "+ Confirmed: both human-in-the-loop approval routes answer from bx-ai's own processor" )
+
+	// ------------------------------------------------------------------
+	// 5c. The routes the web page revamp added, each over real HTTP, as the shared-secret caller (an admin).
+	//     Each row: the verb, the path, a body for POST, the status wanted and a piece of the answer that proves it
+	//     came from the route (not from a generic 404 page).
+	// ------------------------------------------------------------------
+	revampRoutes = [
+		{ verb : "GET",  path : "/sessions?limit=5&facets=1", status : 200, has : '"total"' },
+		{ verb : "GET",  path : "/sessions?limit=5&offset=0&q=zzz&agent=nobody", status : 200, has : '"sessions"' },
+		{ verb : "GET",  path : "/agent", status : 200, has : '"agents"' },
+		{ verb : "POST", path : "/invoke", body : '{"input":"hi","agent":"no-such-agent"}', status : 400, has : "no agent called" },
+		{ verb : "POST", path : "/sessions", body : '{"agent":"no-such-agent"}', status : 400, has : "no agent called" },
+		{ verb : "POST", path : "/memory/clear", body : '{"all":true}', status : 200, has : '"conversations"' },
+		{ verb : "POST", path : "/memory/clear", body : '{}', status : 400, has : "conversationId" },
+		{ verb : "POST", path : "/notes/clear", body : '{"scope":"user"}', status : 404, has : "no_notes" },
+		{ verb : "GET",  path : "/skills/read?name=no-such-skill", status : 404, has : "no skill called" },
+		{ verb : "GET",  path : "/agent/composition", status : 200, has : '"asksFirst"' },
+		{ verb : "GET",  path : "/agent/files", status : 200, has : '"files"' },
+		{ verb : "GET",  path : "/agent/file?path=.env", status : 404, has : "no such file" },
+		{ verb : "GET",  path : "/usage?days=7", status : 200, has : '"enabled"' },
+		{ verb : "GET",  path : "/vault/activity", status : 200, has : '"activity"' },
+		{ verb : "GET",  path : "/data/backups", status : 200, has : '"backups"' },
+		{ verb : "POST", path : "/data/backup", body : '{}', status : 200, has : '"entries"' },
+		{ verb : "POST", path : "/data/restore", body : '{"name":"missing.zip"}', status : 404, has : "no backup" },
+		{ verb : "GET",  path : "/extensions", status : 200, has : '"extensions"' },
+		{ verb : "POST", path : "/extensions/reload", body : '{}', status : 200, has : '"reloaded"' }
+	]
+	for ( revamp in revampRoutes ) {
+		bx:http url="http://127.0.0.1:#port#/__bxagents#revamp.path#" method="#revamp.verb#" result="revampResult" timeout=60 {
+			bx:httpparam type="header" name="x-bxagents-token" value=coldboxToken;
+			if ( revamp.verb == "POST" ) {
+				bx:httpparam type="header" name="Content-Type" value="application/json";
+				bx:httpparam type="body" value=revamp.body;
+			}
+		}
+		if ( revampResult.status_code != revamp.status || !revampResult.fileContent.findNoCase( revamp.has ) ) {
+			throw(
+				type    = "BxAgents.RevampRouteFailed",
+				message = "#revamp.verb# #revamp.path# expected HTTP #revamp.status# with [#revamp.has#], got HTTP #revampResult.status_code#: #left( revampResult.fileContent ?: '', 500 )#"
+			)
+		}
+	}
+	// the backup just made downloads as a zip
+	bx:http url="http://127.0.0.1:#port#/__bxagents/data/backups" method="GET" result="backupList" timeout=30 { bx:httpparam type="header" name="x-bxagents-token" value=coldboxToken; }
+	backupName = jsonDeserialize( backupList.fileContent ).data.backups[ 1 ].name ?: jsonDeserialize( backupList.fileContent ).backups[ 1 ].name
+	bx:http url="http://127.0.0.1:#port#/__bxagents/data/backup?name=#backupName#" method="GET" result="backupGet" timeout=60 getAsBinary="yes" { bx:httpparam type="header" name="x-bxagents-token" value=coldboxToken; }
+	if ( backupGet.status_code != 200 || arrayLen( backupGet.fileContent ) < 100 ) {
+		throw( type = "BxAgents.RevampRouteFailed", message = "GET /data/backup?name=#backupName# did not download a zip (HTTP #backupGet.status_code#)" )
+	}
+	// and a caller with no token is refused the admin ones
+	bx:http url="http://127.0.0.1:#port#/__bxagents/agent/composition" method="GET" result="noToken" timeout=30 {}
+	if ( noToken.status_code != 401 && noToken.status_code != 403 ) {
+		throw( type = "BxAgents.RevampRouteFailed", message = "GET /agent/composition without a token was not refused (HTTP #noToken.status_code#)" )
+	}
+	println( "+ Confirmed: #revampRoutes.len()# routes of the web page revamp answer over real HTTP, the backup downloads, and an admin route refuses a caller with no token" )
 } finally {
 	process.destroy()
 	process.waitFor( 5, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS )

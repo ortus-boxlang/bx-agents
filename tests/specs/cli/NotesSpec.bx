@@ -55,13 +55,28 @@ class extends="testbox.system.BaseSpec" {
 				expect( run_( "remove", { id : notes[ 1 ].id } ).exitCode ).toBe( 1 );
 			} );
 
-			it( "keeps agent notes under the agent's name and uses the limits from Agent.yaml", function() {
+			it( "clears every note of a scope, and only that scope", function() {
+				if ( !usesDefaultPath ) { return; }
+
+				run_( "add", { text : "one" } );
+				run_( "add", { text : "two" } );
+				run_( "add", { scope : "agent", text : "an agent note" } );
+
+				expect( run_( "clear" ).message ).toBe( "Cleared 2 user notes." );
+				expect( run_( "clear" ).message ).toBe( "Cleared 0 user notes." );
+				var stats = jsonDeserialize( run_( "stats", { json : true } ).message );
+				expect( stats.user.count ).toBe( 0 );
+				expect( stats.agent.count ).toBe( 1 );
+				expect( run_( "clear", { scope : "agent" } ).message ).toBe( "Cleared 1 agent note." );
+			} );
+
+			it( "keeps agent notes in the one set every agent shares and uses the limits from Agent.yaml", function() {
 				if ( !usesDefaultPath ) { return; }
 
 				run_( "add", { scope : "agent", text : "The repo uses Gradle" } );
 				var stats = jsonDeserialize( run_( "stats", { json : true } ).message );
 
-				expect( stats.agent.owner ).toBe( "helper" );
+				expect( stats.agent.owner ).toBe( "agent" );
 				expect( stats.agent.count ).toBe( 1 );
 				expect( stats.user.limit ).toBe( 120 );
 				expect( stats.agent.limit ).toBe( 2200 );

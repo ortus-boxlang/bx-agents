@@ -13,6 +13,7 @@ class {
 
 	static {
 		TITLE_LENGTH = 60
+		MAX_LIMIT    = 100
 	}
 
 	/**
@@ -31,10 +32,11 @@ class {
 	 * @firstMessage What the user said; the first one becomes the title
 	 * @messageDelta Added to the message count (a turn is two: the question and the answer)
 	 * @source Where it started (`web`, `terminal`, `api`, a gateway's platform); kept from the first call, never changed after
+	 * @agent The agent it started with (blank is the main agent); kept from the first call, never changed after
 	 *
 	 * @return False when the id exists and belongs to someone else
 	 */
-	boolean function touch( required string userId, required string conversationId, string firstMessage = "", numeric messageDelta = 2, string source = "" ) {
+	boolean function touch( required string userId, required string conversationId, string firstMessage = "", numeric messageDelta = 2, string source = "", string agent = "" ) {
 		var owner = variables.store.rows( "SELECT userId, title, messageCount FROM conversations WHERE id = :id", { id : arguments.conversationId } )
 		if ( owner.len() ) {
 			if ( owner[ 1 ].userId != arguments.userId ) {
@@ -53,13 +55,14 @@ class {
 			return true
 		}
 		variables.store.exec(
-			"INSERT INTO conversations ( id, userId, title, messageCount, source, createdAt, updatedAt ) VALUES ( :id, :userId, :title, :count, :source, :now, :now )",
+			"INSERT INTO conversations ( id, userId, title, messageCount, source, agent, createdAt, updatedAt ) VALUES ( :id, :userId, :title, :count, :source, :agent, :now, :now )",
 			{
 				id     : arguments.conversationId,
 				userId : arguments.userId,
 				title  : titleOf( arguments.firstMessage ),
 				count  : arguments.messageDelta,
 				source : arguments.source,
+				agent  : arguments.agent,
 				now    : { value : now(), cfsqltype : "timestamp" }
 			}
 		)
@@ -82,9 +85,97 @@ class {
 			params[ "source" ] = arguments.source
 		}
 		return variables.store.rows(
-			"SELECT id, userId, title, messageCount, source, createdAt, updatedAt FROM conversations#only# ORDER BY updatedAt DESC, rowid DESC LIMIT #int( arguments.limit )#",
+			"SELECT id, userId, title, messageCount, source, agent, createdAt, updatedAt FROM conversations#only# ORDER BY updatedAt DESC, rowid DESC LIMIT #int( arguments.limit )#",
 			params
 		)
+	}
+
+	/**
+	 * A page of conversations, filtered, with the count of everything that matches (so a client can page).
+	 *
+	 * @userId Whose; blank for everyone's (an admin's overview)
+	 * @filters { limit?, offset?, q? (title contains), source?, agent? (a name, or an array of names), mainAgent? (the main agent's name, which a blank stored agent stands for), since? and before? (dates, on updatedAt) }
+	 *
+	 * @return { rows : [ { id, userId, title, messageCount, source, agent, createdAt, updatedAt } ], total, limit, offset }
+	 */
+	struct function search( string userId = "", struct filters = {} ) {
+		var limit = max( 1, min( int( val( arguments.filters.limit ?: 25 ) ), static.MAX_LIMIT ) )
+		var offset = max( 0, int( val( arguments.filters.offset ?: 0 ) ) )
+		var params = {}
+		var where = whereOf( arguments.userId, arguments.filters, "", params )
+		var total = variables.store.rows( "SELECT COUNT(*) AS n FROM conversations#where#", params )
+		var rows = variables.store.rows(
+			"SELECT id, userId, title, messageCount, source, agent, createdAt, updatedAt FROM conversations#where# ORDER BY updatedAt DESC, rowid DESC LIMIT #limit# OFFSET #offset#",
+			params
+		)
+		return { "rows" : rows, "total" : val( total[ 1 ].n ?: 0 ), "limit" : limit, "offset" : offset }
+	}
+
+	/**
+	 * How many conversations there are per source and per agent. Each facet is counted with every filter except its
+	 * own, so choosing a source still shows how many each other source would give.
+	 *
+	 * @return { source : { web : 120 }, agent : { "" : 3, researcher : 4 } }
+	 */
+	struct function facets( string userId = "", struct filters = {} ) {
+		var out = {}
+		for ( var column in [ "source", "agent" ] ) {
+			var params = {}
+			var where = whereOf( arguments.userId, arguments.filters, column, params )
+			var counted = {}
+			for ( var row in variables.store.rows( "SELECT #column# AS k, COUNT(*) AS n FROM conversations#where# GROUP BY #column#", params ) ) {
+				counted[ row.k ?: "" ] = val( row.n )
+			}
+			out[ column ] = counted
+		}
+		return out
+	}
+
+	/**
+	 * The WHERE clause of a filtered read, with its parameters added to `params`.
+	 *
+	 * @skip A filter to leave out (a facet is counted without its own)
+	 */
+	private string function whereOf( required string userId, required struct filters, required string skip, required struct params ) {
+		var parts = []
+		if ( len( arguments.userId ) ) {
+			parts.append( "userId = :userId" )
+			arguments.params[ "userId" ] = arguments.userId
+		}
+		var q = trim( arguments.filters.q ?: "" )
+		if ( len( q ) ) {
+			parts.append( "INSTR( LOWER( title ), :q ) > 0" )
+			arguments.params[ "q" ] = lCase( q )
+		}
+		var source = trim( arguments.filters.source ?: "" )
+		if ( len( source ) && arguments.skip != "source" ) {
+			parts.append( "source = :source" )
+			arguments.params[ "source" ] = source
+		}
+		var agents = arguments.filters.agent ?: ""
+		agents = isArray( agents ) ? agents : ( len( trim( agents ) ) ? [ trim( agents ) ] : [] )
+		// the main agent's conversations are stored with a blank agent, so asking for it by name also finds those
+		if ( agents.len() && len( arguments.filters.mainAgent ?: "" ) && agents.contains( arguments.filters.mainAgent ) && !agents.contains( "" ) ) {
+			agents.append( "" )
+		}
+		if ( agents.len() && arguments.skip != "agent" ) {
+			var marks = []
+			var at = 0
+			for ( var name in agents ) {
+				at++
+				marks.append( ":agent#at#" )
+				arguments.params[ "agent#at#" ] = name
+			}
+			parts.append( "agent IN ( #marks.toList()# )" )
+		}
+		for ( var edge in [ { key : "since", op : ">=" }, { key : "before", op : "<" } ] ) {
+			var stamp = trim( arguments.filters[ edge.key ] ?: "" )
+			if ( len( stamp ) && isDate( stamp ) ) {
+				parts.append( "updatedAt #edge.op# :#edge.key#" )
+				arguments.params[ edge.key ] = { value : parseDateTime( stamp ), cfsqltype : "timestamp" }
+			}
+		}
+		return parts.len() ? " WHERE " & parts.toList( " AND " ) : ""
 	}
 
 	/**
@@ -100,7 +191,7 @@ class {
 			params[ "source" ] = arguments.source
 		}
 		return variables.store.rows(
-			"SELECT id, title, messageCount, source, createdAt, updatedAt FROM conversations WHERE userId = :userId#only# ORDER BY updatedAt DESC, rowid DESC LIMIT #int( arguments.limit )#",
+			"SELECT id, title, messageCount, source, agent, createdAt, updatedAt FROM conversations WHERE userId = :userId#only# ORDER BY updatedAt DESC, rowid DESC LIMIT #int( arguments.limit )#",
 			params
 		)
 	}
@@ -110,7 +201,7 @@ class {
 	 */
 	struct function byId( required string userId, required string conversationId ) {
 		var found = variables.store.rows(
-			"SELECT id, title, messageCount, source, createdAt, updatedAt FROM conversations WHERE id = :id AND userId = :userId",
+			"SELECT id, title, messageCount, source, agent, createdAt, updatedAt FROM conversations WHERE id = :id AND userId = :userId",
 			{ id : arguments.conversationId, userId : arguments.userId }
 		)
 		return found.len() ? found[ 1 ] : {}

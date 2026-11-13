@@ -217,6 +217,81 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "talking to a sub-agent directly", function() {
+
+				beforeEach( function() {
+					variables.dir = createTempDirectory( prefix = "bxagents-session-subagent-" );
+					variables.sessions = new bxagents.models.store.SessionStore( bxagents.models.store.ChatStore::forFile( dir & "/chat.db" ) );
+					variables.scout = aiAgent( name : "scout", description : "finds things", model : aiModel( provider : "mock" ) );
+					variables.lead = aiAgent( name : "lead", model : aiModel( provider : "mock" ), subAgents : [ scout ] );
+					variables.team = new bxagents.models.cli.chat.InProcessSession( lead, "", sessions );
+				} );
+
+				afterEach( function() {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				} );
+
+				it( "lists the agent tree, and knows nobody is picked at first", function() {
+					expect( team.agents().map( a => a.name ) ).toBe( [ "lead", "scout" ] );
+					expect( team.agents()[ 2 ].parent ).toBe( "lead" );
+					expect( team.selectedAgent() ).toBe( "" );
+					expect( team.agentName() ).toBe( "lead" );
+				} );
+
+				it( "refuses an agent that is not in the tree, and names the ones that are", function() {
+					var switched = team.switchAgent( "ghost" )
+
+					expect( switched.ok ).toBeFalse();
+					expect( switched.reason ).toInclude( "scout" );
+					expect( team.selectedAgent() ).toBe( "" );
+					expect( function() { team.withAgent( "ghost" ) } ).toThrow( "BxAgents.UnknownAgent" );
+				} );
+
+				it( "switches to a sub-agent with a new conversation, which stays with it and keeps its own memory", function() {
+					var before = team.conversationId()
+					var switched = team.switchAgent( "scout" )
+
+					expect( switched.ok ).toBeTrue();
+					expect( switched.id ).notToBe( before );
+					team.send( "find it", hooks )
+
+					expect( sessions.byId( team.userId(), team.conversationId() ).agent ).toBe( "scout" );
+					expect( scout.getMemoryMessages( team.userId(), team.conversationId() ) ).notToBeEmpty();
+					expect( lead.getMemoryMessages( team.userId(), team.conversationId() ) ).toBeEmpty();
+					expect( team.agentName() ).toBe( "scout" );
+				} );
+
+				it( "goes back to the main agent by its name, and carries on with an old conversation's own agent", function() {
+					team.switchAgent( "scout" )
+					team.send( "find it", hooks )
+					var scoutConversation = team.conversationId()
+					team.switchAgent( "lead" )
+					team.send( "hello", hooks )
+
+					expect( team.selectedAgent() ).toBe( "" );
+					expect( sessions.byId( team.userId(), team.conversationId() ).agent ).toBe( "" );
+
+					var back = team.resumeSession( scoutConversation )
+					expect( back.ok ).toBeTrue();
+					expect( team.selectedAgent() ).toBe( "scout" );
+				} );
+
+				it( "refuses a turn for a conversation that belongs to another agent", function() {
+					team.send( "hello", hooks )
+					var mainConversation = team.conversationId()
+
+					// the same conversation id, asked of a different agent
+					var runner = new bxagents.models.api.TurnRunner( agent = scout, sessions = sessions, agentName = "scout", mainName = "lead" );
+					var refused = runner.run( new bxagents.models.api.Caller( id = team.userId(), source = "terminal" ), { input : "no", conversationId : mainConversation } );
+
+					expect( refused.code() ).toBe( "conflict" );
+					expect( refused.reason() ).toBe( "This conversation belongs to lead" );
+				} );
+
+			} );
+
 			it( "stops reporting tool calls once closed", function() {
 				session.close()
 				aiTool( "late", "late", () => "x", false ).invoke( {} )

@@ -6,6 +6,7 @@
  *   bxAgents notes add --text="Prefers short answers" [--scope=user|agent] [--user=NAME]
  *   bxAgents notes edit --id=<id> --text="new text" [--scope=...] [--user=NAME]
  *   bxAgents notes remove --id=<id> [--scope=...] [--user=NAME]
+ *   bxAgents notes clear [--scope=user|agent] [--user=NAME]   removes every note of the scope
  *   bxAgents notes stats [--user=NAME] [--json]
  *   bxAgents notes export [--file=notes.json]
  *   bxAgents notes import --file=notes.json
@@ -18,7 +19,7 @@ import bxModules.bxagents.models.api.Caller;
 class {
 
 	static {
-		ACTIONS = [ "list", "add", "edit", "remove", "stats", "export", "import" ]
+		ACTIONS = [ "list", "add", "edit", "remove", "clear", "stats", "export", "import" ]
 	}
 
 	/**
@@ -79,6 +80,14 @@ class {
 				return provider.remove( scope, owner, gone )
 					? { exitCode : 0, message : "Removed." }
 					: { exitCode : 1, message : "There is no #scope# note with id [#gone#]." }
+			case "clear":
+				var removed = 0
+				for ( var held in provider.list( scope, owner ) ) {
+					if ( provider.remove( scope, owner, held.id ) ) {
+						removed++
+					}
+				}
+				return { exitCode : 0, message : "Cleared #removed# #scope# note#removed == 1 ? '' : 's'#." }
 			case "export":
 				return exportNotes( provider, user, agentName, arguments.options )
 			case "import":

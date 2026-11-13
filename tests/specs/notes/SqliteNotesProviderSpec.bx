@@ -32,15 +32,28 @@ class extends="testbox.system.BaseSpec" {
 				expect( all[ 1 ].source ).toBe( "agent" );
 			} );
 
-			it( "keeps the two scopes and the owners apart", function() {
+			it( "keeps the people apart, and the agent's notes in one set for every agent", function() {
 				notes.add( "user", "alice", "likes tea" );
 				notes.add( "user", "bob", "likes coffee" );
 				notes.add( "agent", "helper", "the repo uses Gradle" );
+				notes.add( "agent", "researcher", "the docs are in /docs" );
 
 				expect( notes.list( "user", "alice" ).map( n => n.text ) ).toBe( [ "likes tea" ] );
 				expect( notes.list( "user", "bob" ).map( n => n.text ) ).toBe( [ "likes coffee" ] );
-				expect( notes.list( "agent", "helper" ).map( n => n.text ) ).toBe( [ "the repo uses Gradle" ] );
-				expect( notes.list( "agent", "alice" ) ).toBeEmpty();
+				// whatever name asks, the agent notes are the same set
+				expect( notes.list( "agent", "helper" ).map( n => n.text ) ).toBe( [ "the repo uses Gradle", "the docs are in /docs" ] );
+				expect( notes.list( "agent", "researcher" ) ).toBe( notes.list( "agent", "helper" ) );
+				expect( notes.list( "agent", "alice" ) ).toHaveLength( 2 );
+				expect( notes.stats( "agent", "whoever" ).owner ).toBe( "agent" );
+			} );
+
+			it( "lets any agent change or forget a note another agent made", function() {
+				var made = notes.add( "agent", "helper", "the repo uses Gradle" );
+
+				expect( notes.replace( "agent", "researcher", made.id, "the repo uses Maven" ).ok ).toBeTrue();
+				expect( notes.list( "agent", "helper" )[ 1 ].text ).toBe( "the repo uses Maven" );
+				expect( notes.remove( "agent", "scout", made.id ) ).toBeTrue();
+				expect( notes.list( "agent", "helper" ) ).toBeEmpty();
 			} );
 
 			it( "collapses whitespace and line breaks into one line", function() {

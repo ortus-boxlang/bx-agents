@@ -347,7 +347,12 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		var answered = service().turns().run( callerOf( event ), event.getHTTPContent( json : true ) )
+		var body = event.getHTTPContent( json : true )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		var answered = turns.run( callerOf( event ), body )
 		if ( answered.succeeded() ) {
 			event.setHTTPHeader( name : "X-Thread-Id", value : answered.data().threadId )
 		}
@@ -362,7 +367,12 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		answer( event, service().turns().batch( callerOf( event ), event.getHTTPContent( json : true ) ) )
+		var body = event.getHTTPContent( json : true )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		answer( event, turns.batch( callerOf( event ), body ) )
 	}
 
 	/**
@@ -373,7 +383,12 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		var prepared = service().turns().prepareTurn( callerOf( event ), event.getHTTPContent( json : true ) )
+		var body = event.getHTTPContent( json : true )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		var prepared = turns.prepareTurn( callerOf( event ), body )
 		if ( !prepared.succeeded() ) {
 			answer( event, prepared )
 			return
@@ -418,7 +433,12 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		var prepared = service().turns().prepareTurn( callerOf( event ), event.getHTTPContent( json : true ) )
+		var body = event.getHTTPContent( json : true )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		var prepared = turns.prepareTurn( callerOf( event ), body )
 		if ( !prepared.succeeded() ) {
 			answer( event, prepared )
 			return
@@ -437,7 +457,11 @@ class {
 			return
 		}
 		var body = event.getHTTPContent( json : true )
-		answer( event, service().turns().cancel( callerOf( event ), body.threadId ?: "", body.reason ?: "Cancelled by the user." ) )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		answer( event, turns.cancel( callerOf( event ), body.threadId ?: "", body.reason ?: "Cancelled by the user." ) )
 	}
 
 	/**
@@ -450,7 +474,11 @@ class {
 			return
 		}
 		var body = event.getHTTPContent( json : true )
-		answer( event, service().turns().steer( callerOf( event ), body.threadId ?: "", body.input ?: "" ) )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		answer( event, turns.steer( callerOf( event ), body.threadId ?: "", body.input ?: "" ) )
 	}
 
 	/**
@@ -462,7 +490,11 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		answer( event, service().turns().pending( callerOf( event ), rc.threadId ?: "" ) )
+		var turns = turnsFor( event, rc.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		answer( event, turns.pending( callerOf( event ), rc.threadId ?: "" ) )
 	}
 
 	/**
@@ -475,12 +507,30 @@ class {
 			return
 		}
 		var body = event.getHTTPContent( json : true )
-		var prepared = service().turns().prepareResume( callerOf( event ), body.threadId ?: "", body )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		var prepared = turns.prepareResume( callerOf( event ), body.threadId ?: "", body )
 		if ( !prepared.succeeded() ) {
 			answer( event, prepared )
 			return
 		}
 		return streamTurn( prepared.data() )
+	}
+
+	/**
+	 * The turn runner for the agent a request names. An unknown agent is answered here (400) and null comes back.
+	 *
+	 * @agentName A name from the agent tree; blank is the main agent
+	 */
+	private any function turnsFor( required any event, string agentName = "" ) {
+		var checked = service().checkAgent( arguments.agentName )
+		if ( !checked.succeeded() ) {
+			answer( arguments.event, checked )
+			return nullValue()
+		}
+		return service().turns( arguments.agentName )
 	}
 
 	/**
@@ -518,8 +568,9 @@ class {
 	// ----------------------------------------------------------------------------------
 
 	/**
-	 * GET: the caller's recent conversations, most recent first: { sessions : [ { id, title, messageCount, source, updatedAt } ] }.
-	 * Query: limit?, source?
+	 * GET: a page of the caller's conversations, most recent first:
+	 * { sessions : [ { id, title, messageCount, source, agent, updatedAt } ], total, limit, offset, facets? }.
+	 * Query: limit? (25, at most 100), offset?, q? (title contains), source?, agent?, since?, before?, all? (admin), facets? (1 adds counts per source and agent)
 	 * POST: starts a conversation, { conversationId }; the id is made here, never taken from the caller. Body: { title? }
 	 *
 	 * 404 when this server keeps no conversation list (no shared chat database).
@@ -534,10 +585,30 @@ class {
 			return
 		}
 		if ( event.getHTTPMethod() == "POST" ) {
-			answer( event, all.create( callerOf( event ), event.getHTTPContent( json : true ).title ?: "" ) )
+			var body = event.getHTTPContent( json : true )
+			var checked = service().checkAgent( body.agent ?: "" )
+			if ( !checked.succeeded() ) {
+				answer( event, checked )
+				return
+			}
+			answer( event, all.create( callerOf( event ), body.title ?: "", body.agent ?: "" ) )
 			return
 		}
-		answer( event, all.list( callerOf( event ), val( rc.limit ?: 20 ), rc.source ?: "", isBoolean( rc.all ?: "" ) && rc.all ) )
+		answer(
+			event,
+			all.list(
+				caller : callerOf( event ),
+				limit  : val( rc.limit ?: 25 ),
+				source : rc.source ?: "",
+				all    : isBoolean( rc.all ?: "" ) && rc.all,
+				offset : val( rc.offset ?: 0 ),
+				q      : rc.q ?: "",
+				agent  : rc.agent ?: "",
+				since  : rc.since ?: "",
+				before : rc.before ?: "",
+				facets : isBoolean( rc.facets ?: "" ) && rc.facets
+			)
+		)
 	}
 
 	/**
@@ -716,6 +787,17 @@ class {
 		answer( event, service().skills( callerOf( event ) ) )
 	}
 
+	/**
+	 * One skill's SKILL.md text, as { name, description, origin, size, savedAt, body, truncated }. A long one is cut and
+	 * says so; the answer never holds a folder on the machine. Query: name
+	 */
+	function readSkill( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().skill( callerOf( event ), toString( rc.name ?: "" ) ) )
+	}
+
 	// ----------------------------------------------------------------------------------
 	// Routines: prompts the agent runs on a schedule. Every action goes through the RoutineManager, which holds the owner and
 	// admin rules; a server that left routines off answers 404.
@@ -870,6 +952,102 @@ class {
 		answer( event, service().data( callerOf( event ) ) )
 	}
 
+	// ----------------------------------------------------------------------------------
+	// Admin data: composition, files, usage, vault activity, backups, extensions. Every one is admin only.
+	// ----------------------------------------------------------------------------------
+
+	/** How the agent is put together: { incoming, parts, agents, outgoing, asksFirst }. */
+	function composition( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().composition( callerOf( event ) ) )
+	}
+
+	/** The project's own files that are safe to show: { files : [ { path, size } ] }. */
+	function agentFiles( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().agentFiles( callerOf( event ) ) )
+	}
+
+	/** One of those files as text, read only: { path, size, truncated, text }. Query: path */
+	function agentFile( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().agentFile( callerOf( event ), toString( rc.path ?: "" ) ) )
+	}
+
+	/** The usage snapshot: { enabled : false, howTo } until usage is turned on. Query: days? */
+	function usage( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().usage( callerOf( event ), val( rc.days ?: 30 ) ) )
+	}
+
+	/** The vault's key status and its recent audit lines, never a value. */
+	function vaultActivity( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().vaultActivity( callerOf( event ) ) )
+	}
+
+	/** The backups there are, and a restore waiting for the next start: { backups, pending }. */
+	function backups( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().backups( callerOf( event ) ) )
+	}
+
+	/**
+	 * GET: downloads one backup as a zip. Query: name
+	 * POST: makes a backup now, { name, bytes, entries }.
+	 */
+	function backup( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		if ( event.getHTTPMethod() == "POST" ) {
+			answer( event, service().backupNow( callerOf( event ) ) )
+			return
+		}
+		var found = service().backupFile( callerOf( event ), toString( rc.name ?: "" ) )
+		if ( !found.succeeded() ) {
+			answer( event, found )
+			return
+		}
+		event.sendFile( file : found.data().file, name : found.data().name, mimeType : "application/zip", disposition : "attachment" )
+	}
+
+	/** Schedules a backup to be put back the next time the app starts. Body: { name } */
+	function restoreBackup( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().restoreBackup( callerOf( event ), toString( bodyOf( event ).name ?: "" ) ) )
+	}
+
+	/** The extensions this app loaded and what each adds: { extensions, problems }. */
+	function extensions( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().extensions( callerOf( event ) ) )
+	}
+
+	/** Loads the extensions again, as /reload does in the terminal. */
+	function reloadExtensions( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().reloadExtensions( callerOf( event ) ) )
+	}
+
 	/**
 	 * What the caller has set for themselves, as { preferences : { key : value } }. 404 when this server keeps no shared database.
 	 */
@@ -961,6 +1139,42 @@ class {
 			return
 		}
 		answer( event, kept.all() )
+	}
+
+	/**
+	 * Removes every note of one scope: the caller's own, or the agent's (admin only). { cleared : count }.
+	 *
+	 * Body: { scope : "user" | "agent" }
+	 */
+	function clearNotes( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().notes( callerOf( event ) ).clear( toString( event.getHTTPContent( json : true ).scope ?: "" ) ) )
+	}
+
+	/**
+	 * Clears conversation memory and keeps the conversations: one of the caller's, or (admin only) all of them or all of
+	 * one agent's. { conversations, messages }.
+	 *
+	 * Body: { conversationId?, all?, agent? }
+	 */
+	function clearMemory( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var all = service().conversations()
+		if ( isNull( all ) ) {
+			answer( event, noSessions() )
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		var checked = service().checkAgent( body.agent ?: "" )
+		if ( !checked.succeeded() ) {
+			answer( event, checked )
+			return
+		}
+		answer( event, all.clearMemory( callerOf( event ), toString( body.conversationId ?: "" ), isBoolean( body.all ?: "" ) && body.all, toString( body.agent ?: "" ) ) )
 	}
 
 	// ----------------------------------------------------------------------------------

@@ -15,6 +15,7 @@ class {
 		DATABASE = "chat.db"
 		FOLDERS  = [ "files", "skills", "routines" ]
 		FORMAT   = 1
+		PENDING  = "restore-pending.json"
 	}
 
 	/**
@@ -128,6 +129,88 @@ class {
 			zip.close()
 		}
 		return { restored : restored, kept : kept }
+	}
+
+	/**
+	 * The backups in the home's backups/ folder, newest first.
+	 *
+	 * @return [ { name, bytes, madeAt } ]
+	 */
+	array function list() {
+		var folder = variables.home.folder( "backups" )
+		if ( !directoryExists( folder ) ) {
+			return []
+		}
+		return directoryList( path = folder, listInfo = "query", type = "file", filter = "*.zip" )
+			.reduce( ( all, row ) => { all.append( { name : row.name, bytes : row.size, madeAt : dateTimeFormat( row.dateLastModified, "yyyy-MM-dd'T'HH:mm:ss" ) } ); return all }, [] )
+			.sort( ( a, b ) => compare( b.madeAt, a.madeAt ) )
+	}
+
+	/**
+	 * @name A backup's file name, as list() gives it
+	 *
+	 * @return The absolute path of that backup; throws for a name that is not one of the zips in backups/ (never a path)
+	 */
+	string function fileOf( required string name ) {
+		var wanted = trim( arguments.name )
+		if ( !reFind( "^[A-Za-z0-9._-]+\.zip$", wanted ) || wanted.startsWith( "." ) ) {
+			throw( type = "BxAgents.BackupNotFound", message = "[#wanted#] is not the name of a backup." )
+		}
+		var file = variables.home.folder( "backups" ) & "/" & wanted
+		if ( !fileExists( file ) ) {
+			throw( type = "BxAgents.BackupNotFound", message = "There is no backup called [#wanted#]." )
+		}
+		return file
+	}
+
+	/**
+	 * Asks for a backup to be put back the next time the app starts, since the database is open while it runs.
+	 *
+	 * @name A backup's file name, as list() gives it
+	 *
+	 * @return { name, scheduledAt }
+	 */
+	struct function schedule( required string name ) {
+		fileOf( arguments.name )
+		variables.home.ensure()
+		var asked = { "name" : trim( arguments.name ), "scheduledAt" : dateTimeFormat( now(), "yyyy-MM-dd'T'HH:mm:ss" ) }
+		fileWrite( variables.home.path() & "/" & static.PENDING, jsonSerialize( asked ), "UTF-8" )
+		return asked
+	}
+
+	/**
+	 * @return { name, scheduledAt } of the restore waiting for the next start, or an empty struct
+	 */
+	struct function pending() {
+		var marker = variables.home.path() & "/" & static.PENDING
+		if ( !fileExists( marker ) ) {
+			return {}
+		}
+		try {
+			return jsonDeserialize( fileRead( marker, "UTF-8" ) )
+		} catch ( any e ) {
+			return {}
+		}
+	}
+
+	/**
+	 * Called as the app starts, before the database is opened: puts the scheduled backup back, once.
+	 *
+	 * @return { restored : [ ... ], kept : [ ... ] } or an empty struct when nothing was waiting. A backup that cannot be restored is reported in `error`.
+	 */
+	struct function applyPending() {
+		var asked = pending()
+		if ( asked.isEmpty() ) {
+			return {}
+		}
+		var marker = variables.home.path() & "/" & static.PENDING
+		// the marker goes first: a restore that fails must not run again at every start
+		fileDelete( marker )
+		try {
+			return restore( fileOf( asked.name ?: "" ), true )
+		} catch ( any e ) {
+			return { error : e.message }
+		}
 	}
 
 	/**

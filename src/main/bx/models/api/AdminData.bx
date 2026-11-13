@@ -1,0 +1,359 @@
+/**
+ * What an admin sees of the agent's make-up and keeping: how it is composed, the project's own files, the usage
+ * snapshot, the vault's activity, the backups and the extensions. Every answer is an Outcome and none holds a
+ * secret value or a folder on the machine outside the files it was asked to show. AgentService checks that the
+ * caller is an admin before any of it is reached.
+ */
+import bxModules.bxagents.models.api.Outcome;
+
+class {
+
+	static {
+		// what of the project may be shown: these files and these folders, read only
+		FILES   = [ "Agent.yaml", "Agent.bx", "instructions.md" ]
+		FOLDERS = [ "tools", "skills", "subagents", "gateways" ]
+		TEXT    = "md,yaml,yml,bx,bxs,bxm,json,txt"
+		MAX_BYTES = 200000
+		MAX_LISTED = 500
+	}
+
+	/**
+	 * @agent The built agent
+	 * @appData An AppData, or null
+	 * @store A ChatStore, or null
+	 * @gateways A GatewayInfo, or null
+	 * @routinesOn True when routines are on
+	 */
+	function init( required any agent, any appData, any store, any gateways, boolean routinesOn = false ) {
+		variables.agent = arguments.agent
+		variables.appData = arguments.appData ?: nullValue()
+		variables.store = arguments.store ?: nullValue()
+		variables.gateways = arguments.gateways ?: nullValue()
+		variables.routinesOn = arguments.routinesOn
+		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Composition
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return An Outcome: { incoming : [ { kind, name, detail, state } ], parts : [ { key, title, count, detail } ], agents : [ tree ], outgoing : [ { kind, name, detail } ], asksFirst : [ tool names ] }
+	 */
+	any function composition() {
+		var tree = new AgentTree( variables.agent )
+		var config = variables.agent.getConfig()
+		var nodes = tree.nodes()
+		var listed = isNull( variables.gateways ) ? [] : variables.gateways.listing()
+
+		var incoming = [
+			{ kind : "web", name : "Web page", detail : "the page this server serves", state : "on" },
+			{ kind : "api", name : "API", detail : "the routes under the API path", state : "on" },
+			{ kind : "terminal", name : "Terminal chat", detail : "bxAgents chat", state : "on" }
+		]
+		for ( var gateway in listed ) {
+			incoming.append( { kind : "gateway", name : gateway.name ?: "", detail : gateway.type ?: "", state : gateway.state ?: "" } )
+		}
+		if ( variables.routinesOn ) {
+			incoming.append( { kind : "routines", name : "Routines", detail : "prompts run on a schedule", state : "on" } )
+		}
+
+		var skills = config.skills ?: {}
+		var parts = [
+			{ key : "tools", title : "Tools", count : config.toolCount ?: 0, detail : ( config.tools ?: [] ).map( t => t.name ?: "" ).toList( ", " ) },
+			{ key : "skills", title : "Skills", count : ( skills.activeSkills ?: [] ).len() + ( skills.availableSkills ?: [] ).len(), detail : "" },
+			{ key : "agents", title : "Sub-agents", count : nodes.len() - 1, detail : nodes.filter( n => len( n.parent ) ).map( n => n.name ).toList( ", " ) },
+			{ key : "memory", title : "Memory", count : config.memoryCount ?: 0, detail : "" },
+			{ key : "mcp", title : "MCP servers", count : ( config.mcpServers ?: [] ).len(), detail : "" },
+			{ key : "middleware", title : "Middleware", count : config.middlewareCount ?: 0, detail : ( config.middleware ?: [] ).map( m => isStruct( m ) ? ( m.name ?: "" ) : toString( m ) ).toList( ", " ) },
+			{ key : "volumes", title : "Volumes", count : isNull( variables.appData ) ? 0 : variables.appData.listing().len(), detail : "" }
+		]
+
+		var outgoing = [ { kind : "model", name : nodes[ 1 ].model, detail : "the main agent's model" } ]
+		for ( var node in nodes ) {
+			if ( len( node.parent ) && len( node.model ) && node.model != nodes[ 1 ].model ) {
+				outgoing.append( { kind : "model", name : node.model, detail : "the model of #node.name#" } )
+			}
+		}
+		for ( var server in ( config.mcpServers ?: [] ) ) {
+			outgoing.append( { kind : "mcp", name : isStruct( server ) ? ( server.name ?: server.prefix ?: "MCP server" ) : "MCP server", detail : "" } )
+		}
+		for ( var gateway in listed ) {
+			outgoing.append( { kind : "gateway", name : gateway.name ?: "", detail : "replies and routine answers" } )
+		}
+
+		return Outcome::done( {
+			"incoming"  : incoming,
+			"parts"     : parts,
+			"agents"    : nodes,
+			"outgoing"  : outgoing,
+			"asksFirst" : asksFirst()
+		} )
+	}
+
+	/**
+	 * @return The names of the tools a person approves before they run, from the approval middleware of every agent in the tree
+	 */
+	private array function asksFirst() {
+		var names = []
+		for ( var node in new AgentTree( variables.agent ).agents() ) {
+			for ( var middleware in middlewareOf( node ) ) {
+				if ( isObject( middleware ) && listLast( getMetadata( middleware ).name, "." ) == "HumanInTheLoopMiddleware" ) {
+					for ( var name in ( middleware.getToolsRequiringApproval() ?: [] ) ) {
+						if ( !names.contains( name ) ) {
+							names.append( name )
+						}
+					}
+				}
+			}
+		}
+		return names.sort( "text" )
+	}
+
+	/**
+	 * An agent with no middleware to list (a stand-in, in a spec) has none.
+	 */
+	private array function middlewareOf( required any node ) {
+		try {
+			return arguments.node.getMiddleware() ?: []
+		} catch ( any e ) {
+			return []
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+	// The project's files
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return An Outcome: { files : [ { path, size } ] }, paths relative to the project, nothing a secret would be in
+	 */
+	any function files() {
+		var root = projectRoot()
+		var found = []
+		if ( len( root ) ) {
+			for ( var name in static.FILES ) {
+				if ( fileExists( root & "/" & name ) ) {
+					found.append( { path : name, size : createObject( "java", "java.io.File" ).init( root & "/" & name ).length() } )
+				}
+			}
+			for ( var folder in static.FOLDERS ) {
+				if ( !directoryExists( root & "/" & folder ) ) {
+					continue
+				}
+				for ( var file in directoryList( path = root & "/" & folder, recurse = true, listInfo = "array", type = "file" ) ) {
+					var relative = relativeTo( root, file )
+					if ( shown( relative ) && found.len() < static.MAX_LISTED ) {
+						found.append( { path : relative, size : createObject( "java", "java.io.File" ).init( file ).length() } )
+					}
+				}
+			}
+		}
+		return Outcome::done( { "files" : found.sort( ( a, b ) => compare( a.path, b.path ) ) } )
+	}
+
+	/**
+	 * @path A path from files()
+	 *
+	 * @return An Outcome: { path, size, truncated, text }, bad_request or not_found. Secrets in Agent.yaml are shown as names only.
+	 */
+	any function file( required string path ) {
+		var wanted = replace( trim( arguments.path ), "\", "/", "all" )
+		if ( !len( wanted ) ) {
+			return Outcome::failed( "bad_request", "path is required" )
+		}
+		var allowed = files().data().files.filter( f => f.path == wanted )
+		if ( !allowed.len() ) {
+			return Outcome::failed( "not_found", "There is no such file to show: [#wanted#]" )
+		}
+		var file = projectRoot() & "/" & wanted
+		var size = createObject( "java", "java.io.File" ).init( file ).length()
+		var text = size > static.MAX_BYTES ? left( fileRead( file, "UTF-8" ), static.MAX_BYTES ) : fileRead( file, "UTF-8" )
+		if ( reFindNoCase( "^Agent\.(yaml|yml|bx)$", wanted ) ) {
+			text = redacted( text )
+		}
+		return Outcome::done( { "path" : wanted, "size" : size, "truncated" : size > static.MAX_BYTES, "text" : text } )
+	}
+
+	/**
+	 * @return True for a file that is safe to show: a text type, not hidden, not a .env
+	 */
+	private boolean function shown( required string relative ) {
+		var name = listLast( arguments.relative, "/" )
+		return !name.startsWith( "." ) && !arguments.relative.contains( "/." ) && !arguments.relative.contains( ".." )
+			&& listFindNoCase( static.TEXT, listLast( name, "." ) ) > 0
+	}
+
+	/**
+	 * Values of keys that look like secrets become stars: the names stay, so a reader sees what is set.
+	 */
+	private string function redacted( required string text ) {
+		return reReplaceNoCase( arguments.text, "(?m)^([ \t]*[A-Za-z0-9_.-]*(key|token|secret|password|credential)[A-Za-z0-9_.-]*\s*:[ \t]*)[^\r\n]+$", "\1********", "all" )
+	}
+
+	private string function projectRoot() {
+		return isNull( variables.appData ) ? "" : replace( variables.appData.home().projectRoot(), "\", "/", "all" ).reReplace( "/+$", "" )
+	}
+
+	private string function relativeTo( required string root, required string file ) {
+		var clean = replace( arguments.file, "\", "/", "all" )
+		return mid( clean, len( arguments.root ) + 2, len( clean ) )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Usage and the vault
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @days How many days back
+	 *
+	 * @return An Outcome: { enabled : false, howTo } when usage is off, otherwise { enabled : true, days, calls, tokens..., groups, byDay }
+	 */
+	any function usage( numeric days = 30 ) {
+		var days = max( 1, min( int( val( arguments.days ) ), 365 ) )
+		if ( !new "models.usage.UsageRecorder@bxagents"().enabled() || isNull( variables.store ) ) {
+			return Outcome::done( { "enabled" : false, "howTo" : "Turn it on with `usage: true` in Agent.yaml, or `bxAgents stats --enable`, and restart. Only small counts are kept: tokens by day and by model, never a message." } )
+		}
+		var kept = new "models.usage.UsageStore@bxagents"( variables.store )
+		var byModel = kept.report( days, "model" )
+		var byDay = kept.report( days, "day" )
+		return Outcome::done( {
+			"enabled"          : true,
+			"days"             : days,
+			"calls"            : byModel.calls,
+			"promptTokens"     : byModel.promptTokens,
+			"completionTokens" : byModel.completionTokens,
+			"totalTokens"      : byModel.totalTokens,
+			"first"            : byModel.first,
+			"last"             : byModel.last,
+			"byModel"          : byModel.groups,
+			"byDay"            : byDay.groups
+		} )
+	}
+
+	/**
+	 * @return An Outcome: { key : { source, keyId, secrets, wrongKey }, activity : [ { at, action, scope, name, actor, via, host, ok } ] }, never a value
+	 */
+	any function vaultActivity( numeric limit = 100 ) {
+		if ( isNull( variables.store ) ) {
+			return Outcome::failed( "not_found", "This server keeps no database, so it has no vault" )
+		}
+		var vault = new "models.vault.VaultWiring@bxagents"().serviceFor( variables.store )
+		var rows = vault.audit( max( 1, min( int( val( arguments.limit ) ), 500 ) ) ).map( row => {
+			return {
+				"at"     : isDate( row.at ?: "" ) ? dateTimeFormat( row.at, "yyyy-MM-dd'T'HH:mm:ss" ) : toString( row.at ?: "" ),
+				"action" : row.action ?: "",
+				"scope"  : row.scope ?: "",
+				"name"   : row.name ?: "",
+				"actor"  : row.actor ?: "",
+				"via"    : row.via ?: "",
+				"host"   : row.host ?: "",
+				"ok"     : ( row.ok ?: 1 ) == 1
+			}
+		} )
+		return Outcome::done( { "key" : vault.status(), "activity" : rows } )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Backups
+	// ----------------------------------------------------------------------------------
+
+	private any function backups() {
+		return new "models.data.DataBackup@bxagents"( variables.appData.home() )
+	}
+
+	/**
+	 * @return An Outcome: { backups : [ { name, bytes, madeAt } ], pending : { name, scheduledAt } or {} }
+	 */
+	any function backupList() {
+		if ( isNull( variables.appData ) ) {
+			return noHome()
+		}
+		return Outcome::done( { "backups" : backups().list(), "pending" : backups().pending() } )
+	}
+
+	/**
+	 * @return An Outcome: { name, bytes, entries }
+	 */
+	any function backupMake() {
+		if ( isNull( variables.appData ) ) {
+			return noHome()
+		}
+		var made = backups().create()
+		return Outcome::done( { "name" : listLast( replace( made.file, "\", "/", "all" ), "/" ), "bytes" : made.bytes, "entries" : made.entries } )
+	}
+
+	/**
+	 * @return An Outcome: { name, path } of the backup to download, bad_request or not_found
+	 */
+	any function backupFile( required string name ) {
+		if ( isNull( variables.appData ) ) {
+			return noHome()
+		}
+		try {
+			return Outcome::done( { "name" : trim( arguments.name ), "file" : backups().fileOf( arguments.name ) } )
+		} catch ( "BxAgents.BackupNotFound" e ) {
+			return Outcome::failed( "not_found", e.message )
+		}
+	}
+
+	/**
+	 * Schedules a restore for the next start: the database is open while the app runs, so nothing is replaced now.
+	 *
+	 * @return An Outcome: { scheduled : true, name, scheduledAt, note } or not_found
+	 */
+	any function backupRestore( required string name ) {
+		if ( isNull( variables.appData ) ) {
+			return noHome()
+		}
+		try {
+			var asked = backups().schedule( arguments.name )
+			asked[ "scheduled" ] = true
+			asked[ "note" ] = "The backup is put back the next time the app starts. What is there now is kept beside it as <name>.before-restore."
+			return Outcome::done( asked )
+		} catch ( "BxAgents.BackupNotFound" e ) {
+			return Outcome::failed( "not_found", e.message )
+		}
+	}
+
+	private any function noHome() {
+		return Outcome::failed( "not_found", "This app does not know its data home" )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Extensions
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return An Outcome: { extensions : [ { name, state, ... } ], problems : [ sentences ] }; empty when the app loads none
+	 */
+	any function extensions() {
+		var served = application.bxagentsExtensions ?: nullValue()
+		if ( isNull( served ) ) {
+			return Outcome::done( { "extensions" : [], "problems" : [] } )
+		}
+		return Outcome::done( { "extensions" : served.report(), "problems" : served.problems() } )
+	}
+
+	/**
+	 * Loads the extensions again, as /reload does in the terminal.
+	 *
+	 * @return An Outcome: { reloaded, loaded, failed, extensions, problems }
+	 */
+	any function reloadExtensions() {
+		var served = application.bxagentsExtensions ?: nullValue()
+		if ( isNull( served ) ) {
+			return Outcome::done( { "reloaded" : false, "loaded" : 0, "failed" : 0, "extensions" : [], "problems" : [] } )
+		}
+		served.reload()
+		var report = served.report()
+		return Outcome::done( {
+			"reloaded"   : true,
+			"loaded"     : report.filter( e => e.state == "loaded" ).len(),
+			"failed"     : report.filter( e => e.state == "failed" ).len(),
+			"extensions" : report,
+			"problems"   : served.problems()
+		} )
+	}
+
+}

@@ -13,10 +13,12 @@
  * committed, and `build` restores from it. A skill of your own goes in skills/ (see
  * `add skill`). See SkillStore for the layout and RegistryClient for the service.
  */
+import bxModules.bxagents.models.util.NameRules;
+
 class {
 
 	static {
-		SUBCOMMANDS = [ "find", "install", "list", "update", "remove" ]
+		SUBCOMMANDS = [ "find", "install", "list", "show", "update", "remove" ]
 	}
 
 	/**
@@ -56,6 +58,8 @@ class {
 				return rest.len() ? doInstall( installer, root, rest ) : doRestore( installer, root )
 			case "list":
 				return doList( installer, root, arguments.options )
+			case "show":
+				return doShow( root, rest )
 			case "update":
 				return doUpdate( installer, root, rest, arguments.options[ "dry-run" ] ?: false )
 			default:
@@ -104,6 +108,33 @@ class {
 		out.append( "Skills are instructions your agent will follow. Read what you install before you ship it." )
 		out.append( "Commit .agents/skills.lock.json; the skills themselves are restored at build time." )
 		return { exitCode : 0, message : out.toList( char( 10 ) ) }
+	}
+
+	/**
+	 * Prints one skill's SKILL.md, from the project (skills/), the registry installs (.agents/skills/) or the ones the
+	 * agent saved in its data home, in that order. Never prints a folder: a skill is read by name.
+	 */
+	private struct function doShow( required string root, required array rest ) {
+		if ( arguments.rest.len() != 1 ) {
+			throw( type = "BxAgents.MissingSkillName", message = "Say which skill to read: bxAgents skills show <name>" )
+		}
+		var name = trim( arguments.rest[ 1 ] )
+		if ( !NameRules::isSafeFolder( name, 64 ) ) {
+			return { exitCode : 1, message : "[#name#] is not a skill name. Names are letters, digits, . _ and -." }
+		}
+		var places = [ { origin : "project", folder : arguments.root & "/skills" }, { origin : "installed", folder : arguments.root & "/.agents/skills" } ]
+		try {
+			places.append( { origin : "agent", folder : new "models.data.ProjectData@bxagents"().appDataOf( arguments.root ).home() & "/skills" } )
+		} catch ( any e ) {
+			// no data home to look in (the project is not built): the first two are all there is
+		}
+		for ( var place in places ) {
+			var file = place.folder & "/" & name & "/SKILL.md"
+			if ( fileExists( file ) ) {
+				return { exitCode : 0, message : name & " (" & place.origin & ")" & char( 10 ) & char( 10 ) & fileRead( file, "UTF-8" ) }
+			}
+		}
+		return { exitCode : 1, message : "There is no skill called [#name#]. Try `bxAgents skills list`, or /skills in a chat for every skill the agent has." }
 	}
 
 	private struct function doRestore( required any installer, required string root ) {
