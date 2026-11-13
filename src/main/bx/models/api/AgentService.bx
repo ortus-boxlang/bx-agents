@@ -342,6 +342,81 @@ class {
 		return Outcome::done( { "skills" : library.listing() } )
 	}
 
+	// ----------------------------------------------------------------------------------
+	// Admin data: how the agent is composed, its files, usage, vault activity, backups, extensions
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return The AdminData for this app, or a forbidden Outcome when the caller is not an admin
+	 */
+	private any function adminData( required any caller ) {
+		return new AdminData(
+			variables.agent,
+			variables.appData ?: nullValue(),
+			variables.store ?: nullValue(),
+			variables.gatewayInfo ?: nullValue(),
+			!isNull( routinesSettings() )
+		)
+	}
+
+	/**
+	 * Runs one admin-only question: a forbidden Outcome for anyone else, otherwise what AdminData answers.
+	 *
+	 * @caller The Caller
+	 * @method The AdminData method
+	 * @args Its arguments
+	 */
+	private any function asAdmin( required any caller, required string method, struct args = {} ) {
+		if ( !arguments.caller.isAdmin() ) {
+			return Outcome::failed( "forbidden", "Only an admin may do that" )
+		}
+		return invoke( adminData( arguments.caller ), arguments.method, arguments.args )
+	}
+
+	any function composition( required any caller ) {
+		return asAdmin( arguments.caller, "composition" )
+	}
+
+	any function agentFiles( required any caller ) {
+		return asAdmin( arguments.caller, "files" )
+	}
+
+	any function agentFile( required any caller, required string path ) {
+		return asAdmin( arguments.caller, "file", { path : arguments.path } )
+	}
+
+	any function usage( required any caller, numeric days = 30 ) {
+		return asAdmin( arguments.caller, "usage", { days : arguments.days } )
+	}
+
+	any function vaultActivity( required any caller ) {
+		return asAdmin( arguments.caller, "vaultActivity" )
+	}
+
+	any function backups( required any caller ) {
+		return asAdmin( arguments.caller, "backupList" )
+	}
+
+	any function backupNow( required any caller ) {
+		return asAdmin( arguments.caller, "backupMake" )
+	}
+
+	any function backupFile( required any caller, required string name ) {
+		return asAdmin( arguments.caller, "backupFile", { name : arguments.name } )
+	}
+
+	any function restoreBackup( required any caller, required string name ) {
+		return asAdmin( arguments.caller, "backupRestore", { name : arguments.name } )
+	}
+
+	any function extensions( required any caller ) {
+		return asAdmin( arguments.caller, "extensions" )
+	}
+
+	any function reloadExtensions( required any caller ) {
+		return asAdmin( arguments.caller, "reloadExtensions" )
+	}
+
 	/**
 	 * One skill's text, for anyone who may list the skills.
 	 *
@@ -400,7 +475,7 @@ class {
 	 */
 	any function gateways( required any caller ) {
 		if ( !arguments.caller.isAdmin() ) {
-			return Outcome::failed( "forbidden", "Only an admin may see the chat apps" )
+			return Outcome::failed( "forbidden", "Only an admin may see the gateways" )
 		}
 		return Outcome::done( { "gateways" : isNull( variables.gatewayInfo ) ? [] : variables.gatewayInfo.listing() } )
 	}
@@ -415,10 +490,10 @@ class {
 	 */
 	any function reconnectGateway( required any caller, required string name ) {
 		if ( !arguments.caller.isAdmin() ) {
-			return Outcome::failed( "forbidden", "Only an admin may reconnect a chat app" )
+			return Outcome::failed( "forbidden", "Only an admin may reconnect a gateway" )
 		}
 		if ( isNull( variables.gatewayInfo ) ) {
-			return Outcome::failed( "not_found", "This app has no chat apps." )
+			return Outcome::failed( "not_found", "This app has no gateways." )
 		}
 		return variables.gatewayInfo.reconnect( arguments.name )
 	}

@@ -45,8 +45,6 @@ class {
 			ApiContract::route( "/pending", "pending", "Runs", { get : {
 				summary : "What a paused run is waiting to have approved", query : { threadId : "string", agent : "string?" }, returns : "json" } } ),
 			ApiContract::route( "/tools", "tools", "About the agent", { get : { summary : "The tools the agent has", returns : "json" } } ),
-			ApiContract::route( "/agent", "about", "About the agent", { get : {
-				summary : "The agent in full: model, window, tools, the agent tree (agents, each sub-agent a caller may talk to directly) and what this server can do (capabilities)", returns : "json" } } ),
 			ApiContract::route( "/health", "health", "About the agent", { get : {
 				summary : "Is the server up. Needs no token and says nothing else", returns : "json" } }, true ),
 			ApiContract::route( "/profiles", "profiles", "About the agent", { get : {
@@ -75,10 +73,10 @@ class {
 				summary : "The agent's logs: which there are, or the last lines of one. Admin only",
 				query : { area : "string?", tail : "integer?", level : "string?", q : "string?" }, returns : "json" } }, false, true ),
 			ApiContract::route( "/gateways/reconnect", "reconnectGateway", "About the agent", { post : {
-				summary : "Stops and starts one chat app in place, so a fixed credential or a dropped connection does not need an app restart. A turn already running is not cancelled. Admin only",
+				summary : "Stops and starts one gateway in place, so a fixed credential or a dropped connection does not need an app restart. A turn already running is not cancelled. Admin only",
 				body : { name : "string" }, returns : "json" } }, false, true ),
 			ApiContract::route( "/gateways", "gateways", "About the agent", { get : {
-				summary : "The chat apps and the state of each: connected, which credentials are set (never their values), last activity, last error and the chats each has talked to (ids and when, never text). Admin only", returns : "json" } }, false, true ),
+				summary : "The gateways and the state of each: connected, which credentials are set (never their values), last activity, last error and the chats each has talked to (ids and when, never text). Admin only", returns : "json" } }, false, true ),
 			ApiContract::route( "/routines/reports/clean", "cleanRoutineReports", "Routines", { post : {
 				summary : "Removes the reports of a routine older than some days, or all of them. A dry run that only says what it would remove, unless apply is true",
 				body : { name : "string", olderThanDays : "integer?", all : "boolean?", apply : "boolean?" }, returns : "json" } } ),
@@ -115,6 +113,32 @@ class {
 				query : { name : "string" }, returns : "json" } } ),
 			ApiContract::route( "/skills", "skills", "About the agent", { get : {
 				summary : "The skills the agent can load: name, description and whether the project or the agent wrote it. Never a folder on the machine", returns : "json" } } ),
+			ApiContract::route( "/agent/composition", "composition", "About the agent", { get : {
+				summary : "How the agent is put together in one call: what comes in, its parts, the agent tree, what goes out and the tools that ask first. Admin only", returns : "json" } }, false, true ),
+			ApiContract::route( "/agent/files", "agentFiles", "About the agent", { get : {
+				summary : "The project's own files that are safe to show (Agent.yaml, instructions, tools, skills, subagents, gateways), by relative path and size. Admin only", returns : "json" } }, false, true ),
+			ApiContract::route( "/agent/file", "agentFile", "About the agent", { get : {
+				summary : "One of those files as text, read only; secrets in Agent.yaml are shown as stars and a long file is cut. Admin only",
+				query : { path : "string" }, returns : "json" } }, false, true ),
+			ApiContract::route( "/agent", "about", "About the agent", { get : {
+				summary : "The agent in full: model, window, tools, the agent tree (agents, each sub-agent a caller may talk to directly) and what this server can do (capabilities)", returns : "json" } } ),
+			ApiContract::route( "/usage", "usage", "About the agent", { get : {
+				summary : "Tokens by day and by model: a small snapshot, off until usage is turned on (then enabled is false). Admin only",
+				query : { days : "integer?" }, returns : "json" } }, false, true ),
+			ApiContract::route( "/vault/activity", "vaultActivity", "Vault", { get : {
+				summary : "The vault's key status and its recent audit lines: what was used, by whom and when. Never a value. Admin only", returns : "json" } }, false, true ),
+			ApiContract::route( "/data/backups", "backups", "About the agent", { get : {
+				summary : "The backups of the data home, newest first, and the restore waiting for the next start. Admin only", returns : "json" } }, false, true ),
+			ApiContract::route( "/data/backup", "backup", "About the agent", {
+				get : { summary : "Downloads one backup as a zip. Admin only", query : { name : "string" }, returns : "file" },
+				post : { summary : "Makes a backup of the data home now. Admin only", returns : "json" } }, false, true ),
+			ApiContract::route( "/data/restore", "restoreBackup", "About the agent", { post : {
+				summary : "Schedules a backup to be put back the next time the app starts; what is there is kept as before-restore. Admin only",
+				body : { name : "string" }, returns : "json" } }, false, true ),
+			ApiContract::route( "/extensions/reload", "reloadExtensions", "About the agent", { post : {
+				summary : "Loads the extensions again, as /reload does in the terminal. Admin only", returns : "json" } }, false, true ),
+			ApiContract::route( "/extensions", "extensions", "About the agent", { get : {
+				summary : "The extensions this app loaded, with what each adds and what went wrong. Admin only", returns : "json" } }, false, true ),
 			ApiContract::route( "/data", "data", "About the agent", { get : {
 				summary : "Where the agent keeps everything, how big each part is, and where each volume is. Admin only", returns : "json" } }, false, true ),
 			ApiContract::route( "/users/admin", "setUserAdmin", "Accounts", { post : {

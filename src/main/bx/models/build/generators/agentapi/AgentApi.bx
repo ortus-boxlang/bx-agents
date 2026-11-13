@@ -952,6 +952,102 @@ class {
 		answer( event, service().data( callerOf( event ) ) )
 	}
 
+	// ----------------------------------------------------------------------------------
+	// Admin data: composition, files, usage, vault activity, backups, extensions. Every one is admin only.
+	// ----------------------------------------------------------------------------------
+
+	/** How the agent is put together: { incoming, parts, agents, outgoing, asksFirst }. */
+	function composition( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().composition( callerOf( event ) ) )
+	}
+
+	/** The project's own files that are safe to show: { files : [ { path, size } ] }. */
+	function agentFiles( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().agentFiles( callerOf( event ) ) )
+	}
+
+	/** One of those files as text, read only: { path, size, truncated, text }. Query: path */
+	function agentFile( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().agentFile( callerOf( event ), toString( rc.path ?: "" ) ) )
+	}
+
+	/** The usage snapshot: { enabled : false, howTo } until usage is turned on. Query: days? */
+	function usage( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().usage( callerOf( event ), val( rc.days ?: 30 ) ) )
+	}
+
+	/** The vault's key status and its recent audit lines, never a value. */
+	function vaultActivity( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().vaultActivity( callerOf( event ) ) )
+	}
+
+	/** The backups there are, and a restore waiting for the next start: { backups, pending }. */
+	function backups( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().backups( callerOf( event ) ) )
+	}
+
+	/**
+	 * GET: downloads one backup as a zip. Query: name
+	 * POST: makes a backup now, { name, bytes, entries }.
+	 */
+	function backup( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		if ( event.getHTTPMethod() == "POST" ) {
+			answer( event, service().backupNow( callerOf( event ) ) )
+			return
+		}
+		var found = service().backupFile( callerOf( event ), toString( rc.name ?: "" ) )
+		if ( !found.succeeded() ) {
+			answer( event, found )
+			return
+		}
+		event.sendFile( file : found.data().file, name : found.data().name, mimeType : "application/zip", disposition : "attachment" )
+	}
+
+	/** Schedules a backup to be put back the next time the app starts. Body: { name } */
+	function restoreBackup( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().restoreBackup( callerOf( event ), toString( bodyOf( event ).name ?: "" ) ) )
+	}
+
+	/** The extensions this app loaded and what each adds: { extensions, problems }. */
+	function extensions( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().extensions( callerOf( event ) ) )
+	}
+
+	/** Loads the extensions again, as /reload does in the terminal. */
+	function reloadExtensions( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().reloadExtensions( callerOf( event ) ) )
+	}
+
 	/**
 	 * What the caller has set for themselves, as { preferences : { key : value } }. 404 when this server keeps no shared database.
 	 */

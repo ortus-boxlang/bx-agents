@@ -226,6 +226,58 @@ class {
 		return get( "skills" )
 	}
 
+	// ---- Admin data (an admin token) --------------------------------------------------------
+
+	/** How the agent is put together: { incoming, parts, agents, outgoing, asksFirst }. */
+	struct function composition() {
+		return get( "agent/composition" )
+	}
+
+	/** The project's own files that are safe to show: { files : [ { path, size } ] }. */
+	struct function agentFiles() {
+		return get( "agent/files" )
+	}
+
+	/** One of those files as text: { path, size, truncated, text }. */
+	struct function agentFile( required string path ) {
+		return get( "agent/file", { path : arguments.path } )
+	}
+
+	/** The usage snapshot: { enabled : false, howTo } until usage is turned on. */
+	struct function usage( numeric days = 30 ) {
+		return get( "usage", { days : arguments.days } )
+	}
+
+	/** The vault's key status and its recent audit lines: { key, activity }. Never a value. */
+	struct function vaultActivity() {
+		return get( "vault/activity" )
+	}
+
+	/** The backups of the data home, and a restore waiting for the next start: { backups, pending }. */
+	struct function backups() {
+		return get( "data/backups" )
+	}
+
+	/** Makes a backup of the data home now: { name, bytes, entries }. */
+	struct function backup() {
+		return post( "data/backup", {} )
+	}
+
+	/** Schedules a backup to be put back the next time the app starts. */
+	struct function restoreBackup( required string name ) {
+		return post( "data/restore", { "name" : arguments.name } )
+	}
+
+	/** The extensions the app loaded: { extensions, problems }. */
+	struct function extensions() {
+		return get( "extensions" )
+	}
+
+	/** Loads the extensions again: { reloaded, loaded, failed, extensions, problems }. */
+	struct function reloadExtensions() {
+		return post( "extensions/reload", {} )
+	}
+
 	/** One skill's text: { name, description, origin, size, savedAt, body, truncated }. 404 when there is none by that name. */
 	struct function readSkill( required string name ) {
 		return get( "skills/read", { name : arguments.name } )
