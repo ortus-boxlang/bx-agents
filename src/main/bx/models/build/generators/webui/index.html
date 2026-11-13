@@ -1026,7 +1026,9 @@ __ICON_SPRITE__
 			<div class="sidebar-head">
 				<button type="button" id="newBtn" title="Start a new conversation"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg> New chat</button>
 			</div>
+			<div class="conv-filter"><input type="search" id="convFilter" placeholder="Filter conversations" aria-label="Filter conversations" autocomplete="off"></div>
 			<ul id="convList"></ul>
+			<div id="convMore" class="conv-more" hidden><button type="button" id="convMoreBtn"></button><a id="convAll" href="#/conversations">All conversations</a></div>
 			<div id="slotSidebar" class="slot-area" hidden></div>
 		</aside>
 		<div id="main">
@@ -1263,6 +1265,11 @@ __MARKDOWN_SCRIPTS__
 	// worse than no button.
 	var capabilities = {};
 	var conversations = [];
+	// the sidebar shows 25 at a time, newest first, with Show more and a quick filter; the Conversations page is the whole list
+	var CONV_PAGE = 25;
+	var convLimit = CONV_PAGE;
+	var convQuery = "";
+	var conversationsTotal = 0;
 	// Pictures and text files waiting to go with the next message
 	var pendingImages = [];   // { name, mime, data (base64), url }
 	var pendingTexts = [];    // { name, content }
@@ -1454,7 +1461,7 @@ __MARKDOWN_SCRIPTS__
 		if ( !conversations.length ) {
 			var empty = document.createElement( "li" );
 			empty.className = "empty";
-			empty.textContent = "No conversations yet.";
+			empty.textContent = convQuery ? "No conversation matches that." : "No conversations yet.";
 			convListEl.appendChild( empty );
 			return;
 		}
@@ -1539,11 +1546,40 @@ __MARKDOWN_SCRIPTS__
 		if ( capabilities.conversations === false ) {
 			return Promise.resolve();
 		}
-		return apiGet( "/sessions?limit=100" ).then( function ( payload ) {
+		return apiGet( "/sessions?limit=" + convLimit + ( convQuery ? "&q=" + encodeURIComponent( convQuery ) : "" ) ).then( function ( payload ) {
 			conversations = ( payload && payload.sessions ) || [];
+			// an older server answers without a total: then everything it has is on the list
+			conversationsTotal = payload && typeof payload.total === "number" ? payload.total : conversations.length;
 			renderConversations();
+			renderConversationsMore();
 		} );
 	}
+
+	/** "Show more" while the server has more than the list shows; past 100 the Conversations page takes over */
+	function renderConversationsMore() {
+		var more = document.getElementById( "convMore" );
+		var moreBtn = document.getElementById( "convMoreBtn" );
+		var all = document.getElementById( "convAll" );
+		var hidden = conversationsTotal - conversations.length;
+		more.hidden = hidden <= 0 && !pageDefs.conversations;
+		moreBtn.hidden = hidden <= 0 || convLimit >= 100;
+		moreBtn.textContent = "Show more (" + hidden + " more)";
+		all.hidden = !pageDefs.conversations || !pageAvailable( pageDefs.conversations );
+	}
+
+	document.getElementById( "convMoreBtn" ).addEventListener( "click", function () {
+		convLimit = Math.min( 100, convLimit + CONV_PAGE );
+		loadConversations();
+	} );
+	document.getElementById( "convFilter" ).addEventListener( "input", function ( evt ) {
+		var field = evt.target;
+		clearTimeout( field._t );
+		field._t = setTimeout( function () {
+			convQuery = field.value.trim();
+			convLimit = CONV_PAGE;
+			loadConversations();
+		}, 250 );
+	} );
 
 	/**
 	 * Starts a conversation server-side and opens it. The id is minted by the
@@ -4580,7 +4616,8 @@ __SHELL_SCRIPT__
 			// from another tab, or a fresh store) would rehydrate to nothing and
 			// leave the sidebar with no active row. Fall back to the newest one.
 			var current = getConversationId();
-			var known = conversations.some( function ( c ) { return c.id === current; } );
+			// only the newest are on the list: when the server has more, a remembered one may simply be further down
+			var known = conversations.some( function ( c ) { return c.id === current; } ) || conversationsTotal > conversations.length;
 			if ( !known && conversations.length ) {
 				return selectConversation( conversations[ 0 ].id );
 			}

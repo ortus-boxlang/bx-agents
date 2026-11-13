@@ -738,6 +738,35 @@ class extends="testbox.system.BaseSpec" {
 					expect( html ).toInclude( "shellGo( ""vault"" )" );
 				} );
 
+				it( "has a Conversations page that asks the server for a page at a time with its filters and facets", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "id: ""conversations""," );
+					expect( html ).toInclude( """/sessions?limit="" + state.limit + ""&offset="" + state.offset + ""&facets=1""" );
+					for ( var param in [ "&q=", "&source=", "&agent=", "&since=", "&before=", "&all=1" ] ) {
+						expect( html ).toInclude( param );
+					}
+					// every row can be opened, renamed, forked, exported and deleted, and several deleted at once
+					expect( html ).toInclude( "/sessions/fork" );
+					expect( html ).toInclude( "Delete selected" );
+				} );
+
+				it( "shows 25 conversations in the sidebar, with Show more and a quick filter, and trusts a remembered one further down", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "var CONV_PAGE = 25;" );
+					expect( html ).toInclude( 'id="convFilter"' );
+					expect( html ).toInclude( 'id="convMoreBtn"' );
+					expect( html ).notToInclude( "/sessions?limit=100" );
+					expect( html ).toInclude( "conversationsTotal > conversations.length" );
+				} );
+
 				it( "draws the Appearance controls in the Settings page as well as in the popup", function() {
 					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 					var appDir = newAppDir();
