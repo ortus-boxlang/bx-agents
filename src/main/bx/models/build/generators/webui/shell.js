@@ -25,7 +25,7 @@
 
 	/**
 	 * def: { id, title, icon, group ("main" | "admin"), cap(capabilities) -> bool,
-	 *        order (menu position), render(host, route), leave(), replaces: [ ids of today's menu buttons it makes redundant ],
+	 *        order (menu position), render(host, route), leave(),
 	 *        badgeWord (spoken after a badge count) }
 	 */
 	function registerPage( def ) {
@@ -232,7 +232,8 @@
 		}
 		if ( evt.key === "Tab" ) {
 			// a drawer is modal: Tab stays among the menu's own controls
-			var stops = Array.prototype.slice.call( navEl.querySelectorAll( "a[href], button:not([hidden])" ) );
+			// only what can take focus now: the fold button is not drawn on a phone
+			var stops = Array.prototype.slice.call( navEl.querySelectorAll( "a[href], button:not([hidden])" ) ).filter( function ( el ) { return el.getClientRects().length > 0; } );
 			if ( !stops.length ) {
 				return;
 			}
@@ -338,26 +339,22 @@
 
 	/**
 	 * Called once the capabilities are known (after GET /agent): builds the menu from them,
-	 * hides the Settings-menu buttons a page now replaces, and opens the page in the address.
+	 * and opens the page in the address. The Settings menu keeps every item: the pages are a second way in.
 	 */
 	function shellStart() {
-		pageOrder.forEach( function ( id ) {
-			var def = pageDefs[ id ];
-			if ( def.replaces && pageAvailable( def ) ) {
-				def.replaces.forEach( function ( buttonId ) {
-					var legacy = document.getElementById( buttonId );
-					if ( legacy ) {
-						legacy.hidden = true;
-						legacy.setAttribute( "data-replaced", id );
-					}
-				} );
-			}
-		} );
 		buildNav();
 		setNavFolded( readNavFold(), false );
 		if ( !shellReady ) {
 			shellReady = true;
-			window.addEventListener( "hashchange", function () { showRoute( true ); } );
+			// only #/page addresses are the router's: a plain fragment (the skip link's) is left alone
+			window.addEventListener( "hashchange", function () {
+				if ( /^#\//.test( window.location.hash ) || !window.location.hash ) { showRoute( true ); }
+			} );
+			// the skip link moves focus to the main region without touching the address
+			document.querySelector( ".skip-link" ).addEventListener( "click", function ( evt ) {
+				evt.preventDefault();
+				document.getElementById( "content" ).focus();
+			} );
 		}
 		showRoute( false );
 	}

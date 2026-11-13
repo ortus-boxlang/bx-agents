@@ -1,4 +1,4 @@
-	// ---- Page: Gateways (admin). The chat apps the agent is connected to ----
+	// ---- Page: Gateways (admin). The chat services the agent is connected to ----
 	var GATEWAY_STATE = {
 		connected: [ "ok", "check-circle", "Connected" ],
 		stopped: [ "", "pause", "Stopped" ],
@@ -13,9 +13,8 @@
 		group: "admin",
 		order: 120,
 		cap: function ( caps ) { return !!caps.gateways; },
-		replaces: [ "gatewaysBtn" ],
 		render: function ( host, route ) {
-			var root = pageFrame( host, "Gateways", "The chat apps the agent talks through, and whether each is connected.", [
+			var root = pageFrame( host, "Gateways", "The chat services the agent talks through, and whether each is connected.", [
 				btn( "arrow-clockwise", "Refresh", function () { load(); } )
 			] );
 			var status = h( "p", { class: "pg-status", role: "status", "aria-live": "polite" } );

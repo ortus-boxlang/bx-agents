@@ -8,7 +8,6 @@
 		group: "main",
 		order: 50,
 		cap: function ( caps ) { return !!caps.notes; },
-		replaces: [ "notesBtn" ],
 		render: function ( host, route ) {
 			var root = pageFrame( host, "Memory", "What the agent remembers. Notes are short lines it keeps across conversations and reads at the start of every one." );
 			var status = h( "p", { class: "pg-status", role: "status", "aria-live": "polite" } );

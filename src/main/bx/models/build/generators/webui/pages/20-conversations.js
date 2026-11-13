@@ -130,7 +130,7 @@
 				rows.forEach( function ( conv ) {
 					var pick = h( "input", { type: "checkbox", "aria-label": "Select " + ( conv.title || "Untitled" ), checked: !!selected[ conv.id ] } );
 					pick.addEventListener( "change", function () { selected[ conv.id ] = pick.checked; drawBulk(); } );
-					var open = h( "a", { href: "#/chat", text: conv.title || "Untitled", style: "color:var(--fg);font-weight:600" } );
+					var open = h( "a", { href: "#/chat", class: "row-link", text: conv.title || "Untitled" } );
 					open.addEventListener( "click", function ( evt ) {
 						evt.preventDefault();
 						shellGo( "chat" );

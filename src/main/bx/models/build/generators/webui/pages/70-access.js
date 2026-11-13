@@ -6,7 +6,6 @@
 		group: "admin",
 		order: 140,
 		cap: function ( caps ) { return !!( caps.tokens || caps.admin ); },
-		replaces: [ "tokensBtn" ],
 		render: function ( host, route ) {
 			var tabs = [ { id: "tokens", title: "Tokens", icon: "key" }, { id: "people", title: "People", icon: "users" } ];
 			var tab = route.sub === "people" || ( !capabilities.tokens && route.sub !== "tokens" ) ? "people" : "tokens";

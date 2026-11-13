@@ -714,16 +714,21 @@ class extends="testbox.system.BaseSpec" {
 					expect( html ).toInclude( "cap: function ( caps ) { return !!caps.logs; }" );
 				} );
 
-				it( "says gateways, not chat apps, and hides the Settings buttons a page replaces", function() {
+				it( "says gateways, not chat apps, and keeps every item of the Settings menu", function() {
 					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 					var appDir = newAppDir();
 					generator.generate( discovery, appDir );
 
 					var html = fileRead( appDir & "/chat/index.html" );
 					expect( html ).toInclude( "title: ""Gateways""" );
-					expect( html ).toInclude( "replaces: [ ""gatewaysBtn"" ]" );
-					expect( html ).toInclude( "replaces: [ ""routinesBtn"" ]" );
-					expect( html ).toInclude( "legacy.hidden = true" );
+					expect( html ).toInclude( '<h2 id="gatewaysTitle">Gateways</h2>' );
+					expect( html ).toInclude( 'aria-label="Gateways"' );
+					expect( html ).notToInclude( "Chat apps" );
+					// Notes, Vault, Routines, Access tokens, Logs and Gateways stay in the menu, next to their pages
+					for ( var buttonId in [ "notesBtn", "vaultBtn", "routinesBtn", "tokensBtn", "logsBtn", "gatewaysBtn", "appearanceBtn", "themeBtn", "keyBtn" ] ) {
+						expect( html ).toInclude( 'id="#buttonId#"' );
+					}
+					expect( html ).notToInclude( "legacy.hidden = true" );
 				} );
 
 				it( "keeps both routine dialogs and sends the agent's vault ask to the Vault page", function() {

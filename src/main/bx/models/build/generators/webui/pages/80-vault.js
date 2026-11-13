@@ -8,7 +8,6 @@
 		group: "main",
 		order: 60,
 		cap: function ( caps ) { return !!caps.vault; },
-		replaces: [ "vaultBtn" ],
 		render: function ( host, route ) {
 			var root = pageFrame( host, "Vault", "Secrets the agent can use, such as API keys. Values are sealed and never shown again. Each secret says what it is for and which hosts it may go to." );
 			var status = h( "p", { class: "pg-status", role: "status", "aria-live": "polite" } );

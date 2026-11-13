@@ -23,7 +23,6 @@
 		group: "main",
 		order: 30,
 		cap: function ( caps ) { return !!caps.routines; },
-		replaces: [ "routinesBtn" ],
 		render: function ( host, route ) {
 			var admin = !!capabilities.admin;
 			var rows = [];

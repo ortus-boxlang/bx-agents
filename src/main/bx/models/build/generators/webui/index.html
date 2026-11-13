@@ -892,7 +892,7 @@ __CUSTOM_CSS__
 	#vaultForm button { grid-column: 1 / -1; justify-self: end; }
 	#vaultForm[hidden] { display: none; }
 
-	/* Logs and chat apps (admin) */
+	/* Logs and gateways (admin) */
 	#logsPanel { width: min(64rem, 96vw); }
 	#logsTabs { display: flex; flex-wrap: wrap; gap: 0.3rem; padding: 0.5rem 0.9rem 0; }
 	#logsTabs button { border: 1px solid var(--border); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 0.25rem 0.7rem; font-size: 0.82rem; cursor: pointer; }
@@ -1016,7 +1016,7 @@ __ICON_SPRITE__
 			<button type="button" id="keyBtn" role="menuitem" title="Password for this server" aria-label="Password"><svg class="i" aria-hidden="true"><use href="#i-key"/></svg><span class="label">Password</span></button>
 			<button type="button" id="tokensBtn" role="menuitem" title="Access tokens for this server" aria-label="Tokens" aria-haspopup="dialog" hidden><svg class="i" aria-hidden="true"><use href="#i-terminal-window"/></svg><span class="label">Access tokens</span></button>
 			<button type="button" id="logsBtn" role="menuitem" title="The agent's logs: gateways, API, routines" aria-label="Logs" aria-haspopup="dialog" hidden><svg class="i" aria-hidden="true"><use href="#i-file-text"/></svg><span class="label">Logs</span></button>
-			<button type="button" id="gatewaysBtn" role="menuitem" title="The chat apps and whether each is connected" aria-label="Chat apps" aria-haspopup="dialog" hidden><svg class="i" aria-hidden="true"><use href="#i-lightning"/></svg><span class="label">Chat apps</span></button>
+			<button type="button" id="gatewaysBtn" role="menuitem" title="The gateways and whether each is connected" aria-label="Gateways" aria-haspopup="dialog" hidden><svg class="i" aria-hidden="true"><use href="#i-lightning"/></svg><span class="label">Gateways</span></button>
 		</div>
 	</div>
 	<main id="content" tabindex="-1">
@@ -1158,7 +1158,7 @@ __ICON_SPRITE__
 
 	<dialog id="gatewaysPanel" aria-labelledby="gatewaysTitle">
 		<div class="notes-head">
-			<h2 id="gatewaysTitle">Chat apps</h2>
+			<h2 id="gatewaysTitle">Gateways</h2>
 			<button type="button" id="gatewaysRefresh" aria-label="Refresh" title="Refresh"><svg class="i" aria-hidden="true"><use href="#i-arrow-clockwise"/></svg></button>
 			<button type="button" id="gatewaysClose" aria-label="Close" title="Close"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
 		</div>
@@ -1192,7 +1192,7 @@ __ICON_SPRITE__
 			<div class="rt-row">
 				<label>Where the answer goes<select id="routineWhere"><option value="routine">Its own conversation</option></select></label>
 				<label id="routineChatPickLabel" hidden>Chat<select id="routineChatPick"></select></label>
-				<label id="routineChatLabel" hidden>Chat id (the chat app has not talked to anyone yet)<input id="routineChat" maxlength="255"></label>
+				<label id="routineChatLabel" hidden>Chat id (the gateway has not talked to anyone yet)<input id="routineChat" maxlength="255"></label>
 			</div>
 			<p class="notes-foot" id="routineFormFoot" role="status"></p>
 			<div class="rt-buttons"><button type="button" id="routineCancel">Cancel</button><button type="submit" class="primary" id="routineSave">Save</button></div>
@@ -3333,7 +3333,7 @@ __MARKDOWN_SCRIPTS__
 		if ( evt.key === "Escape" && !settingsPanel.hidden ) { closeSettings(); settingsBtn.focus(); }
 	} );
 
-	// ---- Logs and chat apps (an admin) ----
+	// ---- Logs and gateways (an admin) ----
 	var logsBtn = document.getElementById( "logsBtn" );
 	var gatewaysBtn = document.getElementById( "gatewaysBtn" );
 	var logsPanel = document.getElementById( "logsPanel" );
@@ -3489,7 +3489,7 @@ __MARKDOWN_SCRIPTS__
 		if ( !gateways.length ) {
 			var none = document.createElement( "li" );
 			none.className = "gw-empty";
-			none.textContent = "No chat apps are set up. Add one with bxAgents add gateway.";
+			none.textContent = "No gateways are set up. Add one with bxAgents add gateway.";
 			gatewaysList.appendChild( none );
 			return;
 		}
@@ -3539,7 +3539,7 @@ __MARKDOWN_SCRIPTS__
 			reconnect.setAttribute( "aria-label", "Reconnect " + gateway.name );
 			if ( gateway.state === "missing" ) {
 				reconnect.disabled = true;
-				reconnect.title = "This chat app is not registered in the running app, so there is nothing to reconnect";
+				reconnect.title = "This gateway is not registered in the running app, so there is nothing to reconnect";
 			}
 			reconnect.addEventListener( "click", function () {
 				reconnect.disabled = true;
@@ -3565,7 +3565,7 @@ __MARKDOWN_SCRIPTS__
 				renderGateways( payload.gateways || [] );
 			} else {
 				renderGateways( [] );
-				gatewaysList.firstChild.textContent = "Could not load the chat apps.";
+				gatewaysList.firstChild.textContent = "Could not load the gateways.";
 			}
 		} );
 	}
@@ -3749,14 +3749,14 @@ __MARKDOWN_SCRIPTS__
 			routineGateways.forEach( function ( g ) {
 				var option = document.createElement( "option" );
 				option.value = "gateway:" + g.type;
-				option.textContent = "Chat app: " + g.type + ( g.name !== g.type ? " (" + g.name + ")" : "" );
+				option.textContent = "Gateway: " + g.type + ( g.name !== g.type ? " (" + g.name + ")" : "" );
 				routineWhere.appendChild( option );
 			} );
 			if ( chosen ) { routineWhere.value = chosen; }
 		} );
 	}
 
-	/** The chat of a chat app: a pick list of the chats it has talked to, or a box for an id when there are none yet */
+	/** The chat of a gateway: a pick list of the chats it has talked to, or a box for an id when there are none yet */
 	function syncRoutineChat( wantedChat ) {
 		var wanted = routineWhere.value;
 		var gateway = routineGateways.filter( function ( g ) { return "gateway:" + g.type === wanted; } )[ 0 ];

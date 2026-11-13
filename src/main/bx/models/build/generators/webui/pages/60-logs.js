@@ -7,7 +7,6 @@
 		order: 130,
 		badgeWord: "errors",
 		cap: function ( caps ) { return !!caps.logs; },
-		replaces: [ "logsBtn" ],
 		render: function ( host, route ) {
 			var areas = [ [ "agent", "Agent" ], [ "gateways", "Gateways" ], [ "routines", "Routines" ], [ "heartbeat", "Heartbeat" ], [ "api", "API" ] ];
 			var area = areas.some( function ( a ) { return a[ 0 ] === route.sub; } ) ? route.sub : "agent";
