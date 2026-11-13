@@ -141,3 +141,9 @@ Taken from the answers already given:
 ## 6. Not in this piece
 
 Docs, the homepage and the tour videos (they come after everything), recall search over past conversations (the Memory page keeps its "planned" card), and permissions by tool pattern (the `type_action` names are ready for it).
+
+## 7. As built (page, so far)
+
+Built: shell (RF1), Conversations page and 25-at-a-time sidebar, Talk to picker (RF2), Registry, Routines, Gateways, Logs, Access, Memory, Vault, Settings (RF3 to RF5 parts). Files: `webui/shell.js`, `webui/shell.css`, `webui/pages/*.js`, joined into `index.html` by `WebUiGenerator`. The Settings menu keeps every item (Coverage board). Verified in Chromium at 1280, 768 and 390, light and dark, as admin and as a chat-scope token (no Admin group, admin addresses go to Chat); no horizontal scroll, 44px targets and 4.5:1 text contrast scanned.
+
+Waiting for routes: `GET /agent/composition`, `GET /agent/files`, `GET /agent/file`, `GET /usage` (Agent pages), `GET /vault/activity` (field names guessed), `GET /data/backups` and backup routes (Data and backups), `GET /extensions`, `POST /extensions/reload` (Settings).
