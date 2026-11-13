@@ -26,7 +26,7 @@
 			apiGet( "/data" ).then( function ( d ) {
 				if ( route.stale() ) { return; }
 				if ( !d ) { where.appendChild( pageNote( "Could not load the data folders.", "error" ) ); return; }
-				where.appendChild( h( "p", { class: "pg-note" }, [ "Data home: ", h( "code", { text: d.home || "" } ), d.database ? [ " Database: ", h( "code", { text: d.database } ) ] : null ] ) );
+				where.appendChild( h( "p", { class: "pg-note" }, [ "Data home: ", h( "code", { text: d.home || "" } ), d.database ? " Database: " : null, d.database ? h( "code", { text: d.database } ) : null ] ) );
 				var rows = h( "tbody" );
 				( d.items || [] ).forEach( function ( i ) { rows.appendChild( h( "tr", {}, [ h( "td", { text: i.name } ), h( "td", { text: BYTES_TEXT( i.bytes ) } ), h( "td", { text: String( i.files ) } ) ] ) ); } );
 				where.appendChild( h( "div", { class: "tbl-wrap" }, [ h( "table", {}, [ h( "caption", { class: "visually-hidden", text: "Folders of the data home" } ),

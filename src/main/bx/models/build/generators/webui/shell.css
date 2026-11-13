@@ -276,3 +276,26 @@
 	:root[data-theme="dark"] .talk-banner { color: rgb(205, 190, 255); }
 	.talk-banner[hidden] { display: none; }
 	body:not([data-page="chat"]) #talkSelect { display: none !important; }
+
+	/* Agent > Composition: three columns, with lines that move between them (off with the switch or prefers-reduced-motion) */
+	.comp { display: grid; grid-template-columns: 1fr 3rem 1.3fr 3rem 1fr; gap: 0; align-items: start; }
+	.comp-col h2 { margin-top: 0; }
+	.comp-item { margin-bottom: 0.5rem; }
+	.comp-item + .comp-item { margin-top: 0; }
+	.comp-flow { margin: 2.4rem 0.4rem 0.5rem; height: 3px; border-radius: 3px; background: repeating-linear-gradient( 90deg, var(--accent) 0 0.5rem, transparent 0.5rem 1rem ); background-size: 1rem 3px; background-repeat: repeat-x; animation: comp-march 1.2s linear infinite; }
+	@keyframes comp-march { to { background-position: 1rem 0; } }
+	.comp.still .comp-flow { animation: none; }
+	@media ( prefers-reduced-motion: reduce ) { .comp-flow { animation: none; } }
+	@media ( max-width: 52rem ) {
+		.comp { grid-template-columns: 1fr; }
+		.comp-flow { width: 3px; height: 2rem; margin: 0.25rem 1rem; background: repeating-linear-gradient( 180deg, var(--accent) 0 0.5rem, transparent 0.5rem 1rem ); background-size: 3px 1rem; background-repeat: repeat-y; animation-name: comp-march-v; }
+		@keyframes comp-march-v { to { background-position: 0 1rem; } }
+	}
+
+	/* Tablet widths: the header gives way before it overflows */
+	@media ( max-width: 64rem ) {
+		header .meta { display: none; }
+		header .brand { flex: 1 1 auto; min-width: 0; }
+		header .actions { min-width: 0; flex-wrap: wrap; justify-content: flex-end; }
+		header .actions select { max-width: 9rem; }
+	}

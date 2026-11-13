@@ -166,10 +166,13 @@
 
 	function readNavFold() {
 		try {
-			return localStorage.getItem( NAV_STORAGE ) === "folded";
-		} catch ( err ) {
-			return false;
-		}
+			var saved = localStorage.getItem( NAV_STORAGE );
+			if ( saved ) {
+				return saved === "folded";
+			}
+		} catch ( err ) { /* a private window: no saved choice */ }
+		// no choice made yet: a tablet-sized window starts with the menu folded so the chat has room
+		return window.innerWidth <= 1024;
 	}
 
 	function setNavFolded( folded, remember ) {

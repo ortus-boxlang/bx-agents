@@ -59,7 +59,7 @@
 					h( "h2", { id: "setExtTitle", style: "margin:0;flex:1", text: "Extensions" } ),
 					capabilities.admin ? btn( "arrows-clockwise", "Reload", function () {
 						routinesCall( "POST", "/extensions/reload", {} ).then( function ( result ) {
-							say( result.ok ? "Reloaded the extensions." : failureText( result, "Could not reload the extensions." ) );
+							say( result.ok ? "Reloaded: " + result.body.loaded + " loaded, " + result.body.failed + " failed." : failureText( result, "Could not reload the extensions." ) );
 							loadExtensions();
 						} );
 					} ) : null
@@ -73,24 +73,32 @@
 					extCard.hidden = false;
 					extBody.textContent = "";
 					var rows = result.body.extensions;
+					( result.body.problems || [] ).forEach( function ( p ) { extBody.appendChild( pageNote( p, "error" ) ); } );
 					if ( !rows.length ) {
 						extBody.appendChild( pageNote( "No extensions are loaded." ) );
 						return;
 					}
 					rows.forEach( function ( ext ) {
-						var adds = ext.adds || ext.provides || [];
+						var adds = [];
+						[ "commands", "schedulers", "slots", "keys", "verbs", "sources", "prefixes" ].forEach( function ( k ) {
+							if ( ( ext[ k ] || [] ).length ) { adds.push( k + ": " + ext[ k ].join( ", " ) ); }
+						} );
+						var good = !/fail|error|disabled|skipped/i.test( ext.state || "" );
 						extBody.appendChild( h( "div", { style: "padding:0.5rem 0;border-top:1px solid var(--border)" }, [
 							h( "div", { class: "pg-actions" }, [
-								h( "strong", { text: ext.name } ),
-								ext.disabled ? h( "span", { class: "chip warn" }, [ h( "span", { html: icon( "pause" ) } ), "Disabled" ] ) : h( "span", { class: "chip ok" }, [ h( "span", { html: icon( "check-circle" ) } ), "Loaded" ] )
+								h( "strong", { text: ext.title || ext.name } ),
+								ext.version ? h( "span", { class: "pg-note", text: ext.version } ) : null,
+								h( "span", { class: "chip " + ( good ? "ok" : "warn" ) }, [ h( "span", { html: icon( good ? "check-circle" : "warning" ) } ), String( ext.state || "" ) ] ),
+								h( "span", { class: "chip", text: ext.layer || "" } )
 							] ),
 							ext.description ? h( "p", { class: "pg-note", style: "margin:0.2rem 0 0", text: ext.description } ) : null,
-							adds.length ? h( "p", { class: "pg-note", style: "margin:0.2rem 0 0", text: "Adds: " + ( Array.isArray( adds ) ? adds.join( ", " ) : String( adds ) ) } ) : null
+							adds.length ? h( "p", { class: "pg-note", style: "margin:0.2rem 0 0", text: "Adds " + adds.join( "; " ) } ) : null,
+							( ext.problems || [] ).length ? h( "p", { class: "pg-error", role: "status", text: ext.problems.join( " " ) } ) : null
 						] ) );
 					} );
 				} );
 			}
-			loadExtensions();
+			if ( capabilities.admin ) { loadExtensions(); }
 
 			// Server: the agent as the server describes it
 			var serverBody = h( "dl", { style: "display:grid;grid-template-columns:max-content 1fr;gap:0.3rem 1rem;margin:0" } );

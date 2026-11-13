@@ -169,11 +169,12 @@
 					if ( route.stale() ) { return; }
 					activityHost.textContent = "";
 					if ( !result.ok || !Array.isArray( result.body.activity ) ) { return; }
-					var lines = result.body.activity;
+					var key = result.body.key || {};
+					var sources = { env: "set in the environment (BXAGENTS_VAULT_KEY)", file: "a file beside the database", none: "not set yet: it is made when the first secret is saved" };
 					activityHost.appendChild( h( "h2", { text: "Activity" } ) );
-					if ( result.body.status ) {
-						activityHost.appendChild( h( "p", { class: "pg-note", text: "The key is " + ( result.body.status.keySource === "file" ? "a file beside the database" : result.body.status.keySource === "env" ? "set in the environment" : String( result.body.status.keySource || "set" ) ) + "." } ) );
-					}
+					activityHost.appendChild( h( "p", { class: "pg-note", text: "The key is " + ( sources[ key.keySource ] || String( key.keySource || "" ) ) + ". " + ( key.secrets || 0 ) + " sealed."
+						+ ( key.wrongKey ? " " + key.wrongKey + " were sealed with another key and cannot be opened." : "" ) } ) );
+					var lines = result.body.activity;
 					if ( !lines.length ) {
 						activityHost.appendChild( pageNote( "Nothing has used a secret yet." ) );
 						return;
@@ -181,15 +182,14 @@
 					var body = h( "tbody" );
 					lines.forEach( function ( line ) {
 						body.appendChild( h( "tr", {}, [
-							h( "td", { text: stampText( line.at || line.time ) } ),
-							h( "td", { text: line.secret || line.name || "" } ),
-							h( "td", { text: line.action || line.what || "" } ),
-							h( "td", { text: line.by || line.user || "" } )
+							h( "td", { text: stampText( line.at ) } ), h( "td", { text: line.name || "" } ),
+							h( "td", {}, [ h( "span", { class: "chip " + ( line.ok ? "ok" : "bad" ) }, [ h( "span", { html: icon( line.ok ? "check-circle" : "warning-circle" ) } ), ( line.action || "" ) + ( line.ok ? "" : " failed" ) ] ) ] ),
+							h( "td", { text: line.scope || "" } ), h( "td", { text: line.actor || "" } ), h( "td", { text: ( line.via || "" ) + ( line.host ? " to " + line.host : "" ) } )
 						] ) );
 					} );
 					activityHost.appendChild( h( "div", { class: "tbl-wrap" }, [ h( "table", {}, [
 						h( "caption", { class: "visually-hidden", text: "Recent use of secrets" } ),
-						h( "thead", {}, [ h( "tr", {}, [ h( "th", { scope: "col", text: "When" } ), h( "th", { scope: "col", text: "Secret" } ), h( "th", { scope: "col", text: "What" } ), h( "th", { scope: "col", text: "By" } ) ] ) ] ),
+						h( "thead", {}, [ h( "tr", {}, [ "When", "Secret", "What", "Whose", "By", "Through" ].map( function ( t ) { return h( "th", { scope: "col", text: t } ); } ) ) ] ),
 						body
 					] ) ] ) );
 				} );
