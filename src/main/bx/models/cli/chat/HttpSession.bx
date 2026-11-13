@@ -263,9 +263,15 @@ class {
 	/**
 	 * @return The caller's recent conversations on the server, most recent first; empty when it keeps none
 	 */
-	array function sessions( numeric limit = 20 ) {
+	array function sessions( numeric limit = 20, struct filters = {} ) {
 		try {
-			var answer = variables.client.getJson( variables.baseUrl, "sessions", { limit : arguments.limit } )
+			var query = { limit : arguments.limit }
+			for ( var key in [ "q", "agent", "source", "since", "before", "offset" ] ) {
+				if ( len( arguments.filters[ key ] ?: "" ) ) {
+					query[ key ] = arguments.filters[ key ]
+				}
+			}
+			var answer = variables.client.getJson( variables.baseUrl, "sessions", query )
 			variables.sessionsMissing = false
 			return answer.sessions ?: []
 		} catch ( any e ) {

@@ -518,8 +518,9 @@ class {
 	// ----------------------------------------------------------------------------------
 
 	/**
-	 * GET: the caller's recent conversations, most recent first: { sessions : [ { id, title, messageCount, source, updatedAt } ] }.
-	 * Query: limit?, source?
+	 * GET: a page of the caller's conversations, most recent first:
+	 * { sessions : [ { id, title, messageCount, source, agent, updatedAt } ], total, limit, offset, facets? }.
+	 * Query: limit? (25, at most 100), offset?, q? (title contains), source?, agent?, since?, before?, all? (admin), facets? (1 adds counts per source and agent)
 	 * POST: starts a conversation, { conversationId }; the id is made here, never taken from the caller. Body: { title? }
 	 *
 	 * 404 when this server keeps no conversation list (no shared chat database).
@@ -537,7 +538,21 @@ class {
 			answer( event, all.create( callerOf( event ), event.getHTTPContent( json : true ).title ?: "" ) )
 			return
 		}
-		answer( event, all.list( callerOf( event ), val( rc.limit ?: 20 ), rc.source ?: "", isBoolean( rc.all ?: "" ) && rc.all ) )
+		answer(
+			event,
+			all.list(
+				caller : callerOf( event ),
+				limit  : val( rc.limit ?: 25 ),
+				source : rc.source ?: "",
+				all    : isBoolean( rc.all ?: "" ) && rc.all,
+				offset : val( rc.offset ?: 0 ),
+				q      : rc.q ?: "",
+				agent  : rc.agent ?: "",
+				since  : rc.since ?: "",
+				before : rc.before ?: "",
+				facets : isBoolean( rc.facets ?: "" ) && rc.facets
+			)
+		)
 	}
 
 	/**

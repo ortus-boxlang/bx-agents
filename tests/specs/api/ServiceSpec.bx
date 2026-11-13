@@ -78,6 +78,43 @@ class extends="testbox.system.BaseSpec" {
 					expect( service.conversations().list( ada ).data().sessions ).toHaveLength( 1 );
 				} );
 
+				it( "pages and filters the list, and says how many match in all", function() {
+					for ( var n = 1; n <= 30; n++ ) {
+						service.sessions().touch( "ada", "c#n#", n % 2 ? "alpha #n#" : "beta #n#", 2, n % 5 == 0 ? "terminal" : "web", n % 3 == 0 ? "researcher" : "" );
+					}
+					var conversations = service.conversations();
+
+					var page = conversations.list( ada ).data();
+					expect( page.sessions ).toHaveLength( 25 );
+					expect( page.total ).toBe( 30 );
+					expect( page.limit ).toBe( 25 );
+					expect( page.offset ).toBe( 0 );
+					expect( conversations.list( caller = ada, offset = 25 ).data().sessions ).toHaveLength( 5 );
+					expect( conversations.list( caller = ada, q = "alpha" ).data().total ).toBe( 15 );
+					expect( conversations.list( caller = ada, agent = "researcher" ).data().total ).toBe( 10 );
+					expect( conversations.list( caller = ada, agent = "fake" ).data().total ).toBe( 20 );
+					expect( conversations.list( caller = ada, source = "terminal" ).data().total ).toBe( 6 );
+					expect( conversations.list( caller = ada, limit = 1000 ).data().limit ).toBe( 100 );
+				} );
+
+				it( "names the main agent on rows that stored none", function() {
+					service.sessions().touch( "ada", "m1", "main", 2, "web" );
+					service.sessions().touch( "ada", "r1", "other", 2, "web", "researcher" );
+
+					var rows = service.conversations().list( ada ).data().sessions;
+					expect( rows.map( ( c ) => c.agent ).sort( "text" ) ).toBe( [ "fake", "researcher" ] );
+				} );
+
+				it( "adds the facet counts only when asked, the main agent under its name", function() {
+					service.sessions().touch( "ada", "m1", "main", 2, "web" );
+					service.sessions().touch( "ada", "r1", "other", 2, "terminal", "researcher" );
+
+					expect( service.conversations().list( ada ).data().keyExists( "facets" ) ).toBeFalse();
+					var facets = service.conversations().list( caller = ada, facets = true ).data().facets;
+					expect( facets.source ).toBe( { web : 1, terminal : 1 } );
+					expect( facets.agent ).toBe( { fake : 1, researcher : 1 } );
+				} );
+
 				it( "lists times as ISO 8601 text, not date objects", function() {
 					service.conversations().create( ada, "timed" );
 

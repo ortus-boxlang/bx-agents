@@ -197,6 +197,15 @@ class {
 					"ALTER TABLE routines ADD COLUMN destinationChat VARCHAR(255) NOT NULL DEFAULT ''",
 					"CREATE TABLE IF NOT EXISTS gateway_chats ( gateway VARCHAR(64) NOT NULL, chatId VARCHAR(255) NOT NULL, threadId VARCHAR(255) NOT NULL DEFAULT '', userId VARCHAR(255) NOT NULL DEFAULT '', metadata TEXT NOT NULL DEFAULT '{}', firstSeen INTEGER, lastSeen INTEGER, PRIMARY KEY ( gateway, chatId, threadId ) )"
 				]
+			},
+			{
+				// the agent a conversation started with (blank is the main agent), so the list can be filtered by it and a
+				// later turn cannot move a conversation to another agent. Conversations from before stay blank.
+				version    : 12,
+				statements : [
+					"ALTER TABLE conversations ADD COLUMN agent VARCHAR(64) NOT NULL DEFAULT ''",
+					"CREATE INDEX IF NOT EXISTS idx_conversations_agent ON conversations ( userId, agent, updatedAt )"
+				]
 			}
 		]
 	}

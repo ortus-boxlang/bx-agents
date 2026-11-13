@@ -22,16 +22,71 @@ class {
 	 * @source Only those that started there (`web`, `terminal`, `api`, a gateway's platform); all when blank
 	 * @all True to list everyone's, for an admin: each row then also says whose it is (`userId`)
 	 *
-	 * @return An Outcome: { sessions : [ { id, title, messageCount, source, createdAt, updatedAt } ] }, or forbidden
+	 * @offset How many to skip, for the next page
+	 * @q Only those whose title contains this text
+	 * @agent Only those that started with this agent (a name from the agent tree)
+	 * @since Only those active on or after this date
+	 * @before Only those active before this date
+	 * @facets True to also answer how many there are per source and per agent
+	 *
+	 * @return An Outcome: { sessions : [ { id, title, messageCount, source, agent, createdAt, updatedAt } ], total, limit, offset, facets? }, or forbidden.
+	 *         `total` counts everything that matches, whatever the page holds; a blank `agent` on a stored row reads as the main agent's name
 	 */
-	any function list( required any caller, numeric limit = 50, string source = "", boolean all = false ) {
+	any function list(
+		required any caller,
+		numeric limit = 25,
+		string source = "",
+		boolean all = false,
+		numeric offset = 0,
+		string q = "",
+		string agent = "",
+		string since = "",
+		string before = "",
+		boolean facets = false
+	) {
 		if ( arguments.all && !arguments.caller.isAdmin() ) {
 			return Outcome::failed( "forbidden", "Only an admin may list everyone's conversations" )
 		}
-		var rows = arguments.all
-			? variables.sessions.listAll( arguments.limit, arguments.source )
-			: variables.sessions.list( arguments.caller.id(), arguments.limit, arguments.source )
-		return Outcome::done( { "sessions" : rows.map( row => stamped( row ) ) } )
+		var main = mainName()
+		var filters = {
+			limit  : arguments.limit,
+			offset : arguments.offset,
+			q      : arguments.q,
+			source : arguments.source,
+			since  : arguments.since,
+			before : arguments.before,
+			agent  : trim( arguments.agent ),
+			mainAgent : main
+		}
+		var userId = arguments.all ? "" : arguments.caller.id()
+		var found = variables.sessions.search( userId, filters )
+		var data = {
+			"sessions" : found.rows.map( row => stamped( row ) ),
+			"total"    : found.total,
+			"limit"    : found.limit,
+			"offset"   : found.offset
+		}
+		if ( arguments.facets ) {
+			var counts = variables.sessions.facets( userId, filters )
+			var byAgent = {}
+			for ( var name in counts.agent ) {
+				var key = len( name ) ? name : main
+				byAgent[ key ] = ( byAgent[ key ] ?: 0 ) + counts.agent[ name ]
+			}
+			data[ "facets" ] = { "source" : counts.source, "agent" : byAgent }
+		}
+		return Outcome::done( data )
+	}
+
+	/**
+	 * @return The main agent's name, which a stored blank agent stands for
+	 */
+	private string function mainName() {
+		try {
+			return variables.agent.getAgentName() ?: ""
+		} catch ( any e ) {
+			return ""
+		}
 	}
 
 	/**
@@ -40,6 +95,9 @@ class {
 	 */
 	private struct function stamped( required struct row ) {
 		var copy = duplicate( arguments.row )
+		if ( structKeyExists( copy, "agent" ) && !len( copy.agent ) ) {
+			copy.agent = mainName()
+		}
 		for ( var key in [ "createdAt", "updatedAt" ] ) {
 			if ( isDate( copy[ key ] ?: "" ) ) {
 				copy[ key ] = dateTimeFormat( copy[ key ], "yyyy-MM-dd'T'HH:mm:ss" )

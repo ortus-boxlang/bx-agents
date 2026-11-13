@@ -92,6 +92,84 @@ class extends="testbox.system.BaseSpec" {
 				expect( sessions.resolve( "alice", "" ) ).toBeEmpty();
 			} );
 
+			it( "records the agent a conversation started with and never moves it", function() {
+				sessions.touch( "alice", "c1", "to the researcher", 2, "web", "researcher" );
+				sessions.touch( "alice", "c1", "later", 2, "web", "writer" );
+				sessions.touch( "alice", "c2", "to the main agent" );
+
+				expect( sessions.byId( "alice", "c1" ).agent ).toBe( "researcher" );
+				expect( sessions.byId( "alice", "c2" ).agent ).toBe( "" );
+			} );
+
+			describe( "search", function() {
+
+				beforeEach( function() {
+					for ( var n = 1; n <= 30; n++ ) {
+						sessions.touch( "alice", "w#n#", "web chat #n# about cats", 2, "web", n % 3 == 0 ? "researcher" : "" );
+					}
+					sessions.touch( "alice", "t1", "terminal 50% done_", 2, "terminal" );
+					sessions.touch( "bob", "b1", "bobs", 2, "web" );
+				} );
+
+				it( "pages with the total of everything that matches", function() {
+					var first = sessions.search( "alice", { limit : 10 } );
+					var second = sessions.search( "alice", { limit : 10, offset : 10 } );
+
+					expect( first.rows ).toHaveLength( 10 );
+					expect( first.total ).toBe( 31 );
+					expect( first.limit ).toBe( 10 );
+					expect( second.offset ).toBe( 10 );
+					expect( second.rows.map( r => r.id ) ).notToInclude( first.rows[ 1 ].id );
+				} );
+
+				it( "caps the page at 100 and defaults to 25", function() {
+					expect( sessions.search( "alice" ).rows ).toHaveLength( 25 );
+					expect( sessions.search( "alice", { limit : 5000 } ).limit ).toBe( 100 );
+					expect( sessions.search( "alice", { limit : 0 } ).limit ).toBe( 1 );
+				} );
+
+				it( "filters by title text, treating % and _ as plain characters", function() {
+					expect( sessions.search( "alice", { q : "CATS" } ).total ).toBe( 30 );
+					expect( sessions.search( "alice", { q : "50%" } ).total ).toBe( 1 );
+					expect( sessions.search( "alice", { q : "done_" } ).total ).toBe( 1 );
+					expect( sessions.search( "alice", { q : "%" } ).total ).toBe( 1 );
+					expect( sessions.search( "alice", { q : "nothing here" } ).total ).toBe( 0 );
+				} );
+
+				it( "filters by source and by agent, the main agent by name too", function() {
+					expect( sessions.search( "alice", { source : "terminal" } ).total ).toBe( 1 );
+					expect( sessions.search( "alice", { agent : "researcher" } ).total ).toBe( 10 );
+					expect( sessions.search( "alice", { agent : "nanobox", mainAgent : "nanobox" } ).total ).toBe( 21 );
+					expect( sessions.search( "alice", { agent : "researcher", source : "terminal" } ).total ).toBe( 0 );
+				} );
+
+				it( "filters by date", function() {
+					var past = dateTimeFormat( dateAdd( "d", -1, now() ), "yyyy-MM-dd'T'HH:mm:ss" );
+					var future = dateTimeFormat( dateAdd( "d", 1, now() ), "yyyy-MM-dd'T'HH:mm:ss" );
+
+					expect( sessions.search( "alice", { since : past } ).total ).toBe( 31 );
+					expect( sessions.search( "alice", { since : future } ).total ).toBe( 0 );
+					expect( sessions.search( "alice", { before : past } ).total ).toBe( 0 );
+					expect( sessions.search( "alice", { before : future } ).total ).toBe( 31 );
+				} );
+
+				it( "never reaches another user's rows unless asked for everyone's", function() {
+					expect( sessions.search( "alice", { q : "bobs" } ).total ).toBe( 0 );
+					expect( sessions.search( "", { q : "bobs" } ).rows[ 1 ].userId ).toBe( "bob" );
+					expect( sessions.search( "" ).total ).toBe( 32 );
+				} );
+
+				it( "counts each facet with every filter but its own", function() {
+					var counts = sessions.facets( "alice", { source : "web", agent : "researcher" } );
+
+					expect( counts.source.web ).toBe( 10 );
+					expect( counts.source.keyExists( "terminal" ) ).toBeFalse();
+					expect( counts.agent.researcher ).toBe( 10 );
+					expect( counts.agent[ "" ] ).toBe( 20 );
+				} );
+
+			} );
+
 			it( "renames, resets the count and deletes", function() {
 				sessions.touch( "alice", "c1", "one" );
 

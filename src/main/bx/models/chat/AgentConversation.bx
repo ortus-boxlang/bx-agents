@@ -293,10 +293,18 @@ class {
 	}
 
 	/**
-	 * @return The user's recent conversations, most recent first: [ { id, title, messageCount, updatedAt } ]
+	 * @filters { q? (title contains), agent?, source?, since?, before?, offset? }, all optional
+	 *
+	 * @return The user's recent conversations, most recent first: [ { id, title, messageCount, agent, updatedAt } ]
 	 */
-	array function sessions( numeric limit = 20 ) {
-		return keepsSessions() ? variables.sessions.list( variables.userId, arguments.limit ) : []
+	array function sessions( numeric limit = 20, struct filters = {} ) {
+		if ( !keepsSessions() ) {
+			return []
+		}
+		var asked = duplicate( arguments.filters )
+		asked[ "limit" ] = arguments.limit
+		asked[ "mainAgent" ] = variables.agent.getAgentName() ?: ""
+		return variables.sessions.search( variables.userId, asked ).rows
 	}
 
 	/**

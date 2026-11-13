@@ -142,6 +142,19 @@ class extends="testbox.system.BaseSpec" {
 				expect( seen.paths[ 1 ] ).toInclude( "all=1" );
 			} );
 
+			it( "asks for a page of conversations by text, agent, dates and offset, with the facets when it says so", function() {
+				client.sessions( limit = 25, offset = 50, q = "plan", agent = "researcher", since = "2026-01-01", before = "2026-02-01", facets = true );
+
+				var path = seen.paths[ 1 ];
+				expect( path ).toInclude( "offset=50" );
+				expect( path ).toInclude( "q=plan" );
+				expect( path ).toInclude( "agent=researcher" );
+				expect( path ).toInclude( "since=2026-01-01" );
+				expect( path ).toInclude( "before=2026-02-01" );
+				expect( path ).toInclude( "facets=1" );
+				expect( path ).notToInclude( "all=1" );
+			} );
+
 			it( "reads an export as text", function() {
 				reply.body = "## chat";
 				reply.type = "text/markdown";

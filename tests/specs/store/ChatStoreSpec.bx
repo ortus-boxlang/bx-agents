@@ -22,7 +22,7 @@ class extends="testbox.system.BaseSpec" {
 				var tables = store.rows( "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name" ).map( r => r.name );
 
 				expect( fileExists( file ) ).toBeTrue();
-				expect( store.schemaVersion() ).toBe( 11 );
+				expect( store.schemaVersion() ).toBe( 12 );
 				expect( store.rows( "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'routines'" ) ).toHaveLength( 1 );
 				expect( tables ).toInclude( "conversations" );
 				expect( tables ).toInclude( "preferences" );
@@ -44,9 +44,9 @@ class extends="testbox.system.BaseSpec" {
 
 				var again = bxagents.models.store.ChatStore::forFile( file );
 
-				expect( again.schemaVersion() ).toBe( 11 );
+				expect( again.schemaVersion() ).toBe( 12 );
 				expect( again.rows( "SELECT prefValue FROM preferences WHERE userId = 'luis'" )[ 1 ].prefValue ).toBe( "dark" );
-				expect( again.rows( "SELECT COUNT(*) AS n FROM bxagents_schema_version" )[ 1 ].n ).toBe( 11 );
+				expect( again.rows( "SELECT COUNT(*) AS n FROM bxagents_schema_version" )[ 1 ].n ).toBe( 12 );
 			} );
 
 			it( "recognises a database the web chat created before the store existed", function() {
@@ -61,7 +61,7 @@ class extends="testbox.system.BaseSpec" {
 
 				var store = new bxagents.models.store.ChatStore( ds );
 
-				expect( store.migrate() ).toBe( 11 );
+				expect( store.migrate() ).toBe( 12 );
 				expect( store.rows( "SELECT title FROM conversations WHERE id = 'c1'" )[ 1 ].title ).toBe( "Old chat" );
 			} );
 
@@ -72,7 +72,7 @@ class extends="testbox.system.BaseSpec" {
 
 				var store = new bxagents.models.store.ChatStore( ds );
 
-				expect( store.migrate() ).toBe( 11 );
+				expect( store.migrate() ).toBe( 12 );
 				expect( store.rows( "SELECT name FROM sqlite_master WHERE name = 'users'" ) ).toHaveLength( 1 );
 			} );
 
@@ -96,7 +96,7 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "reports the newest version it knows", function() {
-				expect( new bxagents.models.store.ChatStore( "ignored" ).latestVersion() ).toBe( 11 );
+				expect( new bxagents.models.store.ChatStore( "ignored" ).latestVersion() ).toBe( 12 );
 			} );
 
 		} );

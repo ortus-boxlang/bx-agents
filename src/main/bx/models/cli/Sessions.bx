@@ -48,7 +48,7 @@ class {
 		var user = len( trim( arguments.options.user ?: "" ) ) ? trim( arguments.options.user ) : Caller::localId()
 
 		if ( action == "list" ) {
-			return list( sessions, user, arguments.options.json ?: false )
+			return list( sessions, user, arguments.options.json ?: false, trim( arguments.options.agent ?: "" ), trim( arguments.options.q ?: "" ) )
 		}
 
 		if ( action == "import" ) {
@@ -83,8 +83,8 @@ class {
 
 	// ----------------------------------------------------------------------------------
 
-	private struct function list( required any sessions, required string user, required boolean asJson ) {
-		var rows = arguments.sessions.list( arguments.user, 50 )
+	private struct function list( required any sessions, required string user, required boolean asJson, string agent = "", string q = "" ) {
+		var rows = arguments.sessions.search( arguments.user, { limit : 50, agent : arguments.agent, q : arguments.q } ).rows
 		if ( arguments.asJson ) {
 			return { exitCode : 0, message : jsonSerialize( rows ) }
 		}

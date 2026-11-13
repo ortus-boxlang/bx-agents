@@ -380,18 +380,43 @@ class {
 	// ---- Conversations ----------------------------------------------------------------
 
 	/**
-	 * The caller's conversations, newest first.
+	 * A page of the caller's conversations, newest first: { sessions, total, limit, offset, facets? }.
 	 *
+	 * @limit How many (at most 100)
 	 * @source Only the ones started from this surface
 	 * @all An admin only: everyone's, with whose each is
+	 * @offset How many to skip, for the next page
+	 * @q Only those whose title contains this text
+	 * @agent Only those that started with this agent
+	 * @since Only those active on or after this date (ISO 8601)
+	 * @before Only those active before this date (ISO 8601)
+	 * @facets True to also get the counts per source and per agent
 	 */
-	struct function sessions( numeric limit = 20, string source = "", boolean all = false ) {
+	struct function sessions(
+		numeric limit = 25,
+		string source = "",
+		boolean all = false,
+		numeric offset = 0,
+		string q = "",
+		string agent = "",
+		string since = "",
+		string before = "",
+		boolean facets = false
+	) {
 		var query = { limit : arguments.limit }
-		if ( len( arguments.source ) ) {
-			query[ "source" ] = arguments.source
+		for ( var key in [ "source", "q", "agent", "since", "before" ] ) {
+			if ( len( arguments[ key ] ) ) {
+				query[ key ] = arguments[ key ]
+			}
+		}
+		if ( arguments.offset > 0 ) {
+			query[ "offset" ] = arguments.offset
 		}
 		if ( arguments.all ) {
 			query[ "all" ] = 1
+		}
+		if ( arguments.facets ) {
+			query[ "facets" ] = 1
 		}
 		return get( "sessions", query )
 	}
