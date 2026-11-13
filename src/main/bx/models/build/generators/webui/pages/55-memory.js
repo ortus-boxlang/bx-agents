@@ -131,7 +131,71 @@
 		}
 	} );
 
-	// Filled in below by the conversation memory part of the Memory page.
-	function memoryDrawConversations( into ) {
+	/**
+	 * Conversation memory: the messages each agent keeps of each conversation, one set per agent and conversation.
+	 * Clearing keeps the conversation and forgets what was said. A person clears their own; an admin may clear every
+	 * conversation of one agent, or of all of them.
+	 */
+	function memoryDrawConversations( into, route, say ) {
+		var admin = !!capabilities.admin;
+		var agentKey = agentTree.length > 1 ? ( mainAgentName || "" ) : "";
+		var pick = h( "select", { "aria-label": "Agent whose conversation memory to show" } );
+		var agents = agentTree.length ? agentTree : [ { name: mainAgentName || "the agent", parent: "" } ];
+		agents.forEach( function ( a ) { pick.appendChild( h( "option", { value: a.parent ? a.name : ( mainAgentName || "" ), text: a.name + ( a.parent ? "" : " (main)" ) } ) ); } );
+		var bar = h( "div", { class: "pg-actions", style: "margin-bottom:0.5rem" }, [ agents.length > 1 ? h( "label", {}, [ "Agent ", pick ] ) : null ] );
+		var list = h( "ul", { "aria-label": "Conversation memory", style: "list-style:none;margin:0;padding:0" } );
+		into.appendChild( bar );
+		into.appendChild( list );
+		function failedText( res, fallback ) {
+			return res.json().then( function ( parsed ) { return ( parsed && ( parsed.reason || parsed.error ) ) || fallback; } ).catch( function () { return fallback; } );
+		}
+		function draw( rows, total ) {
+			list.textContent = "";
+			bar.querySelectorAll( ".mem-clear-all" ).forEach( function ( n ) { n.remove(); } );
+			if ( admin && total ) {
+				var all = btn( "broom", "Clear all conversation memory" + ( agents.length > 1 ? " of this agent" : "" ), function () {
+					if ( !window.confirm( "Forget the messages of all " + total + " conversations" + ( agentKey ? " of " + agentKey : "" ) + "? The conversations stay, empty. This cannot be undone." ) ) { return; }
+					apiPost( "/memory/clear", agentKey ? { all: true, agent: agentKey } : { all: true } ).then( function ( res ) {
+						if ( !res.ok ) { return failedText( res, "Could not clear the memory." ).then( say ); }
+						return res.json().then( function ( made ) { say( "Cleared " + made.messages + " messages in " + made.conversations + " conversations." ); return load(); } );
+					} );
+				}, "danger" );
+				all.classList.add( "mem-clear-all" );
+				bar.appendChild( all );
+			}
+			if ( !rows.length ) {
+				list.appendChild( h( "li", {}, [ pageNote( "No conversations with this agent yet." ) ] ) );
+				return;
+			}
+			rows.forEach( function ( conv ) {
+				list.appendChild( h( "li", { style: "display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;padding:0.4rem 0;border-top:1px solid var(--border)" }, [
+					h( "span", { style: "flex:1;min-width:10rem", text: conv.title || "Untitled" } ),
+					h( "span", { class: "chip" }, [ ( conv.messageCount || 0 ) + " messages" ] ),
+					h( "span", { class: "pg-note", text: stampText( conv.updatedAt ) } ),
+					btn( "broom", "Clear", function () {
+						if ( !window.confirm( "Forget the " + ( conv.messageCount || 0 ) + " messages of this conversation? The conversation stays." ) ) { return; }
+						apiPost( "/memory/clear", { conversationId: conv.id } ).then( function ( res ) {
+							if ( !res.ok ) { return failedText( res, "Could not clear that conversation." ).then( say ); }
+							say( "Cleared." );
+							loadConversations();
+							return load();
+						} );
+					}, "danger", { "aria-label": "Clear the memory of " + ( conv.title || "Untitled" ), disabled: conv.messageCount ? undefined : true } )
+				] ) );
+			} );
+			if ( total > rows.length ) {
+				list.appendChild( h( "li", { class: "pg-note", style: "padding:0.5rem 0" }, [ "Showing the newest " + rows.length + " of " + total + ". ", h( "a", { href: "#/conversations" + ( agentKey ? "?agent=" + encodeURIComponent( agentKey ) : "" ), text: "All of them in Conversations" } ) ] ) );
+			}
+		}
+		function load() {
+			return apiGet( "/sessions?limit=25" + ( agentKey ? "&agent=" + encodeURIComponent( agentKey ) : "" ) ).then( function ( payload ) {
+				if ( route.stale() ) { return; }
+				if ( !payload ) { list.textContent = ""; list.appendChild( h( "li", {}, [ pageNote( "Could not load the conversations.", "error" ) ] ) ); return; }
+				var rows = payload.sessions || [];
+				draw( rows, typeof payload.total === "number" ? payload.total : rows.length );
+			} );
+		}
+		pick.addEventListener( "change", function () { agentKey = pick.value; load(); } );
 		into.appendChild( h( "p", { class: "pg-note", text: "Recall search over past conversations is planned." } ) );
+		load();
 	}

@@ -987,6 +987,7 @@ __ICON_SPRITE__
 			</button>
 			<span id="statusChips" hidden></span>
 			<span id="slotHeader" class="slot-area" hidden></span>
+			<select id="talkSelect" class="talk-select" title="Which agent you are talking to" aria-label="Talk to" hidden></select>
 			<select id="profileSelect" title="The model for your next messages" aria-label="Model" hidden></select>
 			<button type="button" id="sidebarBtn" title="Show or hide conversations" aria-label="Chats" aria-expanded="true" aria-controls="sidebar"><svg class="i" aria-hidden="true"><use href="#i-sidebar-simple"/></svg></button>
 			<button type="button" id="settingsBtn" title="Settings" aria-label="Settings" aria-haspopup="menu" aria-expanded="false" aria-controls="settingsPanel"><svg class="i" aria-hidden="true"><use href="#i-gear"/></svg></button>
@@ -1032,6 +1033,7 @@ __ICON_SPRITE__
 			<div id="slotSidebar" class="slot-area" hidden></div>
 		</aside>
 		<div id="main">
+			<p id="talkBanner" class="talk-banner" role="status" hidden></p>
 			<div id="messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Conversation"></div>
 			<p class="hint" id="hint" role="status"></p>
 			<ul id="slashMenu" role="listbox" aria-label="Commands" hidden></ul>
@@ -1265,6 +1267,12 @@ __MARKDOWN_SCRIPTS__
 	// worse than no button.
 	var capabilities = {};
 	var conversations = [];
+	// Talk to: the agent tree (the main agent first) and the agent the open conversation belongs to ("" is the main agent)
+	var agentTree = [];
+	var mainAgentName = "";
+	var activeAgent = "";
+	var talkSelectEl = document.getElementById( "talkSelect" );
+	var talkBannerEl = document.getElementById( "talkBanner" );
 	// the sidebar shows 25 at a time, newest first, with Show more and a quick filter; the Conversations page is the whole list
 	var CONV_PAGE = 25;
 	var convLimit = CONV_PAGE;
@@ -1342,9 +1350,71 @@ __MARKDOWN_SCRIPTS__
 			activeController.abort();
 		}
 		localStorage.setItem( CONVERSATION_STORAGE, id );
+		var row = conversations.filter( function ( c ) { return c.id === id; } )[ 0 ];
+		if ( row ) {
+			setActiveAgent( agentOfRow( row ) );
+		}
 		renderConversations();
 		return rehydrate();
 	}
+
+	/** A conversation belongs to the agent it started with; the main agent's own are stored under its name or blank */
+	function agentOfRow( row ) {
+		return row && row.agent && row.agent !== mainAgentName ? row.agent : "";
+	}
+
+	/** Adds the agent to a request body when a sub-agent is the one being talked to (blank is the main agent) */
+	function withAgent( body ) {
+		if ( activeAgent ) {
+			body.agent = activeAgent;
+		}
+		return body;
+	}
+
+	function setActiveAgent( name ) {
+		activeAgent = name || "";
+		if ( talkSelectEl.options.length ) {
+			talkSelectEl.value = activeAgent;
+		}
+		talkBannerEl.hidden = !activeAgent;
+		if ( activeAgent ) {
+			var node = agentTree.filter( function ( a ) { return a.name === activeAgent; } )[ 0 ] || {};
+			talkBannerEl.textContent = "You are talking to " + activeAgent + " directly"
+				+ ( node.parent ? " (a sub-agent of " + node.parent + ")" : "" )
+				+ ". It keeps its own memory of this conversation, and it uses your notes and the notes every agent shares.";
+		}
+		document.body.setAttribute( "data-talking", activeAgent ? "sub" : "main" );
+	}
+
+	/** The picker only exists when the server has sub-agents to offer */
+	function drawTalkSelect() {
+		talkSelectEl.textContent = "";
+		if ( agentTree.length < 2 ) {
+			talkSelectEl.hidden = true;
+			return;
+		}
+		agentTree.forEach( function ( agent ) {
+			var option = document.createElement( "option" );
+			var isMain = !agent.parent;
+			option.value = isMain ? "" : agent.name;
+			option.textContent = isMain ? agent.name + " (main)" : agent.name;
+			if ( agent.description ) {
+				option.title = agent.description;
+			}
+			talkSelectEl.appendChild( option );
+		} );
+		talkSelectEl.value = activeAgent;
+		talkSelectEl.hidden = false;
+	}
+
+	talkSelectEl.addEventListener( "change", function () {
+		if ( isBusy ) {
+			talkSelectEl.value = activeAgent;
+			return;
+		}
+		// a conversation belongs to the agent it started with, so switching starts a new one with the chosen agent
+		startConversation( talkSelectEl.value );
+	} );
 
 	/**
 	 * A 401 from a page that has accounts and no token means the visitor is not signed in: send them to the form.
@@ -1380,6 +1450,9 @@ __MARKDOWN_SCRIPTS__
 				return;
 			}
 			capabilities = payload.capabilities || {};
+			mainAgentName = payload.name || "";
+			agentTree = payload.agents || [];
+			drawTalkSelect();
 			if ( payload.model ) {
 				modelMetaEl.textContent = payload.model;
 			}
@@ -1550,6 +1623,10 @@ __MARKDOWN_SCRIPTS__
 			conversations = ( payload && payload.sessions ) || [];
 			// an older server answers without a total: then everything it has is on the list
 			conversationsTotal = payload && typeof payload.total === "number" ? payload.total : conversations.length;
+			var open = conversations.filter( function ( c ) { return c.id === getConversationId(); } )[ 0 ];
+			if ( open ) {
+				setActiveAgent( agentOfRow( open ) );
+			}
 			renderConversations();
 			renderConversationsMore();
 		} );
@@ -1585,12 +1662,15 @@ __MARKDOWN_SCRIPTS__
 	 * Starts a conversation server-side and opens it. The id is minted by the
 	 * server so it cannot collide with one that already exists.
 	 */
-	function startConversation() {
-		return apiPost( "/sessions", {} )
+	function startConversation( agent ) {
+		// a New chat carries on with the agent being talked to; the picker says another
+		var chosen = agent === undefined ? activeAgent : agent;
+		return apiPost( "/sessions", chosen ? { agent: chosen } : {} )
 			.then( function ( res ) { return res.ok ? res.json() : null; } )
 			.then( function ( payload ) {
 				var id = ( payload && payload.conversationId ) || newConversationId();
 				localStorage.setItem( CONVERSATION_STORAGE, id );
+				setActiveAgent( chosen );
 				return loadConversations().then( function () {
 					messagesEl.textContent = "";
 					showHint( "" );
@@ -2731,7 +2811,7 @@ __MARKDOWN_SCRIPTS__
 	 * answer lands in the conversation rather than starting a new one.
 	 */
 	function offerApproval( turn, threadId ) {
-		return fetch( API_BASE + "/pending?threadId=" + encodeURIComponent( threadId ), { headers: authHeaders( {} ) } )
+		return fetch( API_BASE + "/pending?threadId=" + encodeURIComponent( threadId ) + ( activeAgent ? "&agent=" + encodeURIComponent( activeAgent ) : "" ), { headers: authHeaders( {} ) } )
 			.then( function ( res ) { return res.ok ? res.json() : null; } )
 			.then( function ( payload ) {
 				if ( !payload || !payload.pending ) {
@@ -2768,7 +2848,7 @@ __MARKDOWN_SCRIPTS__
 						card.remove();
 						setBusy( true );
 						var next = createTurn();
-						streamInto( "/resume", { threadId: threadId, decision: pair[ 1 ] }, next )
+						streamInto( "/resume", withAgent( { threadId: threadId, decision: pair[ 1 ] } ), next )
 							.then( function ( outcome ) { next.settle( outcome.sawContent ); } )
 							.catch( function ( err ) {
 								next.discard();
@@ -3115,7 +3195,7 @@ __MARKDOWN_SCRIPTS__
 			inputEl.value = "";
 			autoGrow();
 			addUserBubble( text );
-			apiPost( "/steer", { threadId: steering, input: text } )
+			apiPost( "/steer", withAgent( { threadId: steering, input: text } ) )
 				.then( function ( res ) {
 					showHint( res.ok
 						? "Steered - the agent will pick this up at its next step."
@@ -3156,6 +3236,7 @@ __MARKDOWN_SCRIPTS__
 		if ( chosenProfile ) {
 			payload.options.profile = chosenProfile;
 		}
+		withAgent( payload );
 
 		vaultCalls = {};
 		streamInto( "/stream", payload, turn ).then( function ( outcome ) {
@@ -3191,7 +3272,7 @@ __MARKDOWN_SCRIPTS__
 		// checkpoint, so tools stop firing and tokens stop being spent. Aborting
 		// the fetch only stops us listening. Abort regardless of the outcome so
 		// Stop always stops the UI.
-		var body = { threadId: activeThreadId, reason: "Stopped by the user." };
+		var body = withAgent( { threadId: activeThreadId, reason: "Stopped by the user." } );
 		apiPost( "/cancel", body ).catch( function () {} ).finally( function () {
 			if ( activeController ) {
 				activeController.abort();
