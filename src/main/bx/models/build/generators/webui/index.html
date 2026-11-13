@@ -955,13 +955,25 @@ __CUSTOM_CSS__
 	#routineReportsBody .rp-clean input { width: 5rem; }
 	#settingsBtn { position: relative; }
 	#settingsBtn[data-errors]::after { content: attr(data-errors); position: absolute; top: -0.25rem; right: -0.25rem; min-width: 1rem; height: 1rem; border-radius: 999px; background: var(--bubble-error); color: #fff; font-size: 0.65rem; line-height: 1rem; text-align: center; font-weight: 700; }
+__SHELL_STYLES__
 </style>
 __EXTENSION_STYLES__
 </head>
 <body>
 __ICON_SPRITE__
+	<a class="skip-link" href="#content">Skip to content</a>
+	<div id="app">
+	<nav id="mainNav" aria-label="Main">
+		<div id="navList"></div>
+		<div class="nav-foot" id="navFoldRow">
+			<button type="button" id="navFold" aria-expanded="true" title="Fold the menu to icons"><svg class="i" aria-hidden="true"><use href="#i-caret-double-left"/></svg><span id="navFoldLabel" class="nav-label">Fold menu</span></button>
+		</div>
+	</nav>
+	<div id="navScrim" aria-hidden="true"></div>
+	<div id="frame">
 	<header>
 		<div class="brand">
+			<button type="button" id="navBtn" class="ib" title="Menu" aria-label="Menu" aria-expanded="false" aria-controls="mainNav"><svg class="i" aria-hidden="true"><use href="#i-list"/></svg></button>
 			__APP_ICON__
 			<div>
 				<h1>__APP_TITLE__</h1>
@@ -1007,6 +1019,8 @@ __ICON_SPRITE__
 			<button type="button" id="gatewaysBtn" role="menuitem" title="The chat apps and whether each is connected" aria-label="Chat apps" aria-haspopup="dialog" hidden><svg class="i" aria-hidden="true"><use href="#i-lightning"/></svg><span class="label">Chat apps</span></button>
 		</div>
 	</div>
+	<main id="content" tabindex="-1">
+	<div id="page-chat">
 	<div class="shell">
 		<aside id="sidebar" aria-label="Conversations">
 			<div class="sidebar-head">
@@ -1032,6 +1046,11 @@ __ICON_SPRITE__
 			</form>
 			__FOOTER__
 		</div>
+	</div>
+	</div>
+	<div id="pageView" hidden></div>
+	</main>
+	</div>
 	</div>
 
 	<dialog id="keyPanel" aria-labelledby="keyTitle">
@@ -3292,6 +3311,7 @@ __MARKDOWN_SCRIPTS__
 			var errors = ( payload && payload.errors ) || {};
 			var count = 0;
 			Object.keys( errors ).forEach( function ( area ) { count += errors[ area ]; } );
+			shellBadge( "logs", count );
 			if ( count > 0 ) {
 				settingsBtn.setAttribute( "data-errors", String( count ) );
 				settingsBtn.title = "Settings (" + count + " error" + ( count === 1 ? "" : "s" ) + " logged since the app started)";
@@ -4508,10 +4528,13 @@ __MARKDOWN_SCRIPTS__
 		} );
 	} );
 
+__SHELL_SCRIPT__
+
 	// Boot: capabilities first, since they decide which controls exist, then the
 	// conversation list and the transcript. Preferences are independent, so they
 	// load alongside rather than blocking the chat.
 	loadInfo()
+		.then( shellStart )
 		.then( loadPreferences )
 		.then( loadConversations )
 		.then( function () {

@@ -1,0 +1,240 @@
+	/* ---- App shell: left menu, frame, pages (the web UI revamp) ---------- */
+	/* Joined into the page's style block by WebUiGenerator. Every colour is a token of the theme above. */
+	.skip-link {
+		position: absolute;
+		left: 0.5rem;
+		top: -4rem;
+		z-index: 60;
+		padding: 0.6rem 1rem;
+		background: var(--accent);
+		color: var(--accent-fg);
+		border-radius: var(--radius-sm);
+		font-weight: 600;
+		text-decoration: none;
+	}
+	.skip-link:focus { top: 0.5rem; }
+
+	#app { display: flex; flex: 1; min-height: 0; }
+	#frame { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+	#content { display: flex; flex-direction: column; flex: 1; min-height: 0; outline: none; }
+	#page-chat { display: flex; flex: 1; min-height: 0; }
+	#page-chat[hidden], #pageView[hidden] { display: none; }
+
+	/* The left menu */
+	#mainNav {
+		display: flex;
+		flex-direction: column;
+		width: 15rem;
+		flex-shrink: 0;
+		background: var(--surface);
+		border-right: 1px solid var(--border);
+		overflow-y: auto;
+		overflow-x: hidden;
+		padding: 0.5rem 0.5rem 0.75rem;
+		gap: 0.15rem;
+		transition: width 0.18s ease;
+	}
+	#mainNav h2.nav-group {
+		margin: 0.9rem 0.6rem 0.25rem;
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--muted);
+	}
+	#mainNav h2.nav-group:first-child { margin-top: 0.4rem; }
+	#mainNav ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+	#mainNav a.nav-item {
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+		min-height: 2.75rem;
+		padding: 0.4rem 0.7rem;
+		border-radius: var(--radius-sm);
+		color: var(--fg);
+		text-decoration: none;
+		font-size: 0.92rem;
+		position: relative;
+	}
+	#mainNav a.nav-item .i { font-size: 1.2rem; color: var(--muted); }
+	#mainNav a.nav-item:hover { background: var(--accent-soft); color: var(--accent-ink); }
+	#mainNav a.nav-item:hover .i { color: var(--accent-ink); }
+	#mainNav a.nav-item[aria-current="page"] { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
+	#mainNav a.nav-item[aria-current="page"] .i { color: var(--accent-ink); }
+	#mainNav .nav-label { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	#mainNav .nav-badge {
+		min-width: 1.35rem;
+		padding: 0.05rem 0.4rem;
+		border-radius: 999px;
+		background: var(--bubble-error);
+		color: #fff;
+		font-size: 0.72rem;
+		font-weight: 700;
+		text-align: center;
+		line-height: 1.2rem;
+	}
+	#mainNav .nav-badge[hidden] { display: none; }
+	#mainNav .nav-foot { margin-top: auto; padding-top: 0.6rem; }
+	#navFold {
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+		width: 100%;
+		min-height: 2.75rem;
+		padding: 0.4rem 0.7rem;
+		border: 0;
+		border-radius: var(--radius-sm);
+		background: none;
+		color: var(--muted);
+		font: inherit;
+		font-size: 0.88rem;
+		cursor: pointer;
+	}
+	#navFold:hover { background: var(--accent-soft); color: var(--accent-ink); }
+
+	/* Folded to icons: the labels stay for screen readers and as tooltips */
+	body[data-nav="folded"] #mainNav { width: 4.25rem; }
+	body[data-nav="folded"] #mainNav .nav-label,
+	body[data-nav="folded"] #mainNav #navFoldLabel {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+		white-space: nowrap;
+	}
+	body[data-nav="folded"] #mainNav h2.nav-group { height: 1px; margin: 0.5rem 0.6rem; overflow: hidden; font-size: 0; background: var(--border); }
+	body[data-nav="folded"] #mainNav .nav-badge { position: absolute; top: 0.2rem; right: 0.2rem; min-width: 1.1rem; padding: 0 0.25rem; font-size: 0.65rem; line-height: 1.1rem; }
+	body[data-nav="folded"] #navFold .i { transform: rotate(180deg); }
+
+	/* The hamburger and the scrim exist for the phone drawer only */
+	#navBtn, #navScrim { display: none; }
+	#navScrim { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.4); }
+
+	/* Pages other than the chat have no use for the chat controls in the header */
+	body:not([data-page="chat"]) #sidebarBtn,
+	body:not([data-page="chat"]) #contextChip,
+	body:not([data-page="chat"]) #profileSelect,
+	body:not([data-page="chat"]) #modelMeta { display: none !important; }
+
+	/* ---- A page: title bar, then cards ---------------------------------- */
+	#pageView { flex: 1; min-height: 0; overflow-y: auto; padding: 1.25rem 1.5rem 2rem; }
+	.pg { max-width: 62rem; margin: 0 auto; }
+	.pg-head { display: flex; align-items: flex-start; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
+	.pg-head .pg-title { flex: 1; min-width: 12rem; }
+	.pg-head h1 { margin: 0; font-size: 1.35rem; outline: none; }
+	.pg-head p { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.9rem; }
+	.pg-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+	.pg h2 { margin: 1.4rem 0 0.5rem; font-size: 1.02rem; }
+	.pg-tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--border); margin-bottom: 1rem; overflow-x: auto; }
+	.pg-tabs a {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		min-height: 2.75rem;
+		padding: 0.3rem 0.9rem;
+		color: var(--muted);
+		text-decoration: none;
+		border-bottom: 2px solid transparent;
+		white-space: nowrap;
+	}
+	.pg-tabs a:hover { color: var(--accent-ink); }
+	.pg-tabs a[aria-current="page"] { color: var(--accent-ink); border-bottom-color: var(--accent); font-weight: 600; }
+	.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.1rem; }
+	.card + .card { margin-top: 0.75rem; }
+	.card h2:first-child, .card h3:first-child { margin-top: 0; }
+	.pg-note { color: var(--muted); font-size: 0.88rem; }
+	.pg-empty { padding: 2rem 1rem; text-align: center; color: var(--muted); border: 1px dashed var(--border); border-radius: var(--radius); }
+	.pg-error { padding: 0.75rem 1rem; border: 1px solid var(--bubble-error); border-radius: var(--radius-sm); color: var(--bubble-error); }
+	.pg-error .i { margin-right: 0.35rem; }
+	.pg-status { min-height: 1.4rem; margin: 0.5rem 0; font-size: 0.88rem; color: var(--muted); }
+
+	/* Buttons and fields of the pages: 44px high, icon plus word */
+	.pg .btn, .pg button.btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.4rem;
+		min-height: 2.75rem;
+		padding: 0.4rem 0.95rem;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface);
+		color: var(--fg);
+		font: inherit;
+		font-size: 0.9rem;
+		cursor: pointer;
+		text-decoration: none;
+	}
+	.pg .btn:hover { background: var(--accent-soft); color: var(--accent-ink); }
+	.pg .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+	.pg .btn.primary:hover { background: var(--accent-ink); }
+	.pg .btn.danger { color: var(--bubble-error); border-color: var(--bubble-error); }
+	.pg .btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+	.pg .btn.icon { width: 2.75rem; padding: 0; }
+	.pg input[type="text"], .pg input[type="search"], .pg input[type="number"], .pg input[type="password"], .pg input[type="date"], .pg select, .pg textarea {
+		min-height: 2.75rem;
+		padding: 0.4rem 0.7rem;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--input-bg);
+		color: var(--fg);
+		font: inherit;
+		font-size: 0.9rem;
+	}
+	.pg label { font-size: 0.85rem; color: var(--muted); }
+	.pg .chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.15rem 0.6rem;
+		border-radius: 999px;
+		background: var(--accent-soft);
+		color: var(--accent-ink);
+		font-size: 0.78rem;
+		white-space: nowrap;
+	}
+	.pg .chip.ok { background: var(--tool-bg); color: var(--tool-fg); }
+	.pg .chip.warn { background: color-mix(in srgb, rgb(217, 119, 6) 16%, var(--surface)); color: rgb(146, 76, 0); }
+	.pg .chip.bad { background: color-mix(in srgb, var(--bubble-error) 14%, var(--surface)); color: var(--bubble-error); }
+	:root[data-theme="dark"] .pg .chip.warn { color: rgb(245, 180, 90); }
+	.pg table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+	.pg th { text-align: left; font-size: 0.78rem; font-weight: 600; color: var(--muted); padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); }
+	.pg td { padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+	.pg tr:last-child td { border-bottom: 0; }
+	.pg .tbl-wrap { overflow-x: auto; }
+	.pg .grid { display: grid; grid-template-columns: repeat( auto-fill, minmax( 16rem, 1fr ) ); gap: 0.75rem; }
+	.pg .grid .card + .card { margin-top: 0; }
+	.pg code, .pg pre { font-family: var(--font-mono); font-size: 0.85em; }
+	.pg pre { margin: 0; padding: 0.75rem; overflow: auto; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); max-height: 28rem; }
+
+	/* Phone: the menu is a drawer */
+	@media ( max-width: 40rem ) {
+		#navBtn { display: inline-grid; }
+		#mainNav {
+			position: fixed;
+			top: 0;
+			bottom: 0;
+			left: 0;
+			z-index: 50;
+			width: 17rem;
+			max-width: 86vw;
+			transform: translateX( -102% );
+			visibility: hidden;
+			transition: transform 0.18s ease, visibility 0s linear 0.18s;
+			box-shadow: 0 0 2rem rgba( 0, 0, 0, 0.35 );
+		}
+		body[data-drawer="open"] #mainNav { transform: none; visibility: visible; transition: transform 0.18s ease; }
+		body[data-drawer="open"] #navScrim { display: block; }
+		#navFoldRow { display: none; }
+		/* the folded state is a desktop choice */
+		body[data-nav="folded"] #mainNav { width: 17rem; }
+		body[data-nav="folded"] #mainNav .nav-label { position: static; width: auto; height: auto; margin: 0; clip: auto; }
+		body[data-nav="folded"] #mainNav h2.nav-group { height: auto; margin: 0.9rem 0.6rem 0.25rem; font-size: 0.7rem; background: none; }
+		#pageView { padding: 1rem 0.75rem 2rem; }
+		.pg-head h1 { font-size: 1.2rem; }
+	}
+	@media ( prefers-reduced-motion: reduce ) {
+		#mainNav { transition: none; }
+	}

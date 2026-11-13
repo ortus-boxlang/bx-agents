@@ -189,6 +189,23 @@ class {
 	}
 
 	/**
+	 * The shell (left menu, router, page registry) and then one file per page, in name order,
+	 * as one block of script for the page's single closure. The files are read as they are:
+	 * they call the page's own helpers (apiGet, capabilities, icon) and use no placeholders.
+	 */
+	private string function renderShellScript( required string templateDir ) {
+		var script = fileRead( arguments.templateDir & "webui/shell.js" )
+		var pagesDir = arguments.templateDir & "webui/pages"
+		if ( directoryExists( pagesDir ) ) {
+			var files = directoryList( pagesDir, false, "name", "*.js", "name asc" )
+			for ( var file in files ) {
+				script &= char( 10 ) & fileRead( pagesDir & "/" & file )
+			}
+		}
+		return script
+	}
+
+	/**
 	 * Reads the vendored `webui/index.html` template sitting next to THIS
 	 * class - resolved via `getCurrentTemplatePath()` (an absolute
 	 * filesystem path to this .bx file itself, confirmed empirically this
@@ -246,6 +263,8 @@ class {
 		html = html.replace( "__CUSTOM_CSS__", readCustomCss( arguments.entry ), "all" )
 		// Last, so none of the replacements above can touch the libraries' own text (they contain "__proto__" and the like)
 		html = html.replace( "__MARKDOWN_SCRIPTS__", renderMarkdownScripts( templateDir ), "all" )
+		html = html.replace( "__SHELL_STYLES__", fileRead( templateDir & "webui/shell.css" ), "all" )
+		html = html.replace( "__SHELL_SCRIPT__", renderShellScript( templateDir ), "all" )
 		html = html.replace( "__ICON_SPRITE__", fileRead( templateDir & "webui/vendor/icons.svg" ), "all" )
 
 		var mountDir = Strings::normalizePath( arguments.appDir ) & path

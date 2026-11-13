@@ -627,6 +627,76 @@ class extends="testbox.system.BaseSpec" {
 				expect( html ).toInclude( "prefers-reduced-motion" );
 			} );
 
+			describe( "shell", function() {
+
+				it( "wraps the page in a skip link, a labelled left menu and a main region that holds the chat and the page host", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( 'class="skip-link" href="##content"' );
+					expect( html ).toInclude( '<nav id="mainNav" aria-label="Main">' );
+					expect( html ).toInclude( '<main id="content" tabindex="-1">' );
+					expect( html ).toInclude( 'id="page-chat"' );
+					expect( html ).toInclude( 'id="pageView" hidden' );
+					// the hamburger drives the phone drawer
+					expect( html ).toInclude( 'id="navBtn"' );
+					expect( html ).toInclude( 'aria-controls="mainNav"' );
+				} );
+
+				it( "joins the shell styles and script in, leaving no placeholder behind", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).notToInclude( "__SHELL_STYLES__" );
+					expect( html ).notToInclude( "__SHELL_SCRIPT__" );
+					expect( html ).toInclude( "##mainNav a.nav-item[aria-current=""page""]" );
+					expect( html ).toInclude( "function registerPage(" );
+					expect( html ).toInclude( "function shellStart()" );
+				} );
+
+				it( "routes by hash, keeps the chat in the document, and sends a page the server does not offer to the chat", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "window.addEventListener( ""hashchange""" );
+					expect( html ).toInclude( "history.replaceState( null, """", ""##/chat"" )" );
+					// a member's menu is built from the capabilities, never from the address
+					expect( html ).toInclude( "function pageAvailable( def )" );
+					expect( html ).toInclude( "function buildNav()" );
+				} );
+
+				it( "folds the menu to icons, remembers it, and makes it a drawer on a phone", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "body[data-nav=""folded""]" );
+					expect( html ).toInclude( "body[data-drawer=""open""]" );
+					expect( html ).toInclude( "localStorage.setItem( NAV_STORAGE" );
+					// Escape closes the drawer and Tab stays inside it
+					expect( html ).toInclude( "function closeDrawer()" );
+					expect( html ).toInclude( "evt.key === ""Tab""" );
+				} );
+
+				it( "shows the count of logged errors on the Logs item", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "function shellBadge( id, count )" );
+					expect( html ).toInclude( "shellBadge( ""logs"", count )" );
+				} );
+
+			} );
+
 			it( "recovers when the remembered conversation no longer exists", function() {
 				// Deleted from another tab, or a fresh store - rehydrating to
 				// nothing would leave the sidebar with no active row
