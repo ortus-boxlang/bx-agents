@@ -150,19 +150,37 @@ Connecting a connector can add many tools, so the person using it decides which 
 - The choice is kept per person and connector.
 - A warning shows in the panel, in `/connect` and in `bxAgents connectors` when the tools an agent holds pass 100. The number is a setting.
 
-## Schedules
+## Routines and schedules
 
-A schedule has no person. It can say who to run as:
+- **Routines** (the person-owned ones in the Routines page) already run as their owner: the runner builds its `Caller` from the routine's `ownerId`. So a routine uses its owner's connected credentials and clients with no new key. Task 6 pins this with a spec, and with a routine whose owner has not connected (the run gets none of that connector's tools and records why).
+- **File schedules** (`schedules/*.bx`) have no person. They can say who to run as:
 
 ```yaml
 runAs: ada                 # a person who has already connected
 ```
 
-A scheduled run then uses that person's connected credentials and clients. If they have not connected a connector, the run gets none of its tools and records why. Without `runAs`, a schedule uses only shared tokens.
+  The schedule's author sets it and it must name a person who exists. Without `runAs` a file schedule uses only shared tokens.
+- `docs/conventions/connect.md` says a run with nobody behind it finds no tokens. That stays true for file schedules and is corrected for routines.
 
 ## Wizard
 
 The wizard shows every connector as available and asks which to leave out, or lets the developer pick only some. It writes `connectors.exclude` or `connectors.only` accordingly. `--mcp` keeps working.
+
+## In the new web page
+
+Checked against `development` as of e8ff1ae (the revamp). Today the connect feature survives as a small dialog (`#connectPanel`) opened from a Connections button in Settings, under Account. It lists only the OAuth servers of this agent. It does not fit the new shell, so connectors become a page.
+
+Mock-ups, drawn inside the real shell and styles: `plans/connector-catalog-mockups/` (the page, the token connect dialog, the sign in dialog, the tools drawer, the phone width).
+
+- **A new Main page, Connectors**, between Registry and Vault, for everyone. Cards for every catalog connector (icon, name, summary, state, risk, auth kind, who the credential belongs to, tools on), tabs *All*, *Connected*, *Needs attention*, a search box, and a banner for the catalog policy (available, excluded, overridden) and the tool count. Registered like the other pages (`registerPage`, `group: "main"`), gated on a `connectors` capability that replaces `connections`.
+- **Connect dialog:** risk warning with a confirm, the connector's options, the token field for token connectors (masked, sealed in the vault) or "Continue to Atlassian" for a sign in, and for an admin a choice of *Only me* or *Everyone* (shared token). The same fields as the terminal and gateways.
+- **Tools drawer:** a switch per tool, all on, all off, read only, search, a lock and "Turned off by your admin" for tools an admin fixed, "Asks first" marks, and the over 100 warning.
+- **Settings, Account:** the Connections button becomes a link to the Connectors page. Nothing is removed: the control moves, as the revamp's "Nothing removed" rule requires.
+- **Registry, Tools:** tools already group by the word before the first underscore. Connector tools carry the connector's name as that group and a "from a connector" chip, so they stay findable in both places.
+- **Agent, Composition (admin):** connectors appear under outgoing, with their state and the catalog policy.
+- **Vault:** unchanged. A token connected for a person is a vault secret in the user scope, and the Vault page already has the Yours and The agent's tabs.
+- **Icons:** the sprite has none for brands. Cards use generic Phosphor icons from the set the revamp already pulls in; the few missing ones (a card, a kanban board) are added the same way.
+- **Accessibility:** the same rules as every page (44 px targets, state in words and icons, focus trap in dialogs, `aria-current`, reduced motion). Toggles are real checkboxes styled as switches.
 
 ## Contributing
 
@@ -189,8 +207,8 @@ CI rules (schema and safety only):
 2. **Move the data.** `catalog/connectors/*.yaml`, a loader, a validator and `bxAgents connectors check`; CI job; the wizard and `add` read from it. `--mcp` keeps working.
 3. **Spike: per-person clients.** Build `ConnectorClients`, wrap a connector's tools so a call goes to the caller's client, and prove with the fake server that two people never see each other's token or session. A bx-ai pull request only if the wrapping cannot be done from bx-agents.
 4. **Build support.** `connectors:` key: only, exclude, override, none; errors; expansion into `mcpServers`; dormant until a credential exists; specs and a fixture.
-5. **Connection service.** Rows for every connector with state, risk, auth and options. Token connect through the vault, shared versus personal, confirm step, tool switches and the 100 tool warning. Web panel, `/connect`, CLI, `GET /connect`, gateways.
-6. **Schedules.** `runAs` on a schedule, discovery, validation and specs.
+5. **Connection service.** Rows for every connector with state, risk, auth and options. Token connect through the vault, shared versus personal, confirm step, tool switches and the 100 tool warning. The Connectors page, dialogs and tools drawer on the new shell, Settings link, Registry and Composition touches, `/connect`, CLI, `GET /connect`, gateways.
+6. **Routines and schedules.** Pin that a routine runs with its owner's connections; `runAs` on file schedules, validation and specs.
 7. **Wizard.** Show all connectors, exclude or pick, write the `connectors` block.
 8. **Docs.** Catalog page generated from the data, connectors reference, contributor guide, Git note, updates to connect, mcp, vault, agent-yaml, schedules, new-wizard, cli-reference and web-ui. Each with its `docs/versions/1.0.x` copy.
 9. **Home page and tour.** Catalog section, a connectors tile, a Connections tab update, screenshots and the narrated video re-recorded with `af_heart`.
