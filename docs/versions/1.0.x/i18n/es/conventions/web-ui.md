@@ -54,13 +54,13 @@ Porque llega el envelope completo, **el razonamiento y las llamadas de tool ya e
 
 ## Recorrido
 
-<video controls preload="metadata" poster="/assets/video/web-tour-poster.png" style="max-width:100%">
-  <source src="/assets/video/web-tour.mp4" type="video/mp4">
-  <source src="/assets/video/web-tour.webm" type="video/webm">
-  <track kind="captions" src="/assets/video/web-tour.vtt" srclang="en" label="English" default>
+<video controls preload="metadata" poster="/assets/video/web-trailer-poster.png" style="max-width:100%">
+  <source src="/assets/video/web-trailer.mp4" type="video/mp4">
+  <source src="/assets/video/web-trailer.webm" type="video/webm">
+  <track kind="captions" src="/assets/video/web-trailer.vtt" srclang="en" label="English" default>
 </video>
 
-Un minuto y medio por toda la página: el formulario de contraseña, las sugerencias, una respuesta con formato, una llamada a una herramienta, un bloque de código con su botón Copy, el menú Settings, el modo oscuro, las notas y el panel de tokens de acceso. La voz es [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (modelo Apache 2.0), y las respuestas de la página vienen de un modelo de demostración con guion, así que son fijas. Los subtítulos están activados.
+Tres minutos por toda la aplicación web: el chat en directo con tarjetas de herramienta y una aprobación, hablar con un subagente, las conversaciones, las rutinas, el registro, la memoria, la bóveda, y después las páginas de administración (agente, gateways, registros, acceso, datos y copias), el modo oscuro y el diseño de móvil, y lo mismo desde la terminal y la API. La voz es [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (modelo Apache 2.0), y las respuestas de la página vienen de un modelo de demostración con guion, así que son fijas. Los subtítulos están activados.
 
 | | |
 |---|---|

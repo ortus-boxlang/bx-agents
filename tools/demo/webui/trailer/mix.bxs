@@ -1,0 +1,61 @@
+/**
+ * Puts the voice-over and the music on the trailer with bx-audio, the way ../mix.bxs does for the walkthrough: each narrated scene
+ * starts where the capture says it did (out/timeline.json), the music is cut to the picture and ducks under the voice, and the mix is
+ * mastered. The music also builds: a little louder for the opening hook, settled under the narration, rising gently through the
+ * middle, and lifted for the closing call to action. Captions are written next to it.
+ *
+ *   boxlang mix.bxs --out=out --music=out/music.wav --video=out/picture.mp4 --videoOut=out/web-trailer.mp4 [--lufs=-22]
+ */
+opts = server.cli.parsed.options
+outDir = opts.out ?: "out"
+target = val( opts.lufs ?: -22 )
+sr = 44100
+lead = 0.3
+
+/**
+ * A voice at a speaking level: -17 dBFS RMS, never past -1 dBFS at the peak, at the music's sample rate and in stereo
+ */
+function leveled( c ) {
+	c = audioChannels( audioResample( audioFilter( c, "highpass", 80, 0.7071 ), sr ), 2 )
+	var info = audioInfo( c, true )
+	var gainDb = -17 - 20 * log10( max( info.rms, 0.0001 ) )
+	var peakDb = 20 * log10( max( info.peak, 0.0001 ) )
+	return audioGain( c, min( gainDb, -1 - peakDb ) )
+}
+timeline = jsonDeserialize( fileRead( outDir & "/timeline.json" ) )
+total = videoInfo( opts.video ).seconds
+ctaAt = timeline[ timeline.len() ].startMs / 1000
+
+t = audioTimeline( bpm = 128, beatsPerBar = 4, sampleRate = sr, channels = 2 )
+music = audioFitTo( audioChannels( audioResample( audioLoad( opts.music ), sr ), 2 ), total )
+audioAdd( timeline = t, sound = music, at = 0, track = "music", gainDb = -3 )
+
+cues = []
+for ( scene in timeline ) {
+	at = scene.startMs / 1000 + lead
+	audioAdd( timeline = t, sound = leveled( audioLoad( outDir & "/" & scene.id & ".wav" ) ), at = at, track = "voice", gainDb = 0 )
+	for ( cue in jsonDeserialize( fileRead( outDir & "/" & scene.id & ".json" ) ).cues ) {
+		cues.append( { start : cue.start + at, end : cue.end + at, text : cue.text } )
+	}
+}
+audioTrackGain( t, "music", -6 )
+// The shape of the music: up for the hook, settled under the voice, a slow build, then the lift for the call to action
+audioAutomate( t, "music", "gainDb", audioCurve( [
+	{ at : 0, value : 3 },
+	{ at : 8, value : 3 },
+	{ at : 13, value : 0 },
+	{ at : ctaAt - 20, value : 0.5 },
+	{ at : ctaAt - 2, value : 2 },
+	{ at : ctaAt + 0.4, value : 5 },
+	{ at : total, value : 5 }
+], "smooth" ) )
+audioDuck( t, "music", "voice", -12 )
+mix = audioTrim( audioRender( timeline = t, tail = 0 ), 0, total )
+mix = audioFade( mix, 0.05, 2.5, "smooth" )
+mastered = audioMaster( audio = mix, target = target, truePeakDb = -1 )
+loud = audioLoudness( mastered )
+println( "loudness " & numberFormat( loud.integrated, "0.0" ) & " LUFS" )
+audioSave( mastered, outDir & "/trailer.wav" )
+audioSubtitles( cues = cues, format = "vtt", path = outDir & "/web-trailer.vtt", offset = 0 )
+audioMux( video = opts.video, audio = mastered, output = opts.videoOut )
+println( "video: " & opts.videoOut & " (" & numberFormat( total, "0.0" ) & " s, " & cues.len() & " caption lines)" )
