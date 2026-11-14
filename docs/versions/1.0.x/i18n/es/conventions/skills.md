@@ -44,13 +44,9 @@ Las skills de skills.boxlang.io se instalan con `bxAgents skills install <owner/
 
 ## Cómo se conecta en tiempo de ejecución
 
-`skills/` se copia textualmente a la app generada (la misma copia de borrar-y-escribir, excluyendo dotfiles, que [`tools/`](tools.md)). El `config/ColdBox.bx` generado siempre apunta el propio ajuste de módulo `skillsDirectory` de bx-ai a `/skills`:
+`skills/` se copia textualmente a la app generada (la misma copia de borrar-y-escribir, excluyendo dotfiles, que [`tools/`](tools.md); una carpeta de skill que es un enlace simbólico se sigue y se copia). El `skills/` de la app reúne las skills del proyecto y las instaladas.
 
-```javascript
-moduleSettings = {
-	bxai : { skillsDirectory : "/skills" }
-}
-```
+bx-ai lee su carpeta de skills una sola vez, al arrancar el runtime, antes de que se apliquen los ajustes de la app. Por eso la fábrica de agentes generada añade ella misma el `skills/` de la app a la lista de skills globales de bx-ai, antes de construir ningún agente, y después las skills de las extensiones y las que el agente guardó en su carpeta de datos. Todos los agentes reciben esa única lista, así que `GET /skills`, la página Registro y `/skills` muestran las mismas skills y el agente puede cargarlas. Funciona igual con `serve`, `chat` y una app empaquetada.
 
 !!! info
-    El propio `skillsDirectory` por defecto de bx-ai es `/.agents/skills` - una ruta diferente a la convención `skills/` de BxAgents. El generador siempre lo sobreescribe explícitamente para que la carpeta `skills/` de la app sea la que bx-ai realmente carga. Las skills instaladas en el `.agents/skills/` de tu proyecto se copian a ella al construir; nunca necesitas configurar esto tú mismo.
+    El `skillsDirectory` por defecto de bx-ai es `/.agents/skills`, una ruta diferente a la convención `skills/` de BxAgents. Nunca necesitas configurarlo. Las skills instaladas en el `.agents/skills/` de tu proyecto se copian al `skills/` de la app al construir.

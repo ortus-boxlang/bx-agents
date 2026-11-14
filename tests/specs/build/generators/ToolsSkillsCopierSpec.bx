@@ -73,6 +73,27 @@ class extends="testbox.system.BaseSpec" {
 				expect( createObject( "java", "java.nio.file.Files" ).isSymbolicLink( createObject( "java", "java.nio.file.Paths" ).get( result.skills & "/linked-skill", [] ) ) ).toBeFalse();
 			} );
 
+			it( "copies a skill of skills/ that is itself a symbolic link, so a built app lists it", function() {
+				var project = createTempDirectory( prefix = "bxagents-tools-skills-src-" );
+				var elsewhere = createTempDirectory( prefix = "bxagents-tools-skills-elsewhere-" );
+				tempDirs.append( project );
+				tempDirs.append( elsewhere );
+				fileWrite( elsewhere & "/SKILL.md", "---#char( 10 )#name: linked#char( 10 )#description: A linked one#char( 10 )#---#char( 10 )#Linked body.", "UTF-8" );
+				directoryCreate( project & "/skills", true, true );
+				createObject( "java", "java.nio.file.Files" ).createSymbolicLink(
+					createObject( "java", "java.nio.file.Paths" ).get( project & "/skills/linked", [] ),
+					createObject( "java", "java.nio.file.Paths" ).get( elsewhere, [] ),
+					[]
+				);
+				var buildDir = newBuildDir();
+
+				var result = copier.copy( project, buildDir );
+
+				expect( fileExists( result.skills & "/linked/SKILL.md" ) ).toBeTrue();
+				var skills = bxModules.bxai.models.skills.AiSkill::fromDirectory( result.skills );
+				expect( skills.map( s => s.getName() ) ).toBe( [ "linked" ] );
+			} );
+
 			it( "writes no marker when nothing was installed", function() {
 				var result = copier.copy( fixtures & "/full-project", newBuildDir() );
 

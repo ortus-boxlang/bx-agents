@@ -810,6 +810,12 @@ class {
 			"	}",
 			""
 		]
+		// the skills that ship with the app (its skills/ folder) join bx-ai's global skills first: bx-ai reads its skills
+		// folder when the runtime starts, before this app's settings are applied, so it never sees them
+		lines.insertAt(
+			lines.findNoCase( "		// usage recording is off unless Agent.yaml says usage: true" ),
+			'		new "models.skills.SkillWiring@bxagents"().loadShipped( resolveAppPath( "../skills", "#Strings::bxLiteral( Strings::normalizePath( arguments.appDir ) & "/skills" )#" ) )'
+		)
 		// the skills project extensions carry join bx-ai's global skills, before any agent is built
 		var skillsLine = extensionSkillsLine( arguments.projectRoot, arguments.resolvedConfig )
 		if ( len( skillsLine ) ) {

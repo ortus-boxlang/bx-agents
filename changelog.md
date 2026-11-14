@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A project's own `skills/` were built into the app but never listed: `GET /skills`, the Registry page and `/skills` answered an empty list, and the agent could not load them. bx-ai reads its skills folder once when the runtime starts, before an app's settings are applied, so the app's `skills/` was never read. The generated agent factory now adds the app's `skills/` folder (the project's skills, origin `project`, and the installed ones, origin `installed`) to bx-ai's global skills before any agent is built, ahead of the extensions' skills and the ones the agent saved in its data home. Works for `serve`, `chat` and a packaged app. New specs cover listing from a folder and from a built app, a symbolic-linked skill, and saved skills keeping their origin.
+
 ### Docs
 
 - Second docs pass: the trailer (`docs/assets/video/web-trailer.*`) is on the homepage (its own section under the hero, and the first Tour tab, with captions), at the top of the web app guide, in the quick start and on the docs index. Every docs page about a UI feature has its screenshot (routines, memory and notes, vault, gateways, logs, data and backups, skills, sub-agents, access and tokens, connect). New screenshots: the Connections panel (against `tools/demo/fake-oauth-mcp.bxs`) and a code block with its language label and Copy button (a new `adds tax` answer in the scripted model of `tools/demo/webui/model.json`). The Spanish pages (index, web app, CLI reference, installation, course 03, slash commands, API guide and others) are brought up to date.
