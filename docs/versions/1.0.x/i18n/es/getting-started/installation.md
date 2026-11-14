@@ -36,7 +36,7 @@ bxAgents --version
 bxAgents --help
 ```
 
-`--help` lista los 19 verbos (`new`, `add`, `build`, `test`, `serve`, `chat`, `invoke`, `package`, `deploy`, `inspect`, `clean`, `hash-password`, `token`, `notes`, `models`, `sessions`, `stats`, `doctor`, `skills`) con un resumen de una línea de cada uno.
+`--help` lista los 28 verbos (`new`, `add`, `build`, `test`, `serve`, `chat`, `invoke`, `package`, `deploy`, `inspect`, `clean`, `hash-password`, `token`, `users`, `notes`, `vault`, `connect`, `sessions`, `routines`, `stats`, `models`, `doctor`, `skills`, `extensions`, `data`, `logs`, `backup`, `restore`) con un resumen de una línea de cada uno.
 :::
 :::
 

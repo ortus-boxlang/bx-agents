@@ -1,16 +1,24 @@
 ---
-title: La interfaz web de chat
+title: La web app
 icon: phosphor-duotone:chat-circle-text
-summary: Un cliente de chat de navegador completo - barra lateral, streaming, aprobaciones, almacén SQLite.
-description: Un cliente de chat de navegador completo - barra lateral, streaming, aprobaciones, almacén SQLite.
+summary: La web app generada - doce páginas, chat con streaming, rutinas, vault, logs y copias de seguridad.
+description: La web app generada: un menú a la izquierda y doce páginas (chat, conversaciones, rutinas, registro, memoria, vault, ajustes, agente, gateways, logs, acceso, datos y copias), streaming, aprobaciones y un almacén SQLite.
 tags: [conventions, gateways, web-ui]
 ---
 
-# La interfaz web de chat
+# La web app
 
-Una entrada `gateways/*.bx` con `exposes: "webui"` envía un cliente de chat de navegador completo para el agente - una barra lateral de conversación, streaming con razonamiento y llamadas de tool, aprobaciones human-in-the-loop, temática por visitante, y un almacén SQLite real detrás.
+Una entrada `gateways/*.bx` con `exposes: "webui"` envía una web app completa para el agente: un menú a la izquierda con [doce páginas](#las-páginas), un chat con streaming, razonamiento y llamadas de tool, aprobaciones human-in-the-loop, temática por visitante, y un almacén SQLite real detrás.
 
 Vive bajo [gateways/](gateways/index.md) porque ahí es donde se declaran las exposiciones, pero es un subsistema por derecho propio, que es por lo que tiene su propia página.
+
+<video controls preload="metadata" poster="/assets/video/web-trailer-poster.png" style="max-width:100%">
+  <source src="/assets/video/web-trailer.mp4" type="video/mp4">
+  <source src="/assets/video/web-trailer.webm" type="video/webm">
+  <track kind="captions" src="/assets/video/web-trailer.vtt" srclang="en" label="English" default>
+</video>
+
+*Poco más de tres minutos por toda la web app, con narración en inglés. Las respuestas vienen de un modelo de demostración con guion. Los subtítulos están activados.*
 
 ```javascript
 // gateways/chat.bx
@@ -51,6 +59,120 @@ La página habla con la API del agente en `/__bxagents` vía `POST /__bxagents/s
     No hay ninguna clave `token` en ninguna parte. Un cliente escrito contra esa página de documentación - incluyendo la propia primera versión de esta interfaz - lee `undefined` y no renderiza nada en absoluto. Lee `choices[0].delta.content` en su lugar.
 
 Porque llega el envelope completo, **el razonamiento y las llamadas de tool ya están en el cable** sin necesidad de un endpoint extra: `delta.reasoning` (normalizado a través de cada proveedor por bx-ai) se renderiza como una franja colapsada de "Pensando", y `delta.tool_calls` como chips colapsados por llamada. Los argumentos de llamada de tool se transmiten como fragmentos JSON parciales indexados por `index`, así que la página acumula por índice en lugar de asumir que cualquier chunk único contiene una llamada completa.
+
+## Las páginas
+
+La página es un solo archivo generado con un **menú a la izquierda** y una **cabecera**. El menú tiene dos grupos, y cada página se abre en un enlace propio (`<path>/#/conversations`, `<path>/#/routines`, etc.), así que puedes guardarla como marcador. El servidor no necesita rutas extra y la página funciona detrás de cualquier ruta de proxy inverso.
+
+| Grupo | Páginas | Quién la ve |
+|---|---|---|
+| Main | Chat, Conversations, Routines, Registry, Memory, Vault, Settings | todos los que pueden iniciar sesión |
+| Admin | Agent, Gateways, Logs, Access, Data and backups | solo los [admins](#usuarios-e-inicio-de-sesión) |
+
+Un miembro nunca ve el grupo Admin, y el servidor rechaza igualmente las rutas que hay detrás. El menú se pliega a iconos (se recuerda en el navegador), el elemento **Logs** lleva un contador rojo de las fuentes que registraron un error desde que arrancó la app, y no se quitó nada de lo que ofrecía la antigua página única: la cabecera, el engranaje de Settings y los slots de extensión siguen ahí.
+
+![La página Chat: el menú de la izquierda con los grupos Main y Admin, una conversación con una llamada a una tool y una respuesta con formato, y el selector de modelo y el anillo de contexto en la cabecera](../assets/webui/webui-chat.png)
+
+![La misma página en modo oscuro](../assets/webui/webui-chat-dark.png)
+
+### Chat y Talk to
+
+La página de aterrizaje. La barra lateral de conversaciones muestra 25 a la vez con un cuadro de filtro y un botón **Show more**, y el transcript hace streaming de la respuesta con razonamiento, llamadas de tool y aprobaciones. El menú **Talk to** de la cabecera lista el agente principal y cada [sub-agente](subagents.md). Elige uno y el siguiente mensaje va directamente a él; un banner dice con quién hablas, una conversación pertenece al agente con el que empezó y cada agente guarda su propia memoria. En el chat de terminal es `/agent`.
+
+![Talk to con el sub-agente researcher elegido y el banner que lo indica](../assets/webui/webui-talk-to.png)
+
+### Conversations
+
+Todas las conversaciones que puedes ver, en una tabla: título, agente, origen (página web, terminal, un gateway, una rutina), número de mensajes y última actividad. Busca en los títulos, filtra por agente y origen (cada chip muestra su cuenta), por fechas, y pagina la lista. Una fila se abre, renombra, bifurca, exporta como Markdown o borra. Un admin puede pasar de **Mine** a **Everyone** y filtrar también por propietario.
+
+![La página Conversations: filtros, chips de agente y una tabla de 30 conversaciones](../assets/webui/webui-conversations.png)
+
+### Routines
+
+Cuando las [rutinas](routines.md) están activadas. La tabla muestra el estado de cada rutina en palabras, su planificación en palabras con la forma almacenada, la próxima y la última ejecución y adónde va su respuesta. En cada fila hay **Run now**, **Pause**, **Resume**, **Edit**, **Reports**, la conversación propia de la rutina y **Delete**; **New routine** abre el editor, que te lee la planificación en palabras antes de guardar. Los informes son los archivos que guardó una ejecución; se pueden leer, borrar uno a uno o limpiar por antigüedad (con un recuento antes).
+
+![La página Routines: tres rutinas, una en pausa, con la planificación en palabras y la próxima ejecución](../assets/webui/webui-routines.png)
+
+![Los informes de una rutina, con un informe abierto](../assets/webui/webui-routine-reports.png)
+
+### Registry
+
+Lo que puede usar el agente, en tres pestañas. **Tools** lista cada tool agrupada por su origen y marca las que preguntan antes. **Skills** lista cada skill con su nivel (instalada, distribuida con el agente o guardada por el propio agente) y un botón **Read** que abre su `SKILL.md`. **Volumes** lista las carpetas que el agente puede leer o escribir, por nombre y modo, nunca por ruta.
+
+![La página Registry en la pestaña Tools](../assets/webui/webui-registry.png)
+
+![Una skill abierta en el lector](../assets/webui/webui-registry-skills.png)
+
+### Memory
+
+Tres cosas que recuerda el agente. **About you** guarda tus notas. **About the agent** guarda las notas compartidas que el agente toma sobre su propio trabajo, iguales para todos los que lo usan. **Conversation memory** muestra lo que guarda la memoria de cada conversación y la borra, para una conversación o para todas (todas es solo para admins), conservando las conversaciones. Cada lista de notas muestra cuánto se ha llenado y unos tokens aproximados que añade a cada conversación.
+
+![La página Memory con tus notas, las notas del agente y la memoria de conversación](../assets/webui/webui-memory.png)
+
+### Vault
+
+Los secretos que puede usar el agente, por nombre, propósito y los hosts a los que puede ir cada uno. Un valor se escribe una vez en un cuadro oculto, se sella en la base de datos y no se vuelve a mostrar. Tus secretos y los del agente se listan por separado, y un admin ve además el estado de la clave y una lista **Activity** de uso reciente. Consulta [vault](vault.md).
+
+![La página Vault: secretos por nombre, propósito y hosts, y la lista de actividad](../assets/webui/webui-vault.png)
+
+### Agent
+
+Para admins. **Composition** dibuja cómo está montado el agente: qué llega a él (gateways, la API, schedules), el agente principal y sus sub-agentes con sus tools y skills, y a qué se conecta (modelos, servidores MCP, vault, volúmenes), con las tools que preguntan antes marcadas. **Files** muestra los archivos de definición del proyecto en solo lectura; una clave que parece un secreto se muestra como asteriscos. **Usage** muestra tokens por día y por modelo cuando `usage: true` está activado.
+
+![La página Agent, pestaña Composition](../assets/webui/webui-agent.png)
+
+![La misma página en modo oscuro](../assets/webui/webui-agent-dark.png)
+
+![La pestaña Files](../assets/webui/webui-agent-files.png)
+
+![La pestaña Usage](../assets/webui/webui-agent-usage.png)
+
+### Gateways
+
+Para admins. Cada [gateway](gateways/index.md) con su estado (connected, stopped, failing o not registered), cuáles de sus credenciales están definidas (los nombres, nunca un valor), cuándo tuvo su última conversación, su último error y los chats con los que ha hablado. **Reconnect** detiene y arranca un gateway en el sitio, para que corregir una credencial no exija reiniciar la app. Un turno que ya esté en marcha no se cancela.
+
+![La página Gateways](../assets/webui/webui-gateways.png)
+
+### Logs
+
+Para admins. Una pestaña por cada uno de los cinco [logs](logs.md) (agent, gateways, routines, heartbeat, API), un filtro de nivel, un cuadro de búsqueda, un número de líneas y **Refresh every 5 s** para seguir uno mientras crece. Un log nunca contiene secretos.
+
+![La página Logs](../assets/webui/webui-logs.png)
+
+### Access
+
+Para admins. **Tokens** crea y revoca [tokens de acceso](agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) con nombre (el secreto se muestra una vez) con alcance `chat` o `admin` y una caducidad opcional. **People** lista las cuentas de inicio de sesión y deja convertir una en admin o miembro; el último admin no puede degradarse.
+
+![La página Access, pestaña Tokens](../assets/webui/webui-access.png)
+
+![La pestaña People](../assets/webui/webui-access-people.png)
+
+### Data and backups
+
+Para admins. Dónde guarda todo el agente (el [directorio de datos](data.md)) y cuánto ocupa cada parte, los volúmenes y dónde está cada uno, y las copias de seguridad: **Make a backup**, **Download** una o **Restore** una. Una restauración se aplica la próxima vez que arranca la app, y lo que había se conserva como `before-restore`.
+
+![La página Data and backups](../assets/webui/webui-data.png)
+
+### Settings
+
+**Appearance** (modo, color de acento, tamaño de texto, densidad), **Model** (qué perfil responde), **Account** (contraseña), **Connections** para servicios que piden iniciar sesión a cada persona, datos del **Server** y, para admins, las **Extensions** que cargó la app, con un botón Reload.
+
+![La página Settings](../assets/webui/webui-settings.png)
+
+![La página Settings en modo oscuro](../assets/webui/webui-settings-dark.png)
+
+### Móvil y accesibilidad
+
+En un teléfono el menú pasa a ser un cajón, la cabecera cede espacio y una tabla se convierte en lista. La página está pensada para usarse sin ratón: primero un enlace para saltar al contenido, el anillo de foco siempre visible, objetivos de al menos 44 por 44 píxeles, la página actual marcada con `aria-current`, el estado dicho con palabras e iconos además de color, contraste de texto de al menos 4,5 a 1, se respeta `prefers-reduced-motion` y los diálogos atrapan el foco y lo devuelven.
+
+::: columns
+::: column
+![Chat a 390 por 844](../assets/webui/webui-chat-mobile.png)
+:::
+::: column
+![El menú como cajón a 390 por 844](../assets/webui/webui-drawer-mobile.png)
+:::
+:::
 
 ## Recorrido
 
@@ -397,7 +519,7 @@ Para cualquier cosa que los tokens no cubran - fuentes personalizadas, layout, r
 
 ## Ajustes y apariencia
 
-La cabecera conserva solo lo que usas cada minuto: el botón **Chats**, el anillo de contexto, el selector de modelo y un engranaje de **Ajustes**. El engranaje abre un menú en tres grupos: **Conversación** (Bifurcar esta conversación, Exportar como Markdown, Borrar mensajes, Compactar mensajes antiguos), **Tú** (Notas, Apariencia, tema oscuro o claro) y **Servidor** (Contraseña, Tokens de acceso). Un elemento solo aparece donde el servidor lo ofrece, y un grupo vacío se omite.
+La cabecera conserva solo lo que usas cada minuto: el botón de menú, los selectores **Talk to** y de modelo, el anillo de contexto y un engranaje de **Settings**. El engranaje abre un menú rápido en tres grupos: **Conversation** (Fork this conversation, Export as Markdown, Clear messages, Compact older messages), **You** (Memory, Vault, Routines, Appearance, tema oscuro o claro) y **Server** (Password, Access tokens, Logs, Gateways). Un elemento solo aparece donde el servidor lo ofrece. La página completa de **Settings** también está en el menú.
 
 
 **Ajustes**, y luego **Apariencia**, abre el panel donde cada visitante elige, solo para este navegador:
@@ -446,19 +568,30 @@ Las respuestas del asistente se renderizan a través de un subconjunto de markdo
 
 ## Notas
 
-Cuando el agente tiene un bloque [`notes`](agent-yaml.md#notas), la cabecera muestra un botón **Notes**. Abre un panel con dos pestañas, *About you* y *About the agent*, cuánto llena cada una (caracteres del límite y unos tokens aproximados que añade a cada conversación) y las notas con sus ids. Añadir, editar en el sitio y quitar funcionan con tus propias notas. La página y el chat de terminal comparten la misma base de datos, así que una nota añadida en uno aparece en el otro.
+Cuando el agente tiene un bloque [`notes`](agent-yaml.md#notas), la página **Memory** del menú (y **Memory** en el engranaje de Settings) muestra dos listas, *About you* y *About the agent*, cuánto llena cada una (caracteres del límite y unos tokens aproximados que añade a cada conversación) y las notas con sus id. Añadir, editar en el sitio y quitar funcionan con tus propias notas. La página y el chat de terminal comparten la misma base de datos, así que una nota añadida en uno aparece en el otro.
 
 - *About you* pertenece a la misma identidad que tus conversaciones: tu cuenta con [`users`](#usuarios-e-inicio-de-sesión), o el espacio compartido sin cuentas.
-- *About the agent* la comparte todo el que usa el agente: cualquiera puede añadir o editar una, pero la página no tiene botón Remove para ella y `/notes/remove` responde `403`. Quitar una nota del agente requiere un [token](agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) admin en la ruta `/__bxagents/notes/remove` del agente, o `bxAgents notes remove --scope=agent` donde se ejecuta.
-- Sin bloque `notes` el botón no se muestra y las rutas responden `404`: `capabilities.notes` de `/info` lo indica.
+- *About the agent* la comparte todo el que usa el agente, sea cual sea el agente o la persona que habla. Cualquiera puede añadir o editar una; quitar una (o vaciar la lista) requiere un admin, y `/notes/remove` responde `403` a los demás.
+- Sin bloque `notes` la página lo dice y las rutas responden `404`: `capabilities.notes` de `/info` lo indica.
+
+La página Memory tiene además **Conversation memory**: los mensajes que guarda la memoria del agente para cada conversación. **Clear** olvida los mensajes de una conversación y conserva la conversación; un admin puede borrar todas las conversaciones o las de un agente (`POST /memory/clear`, `/clear` en la terminal, `bxAgents sessions clear`).
+
+## Conexiones, código y qué falta
+
+Cuando una entrada de `mcpServers` tiene [`oauth`](connect.md), la página **Settings** tiene una sección **Connections**: una fila por servicio con *Connect* o *Disconnect*. La página nunca ve un token.
+
+![El panel Connections con el correo conectado](../assets/webui/connections.png)
+
+Las respuestas del asistente se renderizan como Markdown completo; cada bloque de código muestra su lenguaje y copia el código con el botón **Copy**.
+
+![Un bloque de código con la etiqueta de lenguaje y el botón Copy](../assets/webui/code-block.png)
 
 ## What is not here yet
 
-La página está completa contra su propia API - cada ruta que necesita existe y se ejercita. Estos son los vacíos:
+La página está completa contra su propia API: cada ruta que necesita existe y se ejercita. Estos son los vacíos:
 
 | Falta | Nota |
 | --- | --- |
-| Adjuntos / entrada de imagen | El compositor es solo texto. El propio bx-ai maneja imágenes, así que este es un vacío de UI, no de capacidad |
 | Reintentar / regenerar | Un turno fallido tiene que reenviarse a mano |
 | Editar y reenviar | No se puede editar un mensaje ya enviado |
-| Visualización de tokens / costo | Nada muestra el uso, aunque el proveedor lo devuelve |
+| Búsqueda en la memoria | Buscar en la memoria de conversaciones pasadas está previsto; la página Memory lo dice |

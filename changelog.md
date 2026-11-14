@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Docs
 
+- Second docs pass: the trailer (`docs/assets/video/web-trailer.*`) is on the homepage (its own section under the hero, and the first Tour tab, with captions), at the top of the web app guide, in the quick start and on the docs index. Every docs page about a UI feature has its screenshot (routines, memory and notes, vault, gateways, logs, data and backups, skills, sub-agents, access and tokens, connect). New screenshots: the Connections panel (against `tools/demo/fake-oauth-mcp.bxs`) and a code block with its language label and Copy button (a new `adds tax` answer in the scripted model of `tools/demo/webui/model.json`). The Spanish pages (index, web app, CLI reference, installation, course 03, slash commands, API guide and others) are brought up to date.
 - The homepage, the web app guide (page by page, with fresh screenshots of the new UI), the API guide (all 76 routes), the CLI reference (all 28 verbs), the slash commands guide (33), the README and `llms.txt` describe what has been built: the new web app, routines and reports, sub-agents you can talk to, memory and notes, the vault, backups, logs, roles and the API. "Chat apps" is "gateways" throughout. The homepage has a Features section (Build, Run, Remember, Connect, Operate, Extend), a web app section and a Tour with tabs.
 
 ### Web page revamp

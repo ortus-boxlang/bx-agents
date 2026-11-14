@@ -27,6 +27,16 @@ document, twelve kinds of gateway, routines, a vault, backups, and tests that ne
 
 ![A terminal session: bxAgents new scaffolds a project, bxAgents build assembles a ColdBox app, bxAgents inspect prints the agent, model and environment, and bxAgents serve starts it on http://127.0.0.1:8080](assets/cli-quickstart.svg)
 
+## Watch the web app
+
+<video controls preload="metadata" poster="/assets/video/web-trailer-poster.png" style="max-width:100%">
+  <source src="/assets/video/web-trailer.mp4" type="video/mp4">
+  <source src="/assets/video/web-trailer.webm" type="video/webm">
+  <track kind="captions" src="/assets/video/web-trailer.vtt" srclang="en" label="English" default>
+</video>
+
+*Just over three minutes through the whole web app, narrated: the left menu and every page. The answers come from a scripted demo model, so they are canned. Captions are on.*
+
 ## Everything the build gives you
 
 | | |

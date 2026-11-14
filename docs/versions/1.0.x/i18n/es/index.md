@@ -21,9 +21,31 @@ ogImage: assets/og-home.png
 construido sobre [ColdBox](https://www.coldbox.org) y
 [BX AI](https://ai.boxlang.io). Describes un agente
 con archivos y carpetas - no con la superficie de API de un framework - y `bxAgents build`
-ensambla con ello una aplicación ColdBox real y ejecutable.
+ensambla con ello una aplicación ColdBox real y ejecutable: una web app de doce páginas, una API con documento
+OpenAPI, doce tipos de gateway, rutinas, una vault, copias de seguridad y tests que no necesitan clave de API.
 
 ![Una sesión de terminal: bxAgents new crea el andamiaje de un proyecto, bxAgents build ensambla una aplicación ColdBox, bxAgents inspect imprime el agente, el modelo y el entorno, y bxAgents serve lo arranca en http://127.0.0.1:8080](assets/cli-quickstart.svg)
+
+## Mira la web app
+
+<video controls preload="metadata" poster="/assets/video/web-trailer-poster.png" style="max-width:100%">
+  <source src="/assets/video/web-trailer.mp4" type="video/mp4">
+  <source src="/assets/video/web-trailer.webm" type="video/webm">
+  <track kind="captions" src="/assets/video/web-trailer.vtt" srclang="en" label="English" default>
+</video>
+
+*Poco más de tres minutos por toda la web app, con narración (en inglés): el menú de la izquierda y cada página. Las respuestas vienen de un modelo de demostración con guion. Los subtítulos están activados.*
+
+## Todo lo que te da el build
+
+| | |
+|---|---|
+| **Build** | [Las carpetas son la API](conventions/agent-yaml.md). Un [asistente](guides/new-wizard.md) y ocho plantillas. [Sub-agentes](conventions/subagents.md) con los que también puedes hablar directamente. [Skills](conventions/skills.md) del registro, o guardadas por el propio agente con tu aprobación. Tests sin tokens. |
+| **Run** | Una [web app](conventions/web-ui.md) con menú a la izquierda y doce páginas. Un [chat de terminal](guides/terminal-ui.md) con 33 comandos de barra. [Rutinas](conventions/routines.md) que las personas crean pidiéndolas. [Schedules](conventions/schedules.md), aprobaciones, un `.bxa` empaquetado y seis destinos de despliegue. |
+| **Remember** | Memoria en la base de datos del chat para cada agente, por persona, igual en la terminal, la web app y la API. Notas por persona y notas compartidas sobre el trabajo del agente. Un [directorio de datos](conventions/data.md) con volúmenes, y copias de seguridad con restauración. |
+| **Connect** | [Doce tipos de gateway](conventions/gateways/index.md), y rutinas que entregan en ellos. Una [API](guides/agent-api.md) con 76 rutas, OpenAPI y un cliente de BoxLang. [MCP](conventions/mcp.md) en ambos sentidos, con [inicio de sesión por persona](conventions/connect.md). Una [vault](conventions/vault.md) con registro de actividad. |
+| **Operate** | Roles de admin y miembro, tokens y personas, `allowedIPs` y límite de frecuencia. Cinco [logs](conventions/logs.md). El árbol del agente, sus archivos y el uso de tokens. Estado de cada gateway con botón de reconexión. `bxAgents doctor`. |
+| **Extend** | Las [extensiones](conventions/extensions.md) añaden comandos, teclas, elementos de estado, listeners, schedulers, slots de página, verbos de CLI, tools, skills y tipos de gateway. [Interceptors](conventions/interceptors.md), módulos y un `Agent.bx` basado en clase. |
 
 ::: cards
 ::: card title="Ensamblado en tiempo de build" icon="phosphor-duotone:gear-six" href="build-pipeline.md"
@@ -46,13 +68,14 @@ especialistas son simplemente más carpetas - construidas de la hoja hacia la ra
 Telegram, Slack, Discord, Email, WhatsApp, Teams, Twilio, GitHub y Signal, además de `http`,
 `cli` y `mock`.
 :::
-::: card title="Una UI web de chat, generada" icon="phosphor-duotone:globe-hemisphere-west" href="conventions/web-ui.md"
-Pídela en una entrada de `gateways/` y el build produce un front end de chat con streaming, tematizable y
-con historial de sesión, notas, un menú Settings y comandos de barra.
+::: card title="Una web app, generada" icon="phosphor-duotone:globe-hemisphere-west" href="conventions/web-ui.md"
+Pídela en una entrada de `gateways/` y el build produce una app tematizable con menú a la izquierda y
+doce páginas: chat, conversaciones, rutinas, registro, memoria, vault, ajustes y, para admins, agente,
+gateways, logs, acceso y datos.
 :::
 ::: card title="Un chat de terminal a pantalla completa" icon="phosphor-duotone:terminal-window" href="guides/terminal-ui.md"
-`bxAgents chat` conserva tu scrollback y tiene sesiones, notas, adjuntos de `@archivo` e imágenes,
-comandos de barra, un medidor de contexto y grabación. Puede arrancar su propio servidor o conectarse a uno desplegado.
+`bxAgents chat` conserva tu scrollback y tiene sesiones, rutinas, notas, adjuntos de `@archivo` e imágenes,
+33 comandos de barra, un medidor de contexto y grabación. Puede arrancar su propio servidor o conectarse a uno desplegado.
 :::
 :::
 
@@ -114,26 +137,27 @@ contenido real y funcional sobre el mismo esqueleto base.
 Consulta [Plantillas de agentes](agent-templates.md) para ver en detalle cada archivo
 generado, y cómo publicar las tuyas.
 
-## Una UI de chat que no tuviste que construir
+## Una web app que no tuviste que construir
 
-Pon `exposes: "webui"` en un gateway y el build emite un front end completo - historial de
-conversaciones, respuestas en streaming, notas, un menú Settings (apariencia, contraseña, tokens de acceso),
-temas claro/oscuro y una disposición móvil -
-conectado a tu agente a través de la misma API HTTP que puede llamar tu propio código.
+Pon `exposes: "webui"` en un gateway y el build emite la app completa: un menú a la izquierda con doce páginas,
+chat con streaming y un menú Talk to para los sub-agentes, conversaciones filtrables, rutinas con sus informes,
+un registro de tools, skills y volúmenes, memoria y notas, una vault, temas claro y oscuro y una disposición móvil.
+Los admins tienen además Agent, Gateways, Logs, Access y Data and backups. Está conectada a tu agente a través de la misma
+API HTTP que puede llamar tu propio código.
 
-![La UI web de chat generada: una barra lateral de conversaciones a la izquierda, un transcript de varios turnos en el centro, y un encabezado y compositor de mensajes con marca](assets/webui-chat-light.png)
+![La web app generada: el menú de la izquierda, una conversación con una llamada a una tool y una respuesta con formato, y el selector de modelo en el encabezado](assets/webui-chat-light.png)
 
 ::: columns
 ::: column
 ![La misma conversación con el interruptor de tema cambiado a oscuro](assets/webui-chat-dark.png)
 :::
 ::: column
-![La misma página en un viewport estrecho, donde el transcript conserva todo el ancho y la barra lateral se superpone](assets/webui-chat-mobile.png)
+![La misma página en un viewport estrecho, donde el menú pasa a ser un cajón](assets/webui-chat-mobile.png)
 :::
 :::
 
 Es CSS generado y marcado generado - [tematizable desde una entrada de `gateways/`](conventions/web-ui.md),
-sin ningún paso de build de front end por tu parte.
+sin ningún paso de build de front end por tu parte. La [guía página por página](conventions/web-ui.md#las-páginas) las muestra todas.
 
 ## Qué produce realmente `build`
 
@@ -207,13 +231,13 @@ dinámico de archivos, sin trabajo de build diferido al camino de la petición.
 ## Alcánzalo desde cualquier sitio
 
 ::: cards
-::: card title="Plataformas de chat" icon="phosphor-duotone:plugs-connected" href="conventions/gateways/index.md"
+::: card title="Gateways" icon="phosphor-duotone:plugs-connected" href="conventions/gateways/index.md"
 Nueve gateways de tipo push - Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio,
 GitHub y Signal - coordinados por una sola sesión con políticas `queue` / `steer` / `interrupt`.
 Cada persona y cada hilo tienen su propia conversación, y los comandos de barra también funcionan allí.
 :::
 ::: card title="HTTP y MCP" icon="phosphor-duotone:stack" href="guides/agent-api.md"
-Todo agente sirve una API HTTP con un documento OpenAPI, abierta en tu máquina o tras tokens,
+Todo agente sirve una API HTTP (76 rutas) con un documento OpenAPI, abierta en tu máquina o tras tokens,
 `allowedIPs` y un límite de frecuencia. Aloja servidores MCP locales desde `mcp/` para que
 otros clientes puedan llamar a tus tools.
 :::

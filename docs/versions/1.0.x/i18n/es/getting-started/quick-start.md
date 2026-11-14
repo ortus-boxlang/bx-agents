@@ -127,6 +127,20 @@ Todo agente servido tiene una API HTTP en `/__bxagents` (abierta en tu propia m�
 
 Si tu proyecto además tiene una entrada `gateways/*` con `{ exposes: "agent", path: "/api/chat" }`, el agente es alcanzable en `POST http://localhost:8080/api/chat/invoke` (y `/stream`, `/batch`, `/info` - ver [gateways/](../conventions/gateways/index.md)). Una entrada `exposes: "webui"` añade la página de chat del navegador.
 
+### Mira la web app
+
+Si creaste el andamiaje con `--template=webui-chat`, `bxAgents serve` sirve también la web app en `/chat`. Esto es todo, en poco más de tres minutos (narración en inglés):
+
+<video controls preload="metadata" poster="/assets/video/web-trailer-poster.png" style="max-width:100%">
+  <source src="/assets/video/web-trailer.mp4" type="video/mp4">
+  <source src="/assets/video/web-trailer.webm" type="video/webm">
+  <track kind="captions" src="/assets/video/web-trailer.vtt" srclang="en" label="English" default>
+</video>
+
+![La web app: el menú de la izquierda, una conversación con una llamada a una tool y una respuesta con formato, y el selector de modelo en la cabecera](../assets/webui/webui-chat.png)
+
+Cada página se describe en la [guía de la web app](../conventions/web-ui.md#las-páginas).
+
 ## 6. Inspecciona, empaqueta, despliega
 
 ```bash

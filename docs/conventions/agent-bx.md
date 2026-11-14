@@ -404,6 +404,8 @@ JSON body (`code: unauthorized`), and never reaches the agent.
     token can't be committed here by mistake. Only the variable's name is ever
     written into generated source.
 
+![The Access page in the web app: the token list and the form that makes a token](../assets/webui/webui-access.png)
+
 ### Access tokens for a deployed agent
 
 One shared secret (`tokenEnvVar`) is enough for a single caller. To let several people or machines in, each with a name you can revoke, turn on issued tokens:

@@ -28,6 +28,10 @@ Always greet the user warmly and use their name if known.
 !!! tip
     `bxAgents add skill <name>` creates `skills/<name>/SKILL.md` with the frontmatter and a body to fill in. See [`add`](../cli-reference.md#add-skill).
 
+![The Registry page on the Skills tab, with a skill open in the reader](../assets/webui/webui-registry-skills.png)
+
+The [Registry page](web-ui.md#registry) of the web app lists every skill with its level and opens its `SKILL.md` in a reader. `/skills NAME` and `bxAgents skills show NAME` do the same in the terminal.
+
 ## Naming
 
 The skill's name is its frontmatter `name:` if present; otherwise it falls back to the folder name (`greeting/` with no frontmatter name would be discovered as `greeting` anyway, but an explicit `name:` always wins even if it differs from the folder). Two skills resolving to the same name fail validation with a duplicate-name error.

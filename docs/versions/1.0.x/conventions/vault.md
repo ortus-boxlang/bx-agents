@@ -71,6 +71,10 @@ class {
 
 Passing `arguments` carries the run, so the person's own `MAIL_TOKEN` is found before the agent's. Without it only the agent's secret is found.
 
+![The Vault page in the web app: secrets by name, purpose and hosts, and the activity list](../assets/webui/webui-vault.png)
+
+The [Vault page](web-ui.md#vault) lists the secrets you can use, adds one into a hidden box, and for an admin shows the key's status and an activity list: what was used, by whom and when, never a value.
+
 ## What the agent can do
 
 Add a `vault` block to give an agent two tools and turn on scrubbing:

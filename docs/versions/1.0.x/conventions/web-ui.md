@@ -12,6 +12,14 @@ A `gateways/*.bx` entry with `exposes: "webui"` ships a complete web app for the
 
 It lives under [gateways/](gateways/index.md) because that is where exposures are declared, but it is a subsystem in its own right, which is why it has its own page.
 
+<video controls preload="metadata" poster="/assets/video/web-trailer-poster.png" style="max-width:100%">
+  <source src="/assets/video/web-trailer.mp4" type="video/mp4">
+  <source src="/assets/video/web-trailer.webm" type="video/webm">
+  <track kind="captions" src="/assets/video/web-trailer.vtt" srclang="en" label="English" default>
+</video>
+
+*Just over three minutes through the whole web app, narrated: the left menu and every page. The answers come from a scripted demo model, so they are canned. Captions are on.*
+
 ```javascript
 // gateways/chat.bx
 class {
@@ -168,19 +176,14 @@ On a phone the menu becomes a drawer, the header gives way, and a table becomes 
 
 ## Walkthrough
 
-<video controls preload="metadata" poster="/assets/video/web-trailer-poster.png" style="max-width:100%">
-  <source src="/assets/video/web-trailer.mp4" type="video/mp4">
-  <source src="/assets/video/web-trailer.webm" type="video/webm">
-  <track kind="captions" src="/assets/video/web-trailer.vtt" srclang="en" label="English" default>
-</video>
-
-Three and a half minutes through the whole web app: streaming chat with tool cards and an approval, talking to a sub-agent, conversations, routines, the registry, memory, the vault, then the admin pages (agent, gateways, logs, access, data and backups), dark mode and the phone layout, and the same things from the terminal and the API. The voice is [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (an Apache 2.0 model), and the page's answers come from a scripted demo model, so they are canned. Captions are on.
+The [trailer at the top](#the-web-app) covers every page. These are the details of the chat page itself.
 
 | | |
 |---|---|
 | ![Sign in with the accounts declared in `users`](../assets/webui/login.png) **Sign in.** Accounts come from [`users`](#users-and-sign-in). | ![An empty conversation with the welcome message and suggestion buttons](../assets/webui/empty-suggestions.png) **Suggestions.** An empty conversation can offer [`suggestions`](#branding-and-theming) that send with one click. |
 | ![A streamed reply with a numbered list and bold text](../assets/webui/markdown-list.png) **Streaming.** Replies render Markdown as they arrive. | ![The planner profile chosen in the picker, and the reply naming its model](../assets/webui/model-picker.png) **Model picker.** The pick is sent with each message, in the same conversation. |
 | ![A tool call shown as an open block above the reply](../assets/webui/tool-call.png) **Tools.** Each call shows its name and arguments. | ![The command menu opened by typing a slash](../assets/webui/commands-menu.png) **Commands.** Type `/` for the menu. |
+| ![A code block with its language and a Copy button](../assets/webui/code-block.png) **Code.** Each block shows its language and copies the code itself. | ![The Connections panel with mail connected](../assets/webui/connections.png) **Connections.** Sign in to a service once; the agent then acts as you. |
 | ![The context panel listing what fills the model's window](../assets/webui/context-panel.png) **Context.** The ring fills as the conversation grows; click it for the breakdown. | ![The Settings menu open](../assets/webui/settings-menu.png) **Settings.** One gear holds the conversation actions and the quick settings. |
 | ![The Appearance panel with mode, accent colors, text size and density](../assets/webui/appearance.png) **Appearance.** Mode, accent, text size and density, kept in this browser. | ![The page in the dark theme with the accent from the gateway entry](../assets/webui/dark-theme.png) **Theme.** Light or dark, remembered, with your `theme` accent. |
 
@@ -573,6 +576,8 @@ memory:
 
 Assistant replies render as full Markdown: headings, lists, tables, quotes, strikethrough, links and fenced code, with code coloured by language (BoxLang, CFML, Java, JavaScript, TypeScript, Python, Go, Rust, Kotlin, SQL, JSON, YAML, TOML, XML/HTML, CSS, shell, Dockerfile, diff and Markdown). The page carries its own copy of [marked](https://marked.js.org), [DOMPurify](https://github.com/cure53/DOMPurify) and [highlight.js](https://highlightjs.org), so it still works offline and loads nothing from a CDN. What the model writes is never trusted: raw HTML in an answer is escaped and shown as text, the result is sanitized, images are not loaded (a remote one would tell its server the page was opened), and a `javascript:` link is not turned into a link at all.
 
+![A code block with its language label and a Copy button](../assets/webui/code-block.png)
+
 !!! info
     The composer is a `textarea` - **Enter** sends, **Shift+Enter** adds a newline, and it grows to about six lines before scrolling. A turn in flight can be halted with **Stop** (an `AbortController`), which keeps whatever already streamed rather than discarding it. The transcript only auto-scrolls when you're already at the bottom, so scrolling up to re-read something mid-stream doesn't yank you back down.
 
@@ -589,6 +594,8 @@ The Memory page also has **Conversation memory**: the messages the agent's memor
 ## Connections
 
 When an `mcpServers` entry has [`oauth`](connect.md), the **Settings** page has a **Connections** section and the Settings gear a **Connections** item (`/info`'s `capabilities.connections` says whether). It opens a panel with a row for each service: its name, its address, *Connected* or *Not connected*, and a *Connect* or *Disconnect* button. *Connect* opens the provider's sign in in a new tab (a link is also shown, in case the browser blocks the tab) and the panel checks again every two seconds until it works. The page never sees a token.
+
+![The Connections panel with mail connected](../assets/webui/connections.png)
 
 
 ## What is not here yet

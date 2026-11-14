@@ -37,6 +37,12 @@ At build time, bx-ai's `addSubAgent()` wraps each built subagent instance as a c
 !!! tip
     `bxAgents add subagent <name>` creates the folder, asks the same questions as `new` for its model and tools, and adds it to the parent's `subAgents`. `--parent=<folder>` nests it under another subagent. See [`add`](../cli-reference.md#add-subagent).
 
+![Talk to with the researcher sub-agent picked and the banner that says so](../assets/webui/webui-talk-to.png)
+
+In the web app the **Talk to** menu lists the main agent and each sub-agent; the next message goes to the one you pick, and each keeps its own memory. In the terminal it is `/agent`. The [Agent page](web-ui.md#agent) draws the whole tree.
+
+![The Agent page, Composition tab: what reaches the agent, the agent tree and what it reaches out to](../assets/webui/webui-agent.png)
+
 ## Flat namespace, sibling references
 
 Every subagent - no matter how deeply another subagent's own config references it - lives directly under the **root** project's `subagents/` folder. A subagent's own declared `subAgents` names reference **sibling** entries in that same root-level folder, not a folder nested under itself. This keeps the discovery/validation model simple: one flat directed graph over `subagents/`'s immediate subfolders, rather than a tree that could nest arbitrarily deep on disk.
