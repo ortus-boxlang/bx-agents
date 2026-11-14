@@ -910,6 +910,18 @@ try {
 		}
 		return { status : issuedNoteAnswer.status_code, body : issuedNoteAnswer.fileContent ?: "" }
 	}
+	// A body must reach the action every time. boxlang-miniserver 1.18.0 reads a body with available() == 0 as empty
+	// when the client's headers and body arrive in two writes (bx:http does that, curl does not), which lost about 1
+	// POST in 50 and answered 400 "required" for a field that was sent. The route middleware now waits for the body
+	// (models/api/RequestBody.bx); this many quick POSTs fail here if that wait is ever lost.
+	for ( issuedPost = 1; issuedPost <= 400; issuedPost++ ) {
+		issuedPref = issuedCall( "POST", "/preferences/set", goodToken, '{"key":"theme","value":"dark"}' )
+		if ( issuedPref.status != 200 ) {
+			throw( type = "BxAgents.BodyLostInTransit", message = "POST #issuedPost# of 400 lost its body (HTTP #issuedPref.status#): #left( issuedPref.body, 200 )#" )
+		}
+	}
+	println( "+ Confirmed: 400 quick POSTs with a JSON body each reached their action with the body" )
+
 	issuedMine = issuedCall( "POST", "/notes", goodToken, '{"scope":"user","text":"Likes tea"}' )
 	issuedShared = issuedCall( "POST", "/notes", goodToken, '{"scope":"agent","text":"The repo uses Gradle"}' )
 	if ( issuedMine.status != 200 || issuedShared.status != 200 ) {

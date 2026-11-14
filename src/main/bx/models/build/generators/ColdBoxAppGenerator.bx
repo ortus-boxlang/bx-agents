@@ -374,6 +374,8 @@ class {
 		lines.append( "	}" )
 		lines.append( "" )
 		lines.append( "	function onRequestStart( required string targetPage ) {" )
+		lines.append( "		// ColdBox reads a request body once, the first time anything asks. boxlang-miniserver reads it as empty when it has not arrived yet, so wait for it first (see models/api/RequestBody.bx)" )
+		lines.append( '		new "models.api.RequestBody@bxagents"().await( getHTTPRequestData( false ).headers )' )
 		lines.append( '		if ( structKeyExists( url, "fwreinit" ) ) {' )
 		lines.append( "			application.cbBootstrap.processReinit()" )
 		lines.append( "		}" )
