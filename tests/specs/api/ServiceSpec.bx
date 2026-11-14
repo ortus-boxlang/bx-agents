@@ -45,6 +45,117 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "Reading a skill", function() {
+
+				it( "answers not_found for a skill the agent does not have, and bad_request without a name", function() {
+					expect( service.skill( ada, "no-such-skill" ).code() ).toBe( "not_found" );
+					expect( service.skill( ada, "  " ).code() ).toBe( "bad_request" );
+				} );
+
+			} );
+
+			describe( "The agent tree and talking to a sub-agent", function() {
+
+				beforeEach( function() {
+					variables.scout = new FakeAgent().named( "scout" );
+					variables.researcher = new FakeAgent().named( "researcher" ).withSubAgent( scout );
+					variables.lead = new FakeAgent().named( "lead" ).withSubAgent( researcher );
+					variables.team = new bxagents.models.api.AgentService( lead, store );
+				} );
+
+				it( "lists every agent, parents first, with what each one has", function() {
+					var tree = team.agents();
+
+					expect( tree.map( ( a ) => a.name ) ).toBe( [ "lead", "researcher", "scout" ] );
+					expect( tree.map( ( a ) => a.parent ) ).toBe( [ "", "lead", "researcher" ] );
+					expect( tree[ 2 ].description ).toBe( "I am researcher" );
+					expect( tree[ 2 ].tools ).toBe( [ "researcher_tool" ] );
+					expect( tree[ 2 ].skills ).toBe( [ "researcher-skill" ] );
+					expect( tree[ 2 ].model ).toBe( "fakeai/m-researcher" );
+				} );
+
+				it( "puts the tree in the agent's own answer, next to the names", function() {
+					var about = team.about( ada ).data();
+
+					expect( about.agents ).toHaveLength( 3 );
+					expect( about.agents[ 1 ].name ).toBe( "lead" );
+				} );
+
+				it( "finds an agent by name at any depth, and takes blank or the main agent's name as the main agent", function() {
+					expect( team.agentFor( "scout" ).getAgentName() ).toBe( "scout" );
+					expect( team.agentFor( "" ).getAgentName() ).toBe( "lead" );
+					expect( team.agentFor( "lead" ).getAgentName() ).toBe( "lead" );
+					expect( isNull( team.agentFor( "ghost" ) ) ).toBeTrue();
+				} );
+
+				it( "says bad_request for a name that is not in the tree, and names the ones that are", function() {
+					expect( team.checkAgent( "" ).succeeded() ).toBeTrue();
+					expect( team.checkAgent( "researcher" ).succeeded() ).toBeTrue();
+					var refused = team.checkAgent( "ghost" );
+					expect( refused.code() ).toBe( "bad_request" );
+					expect( refused.reason() ).toInclude( "researcher" );
+				} );
+
+				it( "runs a turn on the sub-agent asked for, and on nobody else", function() {
+					team.turns( "researcher" ).run( ada, { input : "dig" } );
+
+					expect( researcher.seen().input ).toBe( "dig" );
+					expect( lead.seen() ).toBe( {} );
+				} );
+
+				it( "keeps a conversation with the agent it started with and refuses another", function() {
+					var id = createUUID();
+					team.turns( "researcher" ).run( ada, { input : "dig", conversationId : id } );
+
+					expect( store.rows( "SELECT agent FROM conversations WHERE id = :id", { id : id } )[ 1 ].agent ).toBe( "researcher" );
+					expect( team.turns( "researcher" ).run( ada, { input : "more", conversationId : id } ).succeeded() ).toBeTrue();
+					var wrong = team.turns().run( ada, { input : "hello", conversationId : id } );
+					expect( wrong.code() ).toBe( "conflict" );
+					expect( wrong.reason() ).toBe( "This conversation belongs to researcher" );
+					expect( team.turns( "scout" ).run( ada, { input : "x", conversationId : id } ).code() ).toBe( "conflict" );
+				} );
+
+				it( "keeps a main agent conversation with the main agent, by its name or blank", function() {
+					var id = createUUID();
+					team.turns().run( ada, { input : "hi", conversationId : id } );
+
+					expect( store.rows( "SELECT agent FROM conversations WHERE id = :id", { id : id } )[ 1 ].agent ).toBe( "" );
+					expect( team.turns( "lead" ).run( ada, { input : "again", conversationId : id } ).succeeded() ).toBeTrue();
+					var wrong = team.turns( "scout" ).run( ada, { input : "no", conversationId : id } );
+					expect( wrong.code() ).toBe( "conflict" );
+					expect( wrong.reason() ).toBe( "This conversation belongs to lead" );
+				} );
+
+				it( "starts a conversation for a sub-agent, which then holds it", function() {
+					var id = team.conversations().create( ada, "ask scout", "scout" ).data().conversationId;
+
+					expect( team.sessions().byId( "ada", id ).agent ).toBe( "scout" );
+					expect( team.turns().run( ada, { input : "hi", conversationId : id } ).code() ).toBe( "conflict" );
+					expect( team.turns( "scout" ).run( ada, { input : "hi", conversationId : id } ).succeeded() ).toBeTrue();
+				} );
+
+				it( "lists and filters conversations by agent, the main agent under its own name", function() {
+					team.turns( "researcher" ).run( ada, { input : "a", conversationId : createUUID() } );
+					team.turns().run( ada, { input : "b", conversationId : createUUID() } );
+
+					var rows = team.conversations().list( caller = ada ).data().sessions;
+					expect( rows.map( ( c ) => c.agent ).sort( "text" ) ).toBe( [ "lead", "researcher" ] );
+					expect( team.conversations().list( caller = ada, agent = "researcher" ).data().total ).toBe( 1 );
+					expect( team.conversations().list( caller = ada, agent = "lead" ).data().total ).toBe( 1 );
+				} );
+
+				it( "clears and deletes a conversation's memory in every agent that may hold part of it", function() {
+					var made = team.conversations().create( ada, "x", "researcher" ).data().conversationId;
+
+					team.conversations().delete( ada, made );
+
+					expect( lead.clearedMemory() ).toBe( [ "ada/" & made ] );
+					expect( researcher.clearedMemory() ).toBe( [ "ada/" & made ] );
+					expect( scout.clearedMemory() ).toBe( [ "ada/" & made ] );
+				} );
+
+			} );
+
 			describe( "Conversations", function() {
 
 				it( "starts a conversation under the caller, with the surface it came from", function() {
@@ -76,6 +187,79 @@ class extends="testbox.system.BaseSpec" {
 					expect( service.conversations().list( ada, 50, "", true ).code() ).toBe( "forbidden" );
 					// an ordinary list is still only the caller's own
 					expect( service.conversations().list( ada ).data().sessions ).toHaveLength( 1 );
+				} );
+
+				it( "pages and filters the list, and says how many match in all", function() {
+					for ( var n = 1; n <= 30; n++ ) {
+						service.sessions().touch( "ada", "c#n#", n % 2 ? "alpha #n#" : "beta #n#", 2, n % 5 == 0 ? "terminal" : "web", n % 3 == 0 ? "researcher" : "" );
+					}
+					var conversations = service.conversations();
+
+					var page = conversations.list( ada ).data();
+					expect( page.sessions ).toHaveLength( 25 );
+					expect( page.total ).toBe( 30 );
+					expect( page.limit ).toBe( 25 );
+					expect( page.offset ).toBe( 0 );
+					expect( conversations.list( caller = ada, offset = 25 ).data().sessions ).toHaveLength( 5 );
+					expect( conversations.list( caller = ada, q = "alpha" ).data().total ).toBe( 15 );
+					expect( conversations.list( caller = ada, agent = "researcher" ).data().total ).toBe( 10 );
+					expect( conversations.list( caller = ada, agent = "fake" ).data().total ).toBe( 20 );
+					expect( conversations.list( caller = ada, source = "terminal" ).data().total ).toBe( 6 );
+					expect( conversations.list( caller = ada, limit = 1000 ).data().limit ).toBe( 100 );
+				} );
+
+				it( "names the main agent on rows that stored none", function() {
+					service.sessions().touch( "ada", "m1", "main", 2, "web" );
+					service.sessions().touch( "ada", "r1", "other", 2, "web", "researcher" );
+
+					var rows = service.conversations().list( ada ).data().sessions;
+					expect( rows.map( ( c ) => c.agent ).sort( "text" ) ).toBe( [ "fake", "researcher" ] );
+				} );
+
+				it( "adds the facet counts only when asked, the main agent under its name", function() {
+					service.sessions().touch( "ada", "m1", "main", 2, "web" );
+					service.sessions().touch( "ada", "r1", "other", 2, "terminal", "researcher" );
+
+					expect( service.conversations().list( ada ).data().keyExists( "facets" ) ).toBeFalse();
+					var facets = service.conversations().list( caller = ada, facets = true ).data().facets;
+					expect( facets.source ).toBe( { web : 1, terminal : 1 } );
+					expect( facets.agent ).toBe( { fake : 1, researcher : 1 } );
+				} );
+
+				it( "clears the memory of one conversation, keeps the row and says how many messages went", function() {
+					var admin = new bxagents.models.api.Caller( id = "root", scope = "admin" );
+					service.sessions().touch( "ada", "c1", "plan", 6 );
+
+					var cleared = service.conversations().clearMemory( ada, "c1" );
+
+					expect( cleared.data().conversations ).toBe( 1 );
+					expect( cleared.data().messages ).toBe( 6 );
+					expect( service.sessions().byId( "ada", "c1" ).messageCount ).toBe( 0 );
+					expect( agent.clearedMemory() ).toBe( [ "ada/c1" ] );
+					// somebody else's conversation, and none named, are refused
+					expect( service.conversations().clearMemory( bob, "c1" ).code() ).toBe( "not_found" );
+					expect( service.conversations().clearMemory( ada ).code() ).toBe( "bad_request" );
+				} );
+
+				it( "clears every conversation's memory for an admin only, or only those of one agent", function() {
+					var admin = new bxagents.models.api.Caller( id = "root", scope = "admin" );
+					service.sessions().touch( "ada", "m1", "main", 4 );
+					service.sessions().touch( "bob", "m2", "main too", 2 );
+					service.sessions().touch( "ada", "r1", "other", 10, "web", "researcher" );
+
+					expect( service.conversations().clearMemory( caller = ada, all = true ).code() ).toBe( "forbidden" );
+
+					var one = service.conversations().clearMemory( caller = admin, all = true, agent = "researcher" );
+					expect( one.data() ).toBe( { conversations : 1, messages : 10 } );
+					expect( service.sessions().byId( "ada", "m1" ).messageCount ).toBe( 4 );
+
+					var every = service.conversations().clearMemory( caller = admin, all = true );
+					expect( every.data().conversations ).toBe( 3 );
+					expect( every.data().messages ).toBe( 6 );
+					expect( service.sessions().byId( "bob", "m2" ).messageCount ).toBe( 0 );
+					// by the main agent's name too
+					service.sessions().touch( "ada", "m3", "main", 4 );
+					expect( service.conversations().clearMemory( caller = admin, all = true, agent = "fake" ).data().conversations ).toBe( 3 );
 				} );
 
 				it( "lists times as ISO 8601 text, not date objects", function() {
@@ -115,6 +299,26 @@ class extends="testbox.system.BaseSpec" {
 					expect( allowing.about( root ).data().capabilities.tokens ).toBeTrue();
 					expect( allowing.about( ada ).data().capabilities.tokens ).toBeFalse();
 					expect( isNull( allowing.tokens() ) ).toBeFalse();
+				} );
+
+				it( "hands out the routine manager only when routines are on, and the reports only with a data home", function() {
+					expect( isNull( service.routines() ) ).toBeTrue();
+					var settings = bxagents.models.routines.RoutineSettings::resolve( { enabled : true } );
+					var on = new bxagents.models.api.AgentService( agent = agent, store = store, options = { routines : settings } );
+					expect( isNull( on.routines() ) ).toBeFalse();
+					expect( on.about( ada ).data().capabilities.routines ).toBeTrue();
+					expect( on.routines().reports( ada, "x" ).code() ).toBe( "not_found" );
+					expect( on.routines().reports( ada, "x" ).reason() ).toInclude( "nowhere to keep reports" );
+					var off = new bxagents.models.api.AgentService( agent = agent, store = store, options = { routines : {} } );
+					expect( isNull( off.routines() ) ).toBeTrue();
+					expect( off.about( ada ).data().capabilities.routines ).toBeFalse();
+				} );
+
+				it( "says routines are on only when the build turned them on", function() {
+					var on = new bxagents.models.api.AgentService( agent = agent, store = store, options = { routines : true } );
+
+					expect( service.about( ada ).data().capabilities.routines ).toBeFalse();
+					expect( on.about( ada ).data().capabilities.routines ).toBeTrue();
 				} );
 
 				it( "hands out a conversation for the caller", function() {
@@ -158,6 +362,174 @@ class extends="testbox.system.BaseSpec" {
 					expect( who.id ).toBe( "ada" );
 					expect( who.source ).toBe( "web" );
 					expect( who.agent ).toBe( "fake" );
+				} );
+
+				describe( "logs and gateways", function() {
+
+					beforeEach( function() {
+						variables.home = new bxagents.models.data.DataHome( projectRoot : dir, configured : dir & "/home", environment : {}, userHome : "/home/someone" );
+						bxModules.bxagents.models.logs.Logger::reset();
+						bxModules.bxagents.models.logs.Logger::use( dir & "/home/logs" );
+						variables.info = new bxagents.models.gateways.GatewayInfo( [ { name : "ghost", type : "nosuchgateway", envVars : [ "BXAGENTS_SPEC_NONE" ] } ] );
+						variables.shared = new bxagents.models.api.AgentService( agent, store, nullValue(), {
+							data : new bxagents.models.data.AppData( home, new bxagents.models.data.Volumes( {}, home ) ),
+							gateways : info
+						} );
+						variables.admin = new bxagents.models.api.Caller( id = "root", scope = "admin" );
+					} );
+
+					afterEach( function() {
+						bxModules.bxagents.models.logs.Logger::reset();
+					} );
+
+					it( "lists the logs for an admin, with how many errors were logged", function() {
+						bxModules.bxagents.models.logs.Logger::log( "gateways", "error", "broke", "telegram" );
+						sleep( 200 );
+
+						var answer = shared.logs( admin ).data();
+
+						expect( answer.logs.map( l => l.area ) ).toInclude( "gateways" );
+						expect( answer.errors ).toHaveKey( "gateways" );
+					} );
+
+					it( "gives the last lines of one log, filtered", function() {
+						bxModules.bxagents.models.logs.Logger::log( "api", "info", "fine" );
+						bxModules.bxagents.models.logs.Logger::log( "api", "warn", "slow" );
+						sleep( 200 );
+
+						var lines = shared.logs( admin, "api", 50, "warn" ).data().lines;
+
+						expect( lines.map( l => l.message ) ).toBe( [ "slow" ] );
+					} );
+
+					it( "refuses the logs to anyone but an admin, and says an unknown log is not found", function() {
+						expect( shared.logs( ada ).code() ).toBe( "forbidden" );
+						expect( shared.logs( admin, "chat" ).code() ).toBe( "not_found" );
+						expect( shared.logs( admin, "api", "lots" ).code() ).toBe( "bad_request" );
+					} );
+
+					it( "says it is not found when the app does not know its data home", function() {
+						expect( service.logs( admin ).code() ).toBe( "not_found" );
+					} );
+
+					it( "lists the chat apps for an admin, and refuses everyone else", function() {
+						var gateways = shared.gateways( admin ).data().gateways;
+
+						expect( gateways ).toHaveLength( 1 );
+						expect( gateways[ 1 ].state ).toBe( "missing" );
+						expect( gateways[ 1 ].credentials[ 1 ].set ).toBeFalse();
+						expect( shared.gateways( ada ).code() ).toBe( "forbidden" );
+					} );
+
+					it( "reconnects a chat app for an admin only, and says when the app has none or the name is unknown", function() {
+						expect( shared.reconnectGateway( ada, "ghost" ).code() ).toBe( "forbidden" );
+						expect( shared.reconnectGateway( admin, "nobody" ).code() ).toBe( "not_found" );
+						expect( shared.reconnectGateway( admin, "ghost" ).code() ).toBe( "not_found" );
+						expect( service.reconnectGateway( admin, "ghost" ).code() ).toBe( "not_found" );
+					} );
+
+					it( "lists no chat apps when the app has none to name", function() {
+						expect( service.gateways( admin ).data().gateways ).toBeEmpty();
+					} );
+
+				} );
+
+				describe( "skills", function() {
+
+					beforeEach( function() {
+						variables.home = new bxagents.models.data.DataHome( projectRoot : dir, configured : dir & "/home", environment : {}, userHome : "/home/someone" );
+						variables.shared = new bxagents.models.api.AgentService( agent, store, nullValue(), {
+							data : new bxagents.models.data.AppData( home, new bxagents.models.data.Volumes( {}, home ) )
+						} );
+						variables.globalBefore = aiGlobalSkills().slice( 1, aiGlobalSkills().len() );
+					} );
+
+					afterEach( function() {
+						var global = aiGlobalSkills();
+						global.clear();
+						global.append( globalBefore, true );
+					} );
+
+					it( "lists the skills with their origin, and never a folder on the machine", function() {
+						new bxagents.models.skills.SkillLibrary( home ).save( "report", "Monthly report.", "Steps." );
+
+						var listed = shared.skills( ada ).data().skills.filter( s => s.name == "report" );
+
+						expect( listed ).toHaveLength( 1 );
+						expect( listed[ 1 ].origin ).toBe( "agent" );
+						expect( listed[ 1 ].description ).toBe( "Monthly report." );
+						expect( jsonSerialize( shared.skills( ada ).data() ) ).notToInclude( dir.replace( "\", "/", "all" ) );
+					} );
+
+					it( "still lists the skills when the app does not know its data home", function() {
+						expect( service.skills( ada ).succeeded() ).toBeTrue();
+						expect( service.skills( ada ).data() ).toHaveKey( "skills" );
+					} );
+
+					it( "lets a conversation and the commands list the skills", function() {
+						new bxagents.models.skills.SkillLibrary( home ).save( "report", "Monthly report.", "Steps." );
+
+						expect( shared.conversation( ada ).skills().map( s => s.name ) ).toInclude( "report" );
+						var reply = shared.commands().execute( "ada", "c-" & createUUID(), "/skills", "web", false );
+						expect( jsonSerialize( reply.blocks ) ).toInclude( "report" );
+						expect( jsonSerialize( reply.blocks ) ).toInclude( "agent" );
+						expect( jsonSerialize( reply.blocks ) ).notToInclude( dir.replace( "\", "/", "all" ) );
+					} );
+
+				} );
+
+				describe( "volumes and the data report", function() {
+
+					beforeEach( function() {
+						variables.home = new bxagents.models.data.DataHome( projectRoot : dir, configured : dir & "/home", environment : {}, userHome : "/home/someone" );
+						variables.shared = new bxagents.models.api.AgentService( agent, store, nullValue(), {
+							data : new bxagents.models.data.AppData( home, new bxagents.models.data.Volumes( { notes : { path : dir, mode : "rw", description : "My notes" } }, home ) )
+						} );
+						variables.admin = new bxagents.models.api.Caller( id = "root", scope = "admin" );
+					} );
+
+					it( "lists the volumes by name and mode, never a folder on the machine", function() {
+						var listed = shared.volumes( ada ).data().volumes;
+
+						expect( listed.map( v => v.name ) ).toBe( [ "files", "notes" ] );
+						expect( listed[ 2 ].mode ).toBe( "rw" );
+						expect( listed[ 2 ].description ).toBe( "My notes" );
+						expect( jsonSerialize( listed ) ).notToInclude( dir.replace( "\", "/", "all" ) );
+					} );
+
+					it( "lists no volumes when the app does not know them", function() {
+						expect( service.volumes( ada ).data().volumes ).toBeEmpty();
+					} );
+
+					it( "shows the data report, with folders, to an admin", function() {
+						var report = shared.data( admin ).data();
+
+						expect( report.home ).toBe( dir.replace( "\", "/", "all" ) & "/home" );
+						expect( report.items.map( i => i.name ) ).toInclude( "chat.db" );
+						expect( report.volumes.map( v => v.name ) ).toBe( [ "files", "notes" ] );
+						expect( report.volumes[ 2 ].path ).toInclude( "bxagents-service-" );
+					} );
+
+					it( "refuses the data report to anyone else", function() {
+						var refused = shared.data( ada );
+
+						expect( refused.succeeded() ).toBeFalse();
+						expect( refused.code() ).toBe( "forbidden" );
+					} );
+
+					it( "says it is not found when the app does not know its data home", function() {
+						expect( service.data( admin ).code() ).toBe( "not_found" );
+					} );
+
+					it( "lets a conversation and the commands list the volumes", function() {
+						expect( shared.conversation( ada ).volumes().map( v => v.name ) ).toBe( [ "files", "notes" ] );
+
+						var reply = shared.commands().execute( "ada", "c-" & createUUID(), "/volumes", "web", false );
+						expect( jsonSerialize( reply.blocks ) ).toInclude( "notes" );
+						expect( jsonSerialize( reply.blocks ) ).toInclude( "read and write" );
+						expect( jsonSerialize( reply.blocks ) ).notToInclude( dir.replace( "\", "/", "all" ) );
+					} );
+
 				} );
 
 				it( "has no conversation list or preferences when the app keeps no database", function() {

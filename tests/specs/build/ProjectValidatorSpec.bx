@@ -502,6 +502,13 @@ class extends="testbox.system.BaseSpec" {
 				expect( validateFixture( "bad-gateway-commands" ).errors.filter( e => e.findNoCase( "gatewaySession.attachments' must be true or false" ) ) ).toHaveLength( 1 );
 			} );
 
+			it( "accepts /routines and /routine in gatewaySession.commands.allow only when routines are turned on", function() {
+				var off = validateFixture( "gateway-routines-commands-off" ).errors.filter( e => e.findNoCase( "gatewaySession.commands.allow" ) );
+				expect( off ).toHaveLength( 1 );
+				expect( off[ 1 ] ).toInclude( "routines are not turned on" );
+				expect( validateFixture( "gateway-routines-commands-on" ).errors.filter( e => e.findNoCase( "gatewaySession.commands" ) ) ).toBeEmpty();
+			} );
+
 			it( "rejects an mcp-exposure gateway entry missing its required target", function() {
 				var result = validateFixture( "mcp-exposure-missing-target" );
 				expect( result.errors.filter( e => e.findNoCase( "missing a 'target'" ) ).len() ).toBeGT( 0 );
@@ -600,11 +607,61 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.errors.filter( e => e.findNoCase( "notes" ) ) ).toBeEmpty();
 			} );
 
+			it( "rejects volumes with the reserved name and a bad mode", function() {
+				var text = validateFixture( "bad-volumes" ).errors.filter( e => e.findNoCase( "volumes" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "already has" );
+				expect( text ).toInclude( "must be ro" );
+			} );
+
+			it( "accepts volumes with a path, a mode and a description", function() {
+				expect( validateFixture( "with-volumes" ).errors.filter( e => e.findNoCase( "'volumes" ) ) ).toBeEmpty();
+			} );
+
+			it( "rejects the default memory's settings when they are out of range or unknown", function() {
+				var text = validateFixture( "bad-memory" ).errors.filter( e => e.findNoCase( "memory" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "memory.maxMessages must be a whole number from 20 to 100000" );
+				expect( text ).toInclude( "memory.onLimit is not a setting of the default memory" );
+			} );
+
+			it( "accepts maxMessages and keepRecent under a memory block that names no type", function() {
+				expect( validateFixture( "with-memory" ).errors.filter( e => e.findNoCase( "memory" ) ) ).toBeEmpty();
+			} );
+
+			it( "rejects a data block with an unknown key", function() {
+				var text = validateFixture( "bad-data" ).errors.filter( e => e.findNoCase( "'data'" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "'data' has an unknown key [folder]" );
+			} );
+
+			it( "accepts a data block that names a home", function() {
+				expect( validateFixture( "with-data" ).errors.filter( e => e.findNoCase( "'data" ) ) ).toBeEmpty();
+			} );
+
 			it( "rejects a vault block with an unknown key or a bad flag", function() {
 				var text = validateFixture( "bad-vault" ).errors.filter( e => e.findNoCase( "vault" ) ).toList( char( 10 ) );
 
 				expect( text ).toInclude( "'vault' has an unknown key [colour]" );
 				expect( text ).toInclude( "'vault.tools' must be true or false" );
+			} );
+
+			it( "rejects a skills block with an unknown key or a bad flag, and accepts a good one", function() {
+				var text = validateFixture( "bad-skills" ).errors.filter( e => e.findNoCase( "skills" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "skills.saveAlways is not a setting" );
+				expect( text ).toInclude( "skills.autoApprove must be true or false" );
+				expect( validateFixture( "../with-skills" ).errors.filter( e => e.findNoCase( "skills" ) ) ).toBeEmpty();
+			} );
+
+			it( "rejects a routines block with an unknown key or a bad value, and accepts a good one", function() {
+				var text = validateFixture( "bad-routines" ).errors.filter( e => e.findNoCase( "routines" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "routines.checkOften is not a setting" );
+				expect( text ).toInclude( "routines.enabled must be true or false" );
+				expect( text ).toInclude( "routines.minInterval must be a duration" );
+				var good = expandPath( "/fixtures/with-routines" );
+				expect( validator.validate( good, discoverer.discover( good ), resolver.resolve( projectRoot = good ) ).errors.filter( e => e.findNoCase( "routines" ) ) ).toBeEmpty();
 			} );
 
 			it( "accepts a vault block, and a vault placeholder with no block", function() {
@@ -723,6 +780,8 @@ class extends="testbox.system.BaseSpec" {
 				expect( joined ).toInclude( "more than once" );
 				// A bcrypt-style hash is not this project's format
 				expect( joined ).toInclude( "not in this project's format" );
+				// admin is a flag, not a word
+				expect( joined ).toInclude( "'admin' that is not true or false" );
 			} );
 
 			it( "returns no errors for a fully valid project", function() {

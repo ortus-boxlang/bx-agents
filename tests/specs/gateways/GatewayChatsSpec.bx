@@ -1,0 +1,96 @@
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+
+/**
+ * The chats each chat app has talked to: written when a message arrives, so a routine can write to one later.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "gateways.GatewayChats", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-gwchats-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.clockNow = 1000000;
+				variables.chats = new bxagents.models.gateways.GatewayChats( store, () => clockNow );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function context( gateway = "telegram", chat = "42", user = "u-1", thread = "", metadata = {} ) {
+				return new GatewayContext( gateway : gateway, conversationID : chat, userID : user, threadID : thread, metadata : metadata );
+			}
+
+			it( "notes a chat the first time it writes, and who wrote", function() {
+				chats.seen( context() );
+
+				var known = chats.forGateway( "telegram" );
+				expect( known ).toHaveLength( 1 );
+				expect( known[ 1 ].chatId ).toBe( "42" );
+				expect( known[ 1 ].userId ).toBe( "u-1" );
+			} );
+
+			it( "updates the same chat instead of adding another, and moves it to the front", function() {
+				chats.seen( context( chat = "42" ) );
+				clockNow += 1000;
+				chats.seen( context( chat = "7" ) );
+				clockNow += 1000;
+				chats.seen( context( chat = "42", user = "u-2" ) );
+
+				var known = chats.forGateway( "telegram" );
+				expect( known.map( c => c.chatId ) ).toBe( [ "42", "7" ] );
+				expect( known[ 1 ].userId ).toBe( "u-2" );
+			} );
+
+			it( "keeps a thread of a chat apart from the chat", function() {
+				chats.seen( context( thread = "" ) );
+				chats.seen( context( thread = "topic-1" ) );
+				expect( chats.forGateway( "telegram" ) ).toHaveLength( 2 );
+			} );
+
+			it( "keeps the gateways apart", function() {
+				chats.seen( context( gateway = "telegram" ) );
+				chats.seen( context( gateway = "slack", chat = "C123" ) );
+				expect( chats.forGateway( "slack" ).map( c => c.chatId ) ).toBe( [ "C123" ] );
+				expect( chats.forGateway( "discord" ) ).toBeEmpty();
+			} );
+
+			it( "keeps the Teams serviceUrl and nothing else of the metadata", function() {
+				chats.seen( context( gateway = "teams", chat = "19:abc@thread", metadata = { serviceUrl : "https://smba.example/", token : "secret", raw : { a : 1 } } ) );
+
+				var again = chats.contextFor( "teams", "19:abc@thread" );
+				expect( again.getMetadata() ).toBe( { serviceUrl : "https://smba.example/" } );
+				expect( again.getGateway() ).toBe( "teams" );
+				expect( again.getConversationID() ).toBe( "19:abc@thread" );
+				expect( store.rows( "SELECT metadata FROM gateway_chats" )[ 1 ].metadata ).notToInclude( "secret" );
+			} );
+
+			it( "says which chat a person last wrote from", function() {
+				chats.seen( context( chat = "42", user = "ada" ) );
+				clockNow += 1000;
+				chats.seen( context( chat = "group-9", user = "ada" ) );
+				chats.seen( context( chat = "7", user = "bob" ) );
+
+				expect( chats.chatOf( "telegram", "ada" ) ).toBe( "group-9" );
+				expect( chats.chatOf( "telegram", "nobody" ) ).toBe( "" );
+			} );
+
+			it( "gives nothing for a chat it has not seen", function() {
+				expect( isNull( chats.contextFor( "telegram", "nope" ) ) ).toBeTrue();
+			} );
+
+			it( "never throws, and stores nothing for a message with no chat", function() {
+				chats.seen( context( chat = "" ) );
+				expect( chats.forGateway( "telegram" ) ).toBeEmpty();
+				store.exec( "DROP TABLE gateway_chats" );
+				expect( function() { chats.seen( context() ); } ).notToThrow();
+			} );
+
+		} );
+	}
+
+}

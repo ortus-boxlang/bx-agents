@@ -106,6 +106,9 @@ Hash a plaintext password for a webui users entry.
 ::: card title="token" icon="phosphor-duotone:identification-card" href="#token"
 Issue, list and revoke access tokens for a deployed agent.
 :::
+::: card title="users" icon="phosphor-duotone:users" href="#users"
+List the web page's accounts and choose who is an admin.
+:::
 ::: card title="notes" icon="phosphor-duotone:note-pencil" href="#notes"
 Read and manage the notes an agent keeps.
 :::
@@ -543,11 +546,11 @@ In the screen:
 | Ctrl+C | Clear the box; on an empty box, leave; while the agent works, stop it. Ctrl+D leaves on an empty box |
 | `?` alone, or `/keys` | List the keys as they are bound now, with the action name of each |
 
-Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/keys` (which key does what), `/prompt` (how the message box looks, see below), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
+Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/volumes` (the folders the agent may use), `/skills` (the skills the agent can load, and from which level), `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/keys` (which key does what), `/prompt` (how the message box looks, see below), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
 
 #### The same commands in the web page and in chat apps
 
-Each slash command is written once, as a small class that answers with data (text, a table, a list to pick from), and the terminal, the web page and the chat platforms each draw that answer their own way. So `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/ping`, `/info`, `/remember` and `/notes` work in all three:
+Each slash command is written once, as a small class that answers with data (text, a table, a list to pick from), and the terminal, the web page and the chat platforms each draw that answer their own way. So `/help`, `/new`, `/tools`, `/volumes`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/ping`, `/info`, `/remember` and `/notes` work in all three:
 
 | Where | How you use them |
 |---|---|
@@ -796,6 +799,21 @@ bxAgents token revoke --name=laptop
 - `revoke` stops a token working at once. The name stays taken, so it cannot be reused by accident.
 - Run it where the database is: on the server, or in the project before you pack it. On a deployed server, point `BXAGENTS_DB` at the file the app uses.
 
+### `users`
+
+The sign-in accounts of the web page, as the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) keeps them, and who among them is an admin.
+
+```bash
+bxAgents users list [--json]
+bxAgents users admin --name=ada
+bxAgents users member --name=ada
+```
+
+- `list` shows each account's username, role (`admin` or `member`), whether it is active, and its display name. Never a password.
+- `admin` makes an account an admin; `member` makes an admin a regular account again. The last admin cannot be demoted.
+- The roster itself comes from the `users` of the web gateway at every boot. This verb only changes the admin flag, which the database keeps from then on. See [Admins and members](conventions/web-ui.md#admins-and-members).
+- Run it where the database is, like [`token`](#token).
+
 ### `notes`
 
 The notes an agent keeps, read from the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`, or the file named by `BXAGENTS_DB`). Limits come from the [`notes`](conventions/agent-yaml.md#notes) block of `Agent.yaml`.
@@ -835,6 +853,20 @@ bxAgents vault key
 - `status` says where the key comes from and warns when it is the key file beside the database. `audit` lists who added, used, was refused and removed what, without values.
 - `key` prints a new random key to put in `BXAGENTS_VAULT_KEY`. It does not touch the database.
 
+### `data`, `backup` and `restore`
+
+Where the agent keeps everything, and backups of it. See [data and volumes](conventions/data.md).
+
+```bash
+bxAgents data [--json]
+bxAgents backup [--to=FILE]
+bxAgents restore FILE [--home=DIR] [--force]
+```
+
+- `data` prints the data home and where it came from, the size of the database and each folder, and the volumes with their modes. It makes nothing.
+- `backup` zips the chat database (copied whole, so it is safe while a server runs), `files/` and `skills/`. Without `--to` the zip goes in the home's `backups/` folder. Volumes are not included.
+- `restore` puts a backup back and keeps what was there as `<name>.before-restore`. It stops when the database looks to be in use unless `--force` is given. `--home` restores into another data home.
+
 ### `connect`
 
 Sign in to the services of a project that ask each person to sign in (an `mcpServers` entry with an `oauth` key). See [connect](conventions/connect.md).
@@ -852,6 +884,18 @@ bxAgents connect [--user=NAME] [--json]
 - With a name it prints an address and opens your browser, waits for the redirect on `127.0.0.1` (a free port, or `--port`), and finishes the sign in. `--no-open` only prints. `--timeout` is the seconds to wait, 300 by default.
 - `--remove` forgets your sign in. `--user` is whose: `local` by default, the one user an open server has.
 - Tokens are sealed in the project's chat database. Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
+
+### `logs`
+
+The agent's logs, kept in the `logs/` folder of the [data home](conventions/data.md). See [logs](conventions/logs.md).
+
+```bash
+bxAgents logs [area] [--tail=N] [--level=warn] [--grep=TEXT] [--json]
+```
+
+- Without an area it lists the logs and their size. The areas are `agent`, `gateways`, `routines`, `heartbeat` and `api`.
+- With one it prints the last lines: `--tail` is how many (default 100, up to 1000), `--level` the least serious level to show, and `--grep` a word a line must contain.
+- Secrets are never in a log, and neither is what a person said.
 
 ### `models`
 
@@ -871,6 +915,26 @@ planner       claude/claude-opus-4            context ?  images ?  key MISSING
 - `list` shows the default model and every [profile](conventions/models.md#profiles), with what the project says about each ([`contextWindow` and `vision`](conventions/models.md#what-the-project-knows-about-a-model), `?` when it does not) and whether the profile's key is set.
 - `test` sends each model one tiny question through bx-ai and reports `ok` with the time, or `FAILED` with the provider's own message. It tests the default model, one profile with `--profile`, or all of them with `--all`, and exits `1` when any does not answer, so it can gate a deploy. It spends a few tokens per model.
 - It uses the models the project was last built with: run `bxAgents build` first.
+
+### `routines`
+
+The scheduled [routines](conventions/routines.md) of a project, as the local operator (admin scope, so `--all` lists every owner's). It works on the project's chat database and data home, and needs `routines.enabled: true`.
+
+```bash
+bxAgents routines list [--all] [--json]
+bxAgents routines show <name>
+bxAgents routines add --name=<name> --schedule="0 9 * * 1-5" --prompt="..." [--destination=routine|gateway:<name>] [--chat=<id>]
+bxAgents routines edit <name> [--schedule=...] [--prompt=...] [--destination=...] [--chat=...]
+bxAgents routines pause|resume|run <name>
+bxAgents routines delete <name> --yes
+bxAgents routines reports <name>
+bxAgents routines report <name> <file>
+bxAgents routines clean <name> [--older-than=30d | --all] [--yes]
+```
+
+- A schedule is five cron fields or `every 30m`. `list` shows it in words and the next run.
+- `run` marks a routine due. It starts at the next minute of a served app, and the command says so.
+- `delete` asks for `--yes` and keeps the routine's reports. `clean` only lists what it would remove unless you add `--yes`.
 
 ### `sessions`
 

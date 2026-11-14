@@ -1,0 +1,145 @@
+/**
+ * The admin data routes' service side: composition, the project's files, usage, vault activity, backups and
+ * extensions. All of it is for an admin; none of it holds a secret value.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.AgentService admin data", function() {
+
+			beforeEach( function() {
+				variables.dir = replace( createTempDirectory( prefix = "bxagents-admindata-" ), "\", "/", "all" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.scout = new FakeAgent().named( "scout" );
+				variables.lead = new FakeAgent().named( "lead" ).withSubAgent( scout );
+				variables.home = new bxagents.models.data.DataHome( projectRoot : dir, configured : dir & "/home", environment : {}, userHome : "/home/someone" );
+				variables.service = new bxagents.models.api.AgentService( lead, store, nullValue(), {
+					data : new bxagents.models.data.AppData( home, new bxagents.models.data.Volumes( {}, home ) )
+				} );
+				variables.admin = new bxagents.models.api.Caller( id = "root", scope = "admin" );
+				variables.ada = new bxagents.models.api.Caller( id = "ada" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "refuses every one of them to anyone who is not an admin", function() {
+				expect( service.composition( ada ).code() ).toBe( "forbidden" );
+				expect( service.agentFiles( ada ).code() ).toBe( "forbidden" );
+				expect( service.agentFile( ada, "Agent.yaml" ).code() ).toBe( "forbidden" );
+				expect( service.usage( ada ).code() ).toBe( "forbidden" );
+				expect( service.vaultActivity( ada ).code() ).toBe( "forbidden" );
+				expect( service.backups( ada ).code() ).toBe( "forbidden" );
+				expect( service.backupNow( ada ).code() ).toBe( "forbidden" );
+				expect( service.backupFile( ada, "x.zip" ).code() ).toBe( "forbidden" );
+				expect( service.restoreBackup( ada, "x.zip" ).code() ).toBe( "forbidden" );
+				expect( service.extensions( ada ).code() ).toBe( "forbidden" );
+				expect( service.reloadExtensions( ada ).code() ).toBe( "forbidden" );
+			} );
+
+			it( "describes the composition in one call: what comes in, the parts, the tree, what goes out", function() {
+				var made = service.composition( admin ).data();
+
+				expect( made.incoming.map( i => i.kind ) ).toInclude( "web" );
+				expect( made.incoming.map( i => i.kind ) ).toInclude( "api" );
+				expect( made.parts.map( p => p.key ) ).toInclude( "tools" );
+				expect( made.parts.filter( p => p.key == "agents" )[ 1 ].count ).toBe( 1 );
+				expect( made.agents.map( a => a.name ) ).toBe( [ "lead", "scout" ] );
+				expect( made.outgoing[ 1 ].kind ).toBe( "model" );
+				expect( made.asksFirst ).toBeArray();
+			} );
+
+			it( "lists the project's files that are safe to show, and reads them with secrets as stars", function() {
+				fileWrite( dir & "/Agent.yaml", "name: lead" & char( 10 ) & "apiKey: sk-real-secret" & char( 10 ) & "model: openai/gpt-4o" & char( 10 ) );
+				fileWrite( dir & "/.env", "OPENAI_API_KEY=sk-real-secret" );
+				fileWrite( dir & "/instructions.md", "Be brief." );
+				directoryCreate( dir & "/skills/triage", true, true );
+				fileWrite( dir & "/skills/triage/SKILL.md", "---#char( 10 )#name: triage#char( 10 )#---#char( 10 )#Steps." );
+				fileWrite( dir & "/skills/triage/.hidden.md", "no" );
+
+				var paths = service.agentFiles( admin ).data().files.map( f => f.path );
+				expect( paths ).toBe( [ "Agent.yaml", "instructions.md", "skills/triage/SKILL.md" ] );
+
+				var yaml = service.agentFile( admin, "Agent.yaml" ).data();
+				expect( yaml.text ).toInclude( "apiKey: ********" );
+				expect( yaml.text ).notToInclude( "sk-real-secret" );
+				expect( yaml.text ).toInclude( "model: openai/gpt-4o" );
+				expect( service.agentFile( admin, "instructions.md" ).data().text ).toBe( "Be brief." );
+			} );
+
+			it( "never shows a .env, a hidden file or a path outside the project", function() {
+				fileWrite( dir & "/.env", "SECRET=1" );
+				fileWrite( dir & "/Agent.yaml", "name: lead" );
+
+				expect( service.agentFile( admin, ".env" ).code() ).toBe( "not_found" );
+				expect( service.agentFile( admin, "../etc/passwd" ).code() ).toBe( "not_found" );
+				expect( service.agentFile( admin, "" ).code() ).toBe( "bad_request" );
+				expect( service.agentFile( admin, "nothing.md" ).code() ).toBe( "not_found" );
+			} );
+
+			it( "says usage is off, with how to turn it on", function() {
+				var snapshot = service.usage( admin ).data();
+
+				expect( snapshot.enabled ).toBeFalse();
+				expect( snapshot.howTo ).notToBeEmpty();
+			} );
+
+			it( "shows the vault's key status and its audit lines, never a value", function() {
+				var activity = service.vaultActivity( admin ).data();
+
+				expect( activity.key.keySource ).toBeString();
+				expect( activity.activity ).toBeArray();
+				expect( jsonSerialize( activity ) ).notToInclude( dir );
+			} );
+
+			it( "makes a backup, lists it, finds it for download and schedules a restore for the next start", function() {
+				directoryCreate( home.folder( "files" ), true, true );
+				fileWrite( home.folder( "files" ) & "/note.txt", "kept" );
+
+				var made = service.backupNow( admin ).data();
+				expect( made.name ).toMatch( "^backup-.+\.zip$" );
+				expect( made.bytes ).toBeGT( 0 );
+
+				var listed = service.backups( admin ).data();
+				expect( listed.backups.map( b => b.name ) ).toBe( [ made.name ] );
+				expect( listed.pending ).toBeEmpty();
+
+				var found = service.backupFile( admin, made.name );
+				expect( fileExists( found.data().file ) ).toBeTrue();
+				expect( service.backupFile( admin, "../chat.db" ).code() ).toBe( "not_found" );
+				expect( service.backupFile( admin, "missing.zip" ).code() ).toBe( "not_found" );
+
+				var scheduled = service.restoreBackup( admin, made.name ).data();
+				expect( scheduled.scheduled ).toBeTrue();
+				expect( service.backups( admin ).data().pending.name ).toBe( made.name );
+				expect( service.restoreBackup( admin, "missing.zip" ).code() ).toBe( "not_found" );
+			} );
+
+			it( "puts the scheduled backup back when the app starts, once", function() {
+				directoryCreate( home.folder( "files" ), true, true );
+				fileWrite( home.folder( "files" ) & "/note.txt", "kept" );
+				var made = service.backupNow( admin ).data();
+				fileWrite( home.folder( "files" ) & "/note.txt", "changed" );
+				service.restoreBackup( admin, made.name );
+
+				var backups = new bxagents.models.data.DataBackup( home );
+				var done = backups.applyPending();
+
+				expect( done.restored ).toInclude( "files/" );
+				expect( fileRead( home.folder( "files" ) & "/note.txt" ) ).toBe( "kept" );
+				expect( backups.pending() ).toBeEmpty();
+				expect( backups.applyPending() ).toBeEmpty();
+			} );
+
+			it( "says there are no extensions when the app loads none", function() {
+				expect( service.extensions( admin ).data().extensions ).toBeArray();
+				expect( service.reloadExtensions( admin ).data() ).toHaveKey( "reloaded" );
+			} );
+
+		} );
+	}
+
+}

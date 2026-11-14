@@ -26,11 +26,19 @@ class {
 	 * so this is the second lock on the same door.
 	 */
 	private boolean function refused( required any event ) {
-		if ( !isNull( callerOf( arguments.event ) ) ) {
-			return false
+		var caller = callerOf( arguments.event )
+		if ( isNull( caller ) ) {
+			new "models.logs.Logger@bxagents"().write( "api", "warn", "Refused a call to #arguments.event.getCurrentAction()# with no valid sign in or token" )
+			answer( arguments.event, new "models.api.Authenticator@bxagents"().refusal() )
+			return true
 		}
-		answer( arguments.event, new "models.api.Authenticator@bxagents"().refusal() )
-		return true
+		// a route the contract marks admin only is refused here, before its action does anything
+		if ( !caller.isAdmin() && new "models.api.ApiContract@bxagents"().needsAdmin( arguments.event.getCurrentAction() ) ) {
+			new "models.logs.Logger@bxagents"().write( "api", "warn", "Refused #caller.id()# on the admin route #arguments.event.getCurrentAction()#" )
+			answer( arguments.event, failed( "forbidden", "This route is for admins" ) )
+			return true
+		}
+		return false
 	}
 
 	/**
@@ -70,7 +78,7 @@ class {
 	private function service() {
 		// once per request: the probe for the shared database is a query
 		if ( !request.keyExists( "bxagentsService" ) ) {
-			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered(), { manageTokens : manageTokens(), connections : connectionService() } )
+			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered(), { manageTokens : manageTokens(), data : appData(), connections : connectionService(), gateways : gatewayInfo(), routines : jsonDeserialize( "__ROUTINES__" ) } )
 		}
 		return request.bxagentsService
 	}
@@ -86,6 +94,27 @@ class {
 		} catch ( any e ) {
 			return nullValue()
 		}
+	}
+
+	/**
+	 * The data home and volumes the build stamped in, as an AppData. The home is worked out here, where the app runs.
+	 */
+	private function appData() {
+		var home = new "models.data.DataHome@bxagents"( projectRoot : expandPath( "/" ), configured : "__DATA_HOME__", agentName : "__AGENT_NAME__" )
+		return new "models.data.AppData@bxagents"( home, new "models.data.Volumes@bxagents"( jsonDeserialize( "__VOLUMES__" ), home ) )
+	}
+
+	/**
+	 * The chat apps the build found, with the state of each live gateway. Their conversations say when each was last used.
+	 */
+	private function gatewayInfo() {
+		var store = sharedStore()
+		return new "models.gateways.GatewayInfo@bxagents"(
+			jsonDeserialize( "__GATEWAYS__" ),
+			isNull( store ) ? nullValue() : new "models.store.SessionStore@bxagents"( store ),
+			nullValue(),
+			isNull( store ) ? nullValue() : new "models.gateways.GatewayChats@bxagents"( store )
+		)
 	}
 
 	/** Where this build serves the API, as agentApi.path (or the default) set it */
@@ -318,7 +347,12 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		var answered = service().turns().run( callerOf( event ), event.getHTTPContent( json : true ) )
+		var body = event.getHTTPContent( json : true )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		var answered = turns.run( callerOf( event ), body )
 		if ( answered.succeeded() ) {
 			event.setHTTPHeader( name : "X-Thread-Id", value : answered.data().threadId )
 		}
@@ -333,7 +367,12 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		answer( event, service().turns().batch( callerOf( event ), event.getHTTPContent( json : true ) ) )
+		var body = event.getHTTPContent( json : true )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		answer( event, turns.batch( callerOf( event ), body ) )
 	}
 
 	/**
@@ -344,7 +383,12 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		var prepared = service().turns().prepareTurn( callerOf( event ), event.getHTTPContent( json : true ) )
+		var body = event.getHTTPContent( json : true )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		var prepared = turns.prepareTurn( callerOf( event ), body )
 		if ( !prepared.succeeded() ) {
 			answer( event, prepared )
 			return
@@ -389,7 +433,12 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		var prepared = service().turns().prepareTurn( callerOf( event ), event.getHTTPContent( json : true ) )
+		var body = event.getHTTPContent( json : true )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		var prepared = turns.prepareTurn( callerOf( event ), body )
 		if ( !prepared.succeeded() ) {
 			answer( event, prepared )
 			return
@@ -408,7 +457,11 @@ class {
 			return
 		}
 		var body = event.getHTTPContent( json : true )
-		answer( event, service().turns().cancel( callerOf( event ), body.threadId ?: "", body.reason ?: "Cancelled by the user." ) )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		answer( event, turns.cancel( callerOf( event ), body.threadId ?: "", body.reason ?: "Cancelled by the user." ) )
 	}
 
 	/**
@@ -421,7 +474,11 @@ class {
 			return
 		}
 		var body = event.getHTTPContent( json : true )
-		answer( event, service().turns().steer( callerOf( event ), body.threadId ?: "", body.input ?: "" ) )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		answer( event, turns.steer( callerOf( event ), body.threadId ?: "", body.input ?: "" ) )
 	}
 
 	/**
@@ -433,7 +490,11 @@ class {
 		if ( refused( event ) ) {
 			return
 		}
-		answer( event, service().turns().pending( callerOf( event ), rc.threadId ?: "" ) )
+		var turns = turnsFor( event, rc.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		answer( event, turns.pending( callerOf( event ), rc.threadId ?: "" ) )
 	}
 
 	/**
@@ -446,12 +507,30 @@ class {
 			return
 		}
 		var body = event.getHTTPContent( json : true )
-		var prepared = service().turns().prepareResume( callerOf( event ), body.threadId ?: "", body )
+		var turns = turnsFor( event, body.agent ?: "" )
+		if ( isNull( turns ) ) {
+			return
+		}
+		var prepared = turns.prepareResume( callerOf( event ), body.threadId ?: "", body )
 		if ( !prepared.succeeded() ) {
 			answer( event, prepared )
 			return
 		}
 		return streamTurn( prepared.data() )
+	}
+
+	/**
+	 * The turn runner for the agent a request names. An unknown agent is answered here (400) and null comes back.
+	 *
+	 * @agentName A name from the agent tree; blank is the main agent
+	 */
+	private any function turnsFor( required any event, string agentName = "" ) {
+		var checked = service().checkAgent( arguments.agentName )
+		if ( !checked.succeeded() ) {
+			answer( arguments.event, checked )
+			return nullValue()
+		}
+		return service().turns( arguments.agentName )
 	}
 
 	/**
@@ -489,8 +568,9 @@ class {
 	// ----------------------------------------------------------------------------------
 
 	/**
-	 * GET: the caller's recent conversations, most recent first: { sessions : [ { id, title, messageCount, source, updatedAt } ] }.
-	 * Query: limit?, source?
+	 * GET: a page of the caller's conversations, most recent first:
+	 * { sessions : [ { id, title, messageCount, source, agent, updatedAt } ], total, limit, offset, facets? }.
+	 * Query: limit? (25, at most 100), offset?, q? (title contains), source?, agent?, since?, before?, all? (admin), facets? (1 adds counts per source and agent)
 	 * POST: starts a conversation, { conversationId }; the id is made here, never taken from the caller. Body: { title? }
 	 *
 	 * 404 when this server keeps no conversation list (no shared chat database).
@@ -505,10 +585,30 @@ class {
 			return
 		}
 		if ( event.getHTTPMethod() == "POST" ) {
-			answer( event, all.create( callerOf( event ), event.getHTTPContent( json : true ).title ?: "" ) )
+			var body = event.getHTTPContent( json : true )
+			var checked = service().checkAgent( body.agent ?: "" )
+			if ( !checked.succeeded() ) {
+				answer( event, checked )
+				return
+			}
+			answer( event, all.create( callerOf( event ), body.title ?: "", body.agent ?: "" ) )
 			return
 		}
-		answer( event, all.list( callerOf( event ), val( rc.limit ?: 20 ), rc.source ?: "", isBoolean( rc.all ?: "" ) && rc.all ) )
+		answer(
+			event,
+			all.list(
+				caller : callerOf( event ),
+				limit  : val( rc.limit ?: 25 ),
+				source : rc.source ?: "",
+				all    : isBoolean( rc.all ?: "" ) && rc.all,
+				offset : val( rc.offset ?: 0 ),
+				q      : rc.q ?: "",
+				agent  : rc.agent ?: "",
+				since  : rc.since ?: "",
+				before : rc.before ?: "",
+				facets : isBoolean( rc.facets ?: "" ) && rc.facets
+			)
+		)
 	}
 
 	/**
@@ -637,6 +737,318 @@ class {
 	}
 
 	/**
+	 * The folders the agent may use, as { volumes : [ { name, mode, description } ] }. Never a folder on the machine.
+	 */
+	function volumes( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().volumes( callerOf( event ) ) )
+	}
+
+	/**
+	 * The agent's logs: which there are, or the last lines of one (?area=gateways&tail=200&level=warn&q=text). Admin only.
+	 */
+	function logs( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().logs( callerOf( event ), rc.area ?: "", rc.tail ?: 200, rc.level ?: "", rc.q ?: "" ) )
+	}
+
+	/**
+	 * The chat apps and the state of each: { gateways : [ ... ] }. Admin only.
+	 */
+	function gateways( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().gateways( callerOf( event ) ) )
+	}
+
+	/**
+	 * POST: stops and starts one chat app in place. Body: { name }. Admin only.
+	 */
+	function reconnectGateway( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var body = bodyOf( event )
+		answer( event, service().reconnectGateway( callerOf( event ), toString( body.name ?: "" ) ) )
+	}
+
+	/**
+	 * The skills the agent can load, as { skills : [ { name, description, origin } ] }. Never a folder on the machine.
+	 */
+	function skills( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().skills( callerOf( event ) ) )
+	}
+
+	/**
+	 * One skill's SKILL.md text, as { name, description, origin, size, savedAt, body, truncated }. A long one is cut and
+	 * says so; the answer never holds a folder on the machine. Query: name
+	 */
+	function readSkill( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().skill( callerOf( event ), toString( rc.name ?: "" ) ) )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Routines: prompts the agent runs on a schedule. Every action goes through the RoutineManager, which holds the owner and
+	// admin rules; a server that left routines off answers 404.
+	// ----------------------------------------------------------------------------------
+
+	private function noRoutines() {
+		return failed( "not_found", "Routines are not turned on for this agent." )
+	}
+
+	/** The body of a POST as a struct, empty when it is not one */
+	private struct function bodyOf( required any event ) {
+		var body = arguments.event.getHTTPContent( json : true )
+		return isStruct( body ) ? body : {}
+	}
+
+	/** True only for a real true: a JSON boolean, not the number 1 or a word */
+	private boolean function flag( any value = false ) {
+		return isBoolean( arguments.value ) && !isNumeric( arguments.value ) && arguments.value
+	}
+
+	/**
+	 * Runs one routine action: the manager, or the answer that routines are off.
+	 *
+	 * @event The request
+	 * @call A function( manager, caller ) that answers an Outcome
+	 */
+	private void function routineAction( required any event, required function call ) {
+		if ( refused( arguments.event ) ) {
+			return
+		}
+		var manager = service().routines()
+		answer( arguments.event, isNull( manager ) ? noRoutines() : arguments.call( manager, callerOf( arguments.event ) ) )
+	}
+
+	/**
+	 * GET: the caller's routines (all=1 adds everyone's for an admin). POST makes one. Body: { name, schedule, prompt, destination?, chat? }
+	 */
+	function routines( event, rc, prc ) {
+		var body = bodyOf( event )
+		var verb = event.getHTTPMethod()
+		routineAction( event, ( manager, who ) => verb == "POST"
+			? manager.create( who, toString( body.name ?: "" ), toString( body.schedule ?: "" ), toString( body.prompt ?: "" ), toString( body.destination ?: "" ), toString( body.chat ?: "" ) )
+			: manager.list( who, flag( rc.all ?: false ) ) )
+	}
+
+	/** One routine with its prompt. Query: name */
+	function routine( event, rc, prc ) {
+		routineAction( event, ( manager, who ) => manager.get( who, toString( rc.name ?: "" ) ) )
+	}
+
+	/** Body: { name, schedule?, prompt?, destination?, chat? } */
+	function updateRoutine( event, rc, prc ) {
+		var body = bodyOf( event )
+		routineAction( event, ( manager, who ) => manager.update( who, toString( body.name ?: "" ), body ) )
+	}
+
+	/**
+	 * GET: what a schedule means before it is saved: { value, text, nextRunText }, or 400 with the sentence a save would give. Stores nothing.
+	 */
+	function describeSchedule( event, rc, prc ) {
+		routineAction( event, ( manager, who ) => manager.describeSchedule( toString( rc.schedule ?: "" ) ) )
+	}
+
+	/** Body: { name } */
+	function pauseRoutine( event, rc, prc ) {
+		var body = bodyOf( event )
+		routineAction( event, ( manager, who ) => manager.pause( who, toString( body.name ?: "" ) ) )
+	}
+
+	/** Body: { name } */
+	function resumeRoutine( event, rc, prc ) {
+		var body = bodyOf( event )
+		routineAction( event, ( manager, who ) => manager.resume( who, toString( body.name ?: "" ) ) )
+	}
+
+	/** Body: { name } */
+	function runRoutine( event, rc, prc ) {
+		var body = bodyOf( event )
+		routineAction( event, ( manager, who ) => manager.run( who, toString( body.name ?: "" ) ) )
+	}
+
+	/** Body: { name } */
+	function deleteRoutine( event, rc, prc ) {
+		var body = bodyOf( event )
+		routineAction( event, ( manager, who ) => manager.delete( who, toString( body.name ?: "" ) ) )
+	}
+
+	/** The files of a routine's results. Query: name */
+	function routineReports( event, rc, prc ) {
+		routineAction( event, ( manager, who ) => manager.reports( who, toString( rc.name ?: "" ) ) )
+	}
+
+	/** One report file. Query: name, file */
+	function routineReport( event, rc, prc ) {
+		routineAction( event, ( manager, who ) => manager.report( who, toString( rc.name ?: "" ), toString( rc.file ?: "" ) ) )
+	}
+
+	/** Removes one report file. Body: { name, file } */
+	function deleteRoutineReport( event, rc, prc ) {
+		var body = bodyOf( event )
+		routineAction( event, ( manager, who ) => manager.removeReport( who, toString( body.name ?: "" ), toString( body.file ?: "" ) ) )
+	}
+
+	/** Removes old reports, or says what it would remove. Body: { name, olderThanDays?, all?, apply? } */
+	function cleanRoutineReports( event, rc, prc ) {
+		var body = bodyOf( event )
+		var days = isNumeric( body.olderThanDays ?: "" ) ? body.olderThanDays : 0
+		routineAction( event, ( manager, who ) => manager.cleanReports( who, toString( body.name ?: "" ), days, flag( body.all ?: false ), flag( body.apply ?: false ) ) )
+	}
+
+	/**
+	 * The sign-in accounts and whether each is an admin, as { users : [ { username, displayName, admin, active } ] }. Admin only.
+	 */
+	function users( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var accounts = service().accounts()
+		answer( event, isNull( accounts ) ? failed( "not_found", "This server keeps no accounts" ) : accounts.list( callerOf( event ) ) )
+	}
+
+	/**
+	 * Makes an account an admin or takes that away. Admin only.
+	 *
+	 * Body: { username, admin }
+	 */
+	function setUserAdmin( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var accounts = service().accounts()
+		if ( isNull( accounts ) ) {
+			answer( event, failed( "not_found", "This server keeps no accounts" ) )
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		var admin = isStruct( body ) ? ( body.admin ?: "" ) : ""
+		if ( !isBoolean( admin ) ) {
+			answer( event, failed( "bad_request", "admin must be true or false" ) )
+			return
+		}
+		answer( event, accounts.setAdmin( callerOf( event ), isStruct( body ) ? toString( body.username ?: "" ) : "", admin ) )
+	}
+
+	/**
+	 * Where the agent keeps everything and where each volume is. Admin only.
+	 */
+	function data( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().data( callerOf( event ) ) )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Admin data: composition, files, usage, vault activity, backups, extensions. Every one is admin only.
+	// ----------------------------------------------------------------------------------
+
+	/** How the agent is put together: { incoming, parts, agents, outgoing, asksFirst }. */
+	function composition( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().composition( callerOf( event ) ) )
+	}
+
+	/** The project's own files that are safe to show: { files : [ { path, size } ] }. */
+	function agentFiles( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().agentFiles( callerOf( event ) ) )
+	}
+
+	/** One of those files as text, read only: { path, size, truncated, text }. Query: path */
+	function agentFile( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().agentFile( callerOf( event ), toString( rc.path ?: "" ) ) )
+	}
+
+	/** The usage snapshot: { enabled : false, howTo } until usage is turned on. Query: days? */
+	function usage( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().usage( callerOf( event ), val( rc.days ?: 30 ) ) )
+	}
+
+	/** The vault's key status and its recent audit lines, never a value. */
+	function vaultActivity( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().vaultActivity( callerOf( event ) ) )
+	}
+
+	/** The backups there are, and a restore waiting for the next start: { backups, pending }. */
+	function backups( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().backups( callerOf( event ) ) )
+	}
+
+	/**
+	 * GET: downloads one backup as a zip. Query: name
+	 * POST: makes a backup now, { name, bytes, entries }.
+	 */
+	function backup( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		if ( event.getHTTPMethod() == "POST" ) {
+			answer( event, service().backupNow( callerOf( event ) ) )
+			return
+		}
+		var found = service().backupFile( callerOf( event ), toString( rc.name ?: "" ) )
+		if ( !found.succeeded() ) {
+			answer( event, found )
+			return
+		}
+		event.sendFile( file : found.data().file, name : found.data().name, mimeType : "application/zip", disposition : "attachment" )
+	}
+
+	/** Schedules a backup to be put back the next time the app starts. Body: { name } */
+	function restoreBackup( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().restoreBackup( callerOf( event ), toString( bodyOf( event ).name ?: "" ) ) )
+	}
+
+	/** The extensions this app loaded and what each adds: { extensions, problems }. */
+	function extensions( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().extensions( callerOf( event ) ) )
+	}
+
+	/** Loads the extensions again, as /reload does in the terminal. */
+	function reloadExtensions( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().reloadExtensions( callerOf( event ) ) )
+	}
+
+	/**
 	 * What the caller has set for themselves, as { preferences : { key : value } }. 404 when this server keeps no shared database.
 	 */
 	function preferences( event, rc, prc ) {
@@ -727,6 +1139,42 @@ class {
 			return
 		}
 		answer( event, kept.all() )
+	}
+
+	/**
+	 * Removes every note of one scope: the caller's own, or the agent's (admin only). { cleared : count }.
+	 *
+	 * Body: { scope : "user" | "agent" }
+	 */
+	function clearNotes( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().notes( callerOf( event ) ).clear( toString( event.getHTTPContent( json : true ).scope ?: "" ) ) )
+	}
+
+	/**
+	 * Clears conversation memory and keeps the conversations: one of the caller's, or (admin only) all of them or all of
+	 * one agent's. { conversations, messages }.
+	 *
+	 * Body: { conversationId?, all?, agent? }
+	 */
+	function clearMemory( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var all = service().conversations()
+		if ( isNull( all ) ) {
+			answer( event, noSessions() )
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		var checked = service().checkAgent( body.agent ?: "" )
+		if ( !checked.succeeded() ) {
+			answer( event, checked )
+			return
+		}
+		answer( event, all.clearMemory( callerOf( event ), toString( body.conversationId ?: "" ), isBoolean( body.all ?: "" ) && body.all, toString( body.agent ?: "" ) ) )
 	}
 
 	// ----------------------------------------------------------------------------------

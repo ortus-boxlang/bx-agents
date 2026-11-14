@@ -1,0 +1,70 @@
+/**
+ * `logs` CLI verb: the agent's log files, which there are and the last lines of one.
+ *
+ *   bxAgents logs                          which logs there are and how big
+ *   bxAgents logs gateways                 the last 100 lines of the gateways log
+ *   bxAgents logs gateways --tail=500 --level=warn --grep=telegram
+ *   bxAgents logs api --json
+ */
+import bxModules.bxagents.models.util.ByteSize;
+
+class {
+
+	static {
+		DEFAULT_TAIL = 100
+	}
+
+	/**
+	 * @options { projectRoot (required), _positional (the area), tail, level, grep, json }
+	 */
+	struct function run( struct options = {} ) {
+		var root = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( root ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`logs` requires a project root" )
+		}
+		var home = new "models.data.ProjectData@bxagents"().of( root.reReplace( "[\/]+$", "" ) ).home
+		var reader = new "models.logs.LogReader@bxagents"( home.folder( "logs" ) )
+		var area = lCase( trim( isArray( arguments.options._positional ?: "" ) ? ( arguments.options._positional[ 1 ] ?: "" ) : ( arguments.options._positional ?: "" ) ) )
+		var asJson = arguments.options.json ?: false
+		var nl = char( 10 )
+
+		if ( !len( area ) ) {
+			var found = reader.list()
+			if ( asJson ) {
+				return { exitCode : 0, message : jsonSerialize( { logs : found } ) }
+			}
+			if ( !found.len() ) {
+				return { exitCode : 0, message : "No logs yet in #home.folder( 'logs' )#. They appear when the agent runs." }
+			}
+			var rows = [ "Logs in #home.folder( 'logs' )#:", "" ]
+			for ( var log in found ) {
+				rows.append( "  " & left( log.area & repeatString( " ", 11 ), 11 ) & right( repeatString( " ", 9 ) & ByteSize::format( log.bytes ), 9 ) & "   " & dateTimeFormat( log.modified, "yyyy-mm-dd HH:nn" ) )
+			}
+			rows.append( "" )
+			rows.append( "Read one with: bxAgents logs <area> [--tail=N] [--level=warn] [--grep=TEXT]" )
+			return { exitCode : 0, message : rows.toList( nl ) }
+		}
+
+		var tail = arguments.options.tail ?: static.DEFAULT_TAIL
+		if ( !isNumeric( tail ) || tail < 1 ) {
+			return { exitCode : 1, message : "--tail must be a whole number of 1 or more." }
+		}
+		var result
+		try {
+			result = reader.tail( area, int( tail ), arguments.options.level ?: "", arguments.options.grep ?: "" )
+		} catch ( "BxAgents.UnknownLog" e ) {
+			return { exitCode : 1, message : e.message }
+		}
+		if ( asJson ) {
+			return { exitCode : 0, message : jsonSerialize( result ) }
+		}
+		if ( !result.lines.len() ) {
+			return { exitCode : 0, message : "No lines in the #area# log" & ( len( arguments.options.level ?: "" ) || len( arguments.options.grep ?: "" ) ? " that match." : " yet." ) }
+		}
+		var out = result.lines.map( function( l ) {
+			return ( len( l.time ) ? l.time & "  " : "                         " ) & ucase( left( l.level & "     ", 5 ) ) & "  " & ( len( l.subject ) ? "[" & l.subject & "] " : "" ) & l.message
+		} )
+		return { exitCode : 0, message : out.toList( nl ) }
+	}
+
+}

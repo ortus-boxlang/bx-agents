@@ -1,0 +1,47 @@
+/**
+ * What an agent keeps and what it may reach, as one thing to ask: its data home and its volumes.
+ *
+ * The terminal chat, the web page, the gateways and the API all ask this, so the answer is written once.
+ * `listing()` is safe to show to anyone: it names volumes and never a folder on the machine. `report()` shows
+ * those folders, so only a person who owns the machine (the terminal) or an admin may be given it.
+ */
+class {
+
+	/**
+	 * @dataHome A DataHome
+	 * @volumes A Volumes
+	 */
+	function init( required any dataHome, required any volumes ) {
+		variables.dataHome = arguments.dataHome
+		variables.volumes = arguments.volumes
+		return this
+	}
+
+	any function home() {
+		return variables.dataHome
+	}
+
+	any function volumes() {
+		return variables.volumes
+	}
+
+	/**
+	 * @return [ { name, mode, description } ], `files` first, with no path on the machine
+	 */
+	array function listing() {
+		return variables.volumes.listing()
+	}
+
+	/**
+	 * @return { home, source, database, items : [ { name, bytes, files } ], volumes : [ { name, path, mode, description } ] }.
+	 *         It makes nothing on disk.
+	 */
+	struct function report() {
+		var info = variables.dataHome.describe()
+		info[ "volumes" ] = variables.volumes.all().map( function( v ) {
+			return { name : v.name, path : v.path, mode : v.mode, description : v.description }
+		} )
+		return info
+	}
+
+}

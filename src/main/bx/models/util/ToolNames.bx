@@ -1,0 +1,57 @@
+/**
+ * How the tools that BX Agents gives an agent are named: `{type}_{action}`, all lower case, such as `note_remember`,
+ * `skill_save`, `vault_list` or `routine_schedule`.
+ *
+ * The type says what the tool works on and the action what it does to it. Names that always have this shape can be
+ * grouped, allowed and denied by pattern (`routine_*`, `*_delete`) once tool permissions arrive, without a list of
+ * special cases. Tools of bx-ai itself and tools a project writes keep their own names; the project's own are
+ * encouraged to follow the same shape.
+ */
+class {
+
+	static {
+		SHAPE = "^[a-z][a-z0-9]*_[a-z][a-z0-9]*$"
+	}
+
+	/**
+	 * @name A tool name
+	 *
+	 * @return True when the name is `{type}_{action}`
+	 */
+	static boolean function valid( required string name ) {
+		return reFind( static.SHAPE, arguments.name ) > 0
+	}
+
+	/**
+	 * @name A valid tool name
+	 *
+	 * @return The part before the underscore
+	 */
+	static string function typeOf( required string name ) {
+		return listFirst( arguments.name, "_" )
+	}
+
+	/**
+	 * @name A valid tool name
+	 *
+	 * @return The part after the underscore
+	 */
+	static string function actionOf( required string name ) {
+		return listLast( arguments.name, "_" )
+	}
+
+	/**
+	 * Throws when a tool is named off the pattern. Used where we build our own tools, so a new one cannot slip by.
+	 *
+	 * @name The tool's name
+	 *
+	 * @return The name
+	 */
+	static string function require( required string name ) {
+		if ( !ToolNames::valid( arguments.name ) ) {
+			throw( type = "BxAgents.InvalidToolName", message = "The tool name [#arguments.name#] must be {type}_{action} in lower case, such as note_remember." )
+		}
+		return arguments.name
+	}
+
+}

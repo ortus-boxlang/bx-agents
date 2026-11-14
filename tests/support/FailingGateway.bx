@@ -1,0 +1,26 @@
+/**
+ * A gateway that starts once and then refuses to start again, for the reconnect specs. It is a mock gateway with a switch: call
+ * refuseToStart() and the next start() throws, as a gateway does when its credential has gone bad.
+ */
+class extends="bxModules.bxai.models.gateway.MockGateway" {
+
+	function init() {
+		super.init()
+		variables.name = "failing"
+		variables.refuse = false
+		return this
+	}
+
+	function refuseToStart() {
+		variables.refuse = true
+		return this
+	}
+
+	public void function onStart() {
+		if ( variables.refuse ) {
+			throw( message = "Unauthorized token" )
+		}
+		super.onStart()
+	}
+
+}

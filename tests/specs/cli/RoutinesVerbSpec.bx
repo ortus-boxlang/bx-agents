@@ -1,0 +1,90 @@
+/**
+ * The `routines` verb: the local operator's view of the routines, on the same manager the server uses.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "the routines verb", function() {
+
+			beforeEach( function() {
+				variables.dir = replace( createTempDirectory( prefix = "bxagents-routinesverb-" ), "\", "/", "all" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.now = createObject( "java", "java.time.Instant" ).parse( "2026-11-09T08:00:00Z" ).toEpochMilli();
+				variables.settings = bxModules.bxagents.models.routines.RoutineSettings::resolve( { enabled : true, timezone : "UTC" } );
+				variables.service = new bxModules.bxagents.models.routines.Routines( store, settings, () => now );
+				variables.home = new bxModules.bxagents.models.data.DataHome( projectRoot = dir, configured = dir & "/home", environment = {} );
+				variables.results = new bxModules.bxagents.models.routines.RoutineResults( home, settings );
+				variables.manager = new bxModules.bxagents.models.routines.RoutineManager(
+					service,
+					new bxModules.bxagents.models.routines.Destinations( new bxModules.bxagents.models.gateways.GatewayChats( store ), { get : ( n ) => javacast( "null", "" ) } ),
+					new bxModules.bxagents.models.routines.RoutineReports( service, results, () => now )
+				);
+				variables.verb = new bxModules.bxagents.models.cli.Routines();
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function go( array words, struct flags = {} ) {
+				var options = { _manager : manager, _positionals : words };
+				options.append( flags );
+				return verb.run( options );
+			}
+
+			it( "adds, lists, shows, edits, pauses and resumes a routine", function() {
+				var made = go( [ "add" ], { name : "daily", schedule : "0 9 * * 1-5", prompt : "Check the build." } );
+				expect( made.exitCode ).toBe( 0 );
+				expect( made.message ).toInclude( "daily" );
+				expect( go( [ "list" ] ).message ).toInclude( "weekdays at 09:00" );
+				expect( go( [ "show", "daily" ] ).message ).toInclude( "Check the build." );
+				expect( go( [ "edit", "daily" ], { schedule : "every 1h" } ).exitCode ).toBe( 0 );
+				expect( go( [ "pause", "daily" ] ).exitCode ).toBe( 0 );
+				expect( go( [ "list" ] ).message ).toInclude( "paused" );
+				expect( go( [ "resume", "daily" ] ).exitCode ).toBe( 0 );
+			} );
+
+			it( "lists as JSON and for every owner with --all", function() {
+				service.create( new bxModules.bxagents.models.api.Caller( id = "ada" ), "ada-one", "every 1h", "x" );
+				expect( go( [ "list" ] ).message ).notToInclude( "ada-one" );
+				expect( go( [ "list" ], { all : true } ).message ).toInclude( "ada-one" );
+				expect( jsonDeserialize( go( [ "list" ], { all : true, json : true } ).message ) ).toHaveLength( 1 );
+			} );
+
+			it( "says run only marks it due, and refuses to delete without --yes", function() {
+				go( [ "add" ], { name : "daily", schedule : "every 1h", prompt : "x" } );
+				expect( go( [ "run", "daily" ] ).message ).toInclude( "served app" );
+				var refused = go( [ "delete", "daily" ] );
+				expect( refused.exitCode ).toBe( 1 );
+				expect( refused.message ).toInclude( "--yes" );
+				expect( go( [ "delete", "daily" ], { yes : true } ).exitCode ).toBe( 0 );
+				expect( go( [ "list" ] ).message ).toInclude( "No routines" );
+			} );
+
+			it( "lists and prints reports, and cleans as a dry run unless --yes", function() {
+				go( [ "add" ], { name : "daily", schedule : "every 1h", prompt : "x" } );
+				var row = service.get( new bxModules.bxagents.models.api.Caller( id = "local", scope = "admin" ), "daily" ).data().routine;
+				results.save( row, "today.md", "All green." );
+				expect( go( [ "reports", "daily" ] ).message ).toInclude( "today.md" );
+				expect( go( [ "report", "daily", "today.md" ] ).message ).toInclude( "All green." );
+				var dry = go( [ "clean", "daily" ], { all : true } );
+				expect( dry.message ).toInclude( "Would remove 1" );
+				expect( go( [ "reports", "daily" ] ).message ).toInclude( "today.md" );
+				expect( go( [ "clean", "daily" ], { all : true, yes : true } ).message ).toInclude( "Removed 1" );
+				expect( go( [ "reports", "daily" ] ).message ).toInclude( "No reports" );
+			} );
+
+			it( "says a routine it cannot find, and what is missing", function() {
+				var missing = go( [ "show", "nope" ] );
+				expect( missing.exitCode ).toBe( 1 );
+				expect( () => go( [ "pause" ] ) ).toThrow( "BxAgents.MissingRoutineName" );
+				expect( () => go( [ "frobnicate" ] ) ).toThrow( "BxAgents.UnknownRoutinesCommand" );
+				expect( () => go( [ "clean", "x" ] ) ).toThrow( "BxAgents.MissingCleanRule" );
+			} );
+
+		} );
+	}
+
+}

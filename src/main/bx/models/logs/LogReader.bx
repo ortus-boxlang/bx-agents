@@ -1,0 +1,157 @@
+/**
+ * Reads the agent's log files (see Logger): which there are, and the last lines of one, filtered.
+ *
+ * A line of a BoxLang log looks like
+ *
+ *   [2026-11-09T21:32:04,197] [main] [ERROR] [GATEWAYS] [bxagents-root] [telegram] send failed
+ *
+ * and is read as { time, level, area, subject, message }. A line that does not look like that (a stack trace that
+ * continues the one before it) is kept as a line of its own with no time and the level of the line before it.
+ *
+ * Only the end of a file is read, so a big log costs no more than a small one.
+ */
+import bxModules.bxagents.models.logs.Logger;
+
+class {
+
+	static {
+		// how much of the end of a file is read, at most
+		WINDOW      = 1048576
+		MAX_LINES   = 1000
+		DEFAULT     = 200
+		// least to most serious
+		LEVELS      = [ "debug", "info", "warn", "error" ]
+		LINE        = "^\[(\d{4}-\d\d-\d\dT[\d:,.]+)\]\s+\[([^\]]*)\]\s+\[(\w+)\s*\]\s+\[([^\]]*)\]\s+\[([^\]]*)\]\s?(.*)$"
+	}
+
+	/**
+	 * @folder The absolute path of the logs folder
+	 */
+	function init( required string folder ) {
+		variables.folder = replace( arguments.folder, "\", "/", "all" ).reReplace( "/+$", "" )
+		return this
+	}
+
+	/**
+	 * @return [ { area, file, bytes, modified } ] for the areas that have a file, in the order of Logger::areas()
+	 */
+	array function list() {
+		var found = []
+		for ( var area in Logger::areas() ) {
+			var file = variables.folder & "/" & area & ".log"
+			if ( fileExists( file ) ) {
+				var info = getFileInfo( file )
+				found.append( { area : area, file : area & ".log", bytes : info.size, modified : info.lastModified } )
+			}
+		}
+		return found
+	}
+
+	/**
+	 * The last lines of one log.
+	 *
+	 * @area One of the areas
+	 * @count How many lines at most, from the end. 1 to 1000, default 200
+	 * @level Least serious level to show: debug, info, warn or error. Blank shows all
+	 * @query Text a line must contain (case does not matter). Blank shows all
+	 *
+	 * @return { area, lines : [ { time, level, area, subject, message } ] }, oldest first. Empty lines when the log has none
+	 */
+	struct function tail( required string area, numeric count = 200, string level = "", string query = "" ) {
+		if ( !Logger::areas().findNoCase( arguments.area ) ) {
+			throw( type = "BxAgents.UnknownLog", message = "There is no log [#arguments.area#]. They are: #Logger::areas().toList( ', ' )#." )
+		}
+		var area = lCase( arguments.area )
+		var wanted = max( 1, min( int( arguments.count ), static.MAX_LINES ) )
+		var floor = levelRank( arguments.level, 1 )
+		var needle = lCase( trim( arguments.query ) )
+		var parsed = parse( rawLines( variables.folder & "/" & area & ".log" ) )
+		var kept = parsed.filter( function( l ) {
+			return levelRank( l.level, 2 ) >= floor && ( !len( needle ) || lCase( l.message & " " & l.subject ).contains( needle ) )
+		} )
+		var from = max( 1, kept.len() - wanted + 1 )
+		return { area : area, lines : kept.len() ? kept.slice( from, kept.len() - from + 1 ) : [] }
+	}
+
+	/**
+	 * @return The rank of a level, 1 (debug) to 4 (error); the fallback for a blank or unknown one
+	 */
+	private numeric function levelRank( required string level, required numeric fallback ) {
+		var at = static.LEVELS.findNoCase( arguments.level == "warning" ? "warn" : ( arguments.level == "information" ? "info" : arguments.level ) )
+		return at ? at : ( len( arguments.level ) ? 2 : arguments.fallback )
+	}
+
+	/**
+	 * @file The log file
+	 *
+	 * @return The lines in the last window of the file, whole lines only
+	 */
+	private array function rawLines( required string file ) {
+		if ( !fileExists( arguments.file ) ) {
+			return []
+		}
+		var raf = createObject( "java", "java.io.RandomAccessFile" ).init( arguments.file, "r" )
+		try {
+			var size = raf.length()
+			var start = max( 0, size - static.WINDOW )
+			raf.seek( start )
+			var bytes = createObject( "java", "java.lang.reflect.Array" ).newInstance( createObject( "java", "java.lang.Byte" ).TYPE, int( size - start ) )
+			raf.readFully( bytes )
+			var text = createObject( "java", "java.lang.String" ).init( bytes, "UTF-8" )
+		} finally {
+			raf.close()
+		}
+		var lines = replace( text, char( 13 ), "", "all" ).listToArray( char( 10 ), false, false )
+		// the first line of a window that starts in the middle of the file is probably cut
+		if ( start > 0 && lines.len() ) {
+			lines.deleteAt( 1 )
+		}
+		return lines.filter( l => len( trim( l ) ) )
+	}
+
+	/**
+	 * @lines Raw lines
+	 *
+	 * @return One struct per line
+	 */
+	private array function parse( required array lines ) {
+		var out = []
+		var lastLevel = "info"
+		for ( var raw in arguments.lines ) {
+			var m = reFind( static.LINE, raw, 1, true )
+			if ( m.pos[ 1 ] == 0 ) {
+				out.append( { time : "", level : lastLevel, area : "", subject : "", message : trim( raw ) } )
+				continue
+			}
+			var part = ( n ) => mid( raw, m.pos[ n + 1 ], m.len[ n + 1 ] )
+			var message = trim( part( 6 ) )
+			var subject = ""
+			var inside = reFind( "^\[([^\]]+)\]\s?(.*)$", message, 1, true )
+			if ( inside.pos[ 1 ] > 0 ) {
+				subject = mid( message, inside.pos[ 2 ], inside.len[ 2 ] )
+				message = trim( mid( message, inside.pos[ 3 ], inside.len[ 3 ] ) )
+			}
+			lastLevel = normalizeLevel( part( 3 ) )
+			out.append( { time : part( 1 ), level : lastLevel, area : lCase( part( 4 ) ), subject : subject, message : message } )
+		}
+		return out
+	}
+
+	private string function normalizeLevel( required string level ) {
+		switch ( lCase( trim( arguments.level ) ) ) {
+			case "warn":
+			case "warning":
+				return "warn"
+			case "err":
+			case "error":
+			case "fatal":
+				return "error"
+			case "debug":
+			case "trace":
+				return "debug"
+			default:
+				return "info"
+		}
+	}
+
+}

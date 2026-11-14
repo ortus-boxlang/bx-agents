@@ -1,0 +1,76 @@
+/**
+ * `users` CLI verb - the sign-in accounts of the web page, as the project's shared chat database keeps them, and who
+ * among them is an admin.
+ *
+ *   bxAgents users list [--json]
+ *   bxAgents users admin --name=ada      make an account an admin
+ *   bxAgents users member --name=ada     make an admin a regular account again
+ *
+ * The roster itself (who exists, their passwords) comes from the `users` of the web gateway, at every boot. This verb
+ * only changes the admin flag, which the database keeps from then on. The last admin cannot be demoted.
+ */
+class {
+
+	/**
+	 * @options { projectRoot (required), _positional (list, admin or member), name, json }
+	 */
+	struct function run( struct options = {} ) {
+		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( projectRoot ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`users` requires a project root" )
+		}
+		var action = lCase( trim( arguments.options._positional ?: "" ) )
+		if ( ![ "list", "admin", "member" ].contains( action ) ) {
+			throw( type = "BxAgents.UnknownUsersAction", message = "`users` needs one of: list, admin, member - for example `bxAgents users admin --name=ada`." )
+		}
+
+		var file = new "models.store.ChatStorePath@bxagents"().forProject( projectRoot )
+		directoryCreate( getDirectoryFromPath( file ), true, true )
+		var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
+		store.migrate()
+		var accounts = new "models.store.AccountService@bxagents"( store )
+
+		if ( action == "list" ) {
+			return list( accounts, arguments.options )
+		}
+		return change( accounts, arguments.options, action == "admin" )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private struct function list( required any accounts, required struct options ) {
+		var rows = arguments.accounts.list()
+		if ( arguments.options.json ?: false ) {
+			return { exitCode : 0, message : jsonSerialize( rows ) }
+		}
+		if ( !rows.len() ) {
+			return { exitCode : 0, message : "No accounts yet. They come from the `users` of the web gateway when the app starts." }
+		}
+		var lines = [ pad( "USERNAME", 24 ) & pad( "ROLE", 8 ) & pad( "STATUS", 10 ) & "NAME" ]
+		for ( var row in rows ) {
+			lines.append( pad( row.username, 24 ) & pad( row.admin ? "admin" : "member", 8 ) & pad( row.active ? "active" : "inactive", 10 ) & row.displayName )
+		}
+		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+	}
+
+	private struct function change( required any accounts, required struct options, required boolean admin ) {
+		var name = trim( arguments.options.name ?: "" )
+		if ( !len( name ) ) {
+			throw( type = "BxAgents.MissingAccountName", message = "`users #arguments.admin ? 'admin' : 'member'#` requires --name=<the username>" )
+		}
+		try {
+			arguments.accounts.setAdmin( name, arguments.admin )
+		} catch ( any e ) {
+			if ( e.type == "BxAgents.NoSuchAccount" || e.type == "BxAgents.LastAdmin" ) {
+				return { exitCode : 1, message : e.message }
+			}
+			rethrow
+		}
+		return { exitCode : 0, message : "[#name#] is now #arguments.admin ? 'an admin' : 'a member'#." }
+	}
+
+	private string function pad( required string text, required numeric width ) {
+		return left( arguments.text & repeatString( " ", arguments.width ), arguments.width )
+	}
+
+}

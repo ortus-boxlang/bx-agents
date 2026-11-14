@@ -84,13 +84,27 @@ class {
 	}
 
 	/**
+	 * @account The signed-in account cbauth gives; the generated User says whether it is an admin
+	 *
+	 * @return True only when the account says so. An account object that cannot say is not an admin.
+	 */
+	private boolean function isAdminAccount( required any account ) {
+		try {
+			return arguments.account.isAdmin() == true
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	/**
 	 * @return The Caller of a page that is signed in with an account, or null
 	 */
 	private any function signedIn( required any event, required struct headers ) {
 		try {
 			var security = arguments.event.getController().getWireBox().getInstance( "cbSecurity@cbSecurity" )
 			if ( security.isLoggedIn() ) {
-				return Caller::fromAccount( security.getUser().getId() ).via( sourceOf( arguments.headers, "web" ) )
+				var account = security.getUser()
+				return Caller::fromAccount( account.getId(), "", isAdminAccount( account ) ? "admin" : "chat" ).via( sourceOf( arguments.headers, "web" ) )
 			}
 		} catch ( any e ) {
 			// no accounts in this app: not signed in

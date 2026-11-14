@@ -1,0 +1,63 @@
+/**
+ * The sign-in accounts of the web page, as the shared chat database keeps them, and the one flag an admin can change:
+ * whether an account is an admin.
+ *
+ * The roster itself (who exists, their passwords) comes from config at every boot. This class never makes or removes
+ * an account; it reads them, and flips `isAdmin`. The last active admin cannot be demoted, so there is always someone
+ * who can hand the flag on.
+ */
+class {
+
+	/**
+	 * @store A ChatStore, already migrated
+	 */
+	function init( required any store ) {
+		variables.store = arguments.store
+		return this
+	}
+
+	/**
+	 * @return [ { username, displayName, admin, active } ], by username. Never a password hash
+	 */
+	array function list() {
+		return variables.store.rows( "SELECT username, displayName, isAdmin, isActive FROM users ORDER BY username" ).map( function( row ) {
+			return {
+				"username"    : row.username,
+				"displayName" : row.displayName ?: "",
+				"admin"       : ( row.isAdmin ?: 0 ) == 1,
+				"active"      : ( row.isActive ?: 0 ) == 1
+			}
+		} )
+	}
+
+	/**
+	 * @return How many active accounts are admins
+	 */
+	numeric function adminCount() {
+		return variables.store.rows( "SELECT COUNT(*) AS total FROM users WHERE isAdmin = 1 AND isActive = 1" )[ 1 ].total
+	}
+
+	/**
+	 * @username The account
+	 * @admin True to make it an admin, false to take that away
+	 *
+	 * @return { username, admin } as it is now
+	 */
+	struct function setAdmin( required string username, required boolean admin ) {
+		var name = trim( arguments.username )
+		var found = variables.store.rows( "SELECT username, isAdmin, isActive FROM users WHERE username = :name", { name : name } )
+		if ( !found.len() || found[ 1 ].isActive != 1 ) {
+			throw( type = "BxAgents.NoSuchAccount", message = "There is no active account named [#name#]." )
+		}
+		var isAdminNow = found[ 1 ].isAdmin == 1
+		if ( isAdminNow && !arguments.admin && adminCount() <= 1 ) {
+			throw( type = "BxAgents.LastAdmin", message = "[#name#] is the last admin. Make someone else an admin first." )
+		}
+		variables.store.exec(
+			"UPDATE users SET isAdmin = :admin, updatedAt = :now WHERE username = :name",
+			{ admin : arguments.admin ? 1 : 0, now : { value : now(), cfsqltype : "timestamp" }, name : name }
+		)
+		return { "username" : name, "admin" : arguments.admin }
+	}
+
+}

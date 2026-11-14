@@ -1,0 +1,36 @@
+import bxModules.bxagents.models.util.ToolNames;
+
+/**
+ * Every tool BX Agents gives an agent is named {type}_{action}, so permissions can match them by pattern later.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "util.ToolNames", function() {
+
+			it( "accepts {type}_{action} in lower case", function() {
+				for ( var good in [ "note_remember", "skill_save", "vault_list", "routine_schedule", "a1_b2" ] ) {
+					expect( ToolNames::valid( good ) ).toBeTrue( "[#good#] should be valid" );
+				}
+			} );
+
+			it( "refuses names off the pattern", function() {
+				for ( var bad in [ "remember", "saveSkill", "Note_remember", "note-remember", "note_", "_remember", "note_remember_now", "1note_save", "" ] ) {
+					expect( ToolNames::valid( bad ) ).toBeFalse( "[#bad#] should be refused" );
+				}
+			} );
+
+			it( "splits a name into its type and action", function() {
+				expect( ToolNames::typeOf( "routine_delete" ) ).toBe( "routine" );
+				expect( ToolNames::actionOf( "routine_delete" ) ).toBe( "delete" );
+			} );
+
+			it( "throws from require() for a bad name and returns a good one", function() {
+				expect( ToolNames::require( "skill_save" ) ).toBe( "skill_save" );
+				expect( function() { ToolNames::require( "saveSkill" ); } ).toThrow( "BxAgents.InvalidToolName" );
+			} );
+
+		} );
+	}
+
+}

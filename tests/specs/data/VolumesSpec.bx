@@ -1,0 +1,221 @@
+import bxModules.bxagents.models.data.Volumes;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "Volumes", function() {
+
+			beforeEach( function() {
+				variables.root = getTempDirectory() & "bxa-volumes-" & createUUID()
+				variables.notes = variables.root & "/notes"
+				variables.pictures = variables.root & "/pictures"
+				directoryCreate( variables.notes, true )
+				directoryCreate( variables.pictures, true )
+				fileWrite( variables.notes & "/todo.md", "buy seeds" )
+				variables.home = new bxagents.models.data.DataHome( projectRoot : variables.root, configured : variables.root & "/home", environment : {}, userHome : "/home/someone" )
+				variables.home.ensure()
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( variables.root ) ) {
+					directoryDelete( variables.root, true )
+				}
+			} );
+
+			function volumes( struct declared ) {
+				var made = isNull( arguments.declared ) ? {
+					notes    : { path : variables.notes, mode : "rw", description : "My notes" },
+					pictures : { path : variables.pictures }
+				} : arguments.declared
+				return new bxagents.models.data.Volumes( declared : made, dataHome : variables.home )
+			}
+
+			describe( "problems()", function() {
+
+				it( "accepts a good setting", function() {
+					expect( Volumes::problems( { notes : { path : "~/Notes", mode : "rw", description : "mine" } } ) ).toBeEmpty()
+					expect( Volumes::problems( {} ) ).toBeEmpty()
+				} );
+
+				it( "refuses a setting that is not a mapping", function() {
+					expect( Volumes::problems( [ "~/Notes" ] ) ).toHaveLength( 1 )
+				} );
+
+				it( "refuses a name that is not lowercase letters, digits and dashes", function() {
+					expect( Volumes::problems( { "My Notes" : { path : "~/n" } } ).toList( "|" ) ).toInclude( "is not a name" )
+					expect( Volumes::problems( { "-notes" : { path : "~/n" } } ).toList( "|" ) ).toInclude( "is not a name" )
+				} );
+
+				it( "keeps the name files for the volume every agent has", function() {
+					expect( Volumes::problems( { files : { path : "~/n" } } ).toList( "|" ) ).toInclude( "already has" )
+				} );
+
+				it( "names an unknown key", function() {
+					expect( Volumes::problems( { notes : { path : "~/n", colour : "red" } } ).toList( "|" ) ).toInclude( "unknown key [colour]" )
+				} );
+
+				it( "needs a path", function() {
+					expect( Volumes::problems( { notes : { mode : "rw" } } ).toList( "|" ) ).toInclude( "needs a path" )
+				} );
+
+				it( "refuses a mode that is not ro or rw", function() {
+					expect( Volumes::problems( { notes : { path : "~/n", mode : "write" } } ).toList( "|" ) ).toInclude( "must be ro" )
+				} );
+
+				it( "refuses the whole disk and the whole home folder", function() {
+					for ( var wide in [ "/", "~", "~/", "C:\" ] ) {
+						expect( Volumes::problems( { all : { path : wide } } ).toList( "|" ) ).toInclude( "too wide" )
+					}
+				} );
+
+				it( "refuses a description that is too long", function() {
+					expect( Volumes::problems( { notes : { path : "~/n", description : repeatString( "x", 201 ) } } ).toList( "|" ) ).toInclude( "description" )
+				} );
+
+			} );
+
+			describe( "the list", function() {
+
+				it( "starts with files, then the declared volumes", function() {
+					var names = volumes().all().map( v => v.name )
+					expect( names ).toBe( [ "files", "notes", "pictures" ] )
+				} );
+
+				it( "gives files the folder in the data home, read and write", function() {
+					var files = volumes().all()[ 1 ]
+					expect( files.path ).toBe( variables.home.folder( "files" ) )
+					expect( files.mode ).toBe( "rw" )
+				} );
+
+				it( "reads a volume with no mode as read only", function() {
+					expect( volumes().all()[ 3 ].mode ).toBe( "ro" )
+				} );
+
+				it( "lists names, modes and descriptions but never a path", function() {
+					for ( var entry in volumes().listing() ) {
+						expect( entry.keyExists( "path" ) ).toBeFalse()
+					}
+					expect( volumes().listing()[ 2 ].description ).toBe( "My notes" )
+				} );
+
+				it( "gives only the read and write folders when asked for writing", function() {
+					var folders = volumes().folders( "write" )
+					expect( folders ).toHaveLength( 2 )
+					expect( folders.toList( "|" ) ).notToInclude( "pictures" )
+				} );
+
+			} );
+
+			describe( "guidance()", function() {
+
+				it( "tells the agent each volume, its mode and how to write a path", function() {
+					var text = volumes().guidance()
+					expect( text ).toInclude( "volume:path" )
+					expect( text ).toInclude( "- notes (read and write): My notes" )
+					expect( text ).toInclude( "- pictures (read only)" )
+					expect( text ).notToInclude( variables.root.replace( "\", "/", "all" ) )
+				} );
+
+			} );
+
+			describe( "resolve()", function() {
+
+				it( "finds a path inside a volume", function() {
+					var found = volumes().resolve( "notes:todo.md" )
+					expect( found.volume ).toBe( "notes" )
+					expect( fileRead( found.path ) ).toBe( "buy seeds" )
+				} );
+
+				it( "puts a path with no volume in files", function() {
+					expect( volumes().resolve( "a.txt" ).volume ).toBe( "files" )
+				} );
+
+				it( "ignores the case of the volume name", function() {
+					expect( volumes().resolve( "Notes:todo.md" ).volume ).toBe( "notes" )
+				} );
+
+				it( "accepts a path that does not exist yet, for writing", function() {
+					var found = volumes().resolve( "notes:new/deep/file.md", true )
+					expect( found.path ).toInclude( "notes/new/deep/file.md" )
+				} );
+
+				it( "finds the volume folder itself", function() {
+					expect( volumes().resolve( "notes:" ).volume ).toBe( "notes" )
+				} );
+
+				it( "refuses a volume it does not have, and lists the ones it has", function() {
+					expect( function() { volumes().resolve( "secrets:x" ) } ).toThrow( "BxAgents.Volume.UnknownVolume" )
+				} );
+
+				it( "refuses a full path on the machine", function() {
+					expect( function() { volumes().resolve( "/etc/passwd" ) } ).toThrow( "BxAgents.Volume.FullPath" )
+					expect( function() { volumes().resolve( "C:/Windows/x" ) } ).toThrow( "BxAgents.Volume.FullPath" )
+					expect( function() { volumes().resolve( "notes:/etc/passwd" ) } ).toThrow( "BxAgents.Volume.FullPath" )
+				} );
+
+				it( "refuses a path that climbs out", function() {
+					expect( function() { volumes().resolve( "notes:../pictures/a.png" ) } ).toThrow( "BxAgents.Volume.OutsideVolume" )
+					expect( function() { volumes().resolve( "../x" ) } ).toThrow( "BxAgents.Volume.OutsideVolume" )
+				} );
+
+				it( "refuses writing in a read only volume but allows reading", function() {
+					expect( volumes().resolve( "pictures:a.png" ).mode ).toBe( "ro" )
+					expect( function() { volumes().resolve( "pictures:a.png", true ) } ).toThrow( "BxAgents.Volume.ReadOnlyVolume" )
+				} );
+
+				it( "refuses a symbolic link that leads outside the volume", function() {
+					var outside = variables.root & "/outside"
+					directoryCreate( outside )
+					fileWrite( outside & "/secret.txt", "no" )
+					var files = createObject( "java", "java.nio.file.Files" )
+					var link = createObject( "java", "java.io.File" ).init( variables.notes & "/shortcut" ).toPath()
+					var target = createObject( "java", "java.io.File" ).init( outside ).toPath()
+					files.createSymbolicLink( link, target, [] )
+					expect( function() { volumes().resolve( "notes:shortcut/secret.txt" ) } ).toThrow( "BxAgents.Volume.OutsideVolume" )
+				} );
+
+			} );
+
+			describe( "present()", function() {
+
+				it( "turns a real path into volume:path", function() {
+					var real = volumes().resolve( "notes:todo.md" ).path
+					expect( volumes().present( real ) ).toBe( "notes:todo.md" )
+				} );
+
+				it( "reaches into arrays and structs", function() {
+					var real = volumes().resolve( "notes:todo.md" ).path
+					var shown = volumes().present( [ { path : real, size : 9 } ] )
+					expect( shown[ 1 ].path ).toBe( "notes:todo.md" )
+					expect( shown[ 1 ].size ).toBe( 9 )
+				} );
+
+				it( "hides the folder in an error message", function() {
+					var real = volumes().resolve( "notes:todo.md" ).path
+					expect( volumes().present( "File not found: " & real ) ).toBe( "File not found: notes:todo.md" )
+				} );
+
+			} );
+
+			describe( "startupProblems()", function() {
+
+				it( "is empty when every folder is there", function() {
+					expect( volumes().startupProblems() ).toBeEmpty()
+				} );
+
+				it( "names a folder that is missing", function() {
+					var missing = volumes( { gone : { path : variables.root & "/nowhere" } } )
+					expect( missing.startupProblems().toList( "|" ) ).toInclude( "does not exist" )
+				} );
+
+				it( "refuses the data home as a volume", function() {
+					var same = volumes( { copy : { path : variables.home.path() } } )
+					expect( same.startupProblems().toList( "|" ) ).toInclude( "data home itself" )
+				} );
+
+			} );
+
+		} );
+	}
+
+}

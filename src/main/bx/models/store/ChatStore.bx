@@ -168,6 +168,52 @@ class {
 					"CREATE TABLE IF NOT EXISTS oauth_records ( recordKey VARCHAR(64) NOT NULL PRIMARY KEY, sealed TEXT NOT NULL, keyId VARCHAR(16) NOT NULL, expiresAt DATETIME, updatedAt DATETIME )",
 					"CREATE INDEX IF NOT EXISTS idx_oauth_records_expires ON oauth_records ( expiresAt )"
 				]
+			},
+			{
+				// whether a signed-in account is an admin. Config sets it when the account is made, an admin changes it
+				// after that (see AccountService). Accounts from before this version are not admins.
+				version    : 9,
+				statements : [
+					"ALTER TABLE users ADD COLUMN isAdmin INTEGER NOT NULL DEFAULT 0"
+				]
+			},
+			{
+				// routines: prompts an agent runs on a schedule, as their owner (see models/routines). Every time is epoch
+				// milliseconds, so the heartbeat compares numbers and no time zone is stored. status is idle, running or
+				// waiting (a person has to approve a tool); threadId and waitingSince belong to the waiting run.
+				version    : 10,
+				statements : [
+					"CREATE TABLE IF NOT EXISTS routines ( id VARCHAR(64) NOT NULL PRIMARY KEY, ownerId VARCHAR(255) NOT NULL, name VARCHAR(40) NOT NULL, schedule VARCHAR(100) NOT NULL, prompt TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, status VARCHAR(16) NOT NULL DEFAULT 'idle', nextRunAt INTEGER, lastRunAt INTEGER, lastStatus VARCHAR(16) NOT NULL DEFAULT '', lastError VARCHAR(500) NOT NULL DEFAULT '', failures INTEGER NOT NULL DEFAULT 0, threadId VARCHAR(64) NOT NULL DEFAULT '', waitingSince INTEGER, createdAt INTEGER, updatedAt INTEGER, UNIQUE ( ownerId, name ) )",
+					"CREATE INDEX IF NOT EXISTS idx_routines_due ON routines ( enabled, status, nextRunAt )"
+				]
+			},
+			{
+				// where a routine's answer goes (see models/routines/Notifier): its own conversation, or a chat on a chat app. And the
+				// chats each chat app has talked to, written when a message arrives, so a routine can push to one later. Only addresses
+				// and what a gateway needs to send again (Teams' serviceUrl) are kept, never message text.
+				version    : 11,
+				statements : [
+					"ALTER TABLE routines ADD COLUMN destination VARCHAR(100) NOT NULL DEFAULT 'routine'",
+					"ALTER TABLE routines ADD COLUMN destinationChat VARCHAR(255) NOT NULL DEFAULT ''",
+					"CREATE TABLE IF NOT EXISTS gateway_chats ( gateway VARCHAR(64) NOT NULL, chatId VARCHAR(255) NOT NULL, threadId VARCHAR(255) NOT NULL DEFAULT '', userId VARCHAR(255) NOT NULL DEFAULT '', metadata TEXT NOT NULL DEFAULT '{}', firstSeen INTEGER, lastSeen INTEGER, PRIMARY KEY ( gateway, chatId, threadId ) )"
+				]
+			},
+			{
+				// the agent a conversation started with (blank is the main agent), so the list can be filtered by it and a
+				// later turn cannot move a conversation to another agent. Conversations from before stay blank.
+				version    : 12,
+				statements : [
+					"ALTER TABLE conversations ADD COLUMN agent VARCHAR(64) NOT NULL DEFAULT ''",
+					"CREATE INDEX IF NOT EXISTS idx_conversations_agent ON conversations ( userId, agent, updatedAt )"
+				]
+			},
+			{
+				// the agent's notes are global: one set that every agent and sub-agent of the app shares, under one fixed owner
+				// (see SqliteNotesProvider.AGENT_OWNER). Notes the agent made before were kept under its own name.
+				version    : 13,
+				statements : [
+					"UPDATE notes SET owner = 'agent' WHERE scope = 'agent' AND owner <> 'agent'"
+				]
 			}
 		]
 	}

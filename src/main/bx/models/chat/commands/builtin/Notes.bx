@@ -5,7 +5,7 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 	}
 
 	string function hint() {
-		return "open the notes screen, or: list, add [agent] <text>, edit <id> <text>, remove <id>, stats"
+		return "open the notes screen, or: list, add [agent] <text>, edit <id> <text>, remove <id>, clear [agent], stats"
 	}
 
 	/**
@@ -71,8 +71,21 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 					}
 					outcome( reply, kept.remove( after ), "Removed." )
 					break
+				case "clear":
+					var scope = lCase( after ) == "agent" ? "agent" : "user"
+					if ( len( after ) && lCase( after ) != "agent" && lCase( after ) != "user" ) {
+						reply.warn( "Usage: /notes clear [agent]" )
+						break
+					}
+					var cleared = kept.clear( scope )
+					if ( cleared.ok ?: false ) {
+						reply.ok( "Cleared #cleared.cleared ?: 0# #scope == 'agent' ? 'agent ' : ''#note#( ( cleared.cleared ?: 0 ) == 1 ? '' : 's' )#." )
+					} else {
+						reply.warn( cleared.reason ?: cleared.error ?: "That did not work." )
+					}
+					break
 				default:
-					reply.warn( "Usage: /notes [list], add [agent] <text>, edit <id> <text>, remove <id>, stats" )
+					reply.warn( "Usage: /notes [list], add [agent] <text>, edit <id> <text>, remove <id>, clear [agent], stats" )
 			}
 		} catch ( any e ) {
 			reply.warn( "Notes: " & e.message )

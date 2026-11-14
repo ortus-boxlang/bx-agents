@@ -1,0 +1,64 @@
+/**
+ * The sign-in accounts, over the API: who they are and whether each is an admin, for an admin caller. An admin may
+ * change the flag of any account; the last admin cannot be demoted.
+ *
+ * Every answer is an Outcome.
+ */
+import bxModules.bxagents.models.api.Outcome;
+
+class {
+
+	/**
+	 * @service An AccountService
+	 */
+	function init( required any service ) {
+		variables.service = arguments.service
+		return this
+	}
+
+	/**
+	 * @caller The Caller; it must be an admin
+	 *
+	 * @return An Outcome: { users : [ { username, displayName, admin, active } ] }
+	 */
+	any function list( required any caller ) {
+		var refused = adminOnly( arguments.caller )
+		return isNull( refused ) ? Outcome::done( { "users" : variables.service.list() } ) : refused
+	}
+
+	/**
+	 * @caller The Caller; it must be an admin
+	 * @username The account
+	 * @admin True to make it an admin, false to take that away
+	 *
+	 * @return An Outcome: { username, admin }, or bad_request, not_found, conflict (the last admin) or forbidden
+	 */
+	any function setAdmin( required any caller, required string username, required boolean admin ) {
+		var refused = adminOnly( arguments.caller )
+		if ( !isNull( refused ) ) {
+			return refused
+		}
+		if ( !len( trim( arguments.username ) ) ) {
+			return Outcome::failed( "bad_request", "username is required" )
+		}
+		try {
+			return Outcome::done( variables.service.setAdmin( arguments.username, arguments.admin ) )
+		} catch ( any e ) {
+			if ( e.type == "BxAgents.NoSuchAccount" ) {
+				return Outcome::failed( "not_found", e.message )
+			}
+			if ( e.type == "BxAgents.LastAdmin" ) {
+				return Outcome::failed( "conflict", e.message )
+			}
+			rethrow
+		}
+	}
+
+	/**
+	 * @return A forbidden Outcome for anyone who is not an admin, else null
+	 */
+	private any function adminOnly( required any caller ) {
+		return arguments.caller.isAdmin() ? nullValue() : Outcome::failed( "forbidden", "Only an admin may manage accounts" )
+	}
+
+}

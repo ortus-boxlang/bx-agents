@@ -1,0 +1,127 @@
+/**
+ * What a person does with a routine's reports: list, read, remove one, clean up. Owner and admin rules, and a clean-up that only
+ * reports what it would remove unless it is applied.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "routines.RoutineReports", function() {
+
+			beforeEach( function() {
+				variables.dir = replace( createTempDirectory( prefix = "bxagents-reports-" ), "\", "/", "all" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.clockNow = createObject( "java", "java.time.Instant" ).parse( "2026-11-09T08:00:00Z" ).toEpochMilli();
+				variables.settings = bxModules.bxagents.models.routines.RoutineSettings::resolve( { enabled : true, timezone : "UTC" } );
+				variables.routines = new bxModules.bxagents.models.routines.Routines( store, settings, () => clockNow );
+				variables.home = new bxModules.bxagents.models.data.DataHome( projectRoot = dir, configured = dir & "/home", environment = {} );
+				variables.results = new bxModules.bxagents.models.routines.RoutineResults( home, settings );
+				variables.reports = new bxModules.bxagents.models.routines.RoutineReports( routines, results, () => clockNow );
+				variables.ada = new bxModules.bxagents.models.api.Caller( id = "ada" );
+				variables.bob = new bxModules.bxagents.models.api.Caller( id = "bob" );
+				variables.root = new bxModules.bxagents.models.api.Caller( id = "root", scope = "admin" );
+				routines.create( ada, "check-build", "every 10m", "Check." );
+				variables.row = routines.get( ada, "check-build" ).data().routine;
+				results.save( row, "old.md", "old report" );
+				results.save( row, "new.md", "new report" );
+				// the old one was saved 40 days ago, the new one just now
+				var old = createObject( "java", "java.io.File" ).init( results.folderOf( row ) & "/old.md" );
+				old.setLastModified( clockNow - 40 * 86400000 );
+				createObject( "java", "java.io.File" ).init( results.folderOf( row ) & "/new.md" ).setLastModified( clockNow );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "lists the files with their sizes and the total, newest first", function() {
+				var listed = reports.list( ada, "check-build" ).data();
+				expect( listed.files.map( f => f.file ) ).toBe( [ "new.md", "old.md" ] );
+				expect( listed.count ).toBe( 2 );
+				expect( listed.totalBytes ).toBe( len( "old report" ) + len( "new report" ) );
+			} );
+
+			it( "reads a file, and says when there is none", function() {
+				expect( reports.read( ada, "check-build", "new.md" ).data().text ).toBe( "new report" );
+				var missing = reports.read( ada, "check-build", "none.md" );
+				expect( missing.succeeded() ).toBeFalse();
+				expect( missing.code() ).toBe( "not_found" );
+			} );
+
+			it( "keeps another person's reports out of reach, and lets an admin in", function() {
+				expect( reports.list( bob, "check-build" ).code() ).toBe( "not_found" );
+				expect( reports.read( bob, "check-build", "new.md" ).code() ).toBe( "not_found" );
+				expect( reports.remove( bob, "check-build", "new.md" ).code() ).toBe( "not_found" );
+				expect( reports.list( root, row.id ).data().count ).toBe( 2 );
+				expect( reports.remove( root, row.id, "old.md" ).succeeded() ).toBeTrue();
+			} );
+
+			it( "removes one file, and only that one", function() {
+				var gone = reports.remove( ada, "check-build", "old.md" );
+				expect( gone.data() ).toBe( { removed : "old.md", bytes : len( "old report" ) } );
+				expect( reports.list( ada, "check-build" ).data().files.map( f => f.file ) ).toBe( [ "new.md" ] );
+				expect( reports.remove( ada, "check-build", "old.md" ).code() ).toBe( "not_found" );
+				expect( reports.remove( ada, "check-build", "../../chat.db" ).succeeded() ).toBeFalse();
+				expect( fileExists( dir & "/chat.db" ) ).toBeTrue();
+			} );
+
+			describe( "cleaning up", function() {
+
+				it( "only says what it would remove unless applied", function() {
+					var plan = reports.clean( ada, "check-build", 30 ).data();
+
+					expect( plan.removed ).toBeFalse();
+					expect( plan.files.map( f => f.file ) ).toBe( [ "old.md" ] );
+					expect( plan.count ).toBe( 1 );
+					expect( plan.bytes ).toBe( len( "old report" ) );
+					expect( reports.list( ada, "check-build" ).data().count ).toBe( 2 );
+				} );
+
+				it( "removes the old ones when applied and keeps the new", function() {
+					var done = reports.clean( ada, "check-build", 30, false, true ).data();
+
+					expect( done.removed ).toBeTrue();
+					expect( reports.list( ada, "check-build" ).data().files.map( f => f.file ) ).toBe( [ "new.md" ] );
+				} );
+
+				it( "removes everything with all, when applied", function() {
+					expect( reports.clean( ada, "check-build", 0, true ).data().count ).toBe( 2 );
+					expect( reports.list( ada, "check-build" ).data().count ).toBe( 2 );
+					reports.clean( ada, "check-build", 0, true, true );
+					expect( reports.list( ada, "check-build" ).data().count ).toBe( 0 );
+				} );
+
+				it( "finds nothing to remove when nothing is that old", function() {
+					expect( reports.clean( ada, "check-build", 90, false, true ).data().count ).toBe( 0 );
+					expect( reports.list( ada, "check-build" ).data().count ).toBe( 2 );
+				} );
+
+				it( "asks which to clean when neither an age nor all is given", function() {
+					var vague = reports.clean( ada, "check-build" );
+					expect( vague.code() ).toBe( "bad_request" );
+					expect( vague.reason() ).toInclude( "olderThanDays" );
+				} );
+
+				it( "will not clean someone else's routine", function() {
+					expect( reports.clean( bob, "check-build", 1, false, true ).code() ).toBe( "not_found" );
+					expect( reports.list( ada, "check-build" ).data().count ).toBe( 2 );
+				} );
+
+			} );
+
+			it( "logs what was removed, by count, and never a name", function() {
+				bxModules.bxagents.models.logs.Logger::reset();
+				bxModules.bxagents.models.logs.Logger::use( dir & "/logs" );
+				reports.clean( ada, "check-build", 30, false, true );
+				sleep( 200 );
+				var log = fileRead( dir & "/logs/routines.log" );
+				expect( log ).toInclude( "Cleaned 1 report(s) of [check-build]" );
+				expect( log ).notToInclude( "old.md" );
+				bxModules.bxagents.models.logs.Logger::reset();
+			} );
+
+		} );
+	}
+
+}

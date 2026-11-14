@@ -1,0 +1,122 @@
+import bxModules.bxai.models.gateway.contracts.GatewayContext;
+import bxModules.bxai.models.gateway.contracts.GatewayDeliveryResult;
+
+/**
+ * Sending a routine's answer to a chat app: a summary to the chat the routine names, and a plain failure when it cannot.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "routines.Notifier", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-notifier-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.chats = new bxagents.models.gateways.GatewayChats( store );
+				chats.seen( new GatewayContext( gateway : "telegram", conversationID : "42", userID : "ada" ) );
+				chats.seen( new GatewayContext( gateway : "teams", conversationID : "19:abc", userID : "bob", metadata : { serviceUrl : "https://smba.example/" } ) );
+				variables.sent = [];
+				variables.running = true;
+				variables.outcome = "ok";
+				variables.fake = {
+					isRunning : () => running,
+					deliver   : ( event, ctx ) => {
+						if ( outcome == "throw" ) { throw( type = "Boom", message = "socket closed" ); }
+						sent.append( { event : event, context : ctx } );
+						return outcome == "ok" ? new GatewayDeliveryResult( success = true ) : GatewayDeliveryResult::failure( "chat not found" );
+					}
+				};
+				variables.registry = { get : ( name ) => ( name == "telegram" || name == "teams" ) ? fake : javacast( "null", "" ) };
+				variables.settings = bxagents.models.routines.RoutineSettings::resolve( { enabled : true, summaryLength : 200 } );
+				variables.notifier = new bxagents.models.routines.Notifier( chats, settings, registry );
+				variables.row = { name : "check-build", ownerId : "local", destination : "gateway:telegram", destinationChat : "42" };
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "sends nothing for a routine that keeps its answer in its own conversation", function() {
+				row.destination = "routine";
+				row.destinationChat = "";
+				expect( notifier.deliver( row, "green" ) ).toBe( { ok : true, sent : false } );
+				expect( sent ).toBeEmpty();
+			} );
+
+			it( "sends the answer to the chat, under data.text where the chat apps read it", function() {
+				var result = notifier.deliver( row, "The build is green." );
+
+				expect( result ).toBe( { ok : true, sent : true } );
+				expect( sent ).toHaveLength( 1 );
+				expect( sent[ 1 ].context.getConversationID() ).toBe( "42" );
+				expect( sent[ 1 ].event.getData().text ).toBe( "Routine check-build:" & char( 10 ) & "The build is green." );
+			} );
+
+			it( "cuts a long answer to the summary length and points at the reports", function() {
+				var result = notifier.deliver( row, repeatString( "word ", 100 ), [ "report.md", "data-2.csv" ] );
+
+				var text = sent[ 1 ].event.getData().text;
+				expect( result.ok ).toBeTrue();
+				expect( text ).toInclude( "..." );
+				expect( text ).toInclude( "Full report: report.md, data-2.csv" );
+				var body = listToArray( text, char( 10 ) )[ 2 ];
+				expect( len( body ) ).toBeLTE( 200 );
+			} );
+
+			it( "does not cut a short answer", function() {
+				expect( notifier.message( row, "short" ) ).toBe( "Routine check-build:" & char( 10 ) & "short" );
+			} );
+
+			it( "gives Teams what it needs to send: the serviceUrl kept from the first message", function() {
+				row.destination = "gateway:teams";
+				row.destinationChat = "19:abc";
+				notifier.deliver( row, "hi" );
+
+				expect( sent[ 1 ].context.getMetadata().serviceUrl ).toBe( "https://smba.example/" );
+			} );
+
+			it( "fails, saying why, when the chat app is not connected or not known", function() {
+				running = false;
+				var stopped = notifier.deliver( row, "hi" );
+				expect( stopped.ok ).toBeFalse();
+				expect( stopped.reason ).toInclude( "not connected" );
+
+				running = true;
+				row.destination = "gateway:signal";
+				expect( notifier.deliver( row, "hi" ).reason ).toInclude( "not connected" );
+				expect( sent ).toBeEmpty();
+			} );
+
+			it( "fails when the chat is not one the chat app has talked to", function() {
+				row.destinationChat = "999";
+				var result = notifier.deliver( row, "hi" );
+				expect( result.ok ).toBeFalse();
+				expect( result.reason ).toInclude( "no chat with that id" );
+			} );
+
+			it( "fails with the chat app's own words when it refuses, and when it throws", function() {
+				outcome = "refuse";
+				expect( notifier.deliver( row, "hi" ).reason ).toInclude( "chat not found" );
+				outcome = "throw";
+				var result = notifier.deliver( row, "hi" );
+				expect( result.ok ).toBeFalse();
+				expect( result.reason ).toInclude( "socket closed" );
+			} );
+
+			it( "logs what happened and never the text", function() {
+				bxModules.bxagents.models.logs.Logger::reset();
+				bxModules.bxagents.models.logs.Logger::use( dir & "/logs" );
+				notifier.deliver( row, "a very private answer" );
+				sleep( 200 );
+				var log = fileRead( dir & "/logs/routines.log" );
+				expect( log ).toInclude( "Sent [check-build] to telegram" );
+				expect( log ).notToInclude( "private" );
+				bxModules.bxagents.models.logs.Logger::reset();
+			} );
+
+		} );
+	}
+
+}

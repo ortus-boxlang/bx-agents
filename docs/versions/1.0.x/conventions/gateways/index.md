@@ -357,6 +357,12 @@ flowchart TD
 
 Rather than a new background-loop primitive, push-style gateways reach the app's own live ColdBox scheduler singleton (`appScheduler@coldbox`; a project's own [`schedules/`](../schedules.md) are BoxLang schedulers and run separately) and register their own named task(s) into it dynamically - a recurring long-poll task for Telegram, for example. **One shared scheduler, every push-style gateway registering its own tasks into it** - never one scheduler per gateway, and never in conflict with a project's own schedules.
 
+### Chats the app has heard from
+
+Each message that reaches a push-style gateway also notes its chat (the gateway's name, the chat id, who wrote, and for Teams the `serviceUrl`) in the chat database. Only addresses are kept, never message text. This is how [routines](../routines.md#where-the-answer-goes) learn where they can write to a chat app later, since a bot cannot write to a chat that has never written to it.
+
+A reply to a command, and a reply when streaming is off, are sent under `data.text` as well as `data.content`. The chat apps read `text`, so before this a command reply could be dropped by Telegram.
+
 ### Logging
 
 Every push-style gateway writes to its own `gateway-<type>` log file (e.g. `gateway-telegram`) via BoxLang's `writeLog()`, rather than one shared/default app log - so an operator can tail exactly the platform they care about without noise from everything else the app logs.

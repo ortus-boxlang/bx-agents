@@ -1,0 +1,25 @@
+/**
+ * `backup` CLI verb: one zip of the chat database, the files and the skills in the data home.
+ *
+ *   bxAgents backup [--to=FILE]
+ *
+ * Without --to the zip goes in the home's backups/ folder. The volumes are not in it.
+ */
+import bxModules.bxagents.models.util.ByteSize;
+
+class {
+
+	/**
+	 * @options { projectRoot (required), to }
+	 */
+	struct function run( struct options = {} ) {
+		var root = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( root ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`backup` requires a project root" )
+		}
+		var home = new "models.data.ProjectData@bxagents"().of( root.reReplace( "[\/]+$", "" ) ).home
+		var made = new "models.data.DataBackup@bxagents"( home ).create( trim( arguments.options.to ?: "" ) )
+		return { exitCode : 0, message : "Backed up #made.entries# #made.entries == 1 ? 'file' : 'files'# (#ByteSize::format( made.bytes )#) to #made.file#" }
+	}
+
+}

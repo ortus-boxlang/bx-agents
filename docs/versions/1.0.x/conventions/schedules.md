@@ -26,6 +26,9 @@ class {
 
 The build copies each file into the app as `schedules/<Name>.bx`, lists them in `this.schedulers` of the [generated base `Application`](application-bx.md), and BoxLang starts them with the app and stops them with it. They run while the app is served (`bxAgents serve`).
 
+!!! note
+    A scheduler is for the developer. For prompts that the people who use the agent make for themselves, by asking it, see [routines](routines.md).
+
 !!! tip
     `bxAgents add schedule` writes one for you: say when it runs, what to tell the agent, and which agent. See [`add`](../cli-reference.md#add-schedule).
 

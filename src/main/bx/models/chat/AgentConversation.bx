@@ -19,11 +19,16 @@ class {
 	 */
 	function init( required any agent, string userId = "", any sessions, string conversationId = "", any connections ) {
 		variables.agent = arguments.agent
+		// the main agent, and the name of the sub-agent being talked to ( blank for the main agent ): see withAgent()
+		variables.rootAgent = arguments.agent
+		variables.selected = ""
 		variables.connectionMode = isNull( arguments.connections ) ? nullValue() : arguments.connections
 		variables.sessions = isNull( arguments.sessions ) ? nullValue() : arguments.sessions
 		variables.conversationId = len( arguments.conversationId ) ? arguments.conversationId : createUUID()
 		variables.userId = len( trim( arguments.userId ) ) ? trim( arguments.userId ) : Caller::localId()
 		variables.threadId = createUUID()
+		// the one place that changes a conversation's memory and its row in the list together
+		variables.conversations = isNull( variables.sessions ) ? nullValue() : new "models.api.Conversations@bxagents"( variables.agent, variables.sessions )
 		return this
 	}
 
@@ -54,6 +59,55 @@ class {
 
 	string function agentName() {
 		return variables.agent.getConfig().name
+	}
+
+	/**
+	 * @return The name of the sub-agent being talked to, blank for the main agent
+	 */
+	string function selectedAgent() {
+		return variables.selected
+	}
+
+	/**
+	 * @return Every agent that can be talked to: [ { name, parent, description, tools, skills, model } ], the main agent first
+	 */
+	array function agents() {
+		return new "models.api.AgentTree@bxagents"( variables.rootAgent ).nodes()
+	}
+
+	/**
+	 * Talks to a sub-agent directly, from here on: its own memory, its own conversations. The conversation in
+	 * hand stays with the agent it started with, so call newThread() or resumeSession() after switching.
+	 *
+	 * @name A name from agents(); blank or the main agent's name is the main agent
+	 *
+	 * @return This, or throws when the tree has no agent by that name
+	 */
+	any function withAgent( required string name ) {
+		var tree = new "models.api.AgentTree@bxagents"( variables.rootAgent )
+		var found = tree.find( arguments.name )
+		if ( isNull( found ) ) {
+			throw( type = "BxAgents.UnknownAgent", message = "There is no agent called [#trim( arguments.name )#]. Ask for one of: #tree.names().toList( ', ' )#" )
+		}
+		variables.agent = found
+		variables.selected = tree.isMain( arguments.name ) ? "" : trim( arguments.name )
+		variables.conversations = isNull( variables.sessions ) ? nullValue() : new "models.api.Conversations@bxagents"( variables.agent, variables.sessions )
+		return this
+	}
+
+	/**
+	 * Switches to another agent and starts a new conversation with it (a conversation belongs to the agent it started with).
+	 *
+	 * @return { ok, agent, id } or { ok : false, reason }
+	 */
+	struct function switchAgent( required string name ) {
+		try {
+			withAgent( arguments.name )
+		} catch ( "BxAgents.UnknownAgent" e ) {
+			return { ok : false, reason : e.message }
+		}
+		newThread()
+		return { ok : true, agent : agentName(), id : variables.conversationId }
 	}
 
 	string function modelName() {
@@ -192,6 +246,56 @@ class {
 	}
 
 	/**
+	 * @data An AppData: the data home and volumes of the app this agent was built from
+	 *
+	 * @return This conversation, now able to say what the agent may reach
+	 */
+	function withData( required any data ) {
+		variables.data = arguments.data
+		return this
+	}
+
+	/**
+	 * @return The volumes the agent's file tools may use, as [ { name, mode, description } ] and never a folder on the machine; empty when this conversation does not know them
+	 */
+	array function volumes() {
+		return isNull( variables.data ) ? [] : variables.data.listing()
+	}
+
+	/**
+	 * @routines A BoundRoutines or RemoteRoutines: this conversation's owner's routines
+	 *
+	 * @return This conversation, now able to run the /routines commands
+	 */
+	function withRoutines( required any routines ) {
+		variables.boundRoutines = arguments.routines
+		return this
+	}
+
+	/**
+	 * @return The routines of this conversation's owner (list, get, run, pause, resume, delete, reports, report, each answering an Outcome), or null when routines are off or this conversation cannot reach them
+	 */
+	any function routines() {
+		return variables.boundRoutines ?: nullValue()
+	}
+
+	/**
+	 * @return The skills the agent can load, as [ { name, description, origin } ] and never a folder on the machine
+	 */
+	array function skills() {
+		return new "models.skills.SkillLibrary@bxagents"( isNull( variables.data ) ? "" : variables.data.home() ).listing()
+	}
+
+	/**
+	 * @name A skill's name
+	 *
+	 * @return { name, description, origin, size, savedAt, body, truncated }, or an empty struct when the agent has no such skill
+	 */
+	struct function skillText( required string name ) {
+		return new "models.skills.SkillLibrary@bxagents"( isNull( variables.data ) ? "" : variables.data.home() ).read( arguments.name )
+	}
+
+	/**
 	 * @return The names of the tools the agent has
 	 */
 	array function tools() {
@@ -250,10 +354,18 @@ class {
 	}
 
 	/**
-	 * @return The user's recent conversations, most recent first: [ { id, title, messageCount, updatedAt } ]
+	 * @filters { q? (title contains), agent?, source?, since?, before?, offset? }, all optional
+	 *
+	 * @return The user's recent conversations, most recent first: [ { id, title, messageCount, agent, updatedAt } ]
 	 */
-	array function sessions( numeric limit = 20 ) {
-		return keepsSessions() ? variables.sessions.list( variables.userId, arguments.limit ) : []
+	array function sessions( numeric limit = 20, struct filters = {} ) {
+		if ( !keepsSessions() ) {
+			return []
+		}
+		var asked = duplicate( arguments.filters )
+		asked[ "limit" ] = arguments.limit
+		asked[ "mainAgent" ] = variables.rootAgent.getAgentName() ?: ""
+		return variables.sessions.search( variables.userId, asked ).rows
 	}
 
 	/**
@@ -270,6 +382,10 @@ class {
 		var found = len( trim( arguments.reference ) ) ? variables.sessions.resolve( variables.userId, arguments.reference ) : variables.sessions.latest( variables.userId )
 		if ( found.isEmpty() ) {
 			return { ok : false, reason : len( trim( arguments.reference ) ) ? "There is no conversation [#arguments.reference#]. Type /sessions to see them." : "There are no earlier conversations." }
+		}
+		// a conversation belongs to the agent it started with: carry on with that one
+		if ( ( found.agent ?: "" ) != variables.selected ) {
+			withAgent( found.agent ?: "" )
 		}
 		variables.conversationId = found.id
 		variables.threadId = createUUID()
@@ -330,7 +446,8 @@ class {
 		var shown = len( trim( arguments.title ) ) ? arguments.title : "Fork of " & ( len( conversationTitle() ) ? conversationTitle() : "a conversation" )
 		var named = variables.sessions.titleOf( shown )
 		var count = variables.agent.getMemoryMessages( variables.userId, forkId ).len()
-		variables.sessions.touch( variables.userId, forkId, named, count )
+		// the copy belongs to the same agent as the conversation it was copied from
+		variables.sessions.touch( variables.userId, forkId, named, count, "", variables.sessions.byId( variables.userId, variables.conversationId ).agent ?: "" )
 		variables.conversationId = forkId
 		variables.threadId = createUUID()
 		return { ok : true, id : forkId, title : named, messages : count }
@@ -386,7 +503,7 @@ class {
 		var shown = len( trim( arguments.title ) ) ? arguments.title : ( len( arguments.data.title ?: "" ) ? arguments.data.title : "Imported conversation" )
 		var named = variables.sessions.titleOf( shown )
 		var count = variables.agent.getMemoryMessages( variables.userId, newId ).len()
-		variables.sessions.touch( variables.userId, newId, named, count )
+		variables.sessions.touch( variables.userId, newId, named, count, "", variables.selected )
 		variables.conversationId = newId
 		variables.threadId = createUUID()
 		return { ok : true, id : newId, title : named, messages : count }
@@ -403,34 +520,77 @@ class {
 	 * Forgets this conversation's messages (the agent's memory of it) and keeps the conversation.
 	 */
 	struct function clear() {
-		variables.agent.getMemories().each( ( memory ) => memory.clear( variables.userId, variables.conversationId ) )
-		if ( keepsSessions() ) {
-			variables.sessions.resetCount( variables.userId, variables.conversationId )
+		// the memory and the count in the list change together, in Conversations; a chat that has no row in the
+		// list yet (nothing was said) only has its memory to forget
+		if ( !keepsSessions() || !variables.conversations.clear( asCaller(), variables.conversationId ).succeeded() ) {
+			variables.agent.getMemories().each( ( memory ) => memory.clear( variables.userId, variables.conversationId ) )
 		}
 		return { ok : true }
 	}
 
 	/**
-	 * @return True when the agent's memory has a summary model, so compacting does something; without one the button would only look broken
+	 * This conversation's owner as the Caller that Conversations works with.
 	 */
-	boolean function canCompact() {
-		return variables.agent.getMemories().some( ( memory ) => len( memory.getSummaryProvider() ?: "" ) && len( memory.getSummaryModel() ?: "" ) )
+	private any function asCaller() {
+		return new "models.api.Caller@bxagents"( id = variables.userId, name = variables.userId, scope = "chat", source = "terminal" )
 	}
 
 	/**
-	 * Replaces the older messages with a summary and keeps the most recent few.
+	 * The model that summarizes when a memory has none of its own: the agent's own. Only the provider and the model's
+	 * name are taken, so the summary is a plain call of its own, without the agent's tools or instructions.
 	 *
-	 * @return { available, compacted, before, after }; available is false when the agent's memory has no summary model
+	 * @return { provider, model } of the agent's model, or an empty struct when the agent does not say
+	 */
+	struct function compactModel() {
+		var model = variables.agent.getConfig().model ?: {}
+		if ( !isStruct( model ) ) {
+			return {}
+		}
+		var id = ( model.params ?: {} ).model ?: ""
+		return ( len( model.provider ?: "" ) && len( id ) ) ? { provider : model.provider, model : id } : {}
+	}
+
+	/**
+	 * @return True when compacting can do something: a memory has a summary model of its own, or the agent has a model of its own to summarize with
+	 */
+	boolean function canCompact() {
+		return !compactModel().isEmpty() || variables.agent.getMemories().some( ( memory ) => len( memory.getSummaryProvider() ?: "" ) && len( memory.getSummaryModel() ?: "" ) )
+	}
+
+	/**
+	 * Replaces the older messages with a summary and keeps the most recent few. A memory with a summary model of its
+	 * own uses it; any other is summarized by the agent's own model, so `/compact` works with nothing set up.
+	 *
+	 * @return { available, compacted, before, after, model }; available is false when there is no model at all to summarize with, model says which one was used (provider/model, blank when the memory used its own)
 	 */
 	struct function compact() {
 		var summarizes = canCompact()
 		var before = variables.agent.getMemoryMessages( variables.userId, variables.conversationId ).len()
 		if ( !summarizes ) {
-			return { available : false, compacted : false, before : before, after : before }
+			return { available : false, compacted : false, before : before, after : before, model : "" }
 		}
-		variables.agent.getMemories().each( ( memory ) => memory.summarize( {}, variables.userId, variables.conversationId ) )
+		var fallback = compactModel()
+		var usedFallback = false
+		for ( var memory in variables.agent.getMemories() ) {
+			var own = len( memory.getSummaryProvider() ?: "" ) && len( memory.getSummaryModel() ?: "" )
+			if ( own ) {
+				memory.summarize( {}, variables.userId, variables.conversationId )
+			} else if ( !fallback.isEmpty() ) {
+				memory.summarize( fallback, variables.userId, variables.conversationId )
+				usedFallback = true
+			}
+		}
 		var after = variables.agent.getMemoryMessages( variables.userId, variables.conversationId ).len()
-		return { available : true, compacted : after < before, before : before, after : after }
+		if ( keepsSessions() ) {
+			variables.conversations.refreshCount( asCaller(), variables.conversationId )
+		}
+		return {
+			available : true,
+			compacted : after < before,
+			before    : before,
+			after     : after,
+			model     : usedFallback ? fallback.provider & "/" & fallback.model : ""
+		}
 	}
 
 	/**

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Web page revamp
+
+- A left menu (Main and Admin groups, folds to icons, a drawer on a phone, a skip link) and a hash router in the one generated page. Pages: Conversations (paged, filtered), Routines (member and admin views), Registry (tools grouped, skills with a reader, volumes), Memory (notes, global agent notes, conversation memory with clear), Vault, Settings, and for admins Gateways, Logs, Access (tokens, people). The sidebar shows 25 conversations with Show more and a quick filter. Talk to picker for sub-agents. The Settings menu keeps every item.
+
 The first public release of BxAgents - a conventions-based framework for building AI
 agents in BoxLang, powered by [BoxLang AI](https://boxlang.ortusbooks.com/boxlang-+-++/modules/bx-ai)
 and built on [ColdBox](https://coldbox.ortusbooks.com).
@@ -18,6 +22,127 @@ real, runnable ColdBox application from them **at build time**, ready to serve, 
 or package as a portable `.bxa`.
 
 ### Added
+
+#### Routines
+
+- **Routines: prompts the agent runs on a schedule, made by asking it.** Turn them on with `routines.enabled: true`
+  in `Agent.yaml`; they are off by default. A person says "every weekday at 9, check the build", the agent
+  makes a routine and the person approves it. Routines are kept in the chat database per person and run as
+  the person who made them, in a conversation of their own, with the same notes, volumes and approvals as in
+  chat. They are not `schedules/*.bx` schedulers, which stay the developer's.
+- **One heartbeat runs them.** A scheduler the build adds ticks every minute, starts what is due (`maxParallel`
+  at a time), never overlaps a routine with itself, pauses a routine after three failures in a row, and runs
+  a missed routine once after downtime. A run that needs an approval waits for it, and after
+  `approvalTimeout` is cancelled and counts as a failure.
+- **Schedules** are a 5 field cron expression or `every 30m`, read in `routines.timezone`. The tools answer
+  with the English reading and the next run time.
+- **Settings:** `maxPerUser`, `minInterval`, `maxParallel`, `maxPromptLength`, `approvalTimeout` and
+  `timezone`, all checked at build time and by `doctor`.
+- `capabilities.routines` in the agent info says whether routines are on. A routine's conversation is listed
+  for its owner with source `routine`, and `routines.log` and `heartbeat.log` record what happens.
+
+#### Routines: commands, terminal, API and web page
+
+- **`/routines` and `/routine <name> [run|pause|resume|delete confirm|reports|report <file>]`** in the terminal chat and the
+  web page (not on chat apps yet, where the agent's `routine_*` tools do the work). Deleting needs `confirm`, and no command removes a
+  report.
+- **`bxAgents routines`** (`list`, `show`, `add`, `edit`, `pause`, `resume`, `run`, `delete`, `reports`, `report`, `clean`) as
+  the local operator; `--all` lists every owner's. `delete` and `clean` need `--yes`, and `clean` shows what it
+  would remove without it. Completions for bash, fish and PowerShell are regenerated.
+- **Routes** `/routines`, `/routines/get`, `/routines/update`, `/routines/pause`, `/routines/resume`, `/routines/run`,
+  `/routines/delete`, `/routines/reports`, `/routines/report`, `/routines/reports/delete` and `/routines/reports/clean`
+  (a dry run unless `apply`), with `AgentApiClient` methods, the OpenAPI document and `capabilities.admin`. An admin may
+  pick a chat app as a routine's destination through them.
+- **A Routines panel in the web page** to list, make, edit, run, pause, resume and delete routines, read and delete their
+  reports, and clean up old ones, with a confirmation before anything is removed.
+- **Fixed:** a bad `tail` on `GET /logs` answered `500`; it answers `400`.
+
+#### Routines: delivery and reports
+
+- **A routine's answer can go to a chat app.** Each routine has a destination: its own conversation, or a chat on a
+  chat app such as Telegram. If a routine is made from a chat app, its answer goes back to that chat. The chat app
+  gets a summary (`routines.summaryLength`) and a line naming the reports saved. Chat apps belong to the person who
+  runs the agent, so only they can pick another chat, and they name it when the chat app has talked to more than
+  one. A message that cannot be sent counts as a failed run.
+- **Reports.** A running routine can save files with `report_save` into `<data home>/routines/<name>-<id>/`. They are
+  never overwritten and never deleted automatically, they are in `bxAgents backup`, and `report_list` and
+  `report_read` give them back. `routines.maxReportSize` and `routines.maxReportFiles` set the limits.
+- **The app remembers the chats a chat app has talked to** (the chat id, who wrote and, for Teams, the `serviceUrl`;
+  never message text), so a routine can write to one later.
+- **Fixed: command replies to Telegram.** The gateway session sent its replies under `data.content`, and the chat apps
+  read `data.text`, so Telegram dropped them. It sends both now.
+
+#### Tool names
+
+- **Every tool BX Agents gives an agent is named `{type}_{action}`**, so tool permissions can match them by
+  pattern later (`routine_*`, `*_delete`). `saveSkill` is now `skill_save`, and `remember` and `forget` are
+  `note_remember` and `note_forget`. The vault tools were already `vault_list` and `vault_request`, and the new
+  ones are `routine_schedule`, `routine_list`, `routine_update`, `routine_pause`, `routine_resume`,
+  `routine_run` and `routine_delete`. The slash commands (`/remember` and the rest) are unchanged. A rule in the
+  code and a spec keep new tools in line.
+
+#### Logs
+
+- **The agent keeps logs in its data home.** `logs/` holds one file per area: `agent.log`, `gateways.log`,
+  `routines.log`, `heartbeat.log` and `api.log`. They are written with BoxLang's own logging, so BoxLang
+  rolls and removes them (100 MB a file, 90 days, 5 GB in all by default) and BX Agents adds no settings
+  for it. Every chat app now writes to the one `gateways.log` with its name on each line, instead of a
+  file of its own in BoxLang's folder, and a gateway that cannot start says why. Failed turns go to
+  `agent.log` and refused API calls to `api.log`. No message from a person, and no token, password or key,
+  is ever written: lines are cleaned of the usual shapes of a secret.
+- **`bxAgents logs`** lists the logs and shows the last lines of one, with `--tail`, `--level`, `--grep`
+  and `--json`.
+- **`GET /logs` and `GET /gateways`** (admin) give the logs and the state of each chat app: connected,
+  stopped, failing or not registered, which credentials are set (names only), when it last had a
+  conversation and its last error. The client has `logs()` and `gateways()`.
+- **Logs and Chat apps in the web page.** For an admin, the Settings menu has a Logs panel (a tab per log,
+  level filter, search, refresh) and a Chat apps panel, and a red count on the Settings button says errors
+  were logged since the app started.
+
+#### Skills
+
+- **The agent can save skills of its own.** The root agent gets a `saveSkill( name, description, content )`
+  tool: after a task that took real steps and is likely to come up again, it writes a skill to
+  `skills/` in the data home and has it in its skill list at once, with no restart. The skills it saved
+  are loaded again when the app starts. Each save is approved by a person unless `skills.autoApprove` is
+  true, and `skills.agentCanSave: false` takes the tool away. The agent cannot take the name of an
+  installed skill or one that ships with it, or replace it. Backups carry the saved skills.
+- **Three levels of skills.** Installed from the registry (`.agents/skills/`), shipped with the agent
+  (`skills/`) and the agent's own (the data home). The build lists the installed ones in the app's
+  `skills/.installed.json`, so the app can tell the first two apart. A skill linked into `.agents/skills` from a
+  global skills folder (as skills tools do) is followed, and the app gets a copy of what the link points at.
+- **`/skills` and `GET /skills`** list every skill with its description and level (`installed`, `project`
+  or `agent`), never a folder on the machine. The client has `skills()`.
+
+#### Memory
+
+- **Every agent remembers in the chat database by default.** With no `memory:` in `Agent.yaml`, the root
+  agent and each subagent keep their conversations as jdbc memory in `chat.db`, one row per person and
+  conversation under the agent's own name. The same person finds the same conversation from the
+  terminal, the web page and the API, and a subagent that a parent delegates to keeps its own rows
+  for the same person and conversation. `maxMessages` (20 to 100000, default 500) and `keepRecent`
+  (default 20) tune it. A `memory:` that names a `type` is built exactly as written.
+- **`/compact` works with nothing set up.** A memory with no summary model is summarized by the agent's
+  own model, and the answer says which one. `/context` shows how many of the messages its memory keeps
+  a conversation has, with a warning near the limit, and the status line adds `msgs 460/500` there.
+- **The message count in the conversation list is what memory holds.** It is set whenever memory changes
+  (after a turn, `/clear`, `/compact`), never added to, so it cannot pass the limit or go stale.
+  `Conversations` is the one place that changes a conversation's row and its memory together: `clear`,
+  `delete` and `refreshCount`.
+
+#### Data home and volumes
+
+- One **data home** holds everything an agent keeps (`chat.db`, `files/`, `skills/`, `backups/`).
+  There is always one, by convention: `~/.bxagents/<agent name>`, outside the project and the
+  build. `BXAGENTS_HOME` or `data.home` in `Agent.yaml` choose another, and a project that already
+  has `data/chat.db` keeps using it.
+- **Volumes**: `volumes:` in `Agent.yaml` names host folders, read only or read and write. The file
+  tools take `volume:path`, refuse full paths, `..` and symbolic links that leave a volume, and
+  name volumes in results and errors.
+- **Admins and members.** Every web account has an `admin` flag: `admin: true` on a `users` entry seeds it, the database keeps it from then on, and an admin changes it with `POST /users/admin`, `GET /users` and `bxAgents users list|admin|member`. The last admin cannot be demoted. The signed-in caller now has the admin scope when the account is one, and the API contract marks each route `anyone` or `admin`; the admin routes (`/tokens`, `/data`, `/users`) are refused for a member before their action runs.
+- `/volumes` in chat (terminal, web page, chat apps), `GET /volumes` and an admin-only `GET /data` on the agent API, `volumes()` and `data()` on `AgentApiClient`, and a data home check in `doctor`.
+- `bxAgents data`, `bxAgents backup` and `bxAgents restore`. A backup is one zip; the database is
+  copied with `VACUUM INTO`; a restore keeps what was there as `.before-restore`.
 
 #### Markdown and syntax highlighting
 

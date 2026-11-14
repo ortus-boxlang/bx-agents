@@ -15,6 +15,7 @@
  * A request is { input, conversationId?, threadId?, params?, options?, attachments?, images? }.
  */
 import bxModules.bxagents.models.api.Outcome;
+import bxModules.bxagents.models.logs.Logger;
 
 import bxModules.bxagents.models.api.RunOwners;
 
@@ -24,11 +25,17 @@ class {
 	 * @agent The built agent (a bx-ai AiAgent)
 	 * @sessions A SessionStore, or null when the app keeps no conversation list
 	 * @offered An OfferedProfiles: which profiles a request may ask for; null allows none beyond the default
+	 * @agentName The name the turns are for when `agent` is a sub-agent that is talked to directly; blank for the main agent. A conversation belongs to the agent it started with.
+	 * @mainName The main agent's name, for the words of a refusal
 	 */
-	function init( required any agent, any sessions, any offered ) {
+	function init( required any agent, any sessions, any offered, string agentName = "", string mainName = "" ) {
 		variables.agent = arguments.agent
+		variables.agentName = arguments.agentName
+		variables.mainName = arguments.mainName
 		variables.sessions = arguments.sessions ?: nullValue()
 		variables.offered = arguments.offered ?: nullValue()
+		// the list's message count is refreshed from memory when a turn ends (see prepareTurn)
+		variables.conversations = isNull( variables.sessions ) ? nullValue() : new Conversations( variables.agent, variables.sessions )
 		return this
 	}
 
@@ -83,6 +90,12 @@ class {
 			input = built.input
 		}
 
+		// a conversation belongs to the agent it started with
+		var owner = belongsTo( arguments.caller, conversationId )
+		if ( len( owner ) && owner != ( len( variables.agentName ) ? variables.agentName : variables.mainName ) ) {
+			return Outcome::failed( "conflict", "This conversation belongs to #owner#" )
+		}
+
 		// only a turn that will run is noted in the list
 		if ( len( conversationId ) ) {
 			noteTurn( arguments.caller, conversationId, arguments.request.input ?: "" )
@@ -90,11 +103,37 @@ class {
 
 		var thisAgent = variables.agent
 		var params = arguments.request.params ?: {}
+		var tally = isNull( variables.conversations ) ? nullValue() : variables.conversations
+		var theCaller = arguments.caller
+		var theConversation = conversationId
+		// when the turn ends, however it ends, the list's count becomes what memory holds. A list that cannot be
+		// written must not fail the turn.
+		var settle = () => {
+			if ( !isNull( tally ) && len( theConversation ) ) {
+				try {
+					tally.refreshCount( theCaller, theConversation )
+				} catch ( any e ) {
+					// the turn is over; the count is corrected by the next one
+				}
+			}
+		}
 		return Outcome::done( {
 			threadId : threadId,
 			owner    : arguments.caller.id(),
-			work     : ( onChunk ) => thisAgent.stream( onChunk, input, params, options ),
-			run      : () => thisAgent.run( input, params, options )
+			work     : ( onChunk ) => {
+				try {
+					return thisAgent.stream( onChunk, input, params, options )
+				} finally {
+					settle()
+				}
+			},
+			run      : () => {
+				try {
+					return thisAgent.run( input, params, options )
+				} finally {
+					settle()
+				}
+			}
 		} )
 	}
 
@@ -176,6 +215,7 @@ class {
 		try {
 			return Outcome::done( { output : turn.run(), threadId : turn.threadId } )
 		} catch ( any e ) {
+			Logger::log( "agent", "error", "A turn failed (from #arguments.caller.source()#): #e.message#" )
 			return Outcome::failed( "internal", e.message )
 		} finally {
 			if ( recorded ) {
@@ -269,6 +309,7 @@ class {
 				send( "done", "[DONE]" )
 			}
 		} catch ( any e ) {
+			Logger::log( "agent", "error", "A streamed turn failed: #e.message#" )
 			if ( open() ) {
 				send( "error", { "message" : e.message } )
 			}
@@ -367,12 +408,27 @@ class {
 	}
 
 	/**
-	 * Notes the turn in the conversation list. A list that cannot be written must not stop the turn.
+	 * @return The name of the agent a conversation belongs to, or blank when it has no row yet or the list cannot be read (a list that cannot be read must not stop the turn)
+	 */
+	private string function belongsTo( required any caller, required string conversationId ) {
+		if ( !len( arguments.conversationId ) || isNull( variables.sessions ) ) {
+			return ""
+		}
+		try {
+			var existing = variables.sessions.byId( arguments.caller.id(), arguments.conversationId )
+			return existing.isEmpty() ? "" : ( len( existing.agent ?: "" ) ? existing.agent : variables.mainName )
+		} catch ( any e ) {
+			return ""
+		}
+	}
+
+	/**
+	 * Notes the turn in the conversation list: the row exists, has its title and its time is now. The count is not touched here, it is set from memory when the turn ends. A list that cannot be written must not stop the turn.
 	 */
 	private void function noteTurn( required any caller, required string conversationId, required string input ) {
 		try {
 			if ( !isNull( variables.sessions ) ) {
-				variables.sessions.touch( arguments.caller.id(), arguments.conversationId, arguments.input, 2, arguments.caller.source() )
+				variables.sessions.touch( arguments.caller.id(), arguments.conversationId, arguments.input, 0, arguments.caller.source(), variables.agentName )
 			}
 		} catch ( any e ) {
 			// the turn goes on without a list

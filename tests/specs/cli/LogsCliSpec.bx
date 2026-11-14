@@ -1,0 +1,87 @@
+import bxModules.bxagents.models.logs.Logger;
+
+/**
+ * `bxAgents logs`: which logs there are, and the last lines of one.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Logs", function() {
+
+			beforeEach( function() {
+				variables.dir = replace( createTempDirectory( prefix = "bxagents-logscli-" ), "\", "/", "all" );
+				variables.savedHome = createObject( "java", "java.lang.System" ).getProperty( "BXAGENTS_HOME" ) ?: "";
+				createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_HOME", dir & "/home" );
+				Logger::reset();
+				Logger::use( dir & "/home/logs" );
+			} );
+
+			afterEach( function() {
+				Logger::reset();
+				if ( len( savedHome ) ) {
+					createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_HOME", savedHome );
+				} else {
+					createObject( "java", "java.lang.System" ).clearProperty( "BXAGENTS_HOME" );
+				}
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function logs( struct options = {} ) {
+				var all = { projectRoot : dir };
+				all.append( arguments.options );
+				return new bxagents.models.cli.Logs().run( all );
+			}
+
+			it( "says there are no logs yet", function() {
+				var out = logs();
+
+				expect( out.exitCode ).toBe( 0 );
+				expect( out.message ).toInclude( "No logs yet" );
+			} );
+
+			it( "lists the logs with their size", function() {
+				Logger::log( "gateways", "info", "Connected", "telegram" );
+				sleep( 200 );
+
+				var out = logs();
+
+				expect( out.message ).toInclude( "gateways" );
+				expect( out.message ).toInclude( "bxAgents logs <area>" );
+				expect( jsonDeserialize( logs( { json : true } ).message ).logs[ 1 ].area ).toBe( "gateways" );
+			} );
+
+			it( "shows the last lines of one log, with its level and subject", function() {
+				Logger::log( "gateways", "error", "Rate limited", "slack" );
+				sleep( 200 );
+
+				var out = logs( { _positional : [ "gateways" ] } );
+
+				expect( out.exitCode ).toBe( 0 );
+				expect( out.message ).toInclude( "ERROR" );
+				expect( out.message ).toInclude( "[slack] Rate limited" );
+			} );
+
+			it( "filters by level and by word", function() {
+				Logger::log( "api", "info", "fine" );
+				Logger::log( "api", "warn", "Refused a call" );
+				sleep( 200 );
+
+				expect( logs( { _positional : "api", level : "warn" } ).message ).notToInclude( "fine" );
+				expect( logs( { _positional : "api", grep : "refused" } ).message ).toInclude( "Refused a call" );
+				expect( logs( { _positional : "api", grep : "nothing like this" } ).message ).toInclude( "that match" );
+			} );
+
+			it( "refuses an area that does not exist, and a bad --tail", function() {
+				var unknown = logs( { _positional : [ "chat" ] } );
+				expect( unknown.exitCode ).toBe( 1 );
+				expect( unknown.message ).toInclude( "gateways" );
+
+				expect( logs( { _positional : [ "api" ], tail : "lots" } ).exitCode ).toBe( 1 );
+			} );
+
+		} );
+	}
+
+}

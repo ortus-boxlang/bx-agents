@@ -1,0 +1,32 @@
+/**
+ * The heartbeat of routines: a scheduler the build adds to the app when `routines.enabled` is true. Once a minute it asks
+ * the Routines service what is due and starts it (see models/routines/Heartbeat). It is registered through
+ * `this.schedulers` like every schedules/*.bx, so it starts and stops with the app.
+ *
+ * Everything is reached when a beat fires, never in configure(), so the app may finish booting first.
+ */
+class extends="bxagents.Scheduler" {
+
+	function configure() {
+		var me = this
+		task( "bxagents-routines-heartbeat" )
+			.every( 1, "minutes" )
+			.withNoOverlaps()
+			.call( () => me.beat() )
+	}
+
+	/**
+	 * One beat. Quiet when the app is not ready yet.
+	 */
+	function beat() {
+		if ( !application.keyExists( "cbController" ) ) {
+			return
+		}
+		if ( !variables.keyExists( "heartbeat" ) ) {
+			variables.heartbeat = new "models.routines.RoutineWiring@bxagents"().heartbeat( defaultAgent(), jsonDeserialize( "__ROUTINES__" ) )
+			variables.heartbeat.start()
+		}
+		variables.heartbeat.tick()
+	}
+
+}

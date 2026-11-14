@@ -1,0 +1,130 @@
+/**
+ * The report_* tools: save files for the routine that is running, list and read a person's own routines' files, and delete
+ * nothing.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "routines.ReportTools", function() {
+
+			beforeEach( function() {
+				variables.dir = replace( createTempDirectory( prefix = "bxagents-reporttools-" ), "\", "/", "all" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.clockNow = createObject( "java", "java.time.Instant" ).parse( "2026-11-09T08:00:00Z" ).toEpochMilli();
+				variables.settings = bxModules.bxagents.models.routines.RoutineSettings::resolve( { enabled : true, timezone : "UTC", maxReportSize : "1kb" } );
+				variables.routines = new bxModules.bxagents.models.routines.Routines( store, settings, () => clockNow );
+				variables.home = new bxModules.bxagents.models.data.DataHome( projectRoot = dir, configured = dir & "/home", environment = {} );
+				variables.results = new bxModules.bxagents.models.routines.RoutineResults( home, settings );
+				variables.tools = new bxModules.bxagents.models.routines.ReportTools( () => routines, () => results ).tools();
+				variables.ada = new bxModules.bxagents.models.api.Caller( id = "ada" );
+				routines.create( ada, "check-build", "every 10m", "Check." );
+				variables.row = routines.get( ada, "check-build" ).data().routine;
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function toolNamed( name ) {
+				return tools.filter( t => t.getName() == name )[ 1 ];
+			}
+
+			function requestFor( userId = "ada", threadId = "t-chat" ) {
+				return new bxModules.bxai.models.requests.AiChatRequest( new bxModules.bxai.models.runnables.AiMessage(), {}, { userId : userId, threadId : threadId } );
+			}
+
+			function call( name, args = {}, userId = "ada", threadId = "t-chat" ) {
+				return jsonDeserialize( toolNamed( name ).invoke( args, requestFor( userId, threadId ) ) );
+			}
+
+			function startRun( thread = "run-1" ) {
+				routines.claim( row.id, thread );
+				return thread;
+			}
+
+			it( "are three, named {type}_{action}, and none of them deletes", function() {
+				expect( tools.map( t => t.getName() ).sort( "text" ) ).toBe( [ "report_list", "report_read", "report_save" ] );
+				for ( var name in tools.map( t => t.getName() ) ) {
+					expect( bxModules.bxagents.models.util.ToolNames::valid( name ) ).toBeTrue();
+				}
+			} );
+
+			it( "saves a report for the routine that is running", function() {
+				var run = startRun();
+				var answer = call( "report_save", { file : "report.md", content : "All green." }, "ada", run );
+
+				expect( answer ).toBe( { ok : true, file : "report.md" } );
+				expect( fileRead( results.folderOf( row ) & "/report.md" ) ).toBe( "All green." );
+			} );
+
+			it( "refuses to save outside a routine's run, saying why", function() {
+				var answer = call( "report_save", { file : "report.md", content : "x" } );
+				expect( answer.ok ).toBeFalse();
+				expect( answer.reason ).toInclude( "not a routine's run" );
+				expect( directoryExists( dir & "/home/routines" ) ).toBeFalse();
+			} );
+
+			it( "passes on why a report was refused", function() {
+				var run = startRun();
+				expect( call( "report_save", { file : "run.sh", content : "x" }, "ada", run ).reason ).toInclude( "must end in" );
+				expect( call( "report_save", { file : "big.md", content : repeatString( "x", 2000 ) }, "ada", run ).reason ).toInclude( "most allowed" );
+			} );
+
+			it( "never overwrites: a second report of the same name is saved beside the first", function() {
+				var run = startRun();
+				call( "report_save", { file : "report.md", content : "one" }, "ada", run );
+				expect( call( "report_save", { file : "report.md", content : "two" }, "ada", run ).file ).toBe( "report-2.md" );
+			} );
+
+			it( "lists and reads the person's own routine's files by name", function() {
+				var run = startRun();
+				call( "report_save", { file : "report.md", content : "All green." }, "ada", run );
+
+				var listed = call( "report_list", { name : "check-build" } );
+				expect( listed.ok ).toBeTrue();
+				expect( listed.reports.map( r => r.file ) ).toBe( [ "report.md" ] );
+				expect( call( "report_read", { file : "report.md", name : "check-build" } ).text ).toBe( "All green." );
+			} );
+
+			it( "inside a run, a blank name means the run's own routine; in a chat it must be named", function() {
+				var run = startRun();
+				call( "report_save", { file : "report.md", content : "x" }, "ada", run );
+				expect( call( "report_list", {}, "ada", run ).reports ).toHaveLength( 1 );
+				expect( call( "report_list" ).reason ).toInclude( "Say which routine" );
+			} );
+
+			it( "will not show someone else's routine's files", function() {
+				var run = startRun();
+				call( "report_save", { file : "report.md", content : "x" }, "ada", run );
+				var answer = call( "report_list", { name : "check-build" }, "bob" );
+				expect( answer.ok ).toBeFalse();
+				expect( answer.reason ).toInclude( "no routine named" );
+			} );
+
+			it( "tells the answer sent to a chat app about the files saved in the same run", function() {
+				var fakeTurns = {
+					run     : ( who, req ) => {
+						call( "report_save", { file : "report.md", content : "x" }, "ada", req.threadId );
+						return bxModules.bxagents.models.api.Outcome::done( { output : "done", threadId : req.threadId } );
+					},
+					pending : ( who, threadId ) => bxModules.bxagents.models.api.Outcome::done( { pending : false } ),
+					cancel  : ( who, threadId, reason = "" ) => bxModules.bxagents.models.api.Outcome::done( {} )
+				};
+				var told = [];
+				var fakeNotifier = { deliver : ( r, text, files ) => { told.append( { text : text, files : files } ); return { ok : true }; } };
+				var runner = new bxModules.bxagents.models.routines.RoutineRunner( routines = routines, turns = fakeTurns, settings = settings, clock = () => clockNow, notifier = fakeNotifier );
+				clockNow += 10 * 60000;
+
+				runner.run( routines.due()[ 1 ] );
+
+				expect( told ).toHaveLength( 1 );
+				expect( told[ 1 ].files ).toBe( [ "report.md" ] );
+				expect( told[ 1 ].text ).toBe( "done" );
+			} );
+
+		} );
+	}
+
+}

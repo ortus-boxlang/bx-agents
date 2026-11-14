@@ -1,0 +1,162 @@
+/**
+ * A conversation lives in two places: its row in the list and the messages in the agent's memory. The count in the
+ * list is whatever the memory holds, set whenever memory changes, and clearing and deleting change both together.
+ * These run a real agent on the default jdbc memory.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.Conversations with the agent's memory", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-conv-memory-" );
+				variables.file = replace( dir, "\", "/", "all" ) & "/chat.db";
+				variables.savedDb = createObject( "java", "java.lang.System" ).getProperty( "BXAGENTS_DB" ) ?: "";
+				createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", file );
+				variables.wiring = new bxagents.models.memory.MemoryWiring();
+				variables.sessions = new bxagents.models.store.SessionStore( bxagents.models.store.ChatStore::forFile( file ) );
+				variables.ada = new bxagents.models.api.Caller( id = "ada", source = "web" );
+				variables.bob = new bxagents.models.api.Caller( id = "bob", source = "web" );
+			} );
+
+			afterEach( function() {
+				if ( len( savedDb ) ) {
+					createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", savedDb );
+				} else {
+					createObject( "java", "java.lang.System" ).clearProperty( "BXAGENTS_DB" );
+				}
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			/** An agent on the default memory that answers "ok" to anything, with the given limit */
+			function agentWith( numeric maxMessages = 500 ) {
+				return aiAgent(
+					name   : "keeper",
+					model  : aiModel( provider : "mock", options : { providerOptions : { responses : [ "ok" ] } } ),
+					memory : wiring.memory( "keeper", { maxMessages : arguments.maxMessages } )
+				);
+			}
+
+			function countOf( required string id ) {
+				return sessions.byId( "ada", arguments.id ).messageCount;
+			}
+
+			function heldBy( required any agent, required string id, string user = "ada" ) {
+				return arguments.agent.getMemoryMessages( arguments.user, arguments.id ).len();
+			}
+
+			it( "counts what memory holds after a turn, not a running total", function() {
+				var agent = agentWith();
+				var runner = new bxagents.models.api.TurnRunner( agent, sessions );
+				var conversations = runner.run( ada, { input : "hello", conversationId : "c1" } );
+
+				expect( conversations.succeeded() ).toBeTrue();
+				expect( heldBy( agent, "c1" ) ).toBe( 2 );
+				expect( countOf( "c1" ) ).toBe( 2 );
+			} );
+
+			it( "never counts more than the memory keeps", function() {
+				var agent = agentWith( 20 );
+				var runner = new bxagents.models.api.TurnRunner( agent, sessions );
+				for ( var turn = 1; turn <= 15; turn++ ) {
+					runner.run( ada, { input : "message #turn#", conversationId : "long" } );
+				}
+
+				// 15 turns are 30 messages, the memory keeps 20, and the list says the same
+				expect( heldBy( agent, "long" ) ).toBe( 20 );
+				expect( countOf( "long" ) ).toBe( 20 );
+			} );
+
+			it( "keeps one conversation's count apart from another's", function() {
+				var agent = agentWith();
+				var runner = new bxagents.models.api.TurnRunner( agent, sessions );
+				runner.run( ada, { input : "one", conversationId : "a1" } );
+				runner.run( ada, { input : "two", conversationId : "a2" } );
+				runner.run( ada, { input : "three", conversationId : "a2" } );
+
+				expect( countOf( "a1" ) ).toBe( 2 );
+				expect( countOf( "a2" ) ).toBe( 4 );
+			} );
+
+			it( "clears the memory and the count together and keeps the conversation", function() {
+				var agent = agentWith();
+				var runner = new bxagents.models.api.TurnRunner( agent, sessions );
+				var conversations = new bxagents.models.api.Conversations( agent, sessions );
+				runner.run( ada, { input : "hello", conversationId : "c1" } );
+
+				var outcome = conversations.clear( ada, "c1" );
+
+				expect( outcome.succeeded() ).toBeTrue();
+				expect( heldBy( agent, "c1" ) ).toBe( 0 );
+				expect( sessions.byId( "ada", "c1" ).isEmpty() ).toBeFalse();
+				expect( countOf( "c1" ) ).toBe( 0 );
+			} );
+
+			it( "does not clear a conversation that is somebody else's, and says it does not exist", function() {
+				var agent = agentWith();
+				var runner = new bxagents.models.api.TurnRunner( agent, sessions );
+				var conversations = new bxagents.models.api.Conversations( agent, sessions );
+				runner.run( ada, { input : "hello", conversationId : "c1" } );
+
+				var outcome = conversations.clear( bob, "c1" );
+
+				expect( outcome.succeeded() ).toBeFalse();
+				expect( outcome.code() ).toBe( "not_found" );
+				expect( heldBy( agent, "c1" ) ).toBe( 2 );
+				expect( countOf( "c1" ) ).toBe( 2 );
+			} );
+
+			it( "deletes the row and the memory together", function() {
+				var agent = agentWith();
+				var runner = new bxagents.models.api.TurnRunner( agent, sessions );
+				var conversations = new bxagents.models.api.Conversations( agent, sessions );
+				runner.run( ada, { input : "hello", conversationId : "c1" } );
+
+				expect( conversations.delete( ada, "c1" ).succeeded() ).toBeTrue();
+
+				expect( sessions.byId( "ada", "c1" ).isEmpty() ).toBeTrue();
+				expect( heldBy( agent, "c1" ) ).toBe( 0 );
+			} );
+
+			it( "brings the count back in line when memory was changed from outside", function() {
+				var agent = agentWith();
+				var runner = new bxagents.models.api.TurnRunner( agent, sessions );
+				var conversations = new bxagents.models.api.Conversations( agent, sessions );
+				runner.run( ada, { input : "hello", conversationId : "c1" } );
+				// something other than a turn emptied the memory
+				agent.getMemories().each( ( memory ) => memory.clear( "ada", "c1" ) );
+				expect( countOf( "c1" ) ).toBe( 2 );
+
+				expect( conversations.refreshCount( ada, "c1" ) ).toBe( 0 );
+
+				expect( countOf( "c1" ) ).toBe( 0 );
+			} );
+
+			it( "does the same from the terminal: /clear leaves the memory and the count at zero", function() {
+				var agent = agentWith();
+				var runner = new bxagents.models.api.TurnRunner( agent, sessions );
+				runner.run( ada, { input : "hello", conversationId : "c1" } );
+				var chat = new bxagents.models.chat.AgentConversation( agent, "ada", sessions, "c1" );
+
+				chat.clear();
+
+				expect( heldBy( agent, "c1" ) ).toBe( 0 );
+				expect( countOf( "c1" ) ).toBe( 0 );
+			} );
+
+			it( "clears a terminal chat that has no row in the list yet", function() {
+				var agent = agentWith();
+				agent.getMemories().each( ( memory ) => memory.add( { role : "user", content : "stray" }, "ada", "fresh" ) );
+				var chat = new bxagents.models.chat.AgentConversation( agent, "ada", sessions, "fresh" );
+
+				chat.clear();
+
+				expect( heldBy( agent, "fresh" ) ).toBe( 0 );
+			} );
+
+		} );
+	}
+
+}

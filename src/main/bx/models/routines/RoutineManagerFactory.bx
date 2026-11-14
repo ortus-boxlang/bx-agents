@@ -1,0 +1,22 @@
+/**
+ * Builds the RoutineManager every surface uses (the API, the terminal, the chat apps) from the parts they each already have: the shared
+ * chat store, the resolved routines settings and, when there is one, the data home where the reports are kept. One place, so no surface
+ * assembles it differently.
+ */
+class {
+
+	/**
+	 * @store The shared ChatStore
+	 * @settings The resolved routines settings (RoutineSettings::resolve)
+	 * @home A DataHome. Without one the manager has nowhere to keep reports
+	 *
+	 * @return A RoutineManager
+	 */
+	any function build( required any store, required struct settings, any home ) {
+		var service = new "models.routines.Routines@bxagents"( arguments.store, arguments.settings )
+		var destinations = new "models.routines.Destinations@bxagents"( new "models.gateways.GatewayChats@bxagents"( arguments.store ) )
+		var reports = isNull( arguments.home ) ? nullValue() : new "models.routines.RoutineReports@bxagents"( service, new "models.routines.RoutineResults@bxagents"( arguments.home, arguments.settings ) )
+		return new "models.routines.RoutineManager@bxagents"( service, destinations, reports ?: nullValue() )
+	}
+
+}

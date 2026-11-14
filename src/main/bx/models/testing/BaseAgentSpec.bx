@@ -64,6 +64,11 @@ class extends="testbox.system.BaseSpec" {
 			return !arguments.path.reFindNoCase( "[\\/](\.build|dist|tests)([\\/]|$)" )
 		} )
 
+		// The agent remembers in the chat database (see MemoryWiring). A test run gets a database of its own inside the
+		// throwaway copy, so it never touches the project's real data and starts with no memory of an earlier run.
+		variables.$bxagentsSavedDb = getSystemSetting( "BXAGENTS_DB", "" )
+		createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", replace( variables.$bxagentsTempDir, "\", "/", "all" ) & "/data/chat.db" )
+
 		var pipeline = new "models.build.BuildPipeline@bxagents"( "test" )
 		var result = pipeline.build( variables.$bxagentsTempDir, "test" )
 
@@ -77,9 +82,16 @@ class extends="testbox.system.BaseSpec" {
 	}
 
 	/**
-	 * Deletes the throwaway temp copy of the project under test created by beforeAll().
+	 * Gives BXAGENTS_DB back and deletes the throwaway temp copy of the project under test created by beforeAll().
 	 */
 	function afterAll() {
+		if ( structKeyExists( variables, "$bxagentsSavedDb" ) ) {
+			if ( len( variables.$bxagentsSavedDb ) ) {
+				createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", variables.$bxagentsSavedDb )
+			} else {
+				createObject( "java", "java.lang.System" ).clearProperty( "BXAGENTS_DB" )
+			}
+		}
 		if ( structKeyExists( variables, "$bxagentsTempDir" ) && directoryExists( variables.$bxagentsTempDir ) ) {
 			directoryDelete( variables.$bxagentsTempDir, true )
 		}

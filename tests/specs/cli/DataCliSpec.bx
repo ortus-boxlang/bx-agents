@@ -1,0 +1,100 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "the data, backup and restore verbs", function() {
+
+			beforeEach( function() {
+				// another spec can leave these set (loading a built agent names the database); this spec must see none
+				variables.savedEnvironment = {}
+				for ( var name in [ "BXAGENTS_DB", "BXAGENTS_HOME" ] ) {
+					variables.savedEnvironment[ name ] = createObject( "java", "java.lang.System" ).getProperty( name ) ?: ""
+					createObject( "java", "java.lang.System" ).clearProperty( name )
+				}
+				variables.root = getTempDirectory() & "bxa-datacli-" & createUUID()
+				directoryCreate( variables.root & "/Notes", true )
+				fileWrite( variables.root & "/Agent.yaml", "name: demo" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "data:" & char( 10 ) & "  home: ./state" & char( 10 ) & "volumes:" & char( 10 ) & "  notes:" & char( 10 ) & "    path: ./Notes" & char( 10 ) & "    mode: rw" & char( 10 ) & "    description: My notes" & char( 10 ) )
+				variables.options = { projectRoot : variables.root }
+			} );
+
+			afterEach( function() {
+				for ( var name in variables.savedEnvironment ) {
+					if ( len( variables.savedEnvironment[ name ] ) ) {
+						createObject( "java", "java.lang.System" ).setProperty( name, variables.savedEnvironment[ name ] )
+					}
+				}
+				if ( directoryExists( variables.root ) ) {
+					directoryDelete( variables.root, true )
+				}
+			} );
+
+			it( "data says where everything is, how big it is and which volumes there are", function() {
+				var done = new bxagents.models.cli.Data().run( variables.options )
+
+				expect( done.exitCode ).toBe( 0 )
+				expect( done.message ).toInclude( "/state" )
+				expect( done.message ).toInclude( "from data.home in Agent.yaml" )
+				expect( done.message ).toInclude( "chat.db" )
+				expect( done.message ).toInclude( "notes" )
+				expect( done.message ).toInclude( "read and write" )
+				expect( done.message ).toInclude( "My notes" )
+				expect( done.message ).toInclude( "files" )
+			} );
+
+			it( "data --json gives the same as data", function() {
+				var done = new bxagents.models.cli.Data().run( { projectRoot : variables.root, json : true } )
+				var parsed = jsonDeserialize( done.message )
+
+				expect( parsed.home ).toInclude( "/state" )
+				expect( parsed.volumes.map( v => v.name ) ).toBe( [ "files", "notes" ] )
+			} );
+
+			it( "data does not make the data home", function() {
+				new bxagents.models.cli.Data().run( variables.options )
+				expect( directoryExists( variables.root & "/state" ) ).toBeFalse()
+			} );
+
+			it( "backup writes a zip and says where", function() {
+				var target = variables.root & "/mine.zip"
+				var done = new bxagents.models.cli.Backup().run( { projectRoot : variables.root, to : target } )
+
+				expect( done.exitCode ).toBe( 0 )
+				expect( done.message ).toInclude( target )
+				expect( fileExists( target ) ).toBeTrue()
+			} );
+
+			it( "restore puts a backup back", function() {
+				var target = variables.root & "/mine.zip"
+				directoryCreate( variables.root & "/state/files", true )
+				fileWrite( variables.root & "/state/files/kept.txt", "before" )
+				new bxagents.models.cli.Backup().run( { projectRoot : variables.root, to : target } )
+				fileWrite( variables.root & "/state/files/new.txt", "after" )
+
+				var done = new bxagents.models.cli.Restore().run( { projectRoot : variables.root, _positional : target, force : true } )
+
+				expect( done.message ).toInclude( "Restored" )
+				expect( done.message ).toInclude( "files.before-restore" )
+				expect( fileExists( variables.root & "/state/files/new.txt" ) ).toBeFalse()
+				expect( fileRead( variables.root & "/state/files/kept.txt" ) ).toBe( "before" )
+			} );
+
+			it( "restore can put a backup into another home", function() {
+				var target = variables.root & "/mine.zip"
+				directoryCreate( variables.root & "/state/files", true )
+				fileWrite( variables.root & "/state/files/kept.txt", "before" )
+				new bxagents.models.cli.Backup().run( { projectRoot : variables.root, to : target } )
+				var other = variables.root & "/elsewhere"
+
+				var done = new bxagents.models.cli.Restore().run( { projectRoot : variables.root, _positional : target, home : other, force : true } )
+
+				expect( done.message ).toInclude( other )
+				expect( directoryExists( other & "/files" ) ).toBeTrue()
+			} );
+
+			it( "restore asks which backup", function() {
+				expect( function() { new bxagents.models.cli.Restore().run( variables.options ) } ).toThrow( "BxAgents.MissingBackup" )
+			} );
+
+		} );
+	}
+
+}

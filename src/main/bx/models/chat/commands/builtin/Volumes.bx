@@ -1,0 +1,26 @@
+/**
+ * /volumes: the folders the agent's file tools may use, by name and mode. Never a folder on the machine, so it is
+ * safe to show on every transport.
+ */
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "volumes"
+	}
+
+	string function hint() {
+		return "list the folders the agent may read and write"
+	}
+
+	any function run( required any context, required string args ) {
+		var volumes = arguments.context.chat().volumes()
+		if ( !volumes.len() ) {
+			return arguments.context.reply().text( "No volume list is available in this mode." )
+		}
+		var lines = volumes.map( function( v ) {
+			return left( v.name & repeatString( " ", 14 ), 14 ) & left( ( v.mode == "rw" ? "read and write" : "read only" ) & repeatString( " ", 16 ), 16 ) & v.description
+		} )
+		return arguments.context.reply().text( "Volumes:" & char( 10 ) & lines.toList( char( 10 ) ) )
+	}
+
+}

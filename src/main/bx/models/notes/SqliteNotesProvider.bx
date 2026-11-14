@@ -8,6 +8,8 @@ class implements="INotesProvider" {
 		// one note is a line, not a document
 		MAX_NOTE  = 500
 		DEFAULT_LIMITS = { user : 1400, agent : 2200 }
+		// the one owner of the agent scope: the notes of the agent are shared by every agent in the app (migration 13 moves older rows here)
+		AGENT_OWNER = "agent"
 	}
 
 	/**
@@ -28,9 +30,10 @@ class implements="INotesProvider" {
 	}
 
 	array function list( required string scope, required string owner ) {
+		var scope = checkedScope( arguments.scope )
 		return variables.store.rows(
 			"SELECT id, text, source, sessionId, createdAt, updatedAt FROM notes WHERE scope = :scope AND owner = :owner ORDER BY createdAt, rowid",
-			{ scope : checkedScope( arguments.scope ), owner : arguments.owner }
+			{ scope : scope, owner : ownerFor( scope, arguments.owner ) }
 		)
 	}
 
@@ -50,15 +53,18 @@ class implements="INotesProvider" {
 	}
 
 	struct function stats( required string scope, required string owner ) {
+		var scope = checkedScope( arguments.scope )
+		var owner = ownerFor( scope, arguments.owner )
 		var found = variables.store.rows(
 			"SELECT COUNT(*) AS n, COALESCE( SUM( LENGTH( text ) ), 0 ) AS used, MIN( createdAt ) AS oldest, MAX( createdAt ) AS newest FROM notes WHERE scope = :scope AND owner = :owner",
-			{ scope : checkedScope( arguments.scope ), owner : arguments.owner }
+			{ scope : scope, owner : owner }
 		)[ 1 ]
-		return { scope : arguments.scope, owner : arguments.owner, count : found.n, used : found.used, limit : limit( arguments.scope ), oldest : found.oldest ?: "", newest : found.newest ?: "" }
+		return { scope : arguments.scope, owner : owner, count : found.n, used : found.used, limit : limit( arguments.scope ), oldest : found.oldest ?: "", newest : found.newest ?: "" }
 	}
 
 	struct function add( required string scope, required string owner, required string text, string source = "agent", string sessionId = "" ) {
 		var scope = checkedScope( arguments.scope )
+		arguments.owner = ownerFor( scope, arguments.owner )
 		var clean = tidy( arguments.text )
 		var refusal = refusalFor( clean )
 		if ( len( refusal ) ) {
@@ -95,6 +101,7 @@ class implements="INotesProvider" {
 
 	struct function replace( required string scope, required string owner, required string id, required string text ) {
 		var scope = checkedScope( arguments.scope )
+		arguments.owner = ownerFor( scope, arguments.owner )
 		var clean = tidy( arguments.text )
 		var refusal = refusalFor( clean )
 		if ( len( refusal ) ) {
@@ -123,6 +130,7 @@ class implements="INotesProvider" {
 
 	boolean function remove( required string scope, required string owner, required string id ) {
 		var scope = checkedScope( arguments.scope )
+		arguments.owner = ownerFor( scope, arguments.owner )
 		var found = variables.store.rows( "SELECT id FROM notes WHERE id = :id AND scope = :scope AND owner = :owner", { id : arguments.id, scope : scope, owner : arguments.owner } )
 		if ( !found.len() ) {
 			return false
@@ -132,6 +140,14 @@ class implements="INotesProvider" {
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	/**
+	 * The agent's notes are global: one set that every agent and sub-agent of the app reads and writes, whatever
+	 * owner the caller names. Notes about a person stay under that person.
+	 */
+	private string function ownerFor( required string scope, required string owner ) {
+		return arguments.scope == "agent" ? static.AGENT_OWNER : arguments.owner
+	}
 
 	private string function checkedScope( required string scope ) {
 		var scope = lCase( trim( arguments.scope ) )

@@ -70,6 +70,7 @@ class {
 		checkWebUiDependencies( discovery, checks )
 		checkMcpPrograms( config, checks )
 		checkModelKeys( root, checks )
+		checkDataHome( root, checks )
 
 		return finish( checks, arguments.options.json ?: false )
 	}
@@ -77,6 +78,22 @@ class {
 	// --------------------------------------------------------------------------
 	// Individual checks
 	// --------------------------------------------------------------------------
+
+	/**
+	 * Where the agent keeps everything, and whether that place can be written. Nothing is made: a home that does
+	 * not exist yet is fine when the nearest folder above it can be written, since the app makes it at start.
+	 *
+	 * @root The project root
+	 * @checks Accumulator array - append() any findings
+	 */
+	private void function checkDataHome( required string root, required array checks ) {
+		var home = new "models.data.ProjectData@bxagents"().of( arguments.root ).home
+		if ( home.writableWithoutMaking() ) {
+			arguments.checks.append( { status : "ok", message : "Data home [#home.path()#] (#home.source()#) can be written" } )
+		} else {
+			arguments.checks.append( { status : "fail", message : "Data home [#home.path()#] (#home.source()#) cannot be written. Choose another with BXAGENTS_HOME or data.home in Agent.yaml." } )
+		}
+	}
 
 	/**
 	 * Every provider the models use needs its key variable: the default model, each profile (its own

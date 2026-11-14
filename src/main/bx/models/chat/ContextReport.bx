@@ -28,6 +28,7 @@ class {
 	 *   parts : [ { key, label, tokens, detail } ] in the order they are sent,
 	 *   tools : [ { name, tokens } ] largest first,
 	 *   mcpServers : how many MCP servers the agent has (their tools are not counted),
+	 *   messages : { count, limit, near } the conversation's messages in memory, the most its memory keeps (0 when it keeps all of them) and whether it is within a tenth of it,
 	 *   total, contextWindow (0 when not said), percent (0 when there is no window)
 	 * }
 	 */
@@ -56,11 +57,13 @@ class {
 		for ( var tool in tools ) {
 			toolTotal += tool.tokens
 		}
+		var kept = messageLimit()
+		var nearLimit = kept > 0 && messages.len() >= ceiling( kept * 0.9 )
 		var parts = [
 			{ key : "system", label : "System prompt", tokens : system, detail : "" },
 			{ key : "tools", label : "Tool definitions", tokens : toolTotal, detail : tools.len() & ( tools.len() == 1 ? " tool" : " tools" ) },
 			{ key : "notes", label : "Notes", tokens : notes, detail : "" },
-			{ key : "memory", label : "Messages", tokens : memory, detail : messages.len() & ( messages.len() == 1 ? " message" : " messages" ) & ( images ? ", #images# image#images == 1 ? '' : 's'# not counted" : "" ) }
+			{ key : "memory", label : "Messages", tokens : memory, detail : messages.len() & ( kept > 0 ? " of " & kept : "" ) & ( messages.len() == 1 && kept == 0 ? " message" : " messages" ) & ( images ? ", #images# image#images == 1 ? '' : 's'# not counted" : "" ) }
 		]
 		var total = system + toolTotal + notes + memory
 		var window = variables.facts.contextWindow ?: 0
@@ -68,6 +71,7 @@ class {
 			parts         : parts,
 			tools         : tools,
 			mcpServers    : ( variables.agent.getConfig().mcpServers ?: [] ).len(),
+			messages      : { count : messages.len(), limit : kept, near : nearLimit },
 			total         : total,
 			contextWindow : window,
 			percent       : window > 0 ? round( total * 100 / window ) : 0
@@ -75,6 +79,20 @@ class {
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return The most messages the agent's memory keeps for one conversation: the smallest limit among its memories, 0 when none has one
+	 */
+	private numeric function messageLimit() {
+		var least = 0
+		for ( var memory in variables.agent.getMemories() ) {
+			var limit = val( memory.getMaxMessages() ?: 0 )
+			if ( limit > 0 && ( least == 0 || limit < least ) ) {
+				least = limit
+			}
+		}
+		return least
+	}
 
 	/**
 	 * @return [ { name, tokens } ] the tool definitions as they are sent, largest first

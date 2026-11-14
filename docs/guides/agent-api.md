@@ -108,6 +108,10 @@ A run belongs to the caller who started it.
 
 Conversations belong to the caller too: `sessions()` lists them, newest first (an admin may pass `all = true` for everyone's), and `createSession`, `renameSession`, `forkSession`, `deleteSession`, `history` and `export` work on one. `notes()` and `preferences()` keep what the agent should remember about the caller. `command( "/context" )` runs any [slash command](slash-commands.md) the caller may use.
 
+## Routines
+
+When the app has [routines](../conventions/routines.md) on, `capabilities.routines` is `true` in `GET /agent`, and the client has `routines()`, `routine( name )`, `createRoutine()`, `updateRoutine()`, `pauseRoutine()`, `resumeRoutine()`, `runRoutine()`, `deleteRoutine()`, `routineReports()`, `routineReport()`, `deleteRoutineReport()` and `cleanRoutineReports()`. The routes are `/routines`, `/routines/get`, `/routines/update`, `/routines/pause`, `/routines/resume`, `/routines/run`, `/routines/delete`, `/routines/reports`, `/routines/report`, `/routines/reports/delete` and `/routines/reports/clean`, all in the [OpenAPI document](#the-openapi-document) under **Routines**. People see their own routines; an admin adds `all=1` to list everyone's. A clean-up removes nothing unless the request says `"apply": true`. `capabilities.admin` says whether the caller is an admin.
+
 ## Access tokens over the API
 
 With `manageTokens: true` an admin can make tokens without a shell on the server:

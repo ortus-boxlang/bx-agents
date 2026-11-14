@@ -28,12 +28,15 @@ class {
 	/**
 	 * @report A ContextReport.build() result
 	 *
-	 * @return "ctx ~12.4k" or "ctx ~12.4k / 128k 9%"
+	 * @return "ctx ~12.4k" or "ctx ~12.4k / 128k 9%", and "msgs 460/500" after it when the conversation is within a tenth of the most its memory keeps
 	 */
 	string function status( required struct report ) {
 		var text = "ctx " & approx( arguments.report.total )
 		if ( arguments.report.contextWindow > 0 ) {
 			text &= " / " & window( arguments.report.contextWindow ) & " " & arguments.report.percent & "%"
+		}
+		if ( ( arguments.report.messages ?: {} ).near ?: false ) {
+			text &= " · msgs " & arguments.report.messages.count & "/" & arguments.report.messages.limit
 		}
 		return text
 	}

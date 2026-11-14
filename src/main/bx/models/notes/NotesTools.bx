@@ -1,6 +1,8 @@
 /**
- * The tools that let an agent keep its own notes: `remember` (save or correct) and `forget` (remove).
+ * The tools that let an agent keep its own notes: `note_remember` (save or correct) and `note_forget` (remove).
  */
+import bxModules.bxagents.models.util.ToolNames;
+
 class {
 
 	static {
@@ -18,16 +20,16 @@ class {
 	}
 
 	/**
-	 * @return [ remember, forget ] as bx-ai tools, not entered in the global tool registry
+	 * @return [ note_remember, note_forget ] as bx-ai tools, not entered in the global tool registry
 	 */
 	array function tools() {
 		var provider = variables.notesProvider
 		var agentName = variables.agentName
 		var ownerOf = ( scope, chatRequest ) => scope == "agent" ? agentName : ( len( chatRequest.getUserId() ?: "" ) ? chatRequest.getUserId() : static.NO_USER )
 
-		var remember = aiTool(
-			"remember",
-			"Save a short note that lasts across conversations. Use scope user for facts about the person (their name, how they like answers) and scope agent for lasting lessons about this job. Keep each note to one short line. To correct a note, pass its id in replaces. The answer says whether it was saved; if the notes are full it says so, and you must replace or forget a note first.",
+		var noteRemember = aiTool(
+			ToolNames::require( "note_remember" ),
+			"Save a short note that lasts across conversations. Use scope user for facts about the person (their name, how they like answers) and scope agent for lasting lessons about this job. Keep each note to one short line. To correct a note, pass its id in replaces. The answer says whether it was saved; if the notes are full it says so, and you must replace a note or use note_forget first.",
 			( required string text, string scope = "user", string replaces = "" ) => {
 				var chatRequest = arguments._chatRequest
 				var noteScope = lCase( trim( arguments.scope ) )
@@ -41,12 +43,12 @@ class {
 			},
 			false
 		)
-		remember.describeArg( "text", "The note: one short line." )
-		remember.describeArg( "scope", "user for facts about the person, agent for lessons about this job. Default user." )
-		remember.describeArg( "replaces", "The id of an existing note to correct. Leave out to save a new note." )
+		noteRemember.describeArg( "text", "The note: one short line." )
+		noteRemember.describeArg( "scope", "user for facts about the person, agent for lessons about this job. Default user." )
+		noteRemember.describeArg( "replaces", "The id of an existing note to correct. Leave out to save a new note." )
 
-		var forget = aiTool(
-			"forget",
+		var noteForget = aiTool(
+			ToolNames::require( "note_forget" ),
 			"Remove a note by its id. Use it when the user asks you to forget something, or a note is no longer true.",
 			( required string id, string scope = "user" ) => {
 				var chatRequest = arguments._chatRequest
@@ -59,10 +61,10 @@ class {
 			},
 			false
 		)
-		forget.describeArg( "id", "The id of the note, as shown in your notes." )
-		forget.describeArg( "scope", "user or agent. Default user." )
+		noteForget.describeArg( "id", "The id of the note, as shown in your notes." )
+		noteForget.describeArg( "scope", "user or agent. Default user." )
 
-		return [ remember, forget ]
+		return [ noteRemember, noteForget ]
 	}
 
 }

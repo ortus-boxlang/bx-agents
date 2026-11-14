@@ -1,0 +1,137 @@
+/**
+ * Connects an agent to routines, from the `routines` block of Agent.yaml (see RoutineSettings). With the block off, which is
+ * the default, nothing is added: no tools, no heartbeat, no table read.
+ *
+ * The generated agent factory calls attach() on the root agent only, so sub-agents never get the tools. The generated
+ * heartbeat scheduler calls service() and runner(); both share one store and one Routines per process.
+ */
+import bxModules.bxagents.models.routines.RoutineSettings;
+import bxModules.bxagents.models.routines.ReportTools;
+import bxModules.bxagents.models.routines.RoutineTools;
+
+class {
+
+	static {
+		stores = {}
+	}
+
+	/**
+	 * @settings The `routines` block
+	 *
+	 * @return Messages for the author, empty when it is fine
+	 */
+	array function problems( required any settings ) {
+		return RoutineSettings::problems( arguments.settings )
+	}
+
+	/**
+	 * Gives the agent the routine tools, and a person's approval before it makes, changes or deletes one.
+	 *
+	 * @agent The root AiAgent
+	 * @settings The `routines` block
+	 * @agentName The agent's name
+	 * @dataHome `data.home` from Agent.yaml, blank when not set
+	 *
+	 * @return The agent
+	 */
+	any function attach( required any agent, any settings = {}, string agentName = "", string dataHome = "" ) {
+		var found = problems( arguments.settings )
+		if ( found.len() ) {
+			throw( type = "BxAgents.InvalidRoutines", message = "The routines settings of [#arguments.agentName#] are not valid: " & found.toList( " " ) )
+		}
+		var resolved = RoutineSettings::resolve( arguments.settings )
+		if ( !resolved.enabled ) {
+			return arguments.agent
+		}
+		var me = this
+		var theAgent = arguments.agentName
+		var theHome = arguments.dataHome
+		var tools = new RoutineTools( () => me.service( resolved ), resolved, () => me.destinations() ).tools()
+		tools.append( new ReportTools( () => me.service( resolved ), () => me.results( resolved, theAgent, theHome ) ).tools(), true )
+		arguments.agent.withTools( tools )
+		arguments.agent.withMiddleware( new bxModules.bxai.models.middleware.core.HumanInTheLoopMiddleware(
+			toolsRequiringApproval = RoutineTools::approvalNames(),
+			mode                   = "web"
+		) )
+		return arguments.agent
+	}
+
+	/**
+	 * @settings A resolved routines block
+	 *
+	 * @return The Routines service on the app's shared database
+	 */
+	any function service( required struct settings ) {
+		return new "models.routines.Routines@bxagents"( store(), arguments.settings )
+	}
+
+	/**
+	 * The shared chat database, opened and brought up to date once per process: the file named by BXAGENTS_DB when there
+	 * is one (the terminal chat and a served project), otherwise the application's default datasource.
+	 */
+	any function store() {
+		var file = new "models.store.DbSetting@bxagents"().file()
+		var key = len( file ) ? file : "default-datasource"
+		if ( !static.stores.keyExists( key ) ) {
+			lock name="bxagents-routines-store" type="exclusive" timeout="30" {
+				if ( !static.stores.keyExists( key ) ) {
+					var made = ""
+					if ( len( file ) ) {
+						directoryCreate( getDirectoryFromPath( file ), true, true )
+						made = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
+					} else {
+						made = new "models.store.ChatStore@bxagents"( "" )
+					}
+					made.migrate()
+					static.stores[ key ] = made
+				}
+			}
+		}
+		return static.stores[ key ]
+	}
+
+	/**
+	 * The chats the chat apps have talked to, on the shared database.
+	 */
+	any function chats() {
+		return new "models.gateways.GatewayChats@bxagents"( store() )
+	}
+
+	/**
+	 * The rules for where an answer may go.
+	 */
+	any function destinations() {
+		return new "models.routines.Destinations@bxagents"( chats() )
+	}
+
+	/**
+	 * The folder of each routine's reports, in the data home.
+	 *
+	 * @settings A resolved routines block
+	 * @agentName The agent's name
+	 * @dataHome `data.home` from Agent.yaml, blank when not set
+	 */
+	any function results( required struct settings, string agentName = "", string dataHome = "" ) {
+		var home = new "models.data.DataHome@bxagents"( projectRoot : expandPath( "/" ), configured : arguments.dataHome, agentName : arguments.agentName )
+		return new "models.routines.RoutineResults@bxagents"( home, arguments.settings )
+	}
+
+	/**
+	 * What the heartbeat needs, made once the app is running.
+	 *
+	 * @agent The root agent
+	 * @settings The `routines` block
+	 *
+	 * @return A Heartbeat
+	 */
+	any function heartbeat( required any agent, any settings = {} ) {
+		var resolved = RoutineSettings::resolve( arguments.settings )
+		var routines = service( resolved )
+		var sessions = new "models.store.SessionStore@bxagents"( store() )
+		var turns = new "models.api.TurnRunner@bxagents"( arguments.agent, sessions )
+		var notifier = new "models.routines.Notifier@bxagents"( chats(), resolved )
+		var runner = new "models.routines.RoutineRunner@bxagents"( routines = routines, turns = turns, settings = resolved, notifier = notifier )
+		return new "models.routines.Heartbeat@bxagents"( routines, runner, resolved )
+	}
+
+}

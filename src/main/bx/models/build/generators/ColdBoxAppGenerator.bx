@@ -21,6 +21,8 @@
  * implements natively.
  */
 import bxModules.bxagents.models.util.Strings;
+import bxModules.bxagents.models.wizard.WizardCatalog;
+import bxModules.bxagents.models.routines.RoutineSettings;
 
 class {
 
@@ -87,6 +89,12 @@ class {
 
 		var appName = len( arguments.resolvedConfig.name ?: "" ) ? arguments.resolvedConfig.name : "BxAi"
 
+		// The project's volumes and data home belong to the whole app, but every agent in the tree gets its file tools
+		// from them (see renderToolsLines). The build is one pass, so they are kept here for the nodes to read.
+		variables.projectVolumes = isStruct( arguments.resolvedConfig.volumes ?: "" ) ? arguments.resolvedConfig.volumes : {}
+		variables.projectAgentName = arguments.resolvedConfig.name ?: ""
+		variables.projectDataHome = ( isStruct( arguments.resolvedConfig.data ?: "" ) ? arguments.resolvedConfig.data : {} ).home ?: ""
+
 		var applicationPath  = appDir & "/Application.bx"
 		var baseApplicationPath = appDir & "/bxagents/Application.bx"
 		var coldboxPath      = appDir & "/config/ColdBox.bx"
@@ -134,7 +142,8 @@ class {
 		// issued tokens): it gets the default datasource, migrated at start.
 		var database = arguments.webUiDatabase
 		// A vault (its tools, or a ${vault.NAME} in the config) lives in the same database.
-		if ( agentFactory.source.find( "NotesWiring@bxagents" ) || agentFactory.source.find( "VaultWiring@bxagents" ) || agentFactory.source.find( "${vault." ) ) {
+		// Every agent's default memory (MemoryWiring) lives in the same database.
+		if ( agentFactory.source.find( "NotesWiring@bxagents" ) || agentFactory.source.find( "RoutineWiring@bxagents" ) || agentFactory.source.find( "VaultWiring@bxagents" ) || agentFactory.source.find( "MemoryWiring@bxagents" ) || agentFactory.source.find( "${vault." ) ) {
 			if ( database.isEmpty() ) {
 				database = { datasource : "bxagents", path : "./data/chat.db" }
 			}
@@ -147,6 +156,16 @@ class {
 		// The wiring lives in a generated base class, bxagents/Application.bx; the app's own Application.bx only
 		// extends it. The project's root Application.bx, when it has one, is copied as it is, so the developer owns
 		// the file the runtime loads and overrides whatever the base sets.
+		// Routines have one scheduler of their own, the heartbeat, added only when the feature is on
+		var schedulerClasses = duplicate( arguments.schedulerClasses )
+		if ( isStruct( arguments.resolvedConfig.routines ?: "" ) && RoutineSettings::resolve( arguments.resolvedConfig.routines ).enabled ) {
+			fileWrite(
+				appDir & "/bxagents/RoutinesScheduler.bx",
+				fileRead( getDirectoryFromPath( getCurrentTemplatePath() ) & "runtime/RoutinesScheduler.bx", "UTF-8" ).replace( "__ROUTINES__", Strings::bxLiteral( jsonSerialize( arguments.resolvedConfig.routines ) ) )
+			)
+			schedulerClasses.append( "bxagents.RoutinesScheduler" )
+		}
+
 		fileWrite(
 			baseApplicationPath,
 			renderApplication(
@@ -155,7 +174,9 @@ class {
 				sessionManagement  : arguments.hasWebUi,
 				datasourceName     : database.datasource ?: "",
 				databasePath       : database.path ?: "",
-				schedulerClasses   : arguments.schedulerClasses
+				dataHome           : ( arguments.resolvedConfig.data ?: {} ).home ?: "",
+				agentName          : arguments.resolvedConfig.name ?: "",
+				schedulerClasses   : schedulerClasses
 			)
 		)
 		if ( len( arguments.userApplicationPath ) ) {
@@ -213,6 +234,8 @@ class {
 	 * @sessionTimeoutMinutes Only used when `sessionManagement` is true - minutes until `this.sessionTimeout` expires
 	 * @datasourceName Non-empty only when the web UI's chat store needs one (see `generate()`'s `webUiDatabase`) - registers it as a NAMED SQLite `this.datasources[...]` entry AND as `this.datasource` (the app default), so an unqualified query always resolves rather than failing with "No default datasource defined"
 	 * @databasePath Only used alongside `datasourceName` - the SQLite file path, relative to the app folder, for that datasource's `"database"` key
+	 * @agentName The agent's name, which names the conventional data home (~/.bxagents/<name>)
+	 * @dataHome `data.home` from Agent.yaml, stamped into the app so the data home is the same one `serve` and `chat` use. Blank when it is not set
 	 * @schedulerClasses Class paths of the project's schedulers, registered through `this.schedulers` so they start and stop with the app
 	 *
 	 * @return The rendered bxagents/Application.bx source: the base class the app's own Application.bx extends
@@ -224,6 +247,8 @@ class {
 		numeric sessionTimeoutMinutes = 60,
 		string datasourceName = "",
 		string databasePath = "",
+		string dataHome = "",
+		string agentName = "",
 		array schedulerClasses = []
 	) {
 		var lines = [
@@ -275,7 +300,7 @@ class {
 			lines.append( '		"driver"  : "sqlite",' )
 			// BXAGENTS_DB, when set, names the file: `serve` sets it so the web chat and
 			// the terminal chat share one database in the project's data/ folder
-			lines.append( '		"database": getSystemSetting( "BXAGENTS_DB", appPath( "#Strings::bxLiteral( arguments.databasePath )#" ) )' )
+			lines.append( '		"database": databaseFile( "#Strings::bxLiteral( arguments.databasePath )#" )' )
 			lines.append( "	}" )
 			// Also the app default. A generated app has exactly one datasource,
 			// so anything that runs a query without naming one should reach it
@@ -305,9 +330,24 @@ class {
 			// error at boot, not an auto-created folder. Done here rather than in
 			// ChatDb because this is where the configured path literally is;
 			// ChatDb only ever knows the datasource NAME.
-			lines.append( "		// SQLite creates the db file, but not the directory holding it" )
-			lines.append( '		directoryCreate( getDirectoryFromPath( getSystemSetting( "BXAGENTS_DB", appPath( "#Strings::bxLiteral( arguments.databasePath )#" ) ) ), true, true )' )
+			lines.append( "		// SQLite creates the db file, but not the directory holding it. The data home also gets its folders and README" )
+			// a restore an admin asked for over the API waits for this start, before the database is opened
+			lines.append( '		try {' )
+			lines.append( '			var asked = new "models.data.DataBackup@bxagents"( dataHome() ).applyPending()' )
+			lines.append( '			if ( !asked.isEmpty() ) {' )
+			lines.append( '				systemOutput( "[bxagents] " & ( asked.keyExists( "error" ) ? "The restore asked for did not run: " & asked.error : "Restored " & asked.restored.toList( ", " ) & " from the backup asked for." ), true )' )
+			lines.append( '			}' )
+			lines.append( '		} catch ( any e ) {' )
+			lines.append( '			systemOutput( "[bxagents] The restore asked for did not run: " & e.message, true )' )
+			lines.append( '		}' )
+			lines.append( '		var ready = dataHome().ensure( databaseFile( "#Strings::bxLiteral( arguments.databasePath )#" ) )' )
+			lines.append( '		if ( len( ready.warning ) ) {' )
+			lines.append( '			systemOutput( "[bxagents] " & ready.warning, true )' )
+			lines.append( '		}' )
 		}
+		// The agent's logs go to the logs/ folder of the data home (see Logger)
+		lines.append( "		// Logs: one file per area in the data home's logs/ folder" )
+		lines.append( '		new "models.logs.Logger@bxagents"().start( dataHome().folder( "logs" ) )' )
 		// Named args deliberately, not positional - coldbox.system.Bootstrap's
 		// real init() signature is
 		// (COLDBOX_CONFIG_FILE, COLDBOX_APP_ROOT_PATH, COLDBOX_APP_KEY, COLDBOX_APP_MAPPING, COLDBOX_FAIL_FAST, COLDBOX_WEB_MAPPING) -
@@ -339,6 +379,20 @@ class {
 		lines.append( "		}" )
 		lines.append( "		application.cbBootstrap.onRequestStart( arguments.targetPage )" )
 		lines.append( "		return true" )
+		lines.append( "	}" )
+		lines.append( "" )
+		lines.append( "	/**" )
+		lines.append( "	 * Where the app keeps everything: BXAGENTS_HOME, else `data.home` from Agent.yaml, else ~/.bxagents/<agent name>." )
+		lines.append( "	 */" )
+		lines.append( "	private any function dataHome() {" )
+		lines.append( '		return new "models.data.DataHome@bxagents"( projectRoot : expandPath( "/" ), configured : "#Strings::bxLiteral( arguments.dataHome )#", agentName : "#Strings::bxLiteral( arguments.agentName )#" )' )
+		lines.append( "	}" )
+		lines.append( "" )
+		lines.append( "	/**" )
+		lines.append( "	 * The database file: BXAGENTS_DB, else the data home when it was chosen, else the app's own path." )
+		lines.append( "	 */" )
+		lines.append( "	private string function databaseFile( required string fallback ) {" )
+		lines.append( "		return dataHome().databaseOr( appPath( arguments.fallback ) )" )
 		lines.append( "	}" )
 		lines.append( "" )
 		lines.append( "	/**" )
@@ -761,6 +815,11 @@ class {
 		if ( len( skillsLine ) ) {
 			lines.insertAt( lines.findNoCase( "		// usage recording is off unless Agent.yaml says usage: true" ), skillsLine )
 		}
+		// then the skills the agent saved in its data home, after the project's and the extensions' so theirs win
+		lines.insertAt(
+			lines.findNoCase( "		// usage recording is off unless Agent.yaml says usage: true" ),
+			'		new "models.skills.SkillWiring@bxagents"().load( "#Strings::bxLiteral( variables.projectDataHome )#", "#Strings::bxLiteral( resolveAgentName( arguments.resolvedConfig ) )#" )'
+		)
 
 		for ( var helperLine in renderResolveAppPath() ) {
 			lines.append( helperLine )
@@ -901,8 +960,18 @@ class {
 
 		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery, thisName, arguments.defaultMemory, arguments.appDir, arguments.nodeRelativePath ) )
 		if ( structKeyExists( arguments.resolvedConfig, "notes" ) && isStruct( arguments.resolvedConfig.notes ) ) {
-			// the notes this agent keeps: a prompt block and the remember and forget tools
+			// the notes this agent keeps: a prompt block and the note_remember and note_forget tools
 			statements.append( 'new "models.notes.NotesWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.notes )#, "#Strings::bxLiteral( thisName )#" )' )
+		}
+
+		if ( arguments.accessorPath.isEmpty() ) {
+			// the root agent may save skills of its own (subagents never do): the skill_save tool, unless skills.agentCanSave is false
+			statements.append( 'new "models.skills.SkillWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( isStruct( arguments.resolvedConfig.skills ?: "" ) ? arguments.resolvedConfig.skills : {} )#, "#Strings::bxLiteral( thisName )#", "#Strings::bxLiteral( variables.projectDataHome )#" )' )
+		}
+
+		if ( arguments.accessorPath.isEmpty() && isStruct( arguments.resolvedConfig.routines ?: "" ) ) {
+			// routines (the routine_* tools), on the root agent only; off unless routines.enabled is true
+			statements.append( 'new "models.routines.RoutineWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.routines )#, "#Strings::bxLiteral( thisName )#", "#Strings::bxLiteral( variables.projectDataHome )#" )' )
 		}
 
 		if ( structKeyExists( arguments.resolvedConfig, "vault" ) && isStruct( arguments.resolvedConfig.vault ) ) {
@@ -988,12 +1057,14 @@ class {
 	 * client-supplied identifier to trust - which is why a `webui` project turns
 	 * session management on (see renderApplication()).
 	 *
-	 * An explicit `memory` key on Agent.bx always wins over that default.
+	 * An explicit `memory` key on Agent.bx always wins over that default. With none, and no build-wide default
+	 * either, the agent gets MemoryWiring's memory: jdbc in the chat database, one row per person and
+	 * conversation under the agent's own name (`maxMessages` and `keepRecent` under `memory` tune it).
 	 *
 	 * @resolvedConfig A single node's own resolved config - only `memory` is used
 	 * @defaultMemory Memory type to use when the node declares none ("" means leave bx-ai's own default alone)
 	 *
-	 * @return A BoxLang `aiMemory( ... )` expression string, or "" to omit the argument entirely
+	 * @return A BoxLang `aiMemory( ... )` or MemoryWiring expression string, or "" to omit the argument entirely
 	 */
 	private string function renderMemoryExpression( required struct resolvedConfig, string defaultMemory = "" ) {
 		var declared = arguments.resolvedConfig.memory ?: {}
@@ -1007,7 +1078,11 @@ class {
 			type = arguments.defaultMemory
 		}
 		if ( !len( type ) ) {
-			return ""
+			// No memory named anywhere: the agent remembers its conversations in the chat database, one row per
+			// person and conversation under its own name (see MemoryWiring). `maxMessages` and `keepRecent` tune it.
+			var settings = isStruct( declared ) ? duplicate( declared ) : {}
+			settings.delete( "key" )
+			return 'new "models.memory.MemoryWiring@bxagents"().memory( "#Strings::bxLiteral( arguments.resolvedConfig.name ?: "" )#", #renderLiteral( settings )# )'
 		}
 
 		var rest = isStruct( declared ) ? duplicate( declared ) : {}
@@ -1286,6 +1361,48 @@ class {
 	}
 
 	/**
+	 * Gives an agent that lists bx-ai's file tools the project's volumes to use them over, unless it names folders of
+	 * its own with `toolOptions.bxai.allowedPaths`. The tools are then fenced into volumes and speak in volume names.
+	 *
+	 * @toolOptions The agent's own `toolOptions`
+	 * @declared The agent's `tools:` entries
+	 *
+	 * @return The `toolOptions` to generate, with `bxai.volumes` and `bxai.dataHome` added where they apply
+	 */
+	private struct function withVolumes( required any toolOptions, required any declared ) {
+		var options = isStruct( arguments.toolOptions ) ? arguments.toolOptions : {}
+		if ( !isArray( arguments.declared ) || !listsFileTools( arguments.declared ) ) {
+			return options
+		}
+		if ( isStruct( options.bxai ?: "" ) && options.bxai.keyExists( "allowedPaths" ) ) {
+			return options
+		}
+		var merged = duplicate( options )
+		merged.bxai = isStruct( merged.bxai ?: "" ) ? merged.bxai : {}
+		merged.bxai.volumes = variables.projectVolumes
+		if ( len( variables.projectDataHome ) ) {
+			merged.bxai.dataHome = variables.projectDataHome
+		}
+		merged.bxai.agentName = variables.projectAgentName
+		return merged
+	}
+
+	/**
+	 * @declared The `tools:` entries, each item@module
+	 *
+	 * @return True when one of them is a bx-ai file tool, or all of bx-ai's tools
+	 */
+	private boolean function listsFileTools( required array declared ) {
+		var fileTools = WizardCatalog::FILE_TOOLS_READ.duplicate().append( WizardCatalog::FILE_TOOLS_WRITE, true ).map( function( tool ) {
+			return tool.name
+		} )
+		return arguments.declared.some( function( entry ) {
+			var parts = toString( entry ).listToArray( "@" )
+			return parts.len() == 2 && parts[ 2 ] == "bxai" && ( parts[ 1 ] == "*" || fileTools.contains( parts[ 1 ] ) )
+		} )
+	}
+
+	/**
 	 * The generated statements that decide ONE agent's tools. An agent gets its
 	 * own `tools/` folder plus whatever its `tools:` list names, resolved against
 	 * the registry when the app assembles its agents (see ToolSelector). It does
@@ -1334,7 +1451,7 @@ class {
 
 		var declared = arguments.resolvedConfig.tools ?: []
 		var quoted = isArray( declared ) ? declared.map( entry => '"#Strings::bxLiteral( toString( entry ) )#"' ) : []
-		var toolOptions = arguments.resolvedConfig.toolOptions ?: {}
+		var toolOptions = withVolumes( arguments.resolvedConfig.toolOptions ?: {}, declared )
 		var toolOptionsArgument = isStruct( toolOptions ) && toolOptions.len() ? ", #renderLiteral( toolOptions )#" : ""
 		lines.append( 'var #arguments.varName#Tools = new "models.build.ToolSelector@bxagents"().select( [ #quoted.toList( ", " )# ], #arguments.varName#OwnTools, "#Strings::bxLiteral( arguments.name )#"#toolOptionsArgument# )' )
 

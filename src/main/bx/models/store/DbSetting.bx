@@ -1,0 +1,22 @@
+/**
+ * Which database file this process uses: BXAGENTS_DB. It is read live from the JVM's properties first and from the
+ * environment second. getSystemSetting() alone is not enough here, because it does not follow a property that is
+ * changed after it was first looked up, and a process that opens several projects one after the other (the tests, or
+ * anything that embeds BX Agents) changes it for each.
+ */
+class {
+
+	static {
+		NAME = "BXAGENTS_DB"
+	}
+
+	/**
+	 * @return The database file named for this process, forward slashes, or "" when none is named
+	 */
+	string function file() {
+		var live = createObject( "java", "java.lang.System" ).getProperty( static.NAME )
+		var value = isNull( live ) ? getSystemSetting( static.NAME, "" ) : live
+		return trim( value ).replace( "\", "/", "all" )
+	}
+
+}

@@ -37,6 +37,7 @@ Each of these cost real debugging time here:
 - **`server` and `request` are reserved scopes.** `var server = {...}` does not shadow the scope; it produces baffling "key not found" or "method not found" errors that look like Java-interop failures.
 - `structKeyExists( someJavaObject, "method" )` is **false** for Java methods. Do not use it to feature-detect on an interop object - check the class, or call and catch.
 - A Java class can be public while the type it returns is package-private, so it is unusable from BoxLang. `ortus.boxlang.runtime.net.SSEParser` is public; the `SSEEvent` it returns is not, and `toStruct()` on it throws `NoMethodException`. Not a problem in practice - drive SSE through `http().sse( true )`, which parses internally - but it is why you cannot hand-drive that parser.
+- `listFindNoCase( "true,false", "yes" )` is **1**: BoxLang reads `yes` and `no` as booleans when it compares, so a list or `==` check cannot tell `yes` from `true`. To accept only the words `true` and `false`, use `reFindNoCase( "^(true|false)$", value )`.
 - A `try/catch` at the **top level** of a `.bxs` script (outside any function) can trigger `java.lang.VerifyError: Inconsistent stackmap frames`. Wrap it in a function.
 
 ## Server-Sent Events

@@ -13,6 +13,9 @@ import bxModules.bxagents.models.build.AgentApiConfig;
 
 import bxModules.bxagents.models.api.ApiPath;
 import bxModules.bxagents.models.api.Guards;
+import bxModules.bxagents.models.data.DataHome;
+import bxModules.bxagents.models.data.Volumes;
+import bxModules.bxagents.models.routines.RoutineSettings;
 
 class {
 
@@ -71,6 +74,11 @@ class {
 		validateAgentApi( arguments.resolvedConfig, arguments.discovery, errors )
 		validateNotes( arguments.resolvedConfig, errors )
 		validateVault( arguments.resolvedConfig, errors )
+		validateData( arguments.resolvedConfig, errors )
+		validateVolumes( arguments.resolvedConfig, errors )
+		validateMemory( arguments.resolvedConfig, errors )
+		validateSkills( arguments.resolvedConfig, errors )
+		validateRoutines( arguments.resolvedConfig, errors )
 
 		return { errors : errors, warnings : warnings }
 	}
@@ -618,6 +626,9 @@ class {
 			if ( hasEnvVar && hasHash ) {
 				arguments.errors.append( "Gateway [#arguments.gatewayName#] user [#username#] sets both 'passwordEnvVar' and 'passwordHash' - pick one, so which wins is never ambiguous" )
 			}
+			if ( user.keyExists( "admin" ) && !( isSimpleValue( user.admin ) && reFindNoCase( "^(true|false)$", toString( user.admin ) ) ) ) {
+				arguments.errors.append( "Gateway [#arguments.gatewayName#] user [#username#] has an 'admin' that is not true or false" )
+			}
 			if ( hasHash && !( user.passwordHash ).startsWith( "pbkdf2$" ) ) {
 				arguments.errors.append( "Gateway [#arguments.gatewayName#] user [#username#] has a 'passwordHash' that is not in this project's format - it must look like pbkdf2$<iterations>$<salt>$<hash>" )
 			}
@@ -833,7 +844,7 @@ class {
 	 *     provider: sqlite          # built in, or a class implementing models.notes.INotesProvider
 	 *     user:  { limit: 1400 }    # characters in the prompt
 	 *     agent: { limit: 2200 }
-	 *     tool: true                # the remember and forget tools
+	 *     tool: true                # the note_remember and note_forget tools
 	 *     approveForget: true       # a person approves what the agent forgets
 	 *
 	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `notes` is used
@@ -886,6 +897,99 @@ class {
 			if ( structKeyExists( notes, flag ) && !isBoolean( notes[ flag ] ) ) {
 				arguments.errors.append( "Agent.bx's 'notes.#flag#' must be true or false" )
 			}
+		}
+	}
+
+	/**
+	 * Validates the optional `data` block: where the agent keeps everything (see DataHome).
+	 *
+	 *   data:
+	 *     home: ~/.nanobox     # an absolute path, ~/..., or relative to the project
+	 *
+	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `data` is used
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	private void function validateData( required struct resolvedConfig, required array errors ) {
+		if ( structKeyExists( arguments.resolvedConfig, "data" ) ) {
+			for ( var problem in DataHome::problems( arguments.resolvedConfig.data ) ) {
+				arguments.errors.append( "Agent.bx's " & problem )
+			}
+		}
+	}
+
+	/**
+	 * The `memory` block when it names no `type`: the settings of the default memory (maxMessages, keepRecent).
+	 * A block that names a type is the author's own choice and is built as written, so it is left alone.
+	 *
+	 * @resolvedConfig The resolved config struct
+	 * @errors Accumulator array
+	 */
+	private void function validateMemory( required struct resolvedConfig, required array errors ) {
+		var declared = arguments.resolvedConfig.memory ?: ""
+		if ( !isStruct( declared ) || len( trim( declared.type ?: "" ) ) ) {
+			return
+		}
+		for ( var problem in new "models.memory.MemoryWiring@bxagents"().problems( declared ) ) {
+			arguments.errors.append( problem )
+		}
+	}
+
+	/**
+	 * Validates the optional `volumes` block: the host folders the agent's file tools may use (see Volumes).
+	 *
+	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `volumes` is used
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	private void function validateVolumes( required struct resolvedConfig, required array errors ) {
+		if ( structKeyExists( arguments.resolvedConfig, "volumes" ) ) {
+			for ( var problem in Volumes::problems( arguments.resolvedConfig.volumes ) ) {
+				arguments.errors.append( "Agent.bx's " & problem )
+			}
+		}
+	}
+
+	/**
+	 * Validates the optional `skills` block: whether the root agent may save skills of its own and whether a person
+	 * approves each one. See SkillWiring.
+	 *
+	 *   skills:
+	 *     agentCanSave: true     # default true
+	 *     autoApprove: false     # default false
+	 *
+	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `skills` is used
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	private void function validateSkills( required struct resolvedConfig, required array errors ) {
+		if ( !structKeyExists( arguments.resolvedConfig, "skills" ) ) {
+			return
+		}
+		if ( !isStruct( arguments.resolvedConfig.skills ) ) {
+			arguments.errors.append( "Agent.bx's 'skills' must be a struct such as { autoApprove: true }" )
+			return
+		}
+		for ( var problem in new "models.skills.SkillWiring@bxagents"().problems( arguments.resolvedConfig.skills ) ) {
+			arguments.errors.append( "Agent.bx's " & problem )
+		}
+	}
+
+	/**
+	 * Validates the optional `routines` block: prompts the agent runs on a schedule. Off unless `enabled: true`. See
+	 * RoutineSettings for every setting and its range.
+	 *
+	 *   routines:
+	 *     enabled: true
+	 *     minInterval: 5m
+	 *     timezone: Europe/Madrid
+	 *
+	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `routines` is used
+	 * @errors Accumulator array - append() any validation errors found
+	 */
+	private void function validateRoutines( required struct resolvedConfig, required array errors ) {
+		if ( !structKeyExists( arguments.resolvedConfig, "routines" ) ) {
+			return
+		}
+		for ( var problem in new "models.routines.RoutineWiring@bxagents"().problems( arguments.resolvedConfig.routines ) ) {
+			arguments.errors.append( "Agent.bx's " & problem )
 		}
 	}
 
@@ -947,6 +1051,13 @@ class {
 		}
 
 		validateGatewayCommands( sessionConfig.commands ?: {}, arguments.errors, arguments.hasExtensions )
+
+		// /routines and /routine have nothing to work on when routines are off, so allowing them is a mistake worth naming
+		var allowed = isStruct( sessionConfig.commands ?: "" ) && isArray( sessionConfig.commands.allow ?: "" ) ? sessionConfig.commands.allow : []
+		var routinesOn = isStruct( arguments.resolvedConfig.routines ?: "" ) && RoutineSettings::resolve( arguments.resolvedConfig.routines ).enabled
+		if ( !routinesOn && ( allowed.containsNoCase( "routines" ) || allowed.containsNoCase( "routine" ) ) ) {
+			arguments.errors.append( "Agent.bx's 'gatewaySession.commands.allow' names routines or routine, but routines are not turned on - set routines.enabled to true or take them out" )
+		}
 	}
 
 	/**
@@ -1323,7 +1434,7 @@ class {
 	private void function validateAiSettings( required struct config, required array errors, required string label, array profileNames = [], boolean isRoot = true ) {
 		if ( !arguments.isRoot ) {
 			// bx-ai's settings are global to the app, so these belong to the root Agent.yaml
-			for ( var key in [ "params", "options", "providers", "profiles", "defaultProfile", "embeddings", "speech", "transcription", "image", "usage", "tui", "extensions" ] ) {
+			for ( var key in [ "params", "options", "providers", "profiles", "defaultProfile", "embeddings", "speech", "transcription", "image", "usage", "tui", "extensions", "data", "volumes" ] ) {
 				if ( arguments.config.keyExists( key ) ) {
 					arguments.errors.append( "#arguments.label#: '#key#' applies to the whole app, so it belongs in the project's own Agent.yaml. A subagent can set model or profile" )
 				}

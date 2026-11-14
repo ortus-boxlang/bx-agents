@@ -170,6 +170,31 @@ class extends="testbox.system.BaseSpec" {
 					expect( jsonDeserialize( skills( root, [ "list" ], transport, { json : true } ).message ).map( r => r.state ) ).toBe( [ "missing", "modified" ] );
 				} );
 
+				it( "shows one skill's text by name: the project's own first, then an installed one", function() {
+					var root = newTempProject();
+					directoryCreate( root & "/skills/ours", true, true );
+					fileWrite( root & "/skills/ours/SKILL.md", "---#char( 10 )#name: ours#char( 10 )#description: Ours#char( 10 )#---#char( 10 )#Do it our way.", "UTF-8" );
+					directoryCreate( root & "/.agents/skills/theirs", true, true );
+					fileWrite( root & "/.agents/skills/theirs/SKILL.md", "---#char( 10 )#name: theirs#char( 10 )#description: Theirs#char( 10 )#---#char( 10 )#Do it their way.", "UTF-8" );
+
+					var mine = skills( root, [ "show", "ours" ], "" );
+					var installed = skills( root, [ "show", "theirs" ], "" );
+
+					expect( mine.exitCode ).toBe( 0 );
+					expect( mine.message ).toInclude( "ours (project)" );
+					expect( mine.message ).toInclude( "Do it our way." );
+					expect( installed.message ).toInclude( "theirs (installed)" );
+					expect( installed.message ).notToInclude( root );
+				} );
+
+				it( "says when a skill is not there, refuses a name that is a path, and needs a name", function() {
+					var root = newTempProject();
+
+					expect( skills( root, [ "show", "nope" ], "" ).exitCode ).toBe( 1 );
+					expect( skills( root, [ "show", "../secrets" ], "" ).message ).toInclude( "is not a skill name" );
+					expect( function() { skills( root, [ "show" ], "" ); } ).toThrow( "BxAgents.MissingSkillName" );
+				} );
+
 				it( "updates a skill whose registry copy changed, leaves an edited one alone, and does nothing on --dry-run", function() {
 					var root = newTempProject();
 					skills( root, [ "install", "acme/skills/ops~triage", "acme/skills/writing~release-notes" ], fakeRegistry( catalog() ).transport );

@@ -113,7 +113,7 @@ Identity is the API's: with no `users` the page is the one open `local` user, sh
 
 ### Slash commands
 
-Type `/` in the message box and a menu of commands appears (arrow keys, `Tab` to complete, `Esc` to close). They are the same commands as in [the terminal chat](../cli-reference.md#the-same-commands-in-the-web-page-and-in-chat-apps): `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/context`, `/remember`, `/notes`, `/name`, `/fork`, `/export`, `/ping` and `/keys`. Pressing Enter runs the line on the server with `POST /command` and draws the answer: text, a table, or buttons to pick from. `/new`, `/resume` and `/fork` move the page to the conversation they name, `/clear` reloads the transcript, and `/export [file] [--format=md|html]` hands the conversation to the browser to save (**Fork this conversation** and **Export** in the Settings menu run `/fork` and `/export`).
+Type `/` in the message box and a menu of commands appears (arrow keys, `Tab` to complete, `Esc` to close). They are the same commands as in [the terminal chat](../cli-reference.md#the-same-commands-in-the-web-page-and-in-chat-apps): `/help`, `/new`, `/tools`, `/volumes`, `/skills`, `/routines`, `/routine`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/context`, `/remember`, `/notes`, `/name`, `/fork`, `/export`, `/ping` and `/keys`. Pressing Enter runs the line on the server with `POST /command` and draws the answer: text, a table, or buttons to pick from. `/new`, `/resume` and `/fork` move the page to the conversation they name, `/clear` reloads the transcript, and `/export [file] [--format=md|html]` hands the conversation to the browser to save (**Fork this conversation** and **Export** in the Settings menu run `/fork` and `/export`).
 
 The reply is data, so any client can use it:
 
@@ -221,9 +221,27 @@ Accounts are reconciled from config on every boot, in this order: `ChatDb` migra
 - **Removing** them from config **deactivates** the account rather than deleting it. Their conversations reference their id, so deleting the row would orphan that history instead of revoking access. They can no longer sign in; their data stays intact and returns if the account is restored.
 - A `passwordEnvVar` whose variable is **unset** skips that account entirely and logs a warning to `webui-auth`. This fails closed on purpose - creating the account with an empty password would be far worse than it not existing.
 
+### Admins and members
+
+Every account is either an **admin** or a **member**. A member talks to the agent and sees only their own conversations, notes and preferences. An admin can also do what the operator of the app does: manage access tokens, see everyone's conversations, change the agent's own notes and secrets, see where the agent keeps its data (`GET /data`), and choose who else is an admin.
+
+The flag is a boolean on the account:
+
+```javascript
+users : [
+    { username: "ada",   passwordEnvVar: "ACME_ADA_PASSWORD", admin: true },
+    { username: "grace", passwordEnvVar: "ACME_GRACE_PASSWORD" }
+]
+```
+
+- **Config seeds it, the database keeps it.** `admin: true` sets the flag when the account is created, or when no account is an admin yet (how an account that existed before the flag gets its first admin). After that the database value wins, so a change made later survives a restart. Take `admin: true` out of config and the account stays an admin.
+- **No admin set means no admin.** A server with accounts and none of them an admin has no one who can manage the others; the terminal and the server secret are still admins.
+- **Changing it.** An admin can call `POST /users/admin` with `{ "username": "grace", "admin": true }`, list accounts with `GET /users`, or run [`bxAgents users`](../cli-reference.md#users). The last admin cannot be demoted. The change applies on the account's next request.
+- The server secret (`agentApi.tokenEnvVar`), an issued token with `admin` scope and the terminal are admins as before; an open server with no accounts is one shared admin.
+
 ### What this is not
 
-This is a fixed roster of operator-provisioned accounts, not a user-management system. There is no self-registration, no password reset, no roles or permissions, and no per-user rate limiting or spend cap. If you need federated identity instead, edit `resolveUserId()` in the generated handler to return your own authenticated principal - the rest of the web UI neither knows nor cares where the id came from.
+This is a fixed roster of operator-provisioned accounts, not a user-management system. There is no self-registration, no password reset, no roles beyond admin and member, and no per-user rate limiting or spend cap. If you need federated identity instead, edit `resolveUserId()` in the generated handler to return your own authenticated principal - the rest of the web UI neither knows nor cares where the id came from.
 
 ## Human-in-the-loop
 
@@ -308,7 +326,7 @@ An absolute `database.path` **fails the build**: it's resolved with `expandPath(
 
 **One file for the web chat and the terminal chat.** On a developer's machine, `bxAgents serve` starts the app with the environment variable `BXAGENTS_DB` set to `data/chat.db` in the project folder, and `bxAgents chat` opens the same file. The generated app uses `BXAGENTS_DB` when it is set and `database.path` otherwise, so a deployed app keeps its file inside the app unless you set `BXAGENTS_DB` there too (for example to a mounted volume). New projects git-ignore `data/chat.db*`. The file is in WAL mode, so the terminal chat and a running server can use it at the same time.
 
-**Schema is versioned and forward-only.** `ChatStore.migrate()` (called by `ChatDb.migrate()`) records what it has applied in a `bxagents_schema_version` table and applies only what's newer, so booting against an existing store is a no-op. v1 creates `conversations` and `preferences`; v2 adds `users`, v3 `tokens`, v4 `notes` and v5 `usage`. Evolve it by adding a step to the store's migration list - never by editing a migration that has shipped, because **SQLite cannot modify or drop a column**. A database made by an earlier version of the generated app is recognised and left as it is.
+**Schema is versioned and forward-only.** `ChatStore.migrate()` (called by `ChatDb.migrate()`) records what it has applied in a `bxagents_schema_version` table and applies only what's newer, so booting against an existing store is a no-op. v1 creates `conversations` and `preferences`; v2 adds `users`, v3 `tokens`, v4 `notes` and v5 `usage`; v6 adds where a conversation started, v7 the vault and v8 the admin flag of an account. Evolve it by adding a step to the store's migration list - never by editing a migration that has shipped, because **SQLite cannot modify or drop a column**. A database made by an earlier version of the generated app is recognised and left as it is.
 
 !!! warning
     **Two things here are counter-intuitive, and both were established the hard way against a real ColdBox boot rather than read off a docs page.**
@@ -393,6 +411,15 @@ For anything the tokens don't cover - custom fonts, layout, per-element rules - 
 !!! warning
     **`apiKeyEnvVar` is a shared secret, not a login system.** It is the same thing as the agent API's `agentApi.tokenEnvVar` (a name in `Agent.yaml` wins if both are set). Left unset, the API is open (fine on your own machine, not for a public deployment; `serve` warns when an open API listens on every interface). Set it, and every call to `/__bxagents` must carry a matching `x-bxagents-token` header, compared in constant time. **The static shell (`<path>/index.html`) is not gated**, because a browser's plain page navigation can't send a custom header; the page asks for it in a form: a **Password** box that opens by itself when the server answers `401` and again from **Password** in the Settings menu. The password is kept in `localStorage` and sent on every call; a wrong one shows "That password was not accepted." For several people use [issued tokens](agent-bx.md#access-tokens-for-a-deployed-agent) or `users`.
 
+## Logs and chat apps
+
+For an admin, the **Server** group of the Settings menu has two more items when the server keeps a data home:
+
+- **Logs** opens a panel with a tab for each log that exists (agent, gateways, routines, heartbeat, API). Each line shows its time, its level (error, warn, info or debug, in words as well as colour), who it is about and what happened. Filter by level, search for a word, pick how many lines, and tick **Refresh every 5 s** to follow a log as it grows. See [logs](logs.md).
+- **Chat apps** lists each chat app the project names with its state (connected, stopped, failing or not registered), which of its credentials are set (the names only, never a value), when it last had a conversation, and its last error with a button that opens that gateway's lines in the log. The chat apps are still set up in `gateways/` and `.env`: the page only shows how they are doing.
+
+A small red count on the Settings button says how many sources logged an error since the app started.
+
 ## Settings and appearance
 
 The header keeps only what you use every minute: the **Chats** button, the context ring, the model picker and a **Settings** gear. The gear opens one menu, in three groups: **Conversation** (Fork this conversation, Export as Markdown, Clear messages, Compact older messages), **You** (Notes, Appearance, Dark or Light theme) and **Server** (Password, Access tokens). An item shows only where the server offers it, and a group with nothing in it is left out.
@@ -464,3 +491,14 @@ The page is complete against its own API - every route it needs exists and is ex
 | Retry / regenerate | A failed turn has to be re-sent by hand |
 | Edit and resend | No editing a message already sent |
 | Token / cost display | The page shows none. `usage: true` in `Agent.yaml` records tokens for `bxAgents stats`, and `/stats` shows them in the terminal chat only |
+
+## Routines
+
+When the server has [routines](routines.md) on, the **You** group of the Settings menu has a **Routines** item that opens a panel:
+
+- A row for each routine: its name, a status chip in words (ok, failed last time, paused, running, waiting for approval, not run yet), the schedule in words with the stored form beside it, the next and last run, and where its answer goes. A failed or auto-paused routine shows its last error and a **Resume** button.
+- **Run now**, **Pause** or **Resume**, **Edit**, **Reports**, **Open conversation** (the routine's own, with its answers) and **Delete**, which asks first and keeps the reports. An admin gets **Show every owner's routines**.
+- **New routine** and **Edit** share one dialog: name, schedule (five cron fields such as `0 9 * * 1-5`, or `every 30m`), what the agent should do, and where the answer goes. For an admin that includes a [chat app](gateways/index.md) when the project has one; a chat id is asked for when the chat app has talked to more than one chat. A bad schedule or a limit reached is answered in words in the dialog. The reading of the schedule in words comes back when you save.
+- **Reports** lists a routine's files with their size and date, shows one, deletes one (after a confirmation), and **Clean up reports older than N days** first says how many files and bytes it would remove and asks before it removes them.
+
+The panel works with the keyboard, in light and dark, and on a phone.

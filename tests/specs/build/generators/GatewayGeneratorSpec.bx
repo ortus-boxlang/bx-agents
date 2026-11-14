@@ -24,6 +24,16 @@ class extends="testbox.system.BaseSpec" {
 				return dir & "/app";
 			}
 
+			it( "reports each channel entry with its type and the environment variables it reads, for the admin view", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-telegram" );
+				var result = generator.generate( discovery, newAppDir() );
+
+				expect( result.channelInfo ).toHaveLength( 1 );
+				expect( result.channelInfo[ 1 ].type ).toBe( "telegram" );
+				expect( result.channelInfo[ 1 ].envVars ).toBe( [ "MY_TELEGRAM_BOT_TOKEN" ] );
+				expect( result.channelInfo[ 1 ].keyArray().sort( "text" ) ).toBe( [ "envVars", "name", "type" ] );
+			} );
+
 			it( "emits one aiGatewayRegistry().register() call per channel-adapter entry, ordered by name", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
 				var result = generator.generate( discovery, newAppDir() );
@@ -232,6 +242,19 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.hasPushGateway ).toBeTrue();
 				var content = result.sessionStartupStatement;
 				expect( content ).toInclude( 'aiGatewayRegistry().get( "whatsapp-cloud" )' );
+			} );
+
+			it( "stamps the routines settings into the session when routines are on, and an empty block when they are off", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-telegram" );
+
+				var off = generator.generate( discovery, newAppDir(), { name : "t", model : "openai/gpt-5" } ).sessionStartupStatement;
+				expect( reFind( "routines\s+:\s*\{\s*\}", off ) ).toBeGT( 0 );
+
+				var on = generator.generate( discovery, newAppDir(), { name : "t", model : "openai/gpt-5", routines : { enabled : true, timezone : "UTC" }, data : { home : "mydata" } } ).sessionStartupStatement;
+				expect( on ).toInclude( "routines" );
+				expect( on ).toInclude( "mydata" );
+				expect( on ).toInclude( "UTC" );
+				expect( reFind( "routines\s+:\s*\{\s*\}", on ) ).toBe( 0 );
 			} );
 
 			it( "registers a teams gateway via its bare class path, resolving every config value live", function() {

@@ -57,6 +57,72 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			it( "reaches the clear and skill reading routes, and names the agent a turn is for", function() {
+				client.clearNotes( "agent" );
+				client.clearMemory( all = true, agent = "researcher" );
+				client.clearMemory( conversationId = "c1" );
+				client.readSkill( "release notes" );
+				client.invoke( input = "hi", agent = "researcher" );
+				client.invoke( input = "hello" );
+				client.cancel( "t1", "stop", "researcher" );
+				client.pending( "t1", "researcher" );
+				client.createSession( "Dig", "scout" );
+
+				expect( seen.paths[ 1 ] ).toBe( "/agent-api/notes/clear" );
+				expect( seen.methods[ 1 ] ).toBe( "POST" );
+				expect( jsonDeserialize( seen.bodies[ 1 ] ) ).toBe( { scope : "agent" } );
+				expect( jsonDeserialize( seen.bodies[ 2 ] ) ).toBe( { all : true, agent : "researcher" } );
+				expect( jsonDeserialize( seen.bodies[ 3 ] ) ).toBe( { conversationId : "c1" } );
+				expect( seen.paths[ 2 ] ).toBe( "/agent-api/memory/clear" );
+				expect( seen.paths[ 4 ] ).toInclude( "/agent-api/skills/read?name=release" );
+				expect( seen.methods[ 4 ] ).toBe( "GET" );
+				expect( jsonDeserialize( seen.bodies[ 5 ] ).agent ).toBe( "researcher" );
+				expect( jsonDeserialize( seen.bodies[ 6 ] ).keyExists( "agent" ) ).toBeFalse();
+				expect( jsonDeserialize( seen.bodies[ 7 ] ).agent ).toBe( "researcher" );
+				expect( seen.paths[ 8 ] ).toInclude( "agent=researcher" );
+				expect( jsonDeserialize( seen.bodies[ 9 ] ) ).toBe( { title : "Dig", agent : "scout" } );
+			} );
+
+			it( "reaches each routines route with the verb and body it takes", function() {
+				client.routines();
+				client.routines( true );
+				client.routine( "check-build" );
+				client.createRoutine( "check-build", "0 9 * * 1-5", "Check it.", "gateway:telegram", "42" );
+				client.updateRoutine( "check-build", { schedule : "every 1h", ignored : 1 } );
+				client.pauseRoutine( "check-build" );
+				client.runRoutine( "check-build" );
+				client.routineReports( "check-build" );
+				client.routineReport( "check-build", "report.md" );
+				client.deleteRoutineReport( "check-build", "report.md" );
+				client.cleanRoutineReports( "check-build", 30 );
+				client.cleanRoutineReports( "check-build", 0, true, true );
+
+				expect( seen.paths.map( p => listFirst( p, "?" ) ) ).toBe( [
+					"/agent-api/routines", "/agent-api/routines", "/agent-api/routines/get", "/agent-api/routines",
+					"/agent-api/routines/update", "/agent-api/routines/pause", "/agent-api/routines/run",
+					"/agent-api/routines/reports", "/agent-api/routines/report",
+					"/agent-api/routines/reports/delete", "/agent-api/routines/reports/clean", "/agent-api/routines/reports/clean"
+				] );
+				expect( seen.paths[ 2 ] ).toInclude( "all=1" );
+				expect( seen.paths[ 3 ] ).toInclude( "name=check-build" );
+				expect( seen.paths[ 9 ] ).toInclude( "name=check-build" );
+				expect( seen.paths[ 9 ] ).toInclude( "file=report.md" );
+				expect( jsonDeserialize( seen.bodies[ 4 ] ) ).toBe( { name : "check-build", schedule : "0 9 * * 1-5", prompt : "Check it.", destination : "gateway:telegram", chat : "42" } );
+				expect( jsonDeserialize( seen.bodies[ 5 ] ) ).toBe( { name : "check-build", schedule : "every 1h" } );
+				expect( jsonDeserialize( seen.bodies[ 11 ] ) ).toBe( { name : "check-build", all : false, apply : false, olderThanDays : 30 } );
+				expect( jsonDeserialize( seen.bodies[ 12 ] ) ).toBe( { name : "check-build", all : true, apply : true } );
+			} );
+
+			it( "reaches the chat app and schedule routes", function() {
+				client.gateways();
+				client.reconnectGateway( "telegram" );
+				client.describeSchedule( "0 9 * * 1-5" );
+
+				expect( seen.paths.map( p => listFirst( p, "?" ) ) ).toBe( [ "/agent-api/gateways", "/agent-api/gateways/reconnect", "/agent-api/routines/schedule" ] );
+				expect( jsonDeserialize( seen.bodies[ 2 ] ) ).toBe( { name : "telegram" } );
+				expect( urlDecode( seen.paths[ 3 ] ) ).toInclude( "schedule=0 9 * * 1-5" );
+			} );
+
 			it( "sends the token, the source and the body to the path it was given, and returns the parsed answer", function() {
 				reply.body = '{"success":true,"output":"hello","threadId":"t-1"}';
 
@@ -100,6 +166,19 @@ class extends="testbox.system.BaseSpec" {
 				expect( seen.paths[ 1 ] ).toInclude( "limit=5" );
 				expect( seen.paths[ 1 ] ).toInclude( "source=web" );
 				expect( seen.paths[ 1 ] ).toInclude( "all=1" );
+			} );
+
+			it( "asks for a page of conversations by text, agent, dates and offset, with the facets when it says so", function() {
+				client.sessions( limit = 25, offset = 50, q = "plan", agent = "researcher", since = "2026-01-01", before = "2026-02-01", facets = true );
+
+				var path = seen.paths[ 1 ];
+				expect( path ).toInclude( "offset=50" );
+				expect( path ).toInclude( "q=plan" );
+				expect( path ).toInclude( "agent=researcher" );
+				expect( path ).toInclude( "since=2026-01-01" );
+				expect( path ).toInclude( "before=2026-02-01" );
+				expect( path ).toInclude( "facets=1" );
+				expect( path ).notToInclude( "all=1" );
 			} );
 
 			it( "reads an export as text", function() {

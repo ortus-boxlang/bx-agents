@@ -1,0 +1,86 @@
+/**
+ * /routines and /routine through the command service, as a person in a chat or an admin would type them.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "the /routines and /routine commands", function() {
+
+			beforeEach( function() {
+				variables.dir = replace( createTempDirectory( prefix = "bxagents-routinecmd-" ), "\", "/", "all" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.now = createObject( "java", "java.time.Instant" ).parse( "2026-11-09T08:00:00Z" ).toEpochMilli();
+				variables.settings = bxModules.bxagents.models.routines.RoutineSettings::resolve( { enabled : true, timezone : "UTC" } );
+				variables.service = new bxModules.bxagents.models.routines.Routines( store, settings, () => now );
+				variables.home = new bxModules.bxagents.models.data.DataHome( projectRoot = dir, configured = dir & "/home", environment = {} );
+				variables.results = new bxModules.bxagents.models.routines.RoutineResults( home, settings );
+				variables.reports = new bxModules.bxagents.models.routines.RoutineReports( service, results, () => now );
+				variables.manager = new bxModules.bxagents.models.routines.RoutineManager(
+					service, new bxModules.bxagents.models.routines.Destinations( new bxModules.bxagents.models.gateways.GatewayChats( store ), { get : ( n ) => javacast( "null", "" ) } ), reports
+				);
+				variables.agent = aiAgent( name : "helper", model : aiModel( provider : "mock" ) );
+				variables.on = new bxModules.bxagents.models.chat.commands.CommandService( agent = agent, routines = manager );
+				variables.off = new bxModules.bxagents.models.chat.commands.CommandService( agent = agent );
+				manager.create( new bxModules.bxagents.models.api.Caller( id = "ada", scope = "chat", source = "web" ), "daily-check", "0 9 * * 1-5", "Check the build." );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function said( reply ) {
+				return jsonSerialize( reply.blocks );
+			}
+
+			it( "lists the person's routines with the schedule in words and the next run", function() {
+				var text = said( on.execute( "ada", "c1", "/routines", "web", false ) );
+				expect( text ).toInclude( "daily-check" );
+				expect( text ).toInclude( "weekdays at 09:00" );
+				expect( text ).toInclude( "2026-11-09 09:00" );
+			} );
+
+			it( "does not show another person's routines, and keeps all for an admin", function() {
+				expect( said( on.execute( "bob", "c2", "/routines", "web", false ) ) ).notToInclude( "daily-check" );
+				expect( said( on.execute( "bob", "c2", "/routines all", "web", false ) ) ).toInclude( "Only an admin" );
+				expect( said( on.execute( "root", "c3", "/routines all", "web", true ) ) ).toInclude( "daily-check" );
+			} );
+
+			it( "shows one routine in full", function() {
+				var text = said( on.execute( "ada", "c1", "/routine daily-check", "web", false ) );
+				expect( text ).toInclude( "Check the build." );
+				expect( text ).toInclude( "its own conversation" );
+			} );
+
+			it( "pauses, resumes and runs one", function() {
+				expect( said( on.execute( "ada", "c1", "/routine daily-check pause", "web", false ) ) ).toInclude( "Done" );
+				expect( said( on.execute( "ada", "c1", "/routines", "web", false ) ) ).toInclude( "paused" );
+				on.execute( "ada", "c1", "/routine daily-check resume", "web", false );
+				expect( said( on.execute( "ada", "c1", "/routine daily-check run", "web", false ) ) ).toInclude( "Done" );
+			} );
+
+			it( "deletes only with confirm", function() {
+				expect( said( on.execute( "ada", "c1", "/routine daily-check delete", "web", false ) ) ).toInclude( "delete confirm" );
+				expect( service.list( new bxModules.bxagents.models.api.Caller( id = "ada" ) ).data().routines ).toHaveLength( 1 );
+				on.execute( "ada", "c1", "/routine daily-check delete confirm", "web", false );
+				expect( service.list( new bxModules.bxagents.models.api.Caller( id = "ada" ) ).data().routines ).toBeEmpty();
+			} );
+
+			it( "lists and reads reports, and has no way to remove one", function() {
+				var row = service.get( new bxModules.bxagents.models.api.Caller( id = "ada" ), "daily-check" ).data().routine;
+				results.save( row, "today.md", "All green." );
+				expect( said( on.execute( "ada", "c1", "/routine daily-check reports", "web", false ) ) ).toInclude( "today.md" );
+				expect( said( on.execute( "ada", "c1", "/routine daily-check report today.md", "web", false ) ) ).toInclude( "All green." );
+				expect( said( on.execute( "ada", "c1", "/routine daily-check remove today.md", "web", false ) ) ).toInclude( "Unknown action" );
+			} );
+
+			it( "says a name it does not know, and that routines are off", function() {
+				expect( said( on.execute( "ada", "c1", "/routine nope", "web", false ) ) ).toInclude( "nope" );
+				expect( said( off.execute( "ada", "c1", "/routines", "web", false ) ) ).toInclude( "not turned on" );
+			} );
+
+		} );
+	}
+
+}

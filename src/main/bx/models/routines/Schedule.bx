@@ -1,0 +1,224 @@
+/**
+ * When a routine runs. A schedule is stored in one of two forms, nothing else:
+ *
+ *   a 5 field cron expression    0 9 * * 1-5      minute hour day-of-month month day-of-week
+ *   every <n><m|h|d>             every 30m        minutes, hours or days since the last run
+ *
+ * The model turns "every weekday at 9" into one of these and the tools show the English reading (`describe()`), so a
+ * mistake is seen. Cron is read by BoxLang's own CronExpression. Times are epoch milliseconds throughout, and a cron
+ * expression is read in a time zone you pass (a blank zone is the server's).
+ *
+ * Nothing here throws for a bad schedule: `check()` answers { ok, value, reason }.
+ */
+class {
+
+	static {
+		UNIT_MINUTES = { m : 1, h : 60, d : 1440 }
+		DAYS         = { "0" : "Sunday", "1" : "Monday", "2" : "Tuesday", "3" : "Wednesday", "4" : "Thursday", "5" : "Friday", "6" : "Saturday", "7" : "Sunday" }
+		DAY_NAMES    = { sun : "0", mon : "1", tue : "2", wed : "3", thu : "4", fri : "5", sat : "6" }
+		// how many fires to look at when asking for the shortest gap of a cron schedule
+		SAMPLE       = 60
+	}
+
+	/**
+	 * Reads a schedule.
+	 *
+	 * @text What the person or the model wrote
+	 *
+	 * @return { ok : true, value : the normalised text, kind : cron | every } or { ok : false, reason }
+	 */
+	static struct function check( required string text ) {
+		var clean = trim( reReplace( arguments.text, "\s+", " ", "all" ) )
+		if ( !len( clean ) ) {
+			return { ok : false, reason : "The schedule is empty. Use a cron expression such as 0 9 * * 1-5, or every 30m." }
+		}
+		if ( reFindNoCase( "^every\b", clean ) ) {
+			var m = reFindNoCase( "^every (\d{1,4})([mhd])$", clean, 1, true )
+			if ( !m.pos.len() || m.pos[ 1 ] == 0 ) {
+				return { ok : false, reason : "[#clean#] is not a schedule. An interval looks like every 30m, every 2h or every 1d." }
+			}
+			var amount = int( mid( clean, m.pos[ 2 ], m.len[ 2 ] ) )
+			if ( amount < 1 ) {
+				return { ok : false, reason : "An interval must be at least 1: every 30m." }
+			}
+			return { ok : true, value : "every " & amount & lCase( mid( clean, m.pos[ 3 ], m.len[ 3 ] ) ), kind : "every" }
+		}
+		var fields = listToArray( clean, " " )
+		if ( fields.len() != 5 ) {
+			return { ok : false, reason : "[#clean#] is not a schedule. Use five cron fields (minute hour day-of-month month day-of-week), such as 0 9 * * 1-5, or an interval such as every 30m." }
+		}
+		try {
+			createObject( "java", "ortus.boxlang.runtime.async.CronExpression" ).parse( clean )
+		} catch ( any e ) {
+			return { ok : false, reason : "[#clean#] is not a valid cron expression: #e.message#" }
+		}
+		return { ok : true, value : clean, kind : "cron" }
+	}
+
+	/**
+	 * The next time the schedule fires after a moment.
+	 *
+	 * @text A schedule that check() accepted
+	 * @afterMs Epoch milliseconds
+	 * @zone An IANA zone name such as Europe/Madrid; blank is the server's. Only cron cares.
+	 *
+	 * @return Epoch milliseconds, strictly after afterMs
+	 */
+	static numeric function next( required string text, required numeric afterMs, string zone = "" ) {
+		var checked = Schedule::check( arguments.text )
+		if ( !checked.ok ) {
+			throw( type = "BxAgents.InvalidSchedule", message = checked.reason )
+		}
+		if ( checked.kind == "every" ) {
+			return arguments.afterMs + Schedule::minutesOf( checked.value ) * 60000
+		}
+		var zoneId = Schedule::zoneOf( arguments.zone )
+		var localTime = createObject( "java", "java.time.LocalDateTime" ).ofInstant( createObject( "java", "java.time.Instant" ).ofEpochMilli( javacast( "long", arguments.afterMs ) ), zoneId )
+		var found = createObject( "java", "ortus.boxlang.runtime.async.CronExpression" ).parse( checked.value ).nextFireTime( localTime )
+		if ( !found.isPresent() ) {
+			throw( type = "BxAgents.InvalidSchedule", message = "[#checked.value#] never fires." )
+		}
+		return found.get().atZone( zoneId ).toInstant().toEpochMilli()
+	}
+
+	/**
+	 * The shortest time the schedule can leave between two runs, in minutes. Cron is sampled over its next fires.
+	 *
+	 * @text A schedule that check() accepted
+	 * @zone An IANA zone name; blank is the server's
+	 */
+	static numeric function shortestGap( required string text, string zone = "" ) {
+		var checked = Schedule::check( arguments.text )
+		if ( !checked.ok ) {
+			throw( type = "BxAgents.InvalidSchedule", message = checked.reason )
+		}
+		if ( checked.kind == "every" ) {
+			return Schedule::minutesOf( checked.value )
+		}
+		var at = createObject( "java", "java.lang.System" ).currentTimeMillis()
+		var shortest = 0
+		for ( var i = 1; i <= static.SAMPLE; i++ ) {
+			var following = Schedule::next( checked.value, at, arguments.zone )
+			var gap = ( following - at ) / 60000
+			if ( i > 1 && ( shortest == 0 || gap < shortest ) ) {
+				shortest = gap
+			}
+			at = following
+		}
+		return shortest == 0 ? 525600 : shortest
+	}
+
+	/**
+	 * A short English reading, for the lists and for the model to repeat to the person.
+	 *
+	 * @text A schedule that check() accepted
+	 */
+	static string function describe( required string text ) {
+		var checked = Schedule::check( arguments.text )
+		if ( !checked.ok ) {
+			return arguments.text
+		}
+		if ( checked.kind == "every" ) {
+			var minutes = Schedule::minutesOf( checked.value )
+			var unit = right( checked.value, 1 )
+			var count = int( mid( checked.value, 7, len( checked.value ) - 7 ) )
+			var word = unit == "m" ? "minute" : ( unit == "h" ? "hour" : "day" )
+			return count == 1 ? "every " & word : "every #count# #word#s"
+		}
+		var f = listToArray( checked.value, " " )
+		var plain = ( n ) => isNumeric( f[ n ] )
+		var clock = plain( 1 ) && plain( 2 ) ? numberFormat( f[ 2 ], "00" ) & ":" & numberFormat( f[ 1 ], "00" ) : ""
+		var everyDayOfMonth = f[ 3 ] == "*" && f[ 4 ] == "*"
+		if ( len( clock ) && everyDayOfMonth ) {
+			var days = Schedule::daysOf( f[ 5 ] )
+			if ( days == "*" ) {
+				return "every day at " & clock
+			}
+			if ( len( days ) ) {
+				return days & " at " & clock
+			}
+		}
+		if ( len( clock ) && plain( 3 ) && f[ 4 ] == "*" && f[ 5 ] == "*" ) {
+			return "on day " & f[ 3 ] & " of every month at " & clock
+		}
+		if ( reFind( "^\*/\d+$", f[ 1 ] ) && f[ 2 ] == "*" && f[ 3 ] == "*" && f[ 4 ] == "*" && f[ 5 ] == "*" ) {
+			return "every " & mid( f[ 1 ], 3, len( f[ 1 ] ) ) & " minutes"
+		}
+		if ( plain( 1 ) && f[ 2 ] == "*" && f[ 3 ] == "*" && f[ 4 ] == "*" && f[ 5 ] == "*" ) {
+			return "every hour at minute " & f[ 1 ]
+		}
+		return "on the cron schedule " & checked.value
+	}
+
+	/**
+	 * @text An interval that check() accepted, such as every 30m
+	 *
+	 * @return The interval in minutes
+	 */
+	static numeric function minutesOf( required string text ) {
+		var amount = int( mid( arguments.text, 7, len( arguments.text ) - 7 ) )
+		return amount * static.UNIT_MINUTES[ right( arguments.text, 1 ) ]
+	}
+
+	/**
+	 * @name A zone name, or blank
+	 *
+	 * @return A java ZoneId; the server's when blank
+	 */
+	static any function zoneOf( string name = "" ) {
+		var zoneId = createObject( "java", "java.time.ZoneId" )
+		return len( trim( arguments.name ) ) ? zoneId.of( trim( arguments.name ) ) : zoneId.systemDefault()
+	}
+
+	/**
+	 * @name A zone name
+	 *
+	 * @return True when Java knows the zone
+	 */
+	static boolean function knownZone( required string name ) {
+		try {
+			createObject( "java", "java.time.ZoneId" ).of( trim( arguments.name ) )
+			return true
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	/**
+	 * Reads a day-of-week field into words.
+	 *
+	 * @field The cron field
+	 *
+	 * @return "*" for every day, "weekdays", "weekends", "every Monday", "Monday and Friday", or blank when it is more complicated than that
+	 */
+	static string function daysOf( required string field ) {
+		var f = lCase( arguments.field )
+		if ( f == "*" ) {
+			return "*"
+		}
+		for ( var name in static.DAY_NAMES ) {
+			f = replace( f, name, static.DAY_NAMES[ name ], "all" )
+		}
+		if ( f == "1-5" ) {
+			return "weekdays"
+		}
+		if ( [ "0,6", "6,7" ].contains( listSort( f, "numeric" ) ) ) {
+			return "weekends"
+		}
+		var named = []
+		for ( var day in listToArray( f ) ) {
+			if ( !static.DAYS.keyExists( day ) ) {
+				return ""
+			}
+			named.append( static.DAYS[ day ] )
+		}
+		if ( named.len() == 1 ) {
+			return "every " & named[ 1 ]
+		}
+		if ( named.len() > 1 ) {
+			return named.slice( 1, named.len() - 1 ).toList( ", " ) & " and " & named[ named.len() ]
+		}
+		return ""
+	}
+
+}

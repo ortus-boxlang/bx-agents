@@ -120,7 +120,8 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "reports what /compact did, and when it cannot", function() {
 				expect( say( sessionWith(), [ "/compact" ] ).text ).toInclude( "Compacted: 12 messages became 4." );
-				expect( say( sessionWith( { compact : () => { return { available : false, compacted : false, before : 3, after : 3 }; } } ), [ "/compact" ] ).text ).toInclude( "no summary model" );
+				expect( say( sessionWith( { compact : () => { return { available : false, compacted : false, before : 3, after : 3 }; } } ), [ "/compact" ] ).text ).toInclude( "names no model" );
+				expect( say( sessionWith( { compact : () => { return { available : true, compacted : true, before : 12, after : 4, model : "openai/gpt-4o-mini" }; } } ), [ "/compact" ] ).text ).toInclude( "Summarized with openai/gpt-4o-mini." );
 				expect( say( sessionWith( { compact : () => { return { available : true, compacted : false, before : 3, after : 3 }; } } ), [ "/compact" ] ).text ).toInclude( "Nothing to compact" );
 			} );
 
@@ -136,6 +137,7 @@ class extends="testbox.system.BaseSpec" {
 
 				function httpWith( required struct routes ) {
 					var requests = [];
+					var payloads = [];
 					var client = new FakeClient( {
 						getJson  : ( base, route, query ) => {
 							requests.append( "GET " & route & ( query.isEmpty() ? "" : "?" & query.keyArray().sort( "text" ).map( k => k & "=" & query[ k ] ).toList( "&" ) ) );
@@ -148,11 +150,12 @@ class extends="testbox.system.BaseSpec" {
 						},
 						events   : ( base, route, payload, onEvent ) => {
 							requests.append( "EVENTS " & route & " " & ( payload.conversationId ?: "" ) );
+							payloads.append( payload );
 							return { output : "", threadId : "t", suspended : false, pending : [], error : "" };
 						},
 						stream   : () => {}
 					} );
-					return { session : new bxagents.models.cli.chat.HttpSession( "http://x", client ), requests : requests };
+					return { session : new bxagents.models.cli.chat.HttpSession( "http://x", client ), requests : requests, payloads : payloads };
 				}
 
 				it( "sends the conversation id with every turn and makes a new one on /new", function() {
@@ -178,6 +181,28 @@ class extends="testbox.system.BaseSpec" {
 					expect( back.history ).toHaveLength( 2 );
 					expect( h.session.conversationId() ).toBe( "aaaa-1" );
 					expect( h.requests.last() ).toBe( "GET history?conversationId=aaaa-1" );
+				} );
+
+				it( "talks to a sub-agent of the server: names it in every turn, and carries on with the agent a conversation belongs to", function() {
+					var h = httpWith( {
+						agent    : { name : "lead", agents : [ { name : "lead", parent : "" }, { name : "scout", parent : "lead" } ] },
+						sessions : { sessions : [ { id : "s-1", title : "Find", messageCount : 2, agent : "scout", updatedAt : now() } ] },
+						history  : { messages : [] }
+					} );
+
+					expect( h.session.agents().map( a => a.name ) ).toBe( [ "lead", "scout" ] );
+					expect( h.session.switchAgent( "ghost" ).ok ).toBeFalse();
+					expect( h.session.switchAgent( "scout" ).ok ).toBeTrue();
+					expect( h.session.agentName() ).toBe( "scout" );
+					h.session.send( "hi", { push : () => {}, cancelRequested : () => false, takeSteer : () => nullValue() } );
+					expect( h.payloads[ 1 ].agent ).toBe( "scout" );
+
+					h.session.switchAgent( "lead" );
+					h.session.send( "hi", { push : () => {}, cancelRequested : () => false, takeSteer : () => nullValue() } );
+					expect( h.payloads[ 2 ].keyExists( "agent" ) ).toBeFalse();
+
+					h.session.resumeSession( "1" );
+					expect( h.session.selectedAgent() ).toBe( "scout" );
 				} );
 
 				it( "says so when the server keeps no list", function() {

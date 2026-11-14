@@ -1,0 +1,75 @@
+/**
+ * The one scheduler that runs routines. Once a minute it looks at the routines table, lets go of waiting runs that were
+ * answered or timed out, and starts what is due, a few at a time, each on a thread of its own.
+ *
+ * Nothing else starts a routine. Pausing, editing and deleting take effect at the next tick, because the schedule lives
+ * in the database and not in the scheduler. A quiet minute writes nothing to the log.
+ */
+import bxModules.bxagents.models.logs.Logger;
+
+class {
+
+	/**
+	 * @routines The Routines service
+	 * @runner A RoutineRunner
+	 * @settings The resolved routines block
+	 * @launcher A function that takes a function and runs it off this thread; the default is BoxLang's runAsync. A spec passes one that runs it at once.
+	 */
+	function init( required any routines, required any runner, required struct settings, any launcher ) {
+		variables.routines = arguments.routines
+		variables.runner = arguments.runner
+		variables.settings = arguments.settings
+		variables.launcher = isNull( arguments.launcher ) ? ( work ) => runAsync( work ) : arguments.launcher
+		return this
+	}
+
+	/**
+	 * Call once when the app starts: puts routines whose run was cut off by a restart back in line.
+	 *
+	 * @return How many were put back
+	 */
+	numeric function start() {
+		var back = variables.routines.recover()
+		Logger::log( "heartbeat", "info", "Heartbeat started" & ( back ? ", #back# interrupted routine(s) put back in line" : "" ) )
+		return back
+	}
+
+	/**
+	 * One beat.
+	 *
+	 * @return { started : [ names ], settled : [ names ] }
+	 */
+	struct function tick() {
+		var started = []
+		var settled = []
+		try {
+			for ( var row in variables.routines.waiting() ) {
+				if ( variables.runner.checkWaiting( row ) != "waiting" ) {
+					settled.append( row.name )
+				}
+			}
+			for ( var due in variables.routines.due( variables.settings.maxParallel ) ) {
+				variables.launcher( jobFor( due ) )
+				started.append( due.name )
+			}
+		} catch ( any e ) {
+			Logger::log( "heartbeat", "error", "A beat failed: #e.message#" )
+			return { started : started, settled : settled }
+		}
+		if ( started.len() || settled.len() ) {
+			Logger::log( "heartbeat", "info", ( started.len() ? "Started #started.toList( ', ' )#. " : "" ) & ( settled.len() ? "Settled #settled.toList( ', ' )#." : "" ) )
+		}
+		return { started : started, settled : settled }
+	}
+
+	/**
+	 * A job of its own for one routine. It is made here, not in the loop, so each job keeps its own routine however
+	 * the loop moves on while the threads run.
+	 */
+	private function jobFor( required struct row ) {
+		var runner = variables.runner
+		var chosen = arguments.row
+		return () => runner.run( chosen )
+	}
+
+}
