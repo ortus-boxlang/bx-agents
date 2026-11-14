@@ -165,6 +165,8 @@
 
 			// who used what, and when: the key's status and the recent audit lines, never a value
 			function loadActivity() {
+				// the audit lines are an admin's: a member does not ask for them
+				if ( !capabilities.admin ) { return; }
 				routinesCall( "GET", "/vault/activity" ).then( function ( result ) {
 					if ( route.stale() ) { return; }
 					activityHost.textContent = "";

@@ -1335,7 +1335,14 @@ __MARKDOWN_SCRIPTS__
 			? window.crypto.randomUUID()
 			: "c-" + Date.now() + "-" + Math.random().toString( 36 ).slice( 2, 10 );
 		localStorage.setItem( CONVERSATION_STORAGE, id );
+		// minted here, so the server has no row for it until its first turn: there is no history to ask for
+		localStorage.setItem( CONVERSATION_STORAGE + ".local", id );
 		return id;
+	}
+
+	/** True for an id this page made up and has not sent a turn on yet */
+	function isLocalOnly( id ) {
+		return localStorage.getItem( CONVERSATION_STORAGE + ".local" ) === id;
 	}
 
 	/**
@@ -2340,6 +2347,10 @@ __MARKDOWN_SCRIPTS__
 
 	function rehydrate() {
 		refreshContext();
+		if ( isLocalOnly( getConversationId() ) ) {
+			showWelcome();
+			return Promise.resolve();
+		}
 		var url = API_BASE + "/history?conversationId=" + encodeURIComponent( getConversationId() );
 		return fetch( url, { headers: authHeaders( {} ) } )
 			.then( function ( res ) { return res.ok ? res.json() : null; } )
@@ -3222,6 +3233,9 @@ __MARKDOWN_SCRIPTS__
 		showHint( "" );
 
 		activeThreadId = newThreadId();
+		if ( isLocalOnly( getConversationId() ) ) {
+			localStorage.removeItem( CONVERSATION_STORAGE + ".local" );
+		}
 		var turn = createTurn();
 
 		var payload = {
