@@ -1,8 +1,8 @@
 ---
 title: "Comandos con barra"
 icon: phosphor-duotone:command
-summary: "Los 26 comandos del chat: qué hace cada uno, dónde funciona (terminal, página web, plataformas de chat) y un ejemplo."
-description: "Los 26 comandos del chat: qué hace cada uno, dónde funciona (terminal, página web, plataformas de chat) y un ejemplo."
+summary: "Los 33 comandos del chat: qué hace cada uno, dónde funciona (terminal, página web, plataformas de chat) y un ejemplo."
+description: "Los 33 comandos del chat: qué hace cada uno, dónde funciona (terminal, página web, plataformas de chat) y un ejemplo."
 tags: [guides, cli, tui, reference]
 ---
 
@@ -39,6 +39,8 @@ En un gateway, `/new`, `/clear`, `/compact`, `/sessions` y `/resume` están desa
 | `/help` | T W G | Lista los comandos que puedes ejecutar aquí | `/help` |
 | `/info` | T W G | Agente, modelo, conversación, número de mensajes, notas y base de datos | `/info` |
 | `/tools` | T W G | Lista las tools del agente | `/tools` |
+| `/volumes` | T W G | Lista las carpetas que el agente puede usar, por nombre, modo y descripción. Nunca una carpeta de la máquina | `/volumes` |
+| `/agent [nombre]` | T | Solo terminal. Lista el agente y sus sub-agentes, o cambia a uno y empieza una conversación nueva con él. Cada agente guarda su propia memoria. La página web tiene el menú **Talk to** para esto, y un gateway siempre habla con el agente principal | `/agent researcher` |
 | `/context` | T W | Qué tamaño tiene el contexto y de qué se compone. Se calcula en local, sin llamar al modelo | `/context` |
 | `/stats [días] [--by=model\|provider\|day\|user]` | T | Tokens que usaron las llamadas al modelo. `/stats enable` activa el registro de uso | `/stats 7 --by=day` |
 | `/keys` | T W | Qué tecla hace qué, con el nombre de la acción de cada una. `?` solo hace lo mismo | `/keys` |

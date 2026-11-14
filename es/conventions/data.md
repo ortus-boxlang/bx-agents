@@ -87,6 +87,10 @@ The agent writes a path as `volume:path`, for example `notes:todo.md`. A path wi
 - **Over the API:** `GET /volumes` answers the same list to anyone who may call the API. `GET /data` answers the data home, the size of each part and the folder of each volume, and is for admins only, since it shows paths.
 - **In `doctor`:** it reports the data home, where it came from, and whether it can be written. It makes nothing.
 
+![The Data and backups page: where the agent keeps everything, the volumes, and the backups](../assets/webui/webui-data.png)
+
+The web app shows all of this on its [Data and backups page](web-ui.md#data-and-backups) (admins only).
+
 ## Skills the agent saves
 
 A skill is a folder with a `SKILL.md`: instructions the agent loads by name when a task calls for them. There are three levels:

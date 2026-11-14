@@ -37,6 +37,12 @@ En tiempo de build, el `addSubAgent()` propio de bx-ai envuelve cada instancia d
 !!! tip
     `bxAgents add subagent <name>` crea la carpeta, hace las mismas preguntas que `new` para su modelo y herramientas, y lo añade al `subAgents` del padre. `--parent=<carpeta>` lo anida bajo otro subagente. Consulta [`add`](../cli-reference.md#add-subagent).
 
+![Talk to con el sub-agente researcher elegido y el banner que lo indica](../assets/webui/webui-talk-to.png)
+
+En la web app el menú **Talk to** lista el agente principal y cada sub-agente; el siguiente mensaje va al que elijas, y cada uno guarda su propia memoria. En la terminal es `/agent`. La [página Agent](web-ui.md#agent) dibuja todo el árbol.
+
+![La página Agent, pestaña Composition](../assets/webui/webui-agent.png)
+
 ## Namespace plano, referencias entre hermanos
 
 Cada subagente - sin importar cuán profundamente lo referencie la propia configuración de otro subagente - vive directamente bajo la carpeta `subagents/` del proyecto **raíz**. El propio `subAgents` declarado de un subagente referencia entradas **hermanas** en esa misma carpeta de nivel raíz, no una carpeta anidada bajo sí mismo. Esto mantiene simple el modelo de descubrimiento/validación: un único grafo dirigido plano sobre las subcarpetas inmediatas de `subagents/`, en lugar de un árbol que podría anidarse arbitrariamente profundo en disco.

@@ -118,6 +118,27 @@ Lista, renombra, bifurca y borra las conversaciones de la base de datos del chat
 ::: card title="stats" icon="phosphor-duotone:chart-bar" href="#stats"
 Lo que usaron las llamadas al modelo: tokens por modelo, proveedor, día o usuario, una vez que el proyecto activa el uso.
 :::
+::: card title="vault" icon="phosphor-duotone:vault" href="#vault"
+Los secretos que usa el agente, sellados en la base de datos del chat: list, add, edit, remove, status, audit.
+:::
+::: card title="connect" icon="phosphor-duotone:plugs-connected" href="#connect"
+Inicia sesión en los servidores MCP que piden iniciar sesión a cada persona.
+:::
+::: card title="routines" icon="phosphor-duotone:clock-countdown" href="#routines"
+Las rutinas programadas: list, add, edit, pause, run, informes y limpieza.
+:::
+::: card title="data" icon="phosphor-duotone:database" href="#data-backup-y-restore"
+Dónde guarda todo el agente, cuánto ocupa cada parte y los volúmenes que puede usar.
+:::
+::: card title="logs" icon="phosphor-duotone:list-magnifying-glass" href="#logs"
+Lista los logs del agente y muestra las últimas líneas de uno.
+:::
+::: card title="backup" icon="phosphor-duotone:archive" href="#data-backup-y-restore"
+Comprime la base de datos del chat, los archivos y las skills del directorio de datos.
+:::
+::: card title="restore" icon="phosphor-duotone:clock-counter-clockwise" href="#data-backup-y-restore"
+Devuelve una copia de seguridad; lo que había se conserva como before-restore.
+:::
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
 Informa de cómo está compuesto el agente, a partir de su código fuente.
 :::
@@ -540,7 +561,7 @@ En la pantalla:
 
 Escribe `/` para ver los comandos: `/help`, `/new` (una conversación nueva), `/tools`, `/copy` (la última respuesta al portapapeles, con la secuencia OSC 52 que honran la mayoría de terminales), `/export [archivo]` (la conversación en Markdown o HTML), `/name` y `/fork` (ver abajo), `/keys` (qué tecla hace qué), `/sessions`, `/resume`, `/clear`, `/compact` e `/info` (ver abajo), `/model`, `/profile` y `/default` (ver abajo), `/remember <texto>` y `/notes` (ver abajo), `/record [archivo]` y `/record stop` (ver abajo) y `/exit`.
 
-#### Los mismos comandos en la página web y en las apps de chat
+#### Los mismos comandos en la página web y en las gateways
 
 Cada comando con barra se escribe una sola vez, como una clase pequeña que responde con datos (texto, una tabla, una lista para elegir), y la terminal, la página web y las plataformas de chat dibujan esa respuesta a su manera. Así `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/remember` y `/notes` funcionan en las tres:
 
@@ -764,6 +785,21 @@ bxAgents token revoke --name=laptop
 - `revoke` detiene un token al instante. El nombre sigue ocupado, así que no se reutiliza por accidente.
 - Ejecútalo donde está la base de datos: en el servidor, o en el proyecto antes de empaquetarlo. En un servidor desplegado, apunta `BXAGENTS_DB` al archivo que usa la app.
 
+### `users`
+
+Las cuentas de inicio de sesión de la página web, tal como las guarda la [base de datos de chat compartida](conventions/web-ui.md#el-almacén-sqlite) del proyecto, y cuál de ellas es admin.
+
+```bash
+bxAgents users list [--json]
+bxAgents users admin --name=ada
+bxAgents users member --name=ada
+```
+
+- `list` muestra el nombre de usuario de cada cuenta, su rol (`admin` o `member`), si está activa y su nombre visible. Nunca una contraseña.
+- `admin` convierte una cuenta en admin; `member` vuelve a hacer normal a un admin. El último admin no puede degradarse.
+- La lista en sí viene de los `users` del gateway web en cada arranque. Este verbo solo cambia la marca de admin, que la base de datos conserva desde entonces. Consulta [Administradores y miembros](conventions/web-ui.md#usuarios-e-inicio-de-sesión).
+- Ejecútalo donde está la base de datos, como [`token`](#token).
+
 ### `notes`
 
 Las notas que guarda un agente, leídas de la [base de datos de chat compartida](conventions/web-ui.md#el-almacén-sqlite) del proyecto (`data/chat.db`, o el archivo que indique `BXAGENTS_DB`). Los límites vienen del bloque [`notes`](conventions/agent-yaml.md#notas) de `Agent.yaml`.
@@ -801,6 +837,88 @@ planner       claude/claude-opus-4            context ?  images ?  key MISSING
 - `list` muestra el modelo por defecto y cada [perfil](conventions/models.md#perfiles), con lo que el proyecto dice de cada uno ([`contextWindow` y `vision`](conventions/models.md#lo-que-el-proyecto-sabe-de-un-modelo), `?` cuando no dice nada) y si la clave del perfil está definida.
 - `test` envía a cada modelo una pregunta diminuta a través de bx-ai e informa `ok` con el tiempo, o `FAILED` con el mensaje del propio proveedor. Prueba el modelo por defecto, un perfil con `--profile`, o todos con `--all`, y sale con `1` cuando alguno no responde, así que puede usarse como puerta antes de desplegar. Gasta unos pocos tokens por modelo.
 - Usa los modelos con los que se compiló el proyecto por última vez: ejecuta antes `bxAgents build`.
+
+### `vault`
+
+Los secretos que usa un agente en tiempo de ejecución, sellados en la [base de datos de chat compartida](conventions/web-ui.md#el-almacén-sqlite) del proyecto (`data/chat.db`, o el archivo que nombre `BXAGENTS_DB`). Consulta [la vault](conventions/vault.md).
+
+```bash
+bxAgents vault list [--scope=agent|user|all] [--user=NAME] [--json]
+bxAgents vault add --name=GMAIL_TOKEN [--user=NAME] [--description=TEXT] [--hosts=a.com,*.b.com] [--stdin]
+bxAgents vault edit --name=GMAIL_TOKEN [--user=NAME] [--description=TEXT] [--hosts=...] [--value] [--stdin]
+bxAgents vault remove --name=GMAIL_TOKEN [--user=NAME] [--yes]
+bxAgents vault status [--json]
+bxAgents vault audit [--limit=N] [--json]
+bxAgents vault key
+```
+
+- Un valor **nunca es un flag**. `add` y `edit` lo piden oculto en una terminal, o lo leen de una tubería con `--stdin` (`op read ... | bxAgents vault add --name=X --stdin`). Nada de esto imprime un valor, y uno no se puede mostrar otra vez tras guardarlo.
+- Sin `--user` un secreto es del agente (compartido). Con `--user=NAME` es propio de esa persona.
+- `edit` cambia solo lo que se indica; `--value` (o `--stdin`) sustituye el valor.
+- `status` dice de dónde viene la clave y avisa cuando es el archivo de clave junto a la base de datos. `audit` lista quién añadió, usó, fue rechazado y quitó qué, sin valores.
+- `key` imprime una clave aleatoria nueva para poner en `BXAGENTS_VAULT_KEY`. No toca la base de datos.
+
+### `data`, `backup` y `restore`
+
+Dónde guarda todo el agente, y copias de seguridad de ello. Consulta [datos y volúmenes](conventions/data.md).
+
+```bash
+bxAgents data [--json]
+bxAgents backup [--to=FILE]
+bxAgents restore FILE [--home=DIR] [--force]
+```
+
+- `data` imprime el directorio de datos y de dónde salió, el tamaño de la base de datos y de cada carpeta, y los volúmenes con sus modos. No crea nada.
+- `backup` comprime la base de datos del chat (copiada entera, así que es segura mientras corre un servidor), `files/` y `skills/`. Sin `--to` el zip va a la carpeta `backups/` del directorio. Los volúmenes no se incluyen.
+- `restore` devuelve una copia y conserva lo que había como `<name>.before-restore`. Se detiene cuando la base de datos parece estar en uso salvo que des `--force`. `--home` restaura en otro directorio de datos.
+
+### `connect`
+
+Inicia sesión en los servicios de un proyecto que piden iniciar sesión a cada persona (una entrada de `mcpServers` con una clave `oauth`). Consulta [connect](conventions/connect.md).
+
+```bash
+bxAgents connect
+bxAgents connect mail [--port=8765] [--no-open] [--timeout=300]
+bxAgents connect mail --remove
+bxAgents connect [--user=NAME] [--json]
+```
+
+- Sin nombre lista los servicios y si estás conectado (`--json` para un script).
+- Con un nombre imprime una dirección y abre tu navegador, espera la redirección en `127.0.0.1` (un puerto libre, o `--port`) y termina el inicio de sesión. `--no-open` solo imprime. `--timeout` son los segundos de espera, 300 por defecto.
+- `--remove` olvida tu inicio de sesión. `--user` indica de quién: `local` por defecto, el único usuario de un servidor abierto.
+- Los tokens se sellan en la base de datos del chat del proyecto. Ejecútalo donde está la base de datos: en el proyecto, o en un servidor con `BXAGENTS_DB` definido.
+
+### `logs`
+
+Los logs del agente, guardados en la carpeta `logs/` del [directorio de datos](conventions/data.md). Consulta [logs](conventions/logs.md).
+
+```bash
+bxAgents logs [area] [--tail=N] [--level=warn] [--grep=TEXT] [--json]
+```
+
+- Sin área lista los logs y su tamaño. Las áreas son `agent`, `gateways`, `routines`, `heartbeat` y `api`.
+- Con una imprime las últimas líneas: `--tail` es cuántas (100 por defecto, hasta 1000), `--level` el nivel menos grave a mostrar y `--grep` una palabra que debe contener la línea.
+- Los secretos nunca están en un log, ni lo que dijo una persona.
+
+### `routines`
+
+Las [rutinas](conventions/routines.md) programadas de un proyecto, como operador local (alcance admin, así que `--all` lista las de todos los propietarios). Trabaja sobre la base de datos del chat y el directorio de datos del proyecto, y necesita `routines.enabled: true`.
+
+```bash
+bxAgents routines list [--all] [--json]
+bxAgents routines show <name>
+bxAgents routines add --name=<name> --schedule="0 9 * * 1-5" --prompt="..." [--destination=routine|gateway:<name>] [--chat=<id>]
+bxAgents routines edit <name> [--schedule=...] [--prompt=...] [--destination=...] [--chat=...]
+bxAgents routines pause|resume|run <name>
+bxAgents routines delete <name> --yes
+bxAgents routines reports <name>
+bxAgents routines report <name> <file>
+bxAgents routines clean <name> [--older-than=30d | --all] [--yes]
+```
+
+- Una planificación son cinco campos cron o `every 30m`. `list` la muestra en palabras y la próxima ejecución.
+- `run` marca una rutina como pendiente. Empieza en el siguiente minuto de una app servida, y el comando lo dice.
+- `delete` pide `--yes` y conserva los informes de la rutina. `clean` solo lista lo que quitaría salvo que añadas `--yes`.
 
 ### `sessions`
 

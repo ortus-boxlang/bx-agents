@@ -128,6 +128,8 @@ toolOptions:
 - Una entrada puede ser `${env.NAME}` para tomar una carpeta del entorno.
 - `bxAgents new` puede escribir todo esto por ti: ver [el asistente de new](../guides/new-wizard.md).
 
+![La página Memory: tus notas, las notas compartidas del agente y la memoria de conversación](../assets/webui/webui-memory.png)
+
 ## Notas
 
 Un agente puede guardar notas cortas: cosas sobre el usuario ("prefiere respuestas cortas") y cosas sobre su propio trabajo ("el repo usa Gradle"). Están desactivadas hasta que existe el bloque:
