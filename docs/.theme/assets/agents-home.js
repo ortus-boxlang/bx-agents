@@ -276,19 +276,23 @@
 	}
 
 	/* walkthrough videos: real recordings */
+	/* The tour. Order is the tab order. `pending: true` hides a tab until its video exists: extensions needs
+	   docs/assets/video/extensions.{mp4,webm,vtt} and extensions-poster.png, then drop the flag. web-trailer is
+	   docs/assets/video/web-trailer.{mp4,webm,vtt} and web-trailer-poster.png. */
 	var VIDEOS = [
-		{ id: "quickstart", tab: "Quick start", title: "From nothing to a running agent", text: "Scaffold a project from the web chat starter, build it, inspect the manifest and serve it.", cmd: "bxAgents new, build, inspect, serve" },
-		{ id: "api-tour", tab: "The API tour", title: "One API for the page, the terminal and your code", text: "Narrated, two and a half minutes: open mode and its startup warning, token mode, the cbSecurity guards, the BoxLang client, the OpenAPI document, the web page, the terminal and gateway sessions. Turn the sound on.", cmd: "/__bxagents" },
-		{ id: "web-tour", tab: "Web chat tour", title: "The generated chat page, with a Settings menu", text: "Narrated: the password form, suggestions, a formatted answer, a tool call, a code block you can copy, Settings, dark mode, notes and access tokens. Answers come from a scripted demo model.", cmd: "exposes: \"webui\"" },
+		{ id: "web-trailer", tab: "Web app trailer", title: "The whole web app in a minute", text: "The left menu and every page: chat, conversations, routines, registry, memory, vault, then the admin pages. Narrated. Answers come from a scripted demo model.", cmd: "exposes: \"webui\"" },
+		{ id: "web-tour", tab: "Web UI tour", title: "The generated chat page, with a Settings menu", text: "Narrated: the password form, suggestions, a formatted answer, a tool call, a code block you can copy, Settings, dark mode, notes and access tokens. Answers come from a scripted demo model.", cmd: "exposes: \"webui\"" },
+		{ id: "terminal-tour", tab: "Terminal chat", title: "A full screen chat on the same API", text: "Narrated: keys, prompt styles, a tool call, the context, naming and forking a conversation, then listing sessions. Answers come from a scripted demo model.", cmd: "bxAgents chat" },
+		{ id: "api-tour", tab: "API", title: "One API for the page, the terminal and your code", text: "Narrated, two and a half minutes: open mode and its startup warning, token mode, the cbSecurity guards, the BoxLang client, the OpenAPI document, the web page, the terminal and gateway sessions. Turn the sound on.", cmd: "/__bxagents" },
+		{ id: "wizard", tab: "Wizard", title: "Answer questions, get an agent", text: "bxAgents new asks what the agent should do and writes the project to match. The last screen prints the one-line command that repeats it.", cmd: "bxAgents new" },
+		{ id: "extensions", pending: true, tab: "Extensions", title: "Add a command, a status item and a page panel with one file", text: "One extension file, then the new command in the terminal chat and the panel in the web app.", cmd: "extensions/audit.bx" },
 		{ id: "vault", tab: "Vault", title: "Give the agent a key without pasting it in the chat", text: "The agent asks for a Gmail token. The vault opens on that name, the value is typed into a hidden box and saved, and it is listed by name, purpose and hosts, never shown again. The agent's request is scripted; the saved secret is real.", cmd: "vault: {}" },
-		{ id: "terminal-tour", tab: "Terminal chat tour", title: "A full screen chat on the same API", text: "Narrated: keys, prompt styles, a tool call, the context, naming and forking a conversation, then listing sessions. Answers come from a scripted demo model.", cmd: "bxAgents chat" },
+		{ id: "quickstart", tab: "Quick start", title: "From nothing to a running agent", text: "Scaffold a project from the web chat starter, build it, inspect the manifest and serve it.", cmd: "bxAgents new, build, inspect, serve" },
 		{ id: "connect", tab: "Connections", title: "Let each person sign in to a service", text: "You ask for your mail and the agent says you have not signed in. Connections lists the service, the provider asks you to allow access, and mail shows as connected. The agent's reply is scripted; the sign in is real, against a fake mail service.", cmd: "oauth: true" },
-		{ id: "chat-terminal", tab: "Terminal chat", title: "Chat with the agent in your terminal", text: "Streaming answers, a tool call, formatted Markdown and the slash commands. The answers come from a scripted demo model.", cmd: "bxAgents chat" },
-		{ id: "wizard", tab: "The wizard", title: "Answer questions, get an agent", text: "bxAgents new asks what the agent should do and writes the project to match. The last screen prints the one-line command that repeats it.", cmd: "bxAgents new" },
 		{ id: "http-gateway", tab: "HTTP gateway", title: "An API for your other systems, from one file", text: "One gateway file, then curl against the invoke, info and streaming routes.", cmd: "exposes: \"agent\"" },
 		{ id: "starters", tab: "Starters", title: "Three starters, side by side", text: "Scaffold slack-bot, multi-agent and mcp-server projects and list what each one contains.", cmd: "bxAgents new --template=<name>" },
 		{ id: "mcp", tab: "MCP", title: "Serving MCP tools", text: "A served project answers MCP JSON-RPC: list the tools, then call one over HTTP.", cmd: "exposes: \"mcp\"" }
-	];
+	].filter(function (v) { return !v.pending; });
 	var vt = $("#vtabs"), vv = $("#vvideo"), vs = $("#vsrc"), vs2 = $("#vsrc2");
 	if (vt && vv) {
 		function setVideo(i, play) {

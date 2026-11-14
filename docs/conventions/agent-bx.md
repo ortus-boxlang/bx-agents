@@ -272,7 +272,7 @@ GET  /__bxagents/export    # ?conversationId=&format=md|html the conversation as
 GET  /__bxagents/whoami    # who the server takes the caller to be: { id, name, scope, source, agent }
 GET  /__bxagents/volumes   # the folders the agent may use: { volumes: [ { name, mode, description } ] }, never a path on the machine
 GET  /__bxagents/logs      # the agent's logs, admin only: which there are, or ?area=&tail=&level=&q= for the last lines
-GET  /__bxagents/gateways  # the chat apps and their state, admin only: { gateways: [ { name, type, state, credentials, lastActiveAt, lastError } ] }
+GET  /__bxagents/gateways  # the gateways and their state, admin only: { gateways: [ { name, type, state, credentials, lastActiveAt, lastError } ] }
 GET  /__bxagents/skills    # the skills the agent can load: { skills: [ { name, description, origin } ] }, origin is installed, project or agent
 GET  /__bxagents/data      # where the agent keeps everything and where each volume is (admin only)
 GET  /__bxagents/users     # the sign-in accounts and whether each is an admin (admin only)
@@ -294,6 +294,8 @@ POST /__bxagents/notes    # { scope : "user" | "agent", text }
 POST /__bxagents/notes/update   # { scope, id, text }
 POST /__bxagents/notes/remove   # { scope, id }
 ```
+
+That list is the run-control and conversation core. Routines, the vault, notes and memory, skills, logs, gateways, backups, extensions, accounts and tokens have routes too: every one of the 76 is in [Every route](../guides/agent-api.md#every-route).
 
 `/events` sends the frames of `/stream` (`thread` first, `chunk` for each piece of the answer, `done` last)
 and adds:
