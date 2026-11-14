@@ -16,11 +16,14 @@ const out = args.out || "out";
 const shots = out + "/shots";
 fs.mkdirSync( shots, { recursive: true } );
 const scenes = JSON.parse( fs.readFileSync( __dirname + "/scenes.json", "utf8" ) )
-	.map( s => ( { ...s, seconds: JSON.parse( fs.readFileSync( out + "/" + s.id + ".json", "utf8" ) ).seconds } ) );
+		.map( s => ( { ...s, seconds: s.card ? s.seconds : JSON.parse( fs.readFileSync( out + "/" + s.id + ".json", "utf8" ) ).seconds } ) );
+// A scene may ask for more room: `lead` and `tail` (seconds of picture before and after the voice), `pace` (a slower cursor and typing).
+// `card` scenes are a drawn card with no voice and a fixed `seconds`.
 const terminalText = fs.existsSync( args.terminal || out + "/terminal.txt" ) ? fs.readFileSync( args.terminal || out + "/terminal.txt", "utf8" ) : "";
 const sleep = ms => new Promise( r => setTimeout( r, ms ) );
-const LEAD = 300;      // the voice starts this long after the scene does (mix.bxs `lead`)
-const TAIL = 700;      // quiet at the end of a scene
+let LEAD = 300;        // the voice starts this long after the scene does (the scene's `lead`, read by mix.bxs from timeline.json)
+let TAIL = 700;        // quiet at the end of a scene
+let pace = 1;          // 1 is normal; a scene with `pace` 1.6 moves and types slower
 
 // A cursor dot, since a recording shows none, and the scene caption as a pill at the top
 const overlay = () => {
@@ -69,7 +72,7 @@ const overlay = () => {
 		fs.writeFileSync( out + "/frames/" + frames[ n ].file, Buffer.from( f.data, "base64" ) );
 		cdp.send( "Page.screencastFrameAck", { sessionId: f.sessionId } ).catch( () => {} );
 	} );
-	await p.goto( app + "login.html" );
+	await p.setContent( "<body style='margin:0;background:#0b1217'></body>" );
 	await cdp.send( "Page.startScreencast", { format: "jpeg", quality: 88, everyNthFrame: 1 } );
 	await sleep( 300 );
 	const t0 = Date.now();
@@ -97,13 +100,13 @@ const overlay = () => {
 		await loc.first().scrollIntoViewIfNeeded( { timeout: 2500 } ).catch( () => {} );
 		const c = await place( loc );
 		if ( !c ) { console.warn( "click: not found " + loc ); return false; }
-		await p.mouse.move( c.x + off.x, c.y + off.y, { steps: 14 } );
-		await sleep( 120 );
+		await p.mouse.move( c.x + off.x, c.y + off.y, { steps: Math.round( 14 * pace ) } );
+		await sleep( 120 * pace );
 		await p.mouse.down(); await sleep( 70 ); await p.mouse.up();
 		return true;
 	};
-	const glide = async loc => { const c = await place( loc ); if ( c ) { await p.mouse.move( c.x + off.x, c.y + off.y, { steps: 14 } ); } };
-	const typeInto = async ( loc, text, delay = 38 ) => { await click( loc ); await loc.first().pressSequentially( text, { delay } ); };
+	const glide = async loc => { const c = await place( loc ); if ( c ) { await p.mouse.move( c.x + off.x, c.y + off.y, { steps: Math.round( 14 * pace ) } ); } };
+	const typeInto = async ( loc, text, delay = 38 ) => { await click( loc ); await loc.first().pressSequentially( text, { delay: delay * pace } ); };
 	const go = async hash => { await p.evaluate( h => { window.location.hash = h; }, hash ); await sleep( 700 ); };
 	const scroll = async ( dy, steps = 8 ) => { for ( let i = 0; i < steps; i++ ) { await p.mouse.wheel( 0, dy / steps ); await sleep( 60 ); } };
 	const idle = async () => { await p.waitForFunction( () => !document.querySelector( "#stopBtn:not([hidden])" ), null, { timeout: 30000 } ).catch( () => {} ); };
@@ -127,7 +130,26 @@ const overlay = () => {
 	await ctx.route( "**/__trailer/terminal", r => r.fulfill( { contentType: "text/html", body: card( "Terminal", `<div class=term><div class=bar><i></i><i></i><i></i></div><pre id=t></pre></div>
 		<script>const lines=${JSON.stringify( terminalText )};const t=document.getElementById("t");let i=0;(function tick(){if(i<lines.length){const n=Math.min(lines.length,i+(lines[i]==="\\n"?1:3));t.innerHTML=render(lines.slice(0,n));i=n;setTimeout(tick,14);}})();
 		function render(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").split("\\n").map(l=>l.startsWith("$ ")?'<span class=p>$</span> '+l.slice(2):l.startsWith("#")?'<span class=d>'+l+'</span>':l).join("\\n");}</script>` ) } ) );
-	await ctx.route( "**/__trailer/end", r => r.fulfill( { contentType: "text/html", body: card( "BxAgents", `<style>#__cap{display:none!important}</style><div class=end><h1>BxAgents</h1><p>An agent, and the whole workplace around it.</p><div class=cmd>bxAgents new</div><div class=url>Docs and source: <b>github.com/ortus-boxlang/bx-agents</b></div></div>` ) } ) );
+	const asset = f => "data:image/svg+xml;base64," + fs.readFileSync( __dirname + "/../../../../docs/assets/" + f ).toString( "base64" );
+	const logo = asset( "bxagents-logo-full-dark.svg" ), boxlang = asset( "ecosystem/boxlang.svg" );
+	// The intro and closing cards: the full logo on the site's dark ground, and "Powered by BoxLang". Elements fade in one after another, the card fades out at `fade` seconds.
+	const brand = ( inner, fade ) => card( "BxAgents", `<style>#__cap{display:none!important}
+		body{background:radial-gradient(ellipse 70% 60% at 50% 38%,#12303a 0%,#0b1217 70%)}
+		.c{text-align:center;width:100%}.c img.logo{width:700px;display:block;margin:0 auto}
+		.in{opacity:0;transform:translateY(10px);animation:in .9s ease forwards}@keyframes in{to{opacity:1;transform:none}}
+		.eyebrow{font:600 20px Inter,system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#2dd4bf;margin:44px 0 10px}
+		.tag{font:700 52px/1.15 Inter,system-ui,sans-serif;letter-spacing:-.02em;margin:0}.tag b{background:linear-gradient(90deg,#00dbff,#00edb9);-webkit-background-clip:text;color:transparent}
+		.pw{position:absolute;left:0;right:0;bottom:46px;display:flex;align-items:center;justify-content:center;gap:12px;font:500 20px Inter,system-ui,sans-serif;color:#9bb4bb}.pw img{height:38px}.pw b{color:#e8f1f2;font-weight:700}
+		.site{font:700 56px Inter,system-ui,sans-serif;letter-spacing:-.01em;margin:36px 0 26px;color:#fff}
+		.cmd2{display:inline-block;font:600 34px "JetBrains Mono",ui-monospace,monospace;color:#05201c;background:#2dd4bf;padding:14px 34px;border-radius:14px}
+		.gh{margin-top:28px;font:500 22px Inter,system-ui,sans-serif;color:#9bb4bb}
+		body{animation:out 1s ease ${fade}s forwards}@keyframes out{to{opacity:0}}
+	</style>${inner}<div class="pw in" style="animation-delay:1.6s">Powered by <img src="${boxlang}" alt=""><b>BoxLang</b></div>` );
+	await ctx.route( "**/__trailer/intro", r => r.fulfill( { contentType: "text/html", body: brand( `<div class=c><img class="logo in" src="${logo}" alt="BxAgents">
+		<div class="eyebrow in" style="animation-delay:.8s">AI agents without the plumbing</div><h1 class="tag in" style="animation-delay:1.2s">Build AI agents your team can <b>ship</b>.</h1></div>`, 4.1 ) } ) );
+	await ctx.route( "**/__trailer/end*", r => r.fulfill( { contentType: "text/html", body: brand( `<div class=c><img class="logo in" src="${logo}" alt="BxAgents" style="width:560px">
+		<div class="site in" style="animation-delay:.8s">bxagents.ai</div><div class="cmd2 in" style="animation-delay:4.6s">bxAgents new</div>
+		<div class="gh in" style="animation-delay:5.2s">github.com/ortus-boxlang/bx-agents</div></div>`, Number( new URL( r.request().url() ).searchParams.get( "fade" ) || 12 ) ) } ) );
 	await ctx.route( "**/__trailer/phone", r => r.fulfill( { contentType: "text/html", body: card( "Phone", `<style>#__cap{top:auto!important;bottom:16px}.ph{position:relative;width:390px;height:780px;border:12px solid #1c2a31;border-radius:46px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6);background:#fff}.ph iframe{width:390px;height:780px;border:0}
 		.side{position:absolute;left:calc(50% + 260px);top:50%;transform:translateY(-50%);width:300px;color:#cfe3e6;font-size:20px;line-height:1.6}.side b{color:#2dd4bf}</style>
 		<div class=ph><iframe id=f src="/chat/#/chat"></iframe></div>
@@ -135,15 +157,17 @@ const overlay = () => {
 
 	const actions = {
 		async hook() {
-			await at( 0.04 );
+			await p.goto( app + "login.html" );
+			await p.evaluate( () => { const d = document.createElement( "div" ); d.style.cssText = "position:fixed;inset:0;background:#0b1217;z-index:2147483645;transition:opacity 1s;pointer-events:none"; document.body.appendChild( d ); requestAnimationFrame( () => requestAnimationFrame( () => { d.style.opacity = "0"; } ) ); } );
+			await at( 0.10 );
 			await typeInto( p.locator( "#username" ), "ada", 60 );
 			await typeInto( p.locator( "#password" ), "demo-pass", 45 );
-			await at( 0.36 );
+			await at( 0.30 );
 			await click( p.locator( "button[type=submit]" ) );
 			await p.waitForSelector( "#navList a", { timeout: 20000 } ).catch( () => {} );
 			await shot( "home" );
 			// a quick flick through the pages while the voice names them
-			for ( const [ frac, page ] of [ [ 0.46, "conversations" ], [ 0.55, "routines" ], [ 0.64, "registry" ], [ 0.72, "memory" ], [ 0.80, "vault" ], [ 0.88, "agent" ] ] ) {
+			for ( const [ frac, page ] of [ [ 0.38, "conversations" ], [ 0.49, "routines" ], [ 0.60, "registry" ], [ 0.71, "memory" ], [ 0.82, "vault" ], [ 0.93, "agent" ] ] ) {
 				await at( frac );
 				await click( p.locator( 'a[data-page="' + page + '"]' ) );
 			}
@@ -340,15 +364,23 @@ const overlay = () => {
 			await sleep( 600 );
 			await shot( "terminal" );
 		},
+		async intro() {
+			await p.goto( base + "/__trailer/intro" );
+			await sleep( 3200 );
+			await shot( "poster-intro" );
+		},
 		async outro() {
-			await p.goto( base + "/__trailer/end" );
-			await sleep( 600 );
+			await p.goto( base + "/__trailer/end?fade=" + ( ( budget + TAIL ) / 1000 - 1.3 ).toFixed( 1 ) );
+			await sleep( 6200 );
 			await shot( "end" );
 		}
 	};
 
 	for ( const s of scenes ) {
 		sceneStart = Date.now();
+		LEAD = s.card ? 0 : Math.round( ( s.lead ?? 0.3 ) * 1000 );
+		TAIL = s.card ? 0 : Math.round( ( s.tail ?? 0.7 ) * 1000 );
+		pace = s.pace || 1;
 		budget = s.seconds * 1000 + LEAD;
 		await p.evaluate( c => { try { sessionStorage.setItem( "__trailerCaption", c ); } catch ( e ) {} }, s.caption ).catch( () => {} );
 		const startMs = sceneStart - t0;
@@ -357,7 +389,7 @@ const overlay = () => {
 		const spent = Date.now() - sceneStart;
 		if ( spent < need ) { await sleep( need - spent ); }
 		else { console.warn( s.id + ": actions ran " + ( spent - need ) + " ms longer than the narration" ); }
-		timeline.push( { id: s.id, startMs, endMs: Date.now() - t0, seconds: s.seconds } );
+		timeline.push( { id: s.id, startMs, endMs: Date.now() - t0, seconds: s.seconds, lead: LEAD / 1000, card: !!s.card } );
 	}
 	fs.writeFileSync( out + "/timeline.json", JSON.stringify( timeline, null, 2 ) );
 	const endWall = t0 + timeline[ timeline.length - 1 ].endMs;

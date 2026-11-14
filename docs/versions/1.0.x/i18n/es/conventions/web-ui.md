@@ -60,7 +60,7 @@ Porque llega el envelope completo, **el razonamiento y las llamadas de tool ya e
   <track kind="captions" src="/assets/video/web-trailer.vtt" srclang="en" label="English" default>
 </video>
 
-Tres minutos por toda la aplicación web: el chat en directo con tarjetas de herramienta y una aprobación, hablar con un subagente, las conversaciones, las rutinas, el registro, la memoria, la bóveda, y después las páginas de administración (agente, gateways, registros, acceso, datos y copias), el modo oscuro y el diseño de móvil, y lo mismo desde la terminal y la API. La voz es [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (modelo Apache 2.0), y las respuestas de la página vienen de un modelo de demostración con guion, así que son fijas. Los subtítulos están activados.
+Tres minutos y medio por toda la aplicación web: el chat en directo con tarjetas de herramienta y una aprobación, hablar con un subagente, las conversaciones, las rutinas, el registro, la memoria, la bóveda, y después las páginas de administración (agente, gateways, registros, acceso, datos y copias), el modo oscuro y el diseño de móvil, y lo mismo desde la terminal y la API. La voz es [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (modelo Apache 2.0), y las respuestas de la página vienen de un modelo de demostración con guion, así que son fijas. Los subtítulos están activados.
 
 | | |
 |---|---|

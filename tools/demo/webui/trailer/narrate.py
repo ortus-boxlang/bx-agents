@@ -25,13 +25,16 @@ GAP = 0.32
 for scene in scenes:
     if only and scene["id"] not in only.split(","):
         continue
+    if not scene.get("text"):
+        continue                      # a card with no voice
+    gap = scene.get("gap", GAP)       # a slower scene asks for longer pauses between its sentences
     pieces, cues, t, rate = [], [], 0.0, 24000
     for sentence in [s for s in re.split(r"(?<=[.!?])\s+", scene["text"]) if s.strip()]:
         samples, rate = kokoro.create(sentence, voice=voice["voice"], speed=voice["speed"], lang=voice["language"])
         seconds = len(samples) / rate
         cues.append({"start": round(t, 3), "end": round(t + seconds, 3), "text": sentence})
-        pieces += [samples, np.zeros(int(GAP * rate), dtype=samples.dtype)]
-        t += seconds + GAP
+        pieces += [samples, np.zeros(int(gap * rate), dtype=samples.dtype)]
+        t += seconds + gap
     audio = np.concatenate(pieces[:-1])
     sf.write(f"{out}/{scene['id']}.wav", audio, rate)
     json.dump({"id": scene["id"], "seconds": len(audio) / rate, "cues": cues}, open(f"{out}/{scene['id']}.json", "w"))

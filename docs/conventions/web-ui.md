@@ -174,7 +174,7 @@ On a phone the menu becomes a drawer, the header gives way, and a table becomes 
   <track kind="captions" src="/assets/video/web-trailer.vtt" srclang="en" label="English" default>
 </video>
 
-Three minutes through the whole web app: streaming chat with tool cards and an approval, talking to a sub-agent, conversations, routines, the registry, memory, the vault, then the admin pages (agent, gateways, logs, access, data and backups), dark mode and the phone layout, and the same things from the terminal and the API. The voice is [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (an Apache 2.0 model), and the page's answers come from a scripted demo model, so they are canned. Captions are on.
+Three and a half minutes through the whole web app: streaming chat with tool cards and an approval, talking to a sub-agent, conversations, routines, the registry, memory, the vault, then the admin pages (agent, gateways, logs, access, data and backups), dark mode and the phone layout, and the same things from the terminal and the API. The voice is [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (an Apache 2.0 model), and the page's answers come from a scripted demo model, so they are canned. Captions are on.
 
 | | |
 |---|---|
