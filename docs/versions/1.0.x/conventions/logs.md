@@ -8,12 +8,12 @@ tags: [conventions, logs]
 
 # Logs
 
-An agent writes what it does, and what goes wrong, to log files in the `logs/` folder of its [data home](data.md). There is one file per area, so a broken chat app is not buried in the noise of a busy API:
+An agent writes what it does, and what goes wrong, to log files in the `logs/` folder of its [data home](data.md). There is one file per area, so a broken gateway is not buried in the noise of a busy API:
 
 ```
 <data home>/logs/
   agent.log       startup, errors in a turn, tool failures
-  gateways.log    every chat app: connect, disconnect, send failures. The gateway's name starts each line
+  gateways.log    every gateway: connect, disconnect, send failures. The gateway's name starts each line
   routines.log    routines: created, changed, run, skipped, failed, delivered
   heartbeat.log   each tick of the routine scheduler that did something
   api.log         refused calls and sign-in failures
@@ -53,16 +53,16 @@ bxAgents logs api --json
 
 `--level` shows that level and anything more serious (`debug`, `info`, `warn`, `error`), `--grep` keeps the lines that contain the text (case does not matter), and `--tail` is how many lines, up to 1000. Only the end of a log is read, so a big log is as quick as a small one.
 
-**In the web page**, for an admin, **Settings** has a **Logs** item and a **Chat apps** item (see [the web UI](web-ui.md#logs-and-chat-apps)). A small red count on the Settings button says errors were logged since the app started.
+**In the web page**, for an admin, the menu has a **Logs** page and a **Gateways** page (see [the web UI](web-ui.md#logs-and-gateways)). A red count on the **Logs** item says how many sources logged an error since the app started.
 
 **Over the API**, for an admin: `GET /logs` lists the logs and how many sources logged an error since the app started, and `GET /logs?area=gateways&tail=200&level=warn&q=text` gives lines. The client has `logs()`. See [the agent API](agent-bx.md).
 
-## Chat apps
+## Gateways
 
-`GET /gateways` (and **Chat apps** in the web page) says, for each chat app the project names:
+`GET /gateways` (and **Gateways** in the web page) says, for each gateway the project names:
 
 - whether it is **connected**, **stopped**, **failing** (stopped, with an error logged) or **not registered**;
 - which of its credentials are set, by the name of the environment variable and set or not set, never the value;
 - when it last had a conversation, and its last error.
 
-The chat apps themselves are still set up in `gateways/<name>.bx` and `.env`, and read when the app starts. See [gateways](gateways/index.md).
+The gateways themselves are still set up in `gateways/<name>.bx` and `.env`, and read when the app starts. See [gateways](gateways/index.md).

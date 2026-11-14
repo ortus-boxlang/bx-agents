@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Docs
+
+- The homepage, the web app guide (page by page, with fresh screenshots of the new UI), the API guide (all 76 routes), the CLI reference (all 28 verbs), the slash commands guide (33), the README and `llms.txt` describe what has been built: the new web app, routines and reports, sub-agents you can talk to, memory and notes, the vault, backups, logs, roles and the API. "Chat apps" is "gateways" throughout. The homepage has a Features section (Build, Run, Remember, Connect, Operate, Extend), a web app section and a Tour with tabs.
+
 ### Web page revamp
 
 - A left menu (Main and Admin groups, folds to icons, a drawer on a phone, a skip link) and a hash router in the one generated page. Pages: Conversations (paged, filtered), Routines (member and admin views), Registry (tools grouped, skills with a reader, volumes), Memory (notes, global agent notes, conversation memory with clear), Vault, Settings, and for admins Gateways, Logs, Access (tokens, people). The sidebar shows 25 conversations with Show more and a quick filter. Talk to picker for sub-agents. The Settings menu keeps every item.

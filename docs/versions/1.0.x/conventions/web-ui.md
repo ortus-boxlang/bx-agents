@@ -1,14 +1,14 @@
 ---
-title: The web chat UI
+title: The web app
 icon: phosphor-duotone:chat-circle-text
-summary: A complete browser chat client - sidebar, streaming, approvals, SQLite store.
-description: A complete browser chat client - sidebar, streaming, approvals, SQLite store.
+summary: The generated web app - twelve pages, streaming chat, routines, vault, logs and backups.
+description: The generated web app: a left menu and twelve pages (chat, conversations, routines, registry, memory, vault, settings, agent, gateways, logs, access, data and backups), streaming, approvals and a SQLite store.
 tags: [conventions, gateways, web-ui]
 ---
 
-# The web chat UI
+# The web app
 
-A `gateways/*.bx` entry with `exposes: "webui"` ships a complete browser chat client for the agent - a conversation sidebar, streaming with reasoning and tool calls, human-in-the-loop approvals, per-visitor theming, and a real SQLite store behind it.
+A `gateways/*.bx` entry with `exposes: "webui"` ships a complete web app for the agent: a left menu with [twelve pages](#the-pages), a chat with streaming, reasoning, tool calls and human-in-the-loop approvals, per-visitor theming, and a real SQLite store behind it.
 
 It lives under [gateways/](gateways/index.md) because that is where exposures are declared, but it is a subsystem in its own right, which is why it has its own page.
 
@@ -27,9 +27,9 @@ class {
 
 That generates a static `<path>/index.html` (served directly - no route needed). The page is a client of the [agent API](agent-bx.md#the-always-on-agent-route) at `/__bxagents`, the same one the terminal chat and the gateways use, so there is no second API under `<path>`. The agent API must stay enabled (`agentApi.enabled: false` with a `webui` entry is a build error).
 
-![The generated web chat UI: a conversation sidebar, a multi-turn transcript, and a themed header/composer](../assets/webui-chat-light.png)
+![The generated web app: the left menu, a conversation with a tool call, and the model picker and context ring in the header](../assets/webui-chat-light.png)
 
-The screenshot above is the actual generated page - the real, unmodified template this repo ships - branded with [`examples/webui-agent`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent)'s own `theme`/`title`/`icon` config and populated with example conversation content for illustration; `bxAgents build && bxAgents serve` in that example reproduces it.
+The screenshots on this page are the real, unmodified page this repo ships, from a demo project (Acme Support) with a scripted model, sub-agents, skills, notes, routines, vault entries and thirty conversations. Everything runs offline.
 
 The UI is dependency-free vanilla HTML/CSS/JS - no Bootstrap, AlpineJS or Vite build step - and is **pre-built and vendored inside BxAgents itself**: `bxAgents build` never runs `npm install`/`npm run build`, and a generated project never needs Node or npm installed at all. Everything the page needs is inlined into the single generated `index.html`.
 
@@ -52,6 +52,120 @@ The page talks to the agent API at `/__bxagents` via `POST /__bxagents/stream` (
 
 Because the whole envelope arrives, **reasoning and tool calls are already on the wire** with no extra endpoint needed: `delta.reasoning` (normalized across every provider by bx-ai) renders as a collapsed "Thinking" strip, and `delta.tool_calls` as collapsed per-call chips. Tool-call arguments stream as partial JSON fragments keyed by `index`, so the page accumulates per index rather than assuming any single chunk holds a complete call.
 
+## The pages
+
+The page is one generated file with a **left menu** and a **header**. The menu has two groups, and a page opens at a link of its own (`<path>/#/conversations`, `<path>/#/routines`, and so on), so you can bookmark one. The server needs no extra routes for any of it, and the page works behind any reverse proxy path.
+
+| Group | Pages | Who sees it |
+|---|---|---|
+| Main | Chat, Conversations, Routines, Registry, Memory, Vault, Settings | everyone who can sign in |
+| Admin | Agent, Gateways, Logs, Access, Data and backups | [admins](#admins-and-members) only |
+
+A member never sees the Admin group, and the server refuses the routes behind it anyway. The menu folds to icons (the choice is remembered in the browser), the **Logs** item carries a red count of the sources that logged an error since the app started, and nothing that the old single page offered was removed: the header, the Settings gear and the [extension slots](extensions.md#the-web-page-slots-and-web) are all still there.
+
+![The Chat page: the left menu with Main and Admin groups, a conversation with a tool call and a formatted answer, and the model picker and context ring in the header](../assets/webui/webui-chat.png)
+
+![The same page in dark mode](../assets/webui/webui-chat-dark.png)
+
+### Chat and Talk to
+
+The page you land on. The conversations sidebar shows 25 at a time with a filter box and a **Show more** button, and the transcript streams the answer with reasoning, tool calls and approvals, as before (see [What the page does](#what-the-page-does)). The **Talk to** menu in the header lists the main agent and each [sub-agent](subagents.md). Pick one and the next message goes to it directly; a banner says who you are talking to, a conversation belongs to the agent it started with, and every agent keeps its own memory. In the terminal chat the same thing is `/agent`.
+
+![Talk to with the researcher sub-agent picked and the banner that says so](../assets/webui/webui-talk-to.png)
+
+### Conversations
+
+Every conversation you may see, in one table: title, agent, source (web page, terminal, a gateway, a routine), message count and last activity. Search the titles, narrow by agent and source (each chip shows its count), by dates, and page through the list. A row opens, renames, forks, exports as Markdown or deletes. An admin can switch from **Mine** to **Everyone** and also filter by owner.
+
+![The Conversations page: filters, agent chips and a table of 30 conversations](../assets/webui/webui-conversations.png)
+
+### Routines
+
+When [routines](routines.md) are on. The table shows each routine's status in words, its schedule in words with the stored form, the next and last run and where its answer goes. **Run now**, **Pause**, **Resume**, **Edit**, **Reports**, the routine's own conversation and **Delete** are on each row; **New routine** opens the editor, which reads the schedule back to you in words before you save. Reports are the files a run saved; they can be read, deleted one by one or cleaned up by age (with a count first).
+
+![The Routines page: three routines, one paused, with the schedule in words and the next run](../assets/webui/webui-routines.png)
+
+![The reports of one routine, with a report open](../assets/webui/webui-routine-reports.png)
+
+### Registry
+
+What the agent can use, in three tabs. **Tools** lists every tool grouped by where it comes from and marks the ones that ask first. **Skills** lists each skill with its level (installed, shipped with the agent, or saved by the agent itself) and a **Read** button that opens its `SKILL.md`. **Volumes** lists the folders the agent may read or write, by name and mode, never by path.
+
+![The Registry page on the Tools tab](../assets/webui/webui-registry.png)
+
+![A skill open in the reader](../assets/webui/webui-registry-skills.png)
+
+### Memory
+
+Three things the agent remembers. **About you** holds your notes. **About the agent** holds the shared notes the agent keeps about its own work, the same for everyone who uses it. **Conversation memory** shows what the memory holds for conversations and clears it, for one conversation or for all of them (all is for admins), keeping the conversations themselves. Each note list shows how full it is and about how many tokens it adds to every conversation.
+
+![The Memory page with your notes, the agent's notes and conversation memory](../assets/webui/webui-memory.png)
+
+### Vault
+
+The secrets the agent can use, by name, purpose and the hosts each may go to. A value is typed once into a hidden box, sealed in the database and never shown again. Your own secrets and the agent's are listed apart, and an admin also sees the key's status and an **Activity** list of recent use. See [vault](vault.md).
+
+![The Vault page: secrets by name, purpose and hosts, and the activity list](../assets/webui/webui-vault.png)
+
+### Agent
+
+For admins. **Composition** draws how the agent is put together: what reaches it (gateways, the API, schedules), the main agent and its sub-agents with their tools and skills, and what it reaches out to (models, MCP servers, vault, volumes), with the tools that ask first marked. **Files** shows the project's own definition files read only (`Agent.yaml`, instructions, sub-agents, gateways); a key that looks like a secret is shown as stars. **Usage** shows tokens by day and by model once `usage: true` is set.
+
+![The Agent page, Composition tab](../assets/webui/webui-agent.png)
+
+![The same page in dark mode](../assets/webui/webui-agent-dark.png)
+
+![The Files tab](../assets/webui/webui-agent-files.png)
+
+![The Usage tab](../assets/webui/webui-agent-usage.png)
+
+### Gateways
+
+For admins. Each [gateway](gateways/index.md) with its state (connected, stopped, failing or not registered), which of its credentials are set (the names, never a value), when it last had a conversation, its last error and the chats it has talked to. **Reconnect** stops and starts one gateway in place, so a fixed credential does not need an app restart. A run already going is not cancelled.
+
+![The Gateways page](../assets/webui/webui-gateways.png)
+
+### Logs
+
+For admins. A tab for each of the five [logs](logs.md) (agent, gateways, routines, heartbeat, API), a level filter, a search box, a line count and **Refresh every 5 s** to follow one as it grows. Secrets are never in a log.
+
+![The Logs page](../assets/webui/webui-logs.png)
+
+### Access
+
+For admins. **Tokens** makes and revokes named [access tokens](agent-bx.md#access-tokens-for-a-deployed-agent) (the secret is shown once) with a `chat` or `admin` scope and an optional expiry. **People** lists the sign-in accounts and lets you make one an admin or a member; the last admin cannot be demoted.
+
+![The Access page, Tokens tab](../assets/webui/webui-access.png)
+
+![The People tab](../assets/webui/webui-access-people.png)
+
+### Data and backups
+
+For admins. Where the agent keeps everything (the [data home](data.md)) and how big each part is, the volumes and where each is, and the backups: **Make a backup**, **Download** one, or **Restore** one. A restore is applied the next time the app starts, and what was there is kept as `before-restore`.
+
+![The Data and backups page](../assets/webui/webui-data.png)
+
+### Settings
+
+**Appearance** (mode, accent colour, text size, density), **Model** (which profile answers), **Account** (password), **Connections** for services that ask each person to sign in, **Server** facts, and for admins the **Extensions** the app loaded, with a Reload button.
+
+![The Settings page](../assets/webui/webui-settings.png)
+
+![The Settings page in dark mode](../assets/webui/webui-settings-dark.png)
+
+### Phone and accessibility
+
+On a phone the menu becomes a drawer, the header gives way, and a table becomes a list. The page is built to be used without a mouse: a skip link comes first, the focus ring is always visible, targets are at least 44 by 44 pixels, the current page is marked with `aria-current`, status is said in words and icons as well as colour, text keeps a contrast of at least 4.5 to 1, `prefers-reduced-motion` is respected, and dialogs trap focus and give it back.
+
+::: columns
+::: column
+![Chat at 390 by 844](../assets/webui/webui-chat-mobile.png)
+:::
+::: column
+![The menu as a drawer at 390 by 844](../assets/webui/webui-drawer-mobile.png)
+:::
+:::
+
 ## Walkthrough
 
 <video controls preload="metadata" poster="/assets/video/web-tour-poster.png" style="max-width:100%">
@@ -60,18 +174,15 @@ Because the whole envelope arrives, **reasoning and tool calls are already on th
   <track kind="captions" src="/assets/video/web-tour.vtt" srclang="en" label="English" default>
 </video>
 
-A minute and a half through the whole page: the password form, suggestions, a formatted answer, a tool call, a code block with its Copy button, the Settings menu, dark mode, notes and the access tokens panel. The voice is [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (an Apache 2.0 model), and the page's answers come from a scripted demo model, so they are canned. Captions are on.
+The voice is [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (an Apache 2.0 model), and the page's answers come from a scripted demo model, so they are canned. Captions are on.
 
 | | |
 |---|---|
-| ![Sign in with the accounts declared in `users`](../assets/webui/login.png) **Sign in.** Accounts come from [`users`](#users-and-sign-in). | ![A signed-in chat with the model picker, the context ring, the Chats button and the Settings gear in the header](../assets/webui/home.png) **The header.** Chats, the context ring and a **Settings** gear; everything else is in the Settings menu. The picker shows when the entry lists [`profiles`](#choosing-the-model). |
+| ![Sign in with the accounts declared in `users`](../assets/webui/login.png) **Sign in.** Accounts come from [`users`](#users-and-sign-in). | ![An empty conversation with the welcome message and suggestion buttons](../assets/webui/empty-suggestions.png) **Suggestions.** An empty conversation can offer [`suggestions`](#branding-and-theming) that send with one click. |
 | ![A streamed reply with a numbered list and bold text](../assets/webui/markdown-list.png) **Streaming.** Replies render Markdown as they arrive. | ![The planner profile chosen in the picker, and the reply naming its model](../assets/webui/model-picker.png) **Model picker.** The pick is sent with each message, in the same conversation. |
-| ![A tool call shown as an open block above the reply](../assets/webui/tool-call.png) **Tools.** Each call shows its name and arguments. | ![The conversation sidebar listing two saved chats](../assets/webui/conversations.png) **Conversations.** Saved per account, and still there after a reload. |
-| ![The Notes panel with one note under About you](../assets/webui/notes.png) **Notes.** What the agent should remember, with the size it adds. | ![The page in the dark theme with the accent from the gateway entry](../assets/webui/dark-theme.png) **Theme.** Light or dark, remembered, with your `theme` accent. |
-| ![The context panel listing what fills the model's window](../assets/webui/context-panel.png) **Context.** The ring fills as the conversation grows; click it for the breakdown. | ![The command menu opened by typing a slash](../assets/webui/commands-menu.png) **Commands.** Type `/` for the menu. |
-| ![The empty conversation with the welcome message and three suggestion buttons](../assets/webui/empty-suggestions.png) **Suggestions.** An empty conversation can offer [`suggestions`](#branding-and-theming) that send with one click. | ![A code block with its language and a Copy button](../assets/webui/code-block.png) **Code.** Each block shows its language and copies the code itself. |
-| ![The Settings menu open, with Conversation, You and Server groups](../assets/webui/settings-menu.png) **Settings.** One gear holds the conversation actions, your notes, appearance and the server items. | ![The Appearance panel with mode, accent colors, text size and density](../assets/webui/appearance.png) **Appearance.** Mode, accent, text size and density, kept in this browser. |
-| ![The Access tokens panel with a new token shown once](../assets/webui/tokens-panel.png) **Access tokens.** An admin makes and revokes named tokens; the secret is shown once. | |
+| ![A tool call shown as an open block above the reply](../assets/webui/tool-call.png) **Tools.** Each call shows its name and arguments. | ![The command menu opened by typing a slash](../assets/webui/commands-menu.png) **Commands.** Type `/` for the menu. |
+| ![The context panel listing what fills the model's window](../assets/webui/context-panel.png) **Context.** The ring fills as the conversation grows; click it for the breakdown. | ![The Settings menu open](../assets/webui/settings-menu.png) **Settings.** One gear holds the conversation actions and the quick settings. |
+| ![The Appearance panel with mode, accent colors, text size and density](../assets/webui/appearance.png) **Appearance.** Mode, accent, text size and density, kept in this browser. | ![The page in the dark theme with the accent from the gateway entry](../assets/webui/dark-theme.png) **Theme.** Light or dark, remembered, with your `theme` accent. |
 
 ## What a streaming turn actually looks like
 
@@ -411,20 +522,17 @@ For anything the tokens don't cover - custom fonts, layout, per-element rules - 
 !!! warning
     **`apiKeyEnvVar` is a shared secret, not a login system.** It is the same thing as the agent API's `agentApi.tokenEnvVar` (a name in `Agent.yaml` wins if both are set). Left unset, the API is open (fine on your own machine, not for a public deployment; `serve` warns when an open API listens on every interface). Set it, and every call to `/__bxagents` must carry a matching `x-bxagents-token` header, compared in constant time. **The static shell (`<path>/index.html`) is not gated**, because a browser's plain page navigation can't send a custom header; the page asks for it in a form: a **Password** box that opens by itself when the server answers `401` and again from **Password** in the Settings menu. The password is kept in `localStorage` and sent on every call; a wrong one shows "That password was not accepted." For several people use [issued tokens](agent-bx.md#access-tokens-for-a-deployed-agent) or `users`.
 
-## Logs and chat apps
+## Logs and gateways
 
-For an admin, the **Server** group of the Settings menu has two more items when the server keeps a data home:
+For an admin, the **Logs** and **Gateways** pages of the Admin group (see [The pages](#the-pages)) show how the app is doing. The **Logs** page has a tab for each log that exists (agent, gateways, routines, heartbeat, API), a level filter, search, a line count and **Refresh every 5 s**. The **Gateways** page lists each gateway the project names with its state (connected, stopped, failing or not registered), which credentials are set (the names only, never a value), when it last had a conversation, its last error and a **Reconnect** button. Gateways are still set up in `gateways/` and `.env`: the page shows how they are doing and starts one again in place. See [logs](logs.md).
 
-- **Logs** opens a panel with a tab for each log that exists (agent, gateways, routines, heartbeat, API). Each line shows its time, its level (error, warn, info or debug, in words as well as colour), who it is about and what happened. Filter by level, search for a word, pick how many lines, and tick **Refresh every 5 s** to follow a log as it grows. See [logs](logs.md).
-- **Chat apps** lists each chat app the project names with its state (connected, stopped, failing or not registered), which of its credentials are set (the names only, never a value), when it last had a conversation, and its last error with a button that opens that gateway's lines in the log. The chat apps are still set up in `gateways/` and `.env`: the page only shows how they are doing.
-
-A small red count on the Settings button says how many sources logged an error since the app started.
+A small red count on the **Logs** item says how many sources logged an error since the app started.
 
 ## Settings and appearance
 
-The header keeps only what you use every minute: the **Chats** button, the context ring, the model picker and a **Settings** gear. The gear opens one menu, in three groups: **Conversation** (Fork this conversation, Export as Markdown, Clear messages, Compact older messages), **You** (Notes, Appearance, Dark or Light theme) and **Server** (Password, Access tokens). An item shows only where the server offers it, and a group with nothing in it is left out.
+The header keeps only what you use every minute: the menu button, the **Talk to** and model pickers, the context ring and a **Settings** gear. The gear opens a quick menu in three groups: **Conversation** (Fork this conversation, Export as Markdown, Clear messages, Compact older messages), **You** (Memory, Vault, Routines, Appearance, Dark or Light theme) and **Server** (Password, Access tokens, Logs, Gateways). An item shows only where the server offers it, and a group with nothing in it is left out. The full **Settings** page is in the menu too.
 
-**Settings**, then **Appearance**, opens the panel where a visitor picks, for this browser only:
+**Settings**, then **Appearance** (or the Appearance section of the Settings page), opens the panel where a visitor picks, for this browser only:
 
 | Setting | Choices |
 |---|---|
@@ -470,35 +578,36 @@ Assistant replies render as full Markdown: headings, lists, tables, quotes, stri
 
 ## Notes
 
-When the agent has a [`notes`](agent-yaml.md#notes) block, the Settings menu has a **Notes** item. It opens a panel with two tabs, *About you* and *About the agent*, how full each is (characters of the limit, and about how many tokens that adds to every conversation), and the notes with their ids. Add, edit in place and remove work on your own notes. The page and the terminal chat share the same database, so a note added in one shows in the other.
+When the agent has a [`notes`](agent-yaml.md#notes) block, the **Memory** page of the menu (and **Memory** in the Settings gear) shows two lists, *About you* and *About the agent*, how full each is (characters of the limit, and about how many tokens that adds to every conversation), and the notes with their ids. Add, edit in place and remove work on your own notes. The page and the terminal chat share the same database, so a note added in one shows in the other.
 
 - *About you* belongs to the same identity as your conversations: your account with [`users`](#users-and-sign-in), or the shared workspace without accounts.
-- *About the agent* is shared by everyone who uses the agent, so anyone using the page may add or edit one, but the page has no Remove button for it and `/notes/remove` answers `403`. Removing a note of the agent takes an admin [token](agent-bx.md#access-tokens-for-a-deployed-agent) on the agent's own `/__bxagents/notes/remove` route, or `bxAgents notes remove --scope=agent` where the agent runs.
-- Without a `notes` block the button is not shown and the routes answer `404`: `/info`'s `capabilities.notes` says which.
+- *About the agent* is shared by everyone who uses the agent, whichever agent or person is talking. Anyone using the page may add or edit one; removing one (or clearing the list) takes an admin, and `/notes/remove` answers `403` to anyone else. With an admin [token](agent-bx.md#access-tokens-for-a-deployed-agent) use the agent's own `/__bxagents/notes/remove` route, or `bxAgents notes remove --scope=agent` where the agent runs.
+- Without a `notes` block the page says so and the routes answer `404`: `/info`'s `capabilities.notes` says which.
+
+The Memory page also has **Conversation memory**: the messages the agent's memory keeps for each conversation. **Clear** forgets the messages of one conversation and keeps the conversation; an admin can clear every conversation, or those of one agent (`POST /memory/clear`, `/clear` in the terminal, `bxAgents sessions clear`).
 
 ## Connections
 
-When an `mcpServers` entry has [`oauth`](connect.md), the Settings menu has a **Connections** item (`/info`'s `capabilities.connections` says whether). It opens a panel with a row for each service: its name, its address, *Connected* or *Not connected*, and a *Connect* or *Disconnect* button. *Connect* opens the provider's sign in in a new tab (a link is also shown, in case the browser blocks the tab) and the panel checks again every two seconds until it works. The page never sees a token.
+When an `mcpServers` entry has [`oauth`](connect.md), the **Settings** page has a **Connections** section and the Settings gear a **Connections** item (`/info`'s `capabilities.connections` says whether). It opens a panel with a row for each service: its name, its address, *Connected* or *Not connected*, and a *Connect* or *Disconnect* button. *Connect* opens the provider's sign in in a new tab (a link is also shown, in case the browser blocks the tab) and the panel checks again every two seconds until it works. The page never sees a token.
 
-![The Connections panel with mail connected](../assets/webui/connections.png)
 
 ## What is not here yet
 
-The page is complete against its own API - every route it needs exists and is exercised. These are the gaps:
+The page is complete against its own API: every route it needs exists and is exercised. These are the gaps:
 
 | Missing | Note |
 | --- | --- |
 | Retry / regenerate | A failed turn has to be re-sent by hand |
 | Edit and resend | No editing a message already sent |
-| Token / cost display | The page shows none. `usage: true` in `Agent.yaml` records tokens for `bxAgents stats`, and `/stats` shows them in the terminal chat only |
+| Recall search | Searching the memory of past conversations is planned; the Memory page says so |
 
 ## Routines
 
-When the server has [routines](routines.md) on, the **You** group of the Settings menu has a **Routines** item that opens a panel:
+When the server has [routines](routines.md) on, the **Routines** page of the menu (and **Routines** in the Settings gear) shows:
 
 - A row for each routine: its name, a status chip in words (ok, failed last time, paused, running, waiting for approval, not run yet), the schedule in words with the stored form beside it, the next and last run, and where its answer goes. A failed or auto-paused routine shows its last error and a **Resume** button.
 - **Run now**, **Pause** or **Resume**, **Edit**, **Reports**, **Open conversation** (the routine's own, with its answers) and **Delete**, which asks first and keeps the reports. An admin gets **Show every owner's routines**.
-- **New routine** and **Edit** share one dialog: name, schedule (five cron fields such as `0 9 * * 1-5`, or `every 30m`), what the agent should do, and where the answer goes. For an admin that includes a [chat app](gateways/index.md) when the project has one; a chat id is asked for when the chat app has talked to more than one chat. A bad schedule or a limit reached is answered in words in the dialog. The reading of the schedule in words comes back when you save.
+- **New routine** and **Edit** share one dialog: name, schedule (five cron fields such as `0 9 * * 1-5`, or `every 30m`), what the agent should do, and where the answer goes. For an admin that includes a [gateway](gateways/index.md) when the project has one; a chat id is asked for when the gateway has talked to more than one chat. A bad schedule or a limit reached is answered in words in the dialog. The reading of the schedule in words comes back when you save.
 - **Reports** lists a routine's files with their size and date, shows one, deletes one (after a confirmation), and **Clean up reports older than N days** first says how many files and bytes it would remove and asks before it removes them.
 
 The panel works with the keyboard, in light and dark, and on a phone.

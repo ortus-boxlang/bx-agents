@@ -10,7 +10,7 @@ class {
 
 	static {
 		// what of the project may be shown: these files and these folders, read only
-		FILES   = [ "Agent.yaml", "Agent.bx", "instructions.md" ]
+		FILES   = [ "Agent.yaml", "Agent.yml", "Agent.bx", "instructions.md" ]
 		FOLDERS = [ "tools", "skills", "subagents", "gateways" ]
 		TEXT    = "md,yaml,yml,bx,bxs,bxm,json,txt"
 		MAX_BYTES = 200000
@@ -123,52 +123,106 @@ class {
 
 	// ----------------------------------------------------------------------------------
 	// The project's files
+	//
+	// Wherever the app runs, the files are found where they live there: the project itself when it is served from
+	// the project folder; in a built app, the copy the build keeps in project/ (the definition, the instructions,
+	// subagents/ and gateways/), the app's own tools/ and skills/, the extensions the build copied, and the skills
+	// the agent saved in the data home. Only what is listed can be read, so a path is never joined to a folder.
 	// ----------------------------------------------------------------------------------
 
 	/**
-	 * @return An Outcome: { files : [ { path, size } ] }, paths relative to the project, nothing a secret would be in
+	 * Every file that may be shown: [ { path (what a reader sees), file (where it is), size } ].
 	 */
-	any function files() {
+	private array function entries() {
 		var root = projectRoot()
 		var found = []
-		if ( len( root ) ) {
-			for ( var name in static.FILES ) {
-				if ( fileExists( root & "/" & name ) ) {
-					found.append( { path : name, size : createObject( "java", "java.io.File" ).init( root & "/" & name ).length() } )
-				}
+		var seen = {}
+		if ( !len( root ) ) {
+			return found
+		}
+		var add = function( required string shownAs, required string file, required string base ) {
+			if ( !seen.keyExists( shownAs ) && found.len() < static.MAX_LISTED && safe( base, file ) ) {
+				seen[ shownAs ] = true
+				found.append( { path : shownAs, file : file, size : createObject( "java", "java.io.File" ).init( file ).length() } )
 			}
-			for ( var folder in static.FOLDERS ) {
-				if ( !directoryExists( root & "/" & folder ) ) {
-					continue
-				}
-				for ( var file in directoryList( path = root & "/" & folder, recurse = true, listInfo = "array", type = "file" ) ) {
-					var relative = relativeTo( root, file )
-					if ( shown( relative ) && found.len() < static.MAX_LISTED ) {
-						found.append( { path : relative, size : createObject( "java", "java.io.File" ).init( file ).length() } )
-					}
+		}
+		var homes = [ root & "/project", root ]
+		for ( var name in static.FILES ) {
+			for ( var home in homes ) {
+				if ( fileExists( home & "/" & name ) ) {
+					add( name, home & "/" & name, root )
 				}
 			}
 		}
-		return Outcome::done( { "files" : found.sort( ( a, b ) => compare( a.path, b.path ) ) } )
+		// a built app keeps the effective instructions with the agent
+		if ( fileExists( root & "/agent/instructions.md" ) ) {
+			add( "instructions.md", root & "/agent/instructions.md", root )
+		}
+		for ( var folder in static.FOLDERS ) {
+			for ( var home in homes ) {
+				if ( directoryExists( home & "/" & folder ) ) {
+					collect( home & "/" & folder, home, root, add )
+				}
+			}
+		}
+		if ( directoryExists( root & "/extensions" ) ) {
+			collect( root & "/extensions", root, root, add )
+		}
+		var dataSkills = isNull( variables.appData ) ? "" : replace( variables.appData.home().path(), "\", "/", "all" ) & "/skills"
+		if ( len( dataSkills ) && directoryExists( dataSkills ) ) {
+			collect( dataSkills, dataSkills, dataSkills, ( shownAs, file, base ) => add( "data/skills/" & shownAs, file, base ) )
+		}
+		return found.sort( ( a, b ) => compare( a.path, b.path ) )
+	}
+
+	/**
+	 * Adds every file of a folder that is safe to show, by its path relative to `from`.
+	 */
+	private void function collect( required string folder, required string from, required string base, required any add ) {
+		for ( var file in directoryList( path = arguments.folder, recurse = true, listInfo = "array", type = "file" ) ) {
+			var clean = replace( file, "\", "/", "all" )
+			var relative = mid( clean, len( arguments.from ) + 2, len( clean ) )
+			if ( shown( relative ) ) {
+				arguments.add( relative, clean, arguments.base )
+			}
+		}
+	}
+
+	/**
+	 * Not a symbolic link, and under the folder once every link in its path is followed.
+	 */
+	private boolean function safe( required string base, required string file ) {
+		if ( createObject( "java", "java.nio.file.Files" ).isSymbolicLink( createObject( "java", "java.nio.file.Paths" ).get( arguments.file, [] ) ) ) {
+			return false
+		}
+		var real = replace( createObject( "java", "java.io.File" ).init( arguments.file ).getCanonicalPath(), "\", "/", "all" )
+		var root = replace( createObject( "java", "java.io.File" ).init( arguments.base ).getCanonicalPath(), "\", "/", "all" )
+		return real.startsWith( root & "/" )
+	}
+
+	/**
+	 * @return An Outcome: { files : [ { path, size } ] }, paths relative, nothing a secret would be in
+	 */
+	any function files() {
+		return Outcome::done( { "files" : entries().map( e => { path : e.path, size : e.size } ) } )
 	}
 
 	/**
 	 * @path A path from files()
 	 *
-	 * @return An Outcome: { path, size, truncated, text }, bad_request or not_found. Secrets in Agent.yaml are shown as names only.
+	 * @return An Outcome: { path, size, truncated, text }, bad_request or not_found. Secrets in the definition are shown as stars.
 	 */
 	any function file( required string path ) {
 		var wanted = replace( trim( arguments.path ), "\", "/", "all" )
 		if ( !len( wanted ) ) {
 			return Outcome::failed( "bad_request", "path is required" )
 		}
-		var allowed = files().data().files.filter( f => f.path == wanted )
-		if ( !allowed.len() ) {
+		var found = entries().filter( e => e.path == wanted )
+		if ( !found.len() ) {
 			return Outcome::failed( "not_found", "There is no such file to show: [#wanted#]" )
 		}
-		var file = projectRoot() & "/" & wanted
-		var size = createObject( "java", "java.io.File" ).init( file ).length()
-		var text = size > static.MAX_BYTES ? left( fileRead( file, "UTF-8" ), static.MAX_BYTES ) : fileRead( file, "UTF-8" )
+		var size = found[ 1 ].size
+		var text = size > static.MAX_BYTES ? left( fileRead( found[ 1 ].file, "UTF-8" ), static.MAX_BYTES ) : fileRead( found[ 1 ].file, "UTF-8" )
 		if ( reFindNoCase( "^Agent\.(yaml|yml|bx)$", wanted ) ) {
 			text = redacted( text )
 		}

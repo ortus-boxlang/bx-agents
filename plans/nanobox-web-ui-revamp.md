@@ -160,3 +160,7 @@ Where the code differs from sections 3.1 to 3.6, the code wins; this lists every
 - **Wording (3.6).** Server messages, the routine tools and the OpenAPI summaries say gateway.
 - **Contract.** `/agent` now sits after `/agent/composition`, `/agent/files` and `/agent/file` (the router matches by prefix). OpenAPI lists a route's required query parameters first, then the optional ones by name.
 - **Migrations.** 12 (`conversations.agent`) and 13 (agent notes owner).
+
+### Files tab on a built app
+
+A built app has no Agent.yaml at its root, so the build now copies the definition (Agent.yaml, Agent.yml or Agent.bx), `instructions.md`, `subagents/` and `gateways/` into the app's `project/` folder (`ProjectFilesCopier`). They are text files that name secrets and never hold them; hidden files, secrets files, non-text files and symbolic links are not copied. `GET /agent/files` lists, by relative path: those files, the app's `tools/` and `skills/`, the extensions the build copied (`extensions/...`) and the skills the agent saved in the data home (`data/skills/...`); from a project folder it lists the same names from the project itself. Only listed paths can be read, symbolic links and `.env` are never listed, and the response shape is unchanged (`{ files : [ { path, size } ] }`, `{ path, size, truncated, text }`).

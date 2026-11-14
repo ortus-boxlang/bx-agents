@@ -16,7 +16,7 @@
 
 <p>&nbsp;</p>
 
-**BxAgents** is a conventions-based framework for building AI agents your team can ship, powered by [BoxLang AI](https://ai.boxlang.io). It is built for BoxLang and ColdBox developers, and for any team that wants agents as ordinary code it can read. Skip the glue code for tools, memory, chat UIs, Slack bots and schedulers: describe an agent with a handful of files and folders - `Agent.yaml`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/` it actually needs - and BxAgents assembles a full MVC application from it **at build time** (REST API, web chat, chat platforms and scheduled jobs included), ready to serve, chat with, or package as a portable `.bxa`.
+**BxAgents** is a conventions-based framework for building AI agents your team can ship, powered by [BoxLang AI](https://ai.boxlang.io). It is built for BoxLang and ColdBox developers, and for any team that wants agents as ordinary code it can read. Skip the glue code for tools, memory, web apps, Slack bots, routines and schedulers: describe an agent with a handful of files and folders - `Agent.yaml`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/` it actually needs - and BxAgents assembles a full MVC application from it **at build time** (a twelve-page web app, an API with OpenAPI, gateways, routines and scheduled jobs included), ready to serve, chat with, or package as a portable `.bxa`.
 
 ## What you can build
 
@@ -27,10 +27,12 @@ Pick the problem, write one file.
 | Answer people where they are | [`gateways/slack.bx`](docs/conventions/gateways/index.md) | A Slack bot over Socket Mode (also Telegram, Discord, Teams, WhatsApp, Twilio SMS, GitHub, Signal and email) |
 | Run a job every morning | [`schedules/Digest.bx`](docs/conventions/schedules.md) | A task with `.cron()` that calls `run()`, started with the app, no cron daemon |
 | Let other systems call it | [`agentApi` in `Agent.yaml`](docs/guides/agent-api.md) | One HTTP API at `/__bxagents` with an OpenAPI document and a BoxLang client, open on your machine or behind tokens; plus [`gateways/expose.bx`](docs/conventions/gateways/index.md) for a REST path of your choosing, or an MCP server |
-| Keep a human in the loop | a tool that needs approval | The run waits for approve or reject, in the terminal, the [web chat](docs/conventions/web-ui.md) or a chat gateway |
+| Keep a human in the loop | a tool that needs approval | The run waits for approve or reject, in the terminal, the [web app](docs/conventions/web-ui.md) or a gateway |
+| Let people schedule their own work | [`routines: enabled: true`](docs/conventions/routines.md) | A person asks, the agent makes a routine, a heartbeat runs it, reports are saved, and a summary can go to a gateway chat |
+| Give each specialist a seat | [`subagents/researcher/`](docs/conventions/subagents.md) | A sub-agent you can talk to directly, with its own memory |
 | Connect it to your accounts | [`vault: {}`](docs/conventions/vault.md) | API keys and logins sealed in the database, typed in a hidden box and never shown to the model; each person can keep their own |
 | Let each person sign in to a service | [`oauth:` on an `mcpServers` entry](docs/conventions/connect.md) | Mail, calendars and ticket systems that ask each person to sign in: one click, tokens sealed in the database, the agent acts as them |
-| Add your own commands | [`extensions/hello.bx`](docs/conventions/extensions.md) | A chat command, key, status item or listener, in the terminal chat, the web page and chat platforms |
+| Add your own commands | [`extensions/hello.bx`](docs/conventions/extensions.md) | A chat command, key, status item or listener, in the terminal chat, the web app and gateways |
 | Test without spending tokens | [`tests/specs/AgentSpec.bx`](docs/conventions/testing.md) | `mockResponses()` and agent matchers: specs run in CI with no API key and no network |
 | Ship it anywhere | `bxAgents package` | A portable `.bxa` and [deploy targets](docs/conventions/deploy.md): local, SSH, FTP, SFTP, Docker, DigitalOcean |
 
@@ -52,7 +54,11 @@ bxAgents chat       # a full-screen terminal chat; or: bxAgents serve --port=808
 
 ## See it
 
-The terminal chat, with sessions, notes, `@file` and picture attachments, slash commands and a context meter (the answers here come from a scripted demo model). `bxAgents chat --server` starts its own server and `--connect=<url> --token=<token>` talks to a deployed one:
+The web app a `gateways/` entry with `exposes: "webui"` builds: a left menu with twelve pages (Chat, Conversations, Routines, Registry, Memory, Vault and Settings for everyone; Agent, Gateways, Logs, Access and Data and backups for admins), light and dark, and a phone layout. See the [page-by-page guide](docs/conventions/web-ui.md#the-pages).
+
+![The generated web app: the left menu, a conversation with a tool call, and the model picker and context ring in the header](docs/assets/webui/webui-chat.png)
+
+The terminal chat, with sessions, routines, notes, `@file` and picture attachments, slash commands and a context meter (the answers here come from a scripted demo model). `bxAgents chat --server` starts its own server and `--connect=<url> --token=<token>` talks to a deployed one:
 
 ![bxAgents chat in a terminal: slash commands, a tool call and a formatted answer](docs/assets/tui/chat-terminal.gif)
 
@@ -65,7 +71,7 @@ There is a guide to [the terminal UI](docs/guides/terminal-ui.md), the [slash co
 ## Documentation & Examples
 
 - **[docs/](docs/index.md)** - installation, quick start, one page per convention folder, agent templates (built-in starters, GitHub/ForgeBox sourcing, publishing your own), the build pipeline, the manifest schema, the full CLI reference, and deployment/secrets. Published at **[bxagents.ai](https://bxagents.ai)**, built with [bx-sites](https://bxsites.io/development/); see [Working on the docs](#working-on-the-docs).
-- **[examples/](examples/README.md)** - real, buildable sample projects: nine core-convention examples (a minimal agent, a simple agent, a class-based agent, an HTTP-exposed agent, a scheduled agent, an MCP agent, a multi-agent team, the web chat UI, and a composite "advanced" agent) plus one per push-style chat-platform gateway (Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio, GitHub, Signal), each demonstrating one convention folder end-to-end.
+- **[examples/](examples/README.md)** - real, buildable sample projects: eleven core-convention examples (a minimal agent, a simple agent, a class-based agent, an HTTP-exposed agent, a scheduled agent, an MCP agent, a multi-agent team, the web app, a composite "advanced" agent, an extensions agent and an API agent) plus one per push-style chat-platform gateway (Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio, GitHub, Signal), each demonstrating one convention folder end-to-end.
 
 ## Why build-time assembly?
 
@@ -155,6 +161,8 @@ bxSites doctor    # environment/config health check
 bxSites audit     # CI-grade broken-link/missing-alt gate over an already-built site/
 bxSites lint      # pre-build content checks on the raw docs/ Markdown
 ```
+
+`bxSites build` needs no network and takes about 35 seconds here (it builds the released tree, `/next/` and the Spanish locale). `bxSites lint` (about 4 seconds) checks the Markdown, and `bxSites audit` (about 5 seconds, after a build) is the broken-link and missing-alt check CI-grade; run both before pushing docs. A screenshot a page names but that does not exist fails the audit.
 
 Every page starts with a small frontmatter block (`title`, `icon`, `summary`, `description`, `tags`); `summary` renders under the page title, `description` is meta-only, and `tags` become clickable badges plus a site-wide `/tags/` index. Scaffold a new one with `bxSites page:new --path=guides/setup.md`, or move one (rewriting every relative Markdown link that pointed at it) with `bxSites page:rename --from=... --to=...`.
 
