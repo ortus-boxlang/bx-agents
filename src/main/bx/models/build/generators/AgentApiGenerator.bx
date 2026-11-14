@@ -18,7 +18,7 @@ class {
 	 * @appDir The generated app folder
 	 * @agentApi The root project's `agentApi` config - `{ enabled, tokenEnvVar, tokens }`, all optional
 	 * @connections The `mcpServers` entries that have an `oauth` key, as written in Agent.yaml
-	 * @data { agentName, dataHome, volumes }: what the handler needs to say where the agent keeps its data and what it may use
+	 * @data { agentName, dataHome, volumes, gateways, routines, connectors }: what the handler needs to say where the agent keeps its data and what it may use
 	 *
 	 * @return { written : boolean, path : string } - written is false when `agentApi.enabled` is false
 	 */
@@ -48,6 +48,7 @@ class {
 		source = stamp( source, "__ROUTINES__", Strings::bxLiteral( jsonSerialize( arguments.data.routines ?: {} ) ) )
 		source = stamp( source, "__GATEWAYS__", Strings::bxLiteral( jsonSerialize( arguments.data.gateways ?: [] ) ) )
 		source = stamp( source, "__CONNECTIONS__", Strings::bxLiteral( jsonSerialize( arguments.connections ) ) )
+		source = stamp( source, "__CONNECTORS__", Strings::bxLiteral( jsonSerialize( arguments.data.connectors ?: [] ) ) )
 
 		var path = handlerDir & "/AgentApi.bx"
 		fileWrite( path, source )

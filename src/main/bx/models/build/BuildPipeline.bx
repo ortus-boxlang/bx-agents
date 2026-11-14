@@ -14,6 +14,7 @@
  * again) never pays the packaging cost it doesn't need.
  */
 import bxModules.bxagents.models.connect.OAuthServers;
+import bxModules.bxagents.models.connectors.ConnectorSettings;
 import bxModules.bxagents.models.util.Strings;
 
 import bxModules.bxagents.models.build.AgentApiConfig;
@@ -194,7 +195,9 @@ class {
 			dataHome  : ( isStruct( config.data ?: "" ) ? config.data : {} ).home ?: "",
 			volumes   : isStruct( config.volumes ?: "" ) ? config.volumes : {},
 			gateways  : gatewayResult.channelInfo ?: [],
-			routines  : isStruct( config.routines ?: "" ) && RoutineSettings::resolve( config.routines ).enabled ? RoutineSettings::resolve( config.routines ) : {}
+			routines  : isStruct( config.routines ?: "" ) && RoutineSettings::resolve( config.routines ).enabled ? RoutineSettings::resolve( config.routines ) : {},
+			// what a person can connect to: the catalog as this build sees it, narrowed by the agent's `connectors` key
+			connectors : ConnectorSettings::resolve( config ).available
 		} )
 		arguments.onProgress( "    #agentApiResult.written ? 'written' : 'off (agentApi.enabled is false)'#" )
 

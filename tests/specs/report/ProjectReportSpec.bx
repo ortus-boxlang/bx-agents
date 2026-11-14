@@ -216,6 +216,38 @@ class extends="testbox.system.BaseSpec" {
 				expect( built.generator ).toInclude( "bx-agents" );
 			} );
 
+			it( "reports the connectors an agent offers: all of the catalog by default", function() {
+				var root = newYamlProject( "name: plain-agent" & char( 10 ) & "model: openai/gpt-5" & char( 10 ) );
+				var found = reporter.build( root ).connectors;
+
+				expect( found.mode ).toBe( "all" );
+				expect( found.available.map( c => c.id ) ).toBe( [ "atlassian", "cloudflare", "git", "github", "notion", "stripe", "supabase" ] );
+				expect( found.excluded ).toBeEmpty();
+				expect( found.available.filter( c => c.id == "github" )[ 1 ].ways ).toBe( "token" );
+				expect( found.available.filter( c => c.id == "notion" )[ 1 ].ways ).toBe( "sign in, token" );
+				expect( found.available.filter( c => c.id == "git" )[ 1 ].ways ).toBe( "no sign in" );
+			} );
+
+			it( "reports the connectors that only, exclude and override leave, and marks an override", function() {
+				var found = reporter.build( newTempProject( "with-connectors" ) ).connectors;
+
+				expect( found.mode ).toBe( "only" );
+				expect( found.available.map( c => c.id ) ).toBe( [ "github", "notion", "supabase" ] );
+				expect( found.excluded ).toBe( [ "atlassian", "cloudflare", "git", "stripe" ] );
+				expect( found.available.filter( c => c.id == "supabase" )[ 1 ].overridden ).toBeTrue();
+				expect( found.available.filter( c => c.id == "github" )[ 1 ].overridden ).toBeFalse();
+			} );
+
+			it( "reports none for connectors: none, and nothing when the key has a mistake", function() {
+				var off = reporter.build( newYamlProject( "name: a" & char( 10 ) & "model: openai/gpt-5" & char( 10 ) & "connectors: none" & char( 10 ) ) ).connectors;
+				var broken = reporter.build( newTempProject( "validation/bad-connectors" ) ).connectors;
+
+				expect( off.mode ).toBe( "none" );
+				expect( off.available ).toBeEmpty();
+				expect( broken.mode ).toBe( "" );
+				expect( broken.available ).toBeEmpty();
+			} );
+
 			it( "parses a --section list and rejects an unknown name", function() {
 				expect( reporter.parseSections( "tools, Env,tools" ) ).toBe( [ "tools", "env" ] );
 				expect( reporter.parseSections( "" ) ).toBeEmpty();

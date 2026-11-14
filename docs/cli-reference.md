@@ -1068,6 +1068,7 @@ The report has these sections, in this order. `--section` takes any of the names
 | `tools` | Per agent: each `@AITool` function in `tools/` with its description and file, then the module tools it lists (`now@bxai`) and which modules have `toolOptions`. |
 | `skills` | The skills each agent has. |
 | `mcp` | The MCP servers each agent uses (URLs are shown without a user name or query string, and with the environment variables they need) and the MCP servers the project hosts. |
+| `connectors` | The connectors the agent offers: all of the [catalog](#connectors) by default, narrowed by its `connectors` key, with how a person gets in, the risk, and what an admin overrode. Nothing is attached until a person connects one. |
 | `gateways` | Every `gateways/` entry: its kind (`agent`, `mcp`, `webui` with its auth mode, or a chat platform) and path. |
 | `schedule` | Each `schedules/*.bx` scheduler with its tasks: name, cron (or the frequency method), and the agent it runs (`default` for the root agent). |
 | `ai` | The default model, the other providers, the named [profiles](conventions/models.md) with where each key comes from, and the capability defaults. |

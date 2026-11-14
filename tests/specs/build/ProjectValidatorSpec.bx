@@ -566,6 +566,31 @@ class extends="testbox.system.BaseSpec" {
 				expect( text ).toInclude( "'oauth' must be true or a mapping" );
 			} );
 
+			it( "names every mistake in the connectors key, with the closest id", function() {
+				var result = validateFixture( "bad-connectors" );
+				var text = result.errors.filter( e => e.findNoCase( "connectors" ) ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "unknown key [extra]" );
+				expect( text ).toInclude( "connectors.only names [gitub], which is not in the catalog. Did you mean [github]?" );
+				expect( text ).toInclude( "connectors.exclude names [github], which connectors.only does not offer" );
+				expect( text ).toInclude( "connectors.override.notion.timeout must be a whole number of milliseconds" );
+				expect( text ).toInclude( "connectors.override.notion.options names [x], which [notion] does not have. It has no options" );
+				expect( text ).toInclude( "connectors.override names [stripe], which this agent does not offer" );
+				expect( text ).toInclude( "connectors.override names [github], which this agent does not offer" );
+			} );
+
+			it( "warns, and does not fail, when an mcpServers entry has a connector's name", function() {
+				var result = validateFixture( "connectors-shadow" );
+
+				expect( result.errors ).toBeEmpty();
+				expect( result.warnings.toList( char( 10 ) ) ).toInclude( "The mcpServers entry [github] has the same name as the [github] connector, so it replaces it" );
+			} );
+
+			it( "accepts a project with no connectors key, one with only, exclude and override, and the word none", function() {
+				expect( validateFixture( "../with-connectors" ).errors.filter( e => e.findNoCase( "connectors" ) ) ).toBeEmpty();
+				expect( validateFixture( "../with-mcp-oauth" ).errors.filter( e => e.findNoCase( "connectors" ) ) ).toBeEmpty();
+			} );
+
 			it( "rejects stdio and web mcpServers entries that are mixed up, mistyped or leak a secret", function() {
 				var text = validateFixture( "bad-mcp-stdio" ).errors.filter( e => e.findNoCase( "mcpServers" ) ).toList( char( 10 ) );
 

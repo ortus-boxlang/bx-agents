@@ -16,6 +16,7 @@ import bxModules.bxagents.models.api.Guards;
 import bxModules.bxagents.models.data.DataHome;
 import bxModules.bxagents.models.data.Volumes;
 import bxModules.bxagents.models.routines.RoutineSettings;
+import bxModules.bxagents.models.connectors.ConnectorSettings;
 
 class {
 
@@ -63,6 +64,7 @@ class {
 		validateGateways( arguments.discovery, errors, ( arguments.resolvedConfig.profiles ?: {} ).keyArray(), types, apiBase )
 		validateGatewaySession( arguments.resolvedConfig, errors, directoryExists( arguments.projectRoot & "/extensions" ) )
 		validateMcpServers( arguments.resolvedConfig, errors )
+		validateConnectors( arguments.resolvedConfig, errors, warnings )
 		validateTools( arguments.resolvedConfig, errors, "The project's own agent definition" )
 		validateToolOptions( arguments.resolvedConfig, errors, "The project's own agent definition" )
 		validateModelProvider( arguments.resolvedConfig, arguments.discovery, errors )
@@ -1199,6 +1201,26 @@ class {
 				for ( var problem in modules.get( module ).validateOptions( options[ module ] ) ) {
 					arguments.errors.append( "#arguments.label#'s toolOptions [#module#] #problem#" )
 				}
+			}
+		}
+	}
+
+	/**
+	 * The `connectors` key: which connectors of the catalog the agent offers, and what an admin changed. A mistake is named
+	 * with the closest id; an `mcpServers` entry that has a connector's name replaces that connector, with a warning.
+	 *
+	 * @resolvedConfig The resolved config struct from AgentConfigResolver.resolve() - only `connectors` and `mcpServers` are used
+	 * @errors Accumulator array - append() any validation errors found
+	 * @warnings Accumulator array - append() anything worth saying that does not stop the build
+	 */
+	private void function validateConnectors( required struct resolvedConfig, required array errors, required array warnings ) {
+		var problems = ConnectorSettings::problems( arguments.resolvedConfig )
+		for ( var problem in problems ) {
+			arguments.errors.append( problem )
+		}
+		if ( !problems.len() ) {
+			for ( var id in ConnectorSettings::resolve( arguments.resolvedConfig ).shadowed ) {
+				arguments.warnings.append( "The mcpServers entry [#id#] has the same name as the [#id#] connector, so it replaces it: the catalog entry is not offered. Rename the entry to offer both, or remove it to use the connector" )
 			}
 		}
 	}
