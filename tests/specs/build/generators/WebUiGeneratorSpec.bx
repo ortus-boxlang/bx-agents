@@ -772,6 +772,17 @@ class extends="testbox.system.BaseSpec" {
 					expect( html ).toInclude( "conversationsTotal > conversations.length" );
 				} );
 
+				it( "asks for the vault activity only as an admin, and for no history of a conversation it just made up", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "if ( !capabilities.admin ) { return; }" );
+					expect( html ).toInclude( "function isLocalOnly( id )" );
+					expect( html ).toInclude( "if ( isLocalOnly( getConversationId() ) )" );
+				} );
+
 				it( "draws the Appearance controls in the Settings page as well as in the popup", function() {
 					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 					var appDir = newAppDir();

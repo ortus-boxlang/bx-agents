@@ -70,6 +70,73 @@ class extends="testbox.system.BaseSpec" {
 				expect( service.agentFile( admin, "instructions.md" ).data().text ).toBe( "Be brief." );
 			} );
 
+			it( "lists the project's files from a built app: the build's copy of the definition and instructions, tools, skills, subagents, gateways, extensions and the agent's own skills", function() {
+				var project = dir & "/src-project";
+				directoryCreate( project & "/subagents", true, true );
+				directoryCreate( project & "/gateways", true, true );
+				directoryCreate( project & "/tools", true, true );
+				directoryCreate( project & "/skills/triage", true, true );
+				fileWrite( project & "/Agent.yaml", "name: lead" & char( 10 ) & "apiKey: sk-real-secret" & char( 10 ) );
+				fileWrite( project & "/instructions.md", "Be brief." );
+				fileWrite( project & "/subagents/Scout.bx", "class {}" );
+				fileWrite( project & "/gateways/telegram.yaml", "type: telegram" & char( 10 ) & "token: ${TELEGRAM_TOKEN}" & char( 10 ) );
+				fileWrite( project & "/tools/Greeter.bx", "class {}" );
+				fileWrite( project & "/skills/triage/SKILL.md", "Steps." );
+				fileWrite( project & "/.env", "OPENAI_API_KEY=sk-real-secret" );
+				fileWrite( project & "/gateways/secrets.json", "{}" );
+
+				var built = dir & "/built/app";
+				directoryCreate( built, true, true );
+				var copied = new bxagents.models.build.generators.ProjectFilesCopier().copy( project, built );
+				directoryCopy( project & "/tools", built & "/tools", true );
+				directoryCopy( project & "/skills", built & "/skills", true );
+				directoryCreate( built & "/extensions/acme/skills/x", true, true );
+				fileWrite( built & "/extensions/acme/skills/x/SKILL.md", "Ext skill." );
+				directoryCreate( home.folder( "skills" ) & "/mine", true, true );
+				fileWrite( home.folder( "skills" ) & "/mine/SKILL.md", "Mine." );
+
+				var builtHome = new bxagents.models.data.DataHome( projectRoot : built, configured : dir & "/home", environment : {}, userHome : "/home/someone" );
+				var shown = new bxagents.models.api.AgentService( lead, store, nullValue(), {
+					data : new bxagents.models.data.AppData( builtHome, new bxagents.models.data.Volumes( {}, builtHome ) )
+				} );
+				var paths = shown.agentFiles( admin ).data().files.map( f => f.path );
+
+				expect( copied.copied ).toBe( 4 );
+				expect( paths ).toInclude( "Agent.yaml" );
+				expect( paths ).toInclude( "instructions.md" );
+				expect( paths ).toInclude( "subagents/Scout.bx" );
+				expect( paths ).toInclude( "gateways/telegram.yaml" );
+				expect( paths ).toInclude( "tools/Greeter.bx" );
+				expect( paths ).toInclude( "skills/triage/SKILL.md" );
+				expect( paths ).toInclude( "extensions/acme/skills/x/SKILL.md" );
+				expect( paths ).toInclude( "data/skills/mine/SKILL.md" );
+				expect( paths.filter( p => p.contains( ".env" ) || p.contains( "secrets" ) ) ).toBeEmpty();
+				var yaml = shown.agentFile( admin, "Agent.yaml" ).data().text;
+				expect( yaml ).toInclude( "apiKey: ********" );
+				expect( yaml ).notToInclude( "sk-real-secret" );
+				expect( shown.agentFile( admin, "gateways/telegram.yaml" ).data().text ).toInclude( "TELEGRAM_TOKEN" );
+				expect( shown.agentFile( admin, "../src-project/.env" ).code() ).toBe( "not_found" );
+				expect( shown.agentFile( admin, "project/../../.env" ).code() ).toBe( "not_found" );
+			} );
+
+			it( "does not follow a symbolic link out of the project, in the build copy or when listing", function() {
+				var project = dir & "/linked";
+				directoryCreate( project & "/skills/ok", true, true );
+				fileWrite( project & "/skills/ok/SKILL.md", "fine" );
+				fileWrite( dir & "/outside.md", "outside" );
+				createObject( "java", "java.nio.file.Files" ).createSymbolicLink( createObject( "java", "java.nio.file.Paths" ).get( project & "/skills/leak.md", [] ), createObject( "java", "java.nio.file.Paths" ).get( dir & "/outside.md", [] ), [] );
+				var linkedHome = new bxagents.models.data.DataHome( projectRoot : project, configured : dir & "/home2", environment : {}, userHome : "/home/someone" );
+				var linked = new bxagents.models.api.AgentService( lead, store, nullValue(), {
+					data : new bxagents.models.data.AppData( linkedHome, new bxagents.models.data.Volumes( {}, linkedHome ) )
+				} );
+
+				var paths = linked.agentFiles( admin ).data().files.map( f => f.path );
+
+				expect( paths ).toInclude( "skills/ok/SKILL.md" );
+				expect( paths ).notToInclude( "skills/leak.md" );
+				expect( linked.agentFile( admin, "skills/leak.md" ).code() ).toBe( "not_found" );
+			} );
+
 			it( "never shows a .env, a hidden file or a path outside the project", function() {
 				fileWrite( dir & "/.env", "SECRET=1" );
 				fileWrite( dir & "/Agent.yaml", "name: lead" );

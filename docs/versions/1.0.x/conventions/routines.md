@@ -8,7 +8,7 @@ tags: [conventions, routines, scheduling]
 
 # Routines
 
-A routine is a prompt the agent runs on a schedule, as the person who made it. "Every weekday at 9, check the build and tell me what broke" is a routine. A person makes it by asking the agent, and the agent keeps it in the chat database. The answer can go to a chat app, and a routine can keep reports as files.
+A routine is a prompt the agent runs on a schedule, as the person who made it. "Every weekday at 9, check the build and tell me what broke" is a routine. A person makes it by asking the agent, and the agent keeps it in the chat database. The answer can go to a gateway, and a routine can keep reports as files.
 
 Routines are not [schedulers](schedules.md). They are for the people who use the agent, not for the developer.
 
@@ -52,7 +52,7 @@ With the feature off there are no routine tools, no heartbeat and no routines ca
 | `maxPromptLength` | `4000` | The longest prompt, in characters (200 to 20000). Longer instructions belong in a [skill](skills.md) |
 | `approvalTimeout` | `24h` | How long a run waits for a person to approve a tool (`5m` to `7d`) |
 | `timezone` | the server's | The time zone cron expressions are read in, an IANA name such as `Europe/Madrid` |
-| `summaryLength` | `1500` | How many characters of an answer are sent to a chat app (200 to 4000) |
+| `summaryLength` | `1500` | How many characters of an answer are sent to a gateway (200 to 4000) |
 | `maxReportSize` | `256kb` | The largest report file a routine may save (`1kb` to `5mb`) |
 | `maxReportFiles` | `500` | The most files in one routine's results folder (10 to 5000) |
 
@@ -107,13 +107,13 @@ Each routine has a destination, set when it is made:
 
 | Destination | Meaning |
 |---|---|
-| nothing said | The chat app chat the person is writing in, if that is where they asked. Otherwise the routine's own conversation |
+| nothing said | The gateway chat the person is writing in, if that is where they asked. Otherwise the routine's own conversation |
 | `routine` | The routine's own conversation only |
-| `gateway:telegram` (any chat app) | A chat on that [chat app](gateways/index.md) |
+| `gateway:telegram` (any gateway) | A chat on that [gateway](gateways/index.md) |
 
-Chat apps belong to the person who runs the agent. A person writing from a chat app may send a routine's answer to their own chat there. Anyone else is limited to the routine's own conversation, and the local user can choose a chat app, naming the chat when it has talked to more than one. A chat app can only write to a chat it has already heard from, because that is when the agent learns its address (and for Teams, the address it needs to reply). If the chat app has talked to nobody, the agent tells the owner to message the bot once.
+Gateways belong to the person who runs the agent. A person writing from a gateway may send a routine's answer to their own chat there. Anyone else is limited to the routine's own conversation, and the local user can choose a gateway, naming the chat when it has talked to more than one. A gateway can only write to a chat it has already heard from, because that is when the agent learns its address (and for Teams, the address it needs to reply). If the gateway has talked to nobody, the agent tells the owner to message the bot once.
 
-What is sent is a summary: the answer cut to `summaryLength` characters, headed `Routine <name>:`, and a last line naming the reports the run saved. The whole answer is in the routine's conversation. A message that cannot be sent (the chat app is not connected, the chat is unknown, the platform refuses) counts as a failed run, so three in a row pause the routine, and `routines.log` says why. The log never holds the text.
+What is sent is a summary: the answer cut to `summaryLength` characters, headed `Routine <name>:`, and a last line naming the reports the run saved. The whole answer is in the routine's conversation. A message that cannot be sent (the gateway is not connected, the chat is unknown, the platform refuses) counts as a failed run, so three in a row pause the routine, and `routines.log` says why. The log never holds the text.
 
 A run that stopped for an approval is not sent anywhere once a person answers: its answer is in its conversation.
 
@@ -143,7 +143,7 @@ Making and changing a routine is usually asked of the agent, where a person sees
 
 `run` marks a routine due. It starts within a minute, by the heartbeat of a served app, so from a terminal that is not serving the app nothing starts until the app is running.
 
-The `/routines` and `/routine` commands are for the terminal and the web page. They are not on [chat apps](gateways/index.md) yet: a person there asks the agent, which has the `routine_*` tools.
+The `/routines` and `/routine` commands are for the terminal and the web page. They are not on [gateways](gateways/index.md) yet: a person there asks the agent, which has the `routine_*` tools.
 
 ### Reports are removed by a person
 
@@ -168,4 +168,4 @@ Deleting a routine keeps its reports. The count of what a clean-up removed is lo
 | `POST /routines/reports/delete` | Remove one report (`name`, `file`) |
 | `POST /routines/reports/clean` | `name`, `olderThanDays` or `all`; removes only with `apply` |
 
-Every route answers `404` with "Routines are not turned on" when the feature is off. People see only their own routines, and an admin may act on anyone's by id, or by a name only one owner has. An admin may also send a routine's answer to a chat app, which the tools do not allow for a chat-scope person.
+Every route answers `404` with "Routines are not turned on" when the feature is off. People see only their own routines, and an admin may act on anyone's by id, or by a name only one owner has. An admin may also send a routine's answer to a gateway, which the tools do not allow for a chat-scope person.

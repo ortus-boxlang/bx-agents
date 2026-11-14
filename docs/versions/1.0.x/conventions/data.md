@@ -83,7 +83,7 @@ The agent writes a path as `volume:path`, for example `notes:todo.md`. A path wi
 
 ### Seeing them
 
-- **In chat:** `/volumes` lists the volumes by name, mode and description, in the terminal, the web page and chat apps. It never shows a folder on the machine.
+- **In chat:** `/volumes` lists the volumes by name, mode and description, in the terminal, the web page and gateways. It never shows a folder on the machine.
 - **Over the API:** `GET /volumes` answers the same list to anyone who may call the API. `GET /data` answers the data home, the size of each part and the folder of each volume, and is for admins only, since it shows paths.
 - **In `doctor`:** it reports the data home, where it came from, and whether it can be written. It makes nothing.
 

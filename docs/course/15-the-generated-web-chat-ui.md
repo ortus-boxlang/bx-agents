@@ -30,7 +30,7 @@ at `/__bxagents`. The page is dependency-free vanilla HTML/CSS/JS,
 pre-built and vendored inside BxAgents itself - `bxAgents build` never runs `npm
 install`, and a generated project never needs Node installed at all.
 
-![The generated web chat UI, branded and populated with an example conversation](../assets/webui-chat-light.png)
+![The generated web app with a conversation](../assets/webui-chat-light.png)
 
 That's the real, unmodified generated page - this one branded with
 [`examples/webui-agent`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent)'s
