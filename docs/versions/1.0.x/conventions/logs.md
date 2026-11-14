@@ -27,6 +27,8 @@ A line looks like this:
 [2026-11-09T09:15:11,300] [main] [ERROR] [GATEWAYS] [my-agent] [telegram] Could not start: Telegram rejected the configured bot token: Unauthorized
 ```
 
+![The Logs page: a tab for each log, a level filter and a search box](../assets/webui/webui-logs.png)
+
 ## What is never written
 
 A log is for finding out what happened, not for keeping what was said.

@@ -57,6 +57,35 @@ class {
 	}
 
 	/**
+	 * Puts the skills of the app's skills/ folder (the project's own and the installed ones, as the build copied
+	 * them) in bx-ai's global list. bx-ai reads its skills folder once, when the runtime starts, which is before an
+	 * app's settings are applied, so a built app has to add them itself. A skill already in the list keeps its place,
+	 * except one that came from this same folder, which is read again. Safe to run more than once.
+	 *
+	 * @folder The app's skills/ folder; a missing one adds nothing
+	 *
+	 * @return The names that were added
+	 */
+	array function loadFolder( required string folder ) {
+		var added = []
+		var dir = replace( arguments.folder, "\", "/", "all" ).reReplace( "/+$", "" )
+		if ( !len( dir ) || !directoryExists( dir ) ) {
+			return added
+		}
+		var global = aiGlobalSkills()
+		for ( var skill in bxModules.bxai.models.skills.AiSkill::fromDirectory( dir ).filter( s => isObject( s ) ) ) {
+			var at = positionOf( global, skill.getName() )
+			if ( at == 0 ) {
+				global.append( skill )
+				added.append( skill.getName() )
+			} else if ( replace( global[ at ].getFilePath() ?: "", "\", "/", "all" ).startsWith( dir & "/" ) ) {
+				global[ at ] = skill
+			}
+		}
+		return added
+	}
+
+	/**
 	 * Puts the agent's saved skills in bx-ai's global list, unless a skill of the project has the name.
 	 * Safe to run more than once.
 	 *

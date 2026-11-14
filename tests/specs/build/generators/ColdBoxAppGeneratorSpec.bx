@@ -629,6 +629,16 @@ class extends="testbox.system.BaseSpec" {
 				expect( factory.find( 'SkillWiring@bxagents"().load(' ) ).toBeLT( factory.find( "subagent_" ) );
 			} );
 
+			it( "lists the app's own skills/ folder before the extensions' and the agent's saved skills, since bx-ai never reads it for an app", function() {
+				var result = generateFor( fixtures & "/subagents-chain", newBuildDir() );
+
+				var factory = fileRead( result.agentFactory );
+				expect( factory.reMatch( 'SkillWiring@bxagents"\(\)\.loadShipped\(' ) ).toHaveLength( 1 );
+				expect( factory ).toInclude( 'loadShipped( resolveAppPath( "../skills", ' );
+				expect( factory.find( "loadShipped(" ) ).toBeLT( factory.find( 'SkillWiring@bxagents"().load(' ) );
+				expect( factory.find( 'SkillWiring@bxagents"().load(' ) ).toBeLT( factory.find( "subagent_" ) );
+			} );
+
 			it( "passes the skills settings and the data home to the wiring", function() {
 				var result = generateFor( fixtures & "/with-skills", newBuildDir() );
 

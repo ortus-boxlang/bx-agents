@@ -374,6 +374,8 @@ class {
 		lines.append( "	}" )
 		lines.append( "" )
 		lines.append( "	function onRequestStart( required string targetPage ) {" )
+		lines.append( "		// ColdBox reads a request body once, the first time anything asks. boxlang-miniserver reads it as empty when it has not arrived yet, so wait for it first (see models/api/RequestBody.bx)" )
+		lines.append( '		new "models.api.RequestBody@bxagents"().await( getHTTPRequestData( false ).headers )' )
 		lines.append( '		if ( structKeyExists( url, "fwreinit" ) ) {' )
 		lines.append( "			application.cbBootstrap.processReinit()" )
 		lines.append( "		}" )
@@ -810,6 +812,12 @@ class {
 			"	}",
 			""
 		]
+		// the skills that ship with the app (its skills/ folder) join bx-ai's global skills first: bx-ai reads its skills
+		// folder when the runtime starts, before this app's settings are applied, so it never sees them
+		lines.insertAt(
+			lines.findNoCase( "		// usage recording is off unless Agent.yaml says usage: true" ),
+			'		new "models.skills.SkillWiring@bxagents"().loadShipped( resolveAppPath( "../skills", "#Strings::bxLiteral( Strings::normalizePath( arguments.appDir ) & "/skills" )#" ) )'
+		)
 		// the skills project extensions carry join bx-ai's global skills, before any agent is built
 		var skillsLine = extensionSkillsLine( arguments.projectRoot, arguments.resolvedConfig )
 		if ( len( skillsLine ) ) {

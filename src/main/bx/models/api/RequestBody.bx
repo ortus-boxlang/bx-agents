@@ -1,0 +1,66 @@
+/**
+ * Makes sure the body of a request has arrived before anything reads it.
+ *
+ * Why this exists: BoxLang's miniserver (checked on 1.18.0) reads a request body with
+ * `exchange.getInputStream().available()` and, when that is 0, answers an empty string and remembers it for the
+ * rest of the request. A client that sends the headers and the body in two writes (the BoxLang `bx:http` client
+ * does) can have its headers read before the body bytes have reached the server, so `getHTTPContent()` comes back
+ * empty although `Content-Length` says there is a body. About 1 request in 10 to 100 loses its body that way, and
+ * the action then answers "required" for a field the caller did send. `curl` sends both in one write and never
+ * shows it, and a server that reads the declared number of bytes (Python's http.server) never shows it either.
+ *
+ * The fix is to wait, bounded, until the first body bytes are there. Nothing is read or consumed here; the normal
+ * read afterwards finds the body and caches it as it always did. The generated Application.bx calls this at the
+ * start of every request, before ColdBox (which reads the body once and keeps what it got) or anything else can ask.
+ *
+ * It knows nothing of HTTP beyond the headers it is given, and does nothing when the request declares no body,
+ * when the server is not the miniserver, or when anything about the stream is not as expected.
+ */
+class {
+
+	/**
+	 * @limit The most milliseconds to wait for the first bytes of a declared body
+	 */
+	function init( numeric limit = 5000 ) {
+		variables.limit = arguments.limit
+		return this
+	}
+
+	/**
+	 * @headers The request's headers (lower case names)
+	 * @stream Something with available(), the request's input stream; found on the current request when omitted
+	 *
+	 * @return How many milliseconds it waited (0 when the body was already there or none is declared)
+	 */
+	numeric function await( required struct headers, any stream ) {
+		var declared = val( arguments.headers[ "content-length" ] ?: 0 )
+		if ( declared <= 0 ) {
+			return 0
+		}
+		var source = arguments.stream ?: requestStream()
+		if ( isNull( source ) ) {
+			return 0
+		}
+		var started = getTickCount()
+		try {
+			while ( source.available() == 0 && getTickCount() - started < variables.limit ) {
+				sleep( 1 )
+			}
+		} catch ( any e ) {
+			// a stream that cannot say what it holds is read as before; this only ever shortens a race
+		}
+		return getTickCount() - started
+	}
+
+	/**
+	 * @return The input stream of the request in flight, or null where there is none (a spec, the terminal)
+	 */
+	private any function requestStream() {
+		try {
+			return getBoxContext().getRequestContext().getHTTPExchange().getExchange().getInputStream()
+		} catch ( any e ) {
+			return nullValue()
+		}
+	}
+
+}

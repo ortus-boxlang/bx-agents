@@ -69,6 +69,12 @@ A schedule is stored in one of two forms:
 
 The model turns plain words into one of these, and the tools answer with the English reading ("weekdays at 09:00") and the next run time, so a mistake is seen straight away.
 
+![The Routines page in the web app: three routines, one paused, with the schedule in words and the next run](../assets/webui/webui-routines.png)
+
+![The reports of one routine, with a report open](../assets/webui/webui-routine-reports.png)
+
+Routines have a page in the [web app](web-ui.md#routines): list, make, edit, run, pause, resume, delete, and read the reports.
+
 ## The tools
 
 Every tool the agent gets from BX Agents is named `{type}_{action}`, so permissions can match them by pattern later.

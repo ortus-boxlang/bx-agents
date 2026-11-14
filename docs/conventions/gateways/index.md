@@ -32,6 +32,8 @@ flowchart TD
 !!! tip
     `bxAgents add gateway <type>` writes this entry for you and the `.env` stubs it needs, then lists the setup steps that happen outside the project. See [`add`](../../cli-reference.md#add-gateway).
 
+![The Gateways page in the web app: each gateway with its state, credentials set, chats and a Reconnect button](../../assets/webui/webui-gateways.png)
+
 ## 1. HTTP/MCP/web-UI exposure (`exposes: "agent" | "mcp" | "webui"`)
 
 Exposes the agent, or a local MCP server, over HTTP using ColdBox 8.1's native AI Routing DSL - or a pre-built browser chat UI, documented separately in [The web chat UI](../web-ui.md).
