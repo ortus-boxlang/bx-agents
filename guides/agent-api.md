@@ -124,6 +124,155 @@ agentClient.revokeToken( "ci" );
 
 The same list, create and revoke are in the **Tokens** panel of the [web page](../conventions/web-ui.md) (shown to admins on a server that allows it). A `chat` token gets `403`. Leave `manageTokens` off and the routes do not exist.
 
+## Every route
+
+Every path is under `/__bxagents` (or your `agentApi.path`). The table was written from the one list in `ApiContract.bx` that the build makes the routes and the OpenAPI document from; the document a running server hands out at `GET /openapi` is the authority, and it also has the request and answer shapes. **Admin** routes answer `403` to a caller who is not an admin; **Open** routes need no token even on a closed API.
+
+There are 76 routes (83 verb and path pairs); the token routes are there only with `manageTokens: true`.
+
+### Turns
+
+| Route | Who | Does |
+|---|---|---|
+| `POST /invoke` | Caller | One whole turn: the agent's answer once it is done. |
+| `POST /stream` | Caller | One turn as a stream of thread, chunk and done frames (the small subset of events). |
+| `POST /batch` | Caller | Several inputs, one after another, in one conversation. |
+| `POST /events` | Caller | One turn as the full stream: thread, chunk, tool, suspended, error and done frames. |
+
+### About the agent
+
+| Route | Who | Does |
+|---|---|---|
+| `GET /info` | Caller | What is served: name, model and the routes of the agent. |
+| `GET /tools` | Caller | The tools the agent has. |
+| `GET /health` | Open | Is the server up. |
+| `GET /profiles` | Caller | The models a caller may ask for with options.profile. |
+| `GET /whoami` | Caller | Who the server takes the caller to be: id, scope and where the call came from. |
+| `GET /volumes` | Caller | The folders the agent may use, by name and mode. |
+| `GET /logs` | Admin | The agent's logs: which there are, or the last lines of one. |
+| `POST /gateways/reconnect` | Admin | Stops and starts one gateway in place, so a fixed credential or a dropped connection does not need an app restart. |
+| `GET /gateways` | Admin | The gateways and the state of each: connected, which credentials are set (never their values), last activity, last error and the chats each has talked to (ids and when, never text). |
+| `GET /skills/read` | Caller | One skill's SKILL.md text with its origin, size and when it was saved. |
+| `GET /skills` | Caller | The skills the agent can load: name, description and whether the project or the agent wrote it. |
+| `GET /agent/composition` | Admin | How the agent is put together in one call: what comes in, its parts, the agent tree, what goes out and the tools that ask first. |
+| `GET /agent/files` | Admin | The project's own files that are safe to show (Agent.yaml, instructions, tools, skills, subagents, gateways), by relative path and size. |
+| `GET /agent/file` | Admin | One of those files as text, read only; secrets in Agent.yaml are shown as stars and a long file is cut. |
+| `GET /agent` | Caller | The agent in full: model, window, tools, the agent tree (agents, each sub-agent a caller may talk to directly) and what this server can do (capabilities). |
+| `GET /usage` | Admin | Tokens by day and by model: a small snapshot, off until usage is turned on (then enabled is false). |
+| `GET /data/backups` | Admin | The backups of the data home, newest first, and the restore waiting for the next start. |
+| `POST /data/backup` | Admin | Makes a backup of the data home now. |
+| `GET /data/backup` | Admin | Downloads one backup as a zip. |
+| `POST /data/restore` | Admin | Schedules a backup to be put back the next time the app starts; what is there is kept as before-restore. |
+| `POST /extensions/reload` | Admin | Loads the extensions again, as /reload does in the terminal. |
+| `GET /extensions` | Admin | The extensions this app loaded, with what each adds and what went wrong. |
+| `GET /data` | Admin | Where the agent keeps everything, how big each part is, and where each volume is. |
+| `POST /ping` | Caller | Asks a model for one word to see that it answers. |
+| `GET /context` | Caller | What the next turn would send, by part, against the model's window. |
+| `GET /status` | Caller | The status items extensions show. |
+| `GET /slots` | Caller | What extensions put in the page's slots. |
+| `GET /openapi` | Caller | This description of the API, as an OpenAPI 3 document. |
+
+### Runs
+
+| Route | Who | Does |
+|---|---|---|
+| `POST /cancel` | Caller | Stops a run. |
+| `POST /steer` | Caller | Adds a message to a run that is going. |
+| `POST /resume` | Caller | Carries on a run that paused for approval, as a stream. |
+| `GET /pending` | Caller | What a paused run is waiting to have approved. |
+
+### Conversations
+
+| Route | Who | Does |
+|---|---|---|
+| `POST /sessions/rename` | Caller | Names one of the caller's conversations. |
+| `POST /sessions/fork` | Caller | Copies a conversation under a new name. |
+| `POST /sessions/delete` | Caller | Deletes a conversation and its messages. |
+| `POST /sessions` | Caller | Starts a conversation, for the main agent or one named in agent. |
+| `GET /sessions` | Caller | A page of the caller's conversations, newest first, with the total that match. |
+| `GET /export` | Caller | One conversation as a file, Markdown or a page of HTML. |
+| `GET /history` | Caller | The messages of one conversation. |
+| `POST /clear` | Caller | Deletes the messages of a conversation, keeps the conversation. |
+| `POST /compact` | Caller | Summarizes the older messages and keeps the recent ones. |
+| `POST /memory/clear` | Caller | Forgets the messages of conversations and keeps the conversations: one of the caller's (conversationId), or with all (an admin) every conversation, or those of one agent. |
+
+### Routines
+
+| Route | Who | Does |
+|---|---|---|
+| `POST /routines/reports/clean` | Caller | Removes the reports of a routine older than some days, or all of them. |
+| `POST /routines/reports/delete` | Caller | Removes one report file of a routine. |
+| `GET /routines/reports` | Caller | The report files of a routine, newest first. |
+| `GET /routines/report` | Caller | One report file of a routine as text; a long one is cut and says so. |
+| `POST /routines/update` | Caller | Changes a routine's schedule, prompt or where its answer goes. |
+| `POST /routines/pause` | Caller | Stops a routine from running until it is resumed. |
+| `POST /routines/resume` | Caller | Starts a paused routine again and forgets its failures. |
+| `POST /routines/run` | Caller | Makes a routine due now; the heartbeat starts it within a minute. |
+| `POST /routines/delete` | Caller | Deletes a routine. |
+| `GET /routines/schedule` | Caller | What a schedule means before it is saved: the stored form, the reading in words and the next run. |
+| `GET /routines/get` | Caller | One routine in full, with its prompt. |
+| `POST /routines` | Caller | Makes a routine. |
+| `GET /routines` | Caller | The caller's routines with the schedule in words, status, next and last run and where the answer goes. |
+
+### Vault
+
+| Route | Who | Does |
+|---|---|---|
+| `GET /vault/activity` | Admin | The vault's key status and its recent audit lines: what was used, by whom and when. |
+| `POST /vault/update` | Caller | Changes a secret: its value, description or hosts. |
+| `POST /vault/remove` | Caller | Removes a secret. |
+| `POST /vault` | Caller | Stores a secret. |
+| `GET /vault` | Caller | The secrets the caller can use, by name, never a value: their own and the agent's. |
+
+### Accounts
+
+| Route | Who | Does |
+|---|---|---|
+| `POST /users/admin` | Admin | Makes an account an admin, or takes that away. |
+| `GET /users` | Admin | The sign-in accounts and whether each is an admin. |
+
+### Preferences
+
+| Route | Who | Does |
+|---|---|---|
+| `POST /preferences/set` | Caller | Keeps one setting of the caller. |
+| `POST /preferences/delete` | Caller | Forgets one setting of the caller. |
+| `GET /preferences` | Caller | The caller's settings. |
+
+### Commands
+
+| Route | Who | Does |
+|---|---|---|
+| `GET /commands` | Caller | The slash commands this caller may run. |
+| `POST /command` | Caller | Runs one slash command. |
+
+### Connections
+
+| Route | Who | Does |
+|---|---|---|
+| `GET /connect/callback` | Open | Where a provider sends the person back after they sign in. |
+| `POST /connect/remove` | Caller | Forgets the caller's sign in to one server. |
+| `POST /connect` | Caller | Starts a sign in for the caller and answers with the address to send them to. |
+| `GET /connect` | Caller | The servers that ask people to sign in, and which the caller has connected. |
+
+### Notes
+
+| Route | Who | Does |
+|---|---|---|
+| `POST /notes/clear` | Caller | Removes every note of one scope and says how many: the caller's own (user) or the agent's (agent, which takes an admin). |
+| `POST /notes/update` | Caller | Changes a note. |
+| `POST /notes/remove` | Caller | Removes a note. |
+| `POST /notes` | Caller | Adds a note. |
+| `GET /notes` | Caller | The notes about the caller and about the agent's own work. |
+
+### Tokens
+
+| Route | Who | Does |
+|---|---|---|
+| `POST /tokens/revoke` | Admin | Stops a token working. |
+| `POST /tokens` | Admin | Makes an access token. |
+| `GET /tokens` | Admin | The access tokens, never a secret. |
+
 ## Errors
 
 Every error is `{ "success": false, "error": "text for people", "code": "machine_code" }`.

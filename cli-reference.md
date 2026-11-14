@@ -121,6 +121,27 @@ List, rename, fork, delete, export and import the conversations in the chat data
 ::: card title="stats" icon="phosphor-duotone:chart-bar" href="#stats"
 What the model calls used: tokens by model, provider, day or user, once the project turns usage on.
 :::
+::: card title="vault" icon="phosphor-duotone:vault" href="#vault"
+The secrets the agent uses, sealed in the chat database: list, add, edit, remove, status, audit.
+:::
+::: card title="connect" icon="phosphor-duotone:plugs-connected" href="#connect"
+Sign in to the MCP servers that ask each person to sign in.
+:::
+::: card title="routines" icon="phosphor-duotone:clock-countdown" href="#routines"
+The scheduled routines: list, add, edit, pause, run, reports and clean-up.
+:::
+::: card title="data" icon="phosphor-duotone:database" href="#data-backup-and-restore"
+Where the agent keeps everything, how big each part is, and the volumes it may use.
+:::
+::: card title="logs" icon="phosphor-duotone:list-magnifying-glass" href="#logs"
+List the agent's logs and show the last lines of one.
+:::
+::: card title="backup" icon="phosphor-duotone:archive" href="#data-backup-and-restore"
+Zip the chat database, files and skills in the data home.
+:::
+::: card title="restore" icon="phosphor-duotone:clock-counter-clockwise" href="#data-backup-and-restore"
+Put a backup back; what was there is kept as before-restore.
+:::
 ::: card title="inspect" icon="phosphor-duotone:magnifying-glass" href="#inspect"
 Report how the agent is composed, from its source.
 :::
@@ -546,9 +567,9 @@ In the screen:
 | Ctrl+C | Clear the box; on an empty box, leave; while the agent works, stop it. Ctrl+D leaves on an empty box |
 | `?` alone, or `/keys` | List the keys as they are bound now, with the action name of each |
 
-Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/volumes` (the folders the agent may use), `/skills` (the skills the agent can load, and from which level), `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/keys` (which key does what), `/prompt` (how the message box looks, see below), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
+Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/volumes` (the folders the agent may use), `/agent` (pick a sub-agent to talk to), `/skills` (the skills the agent can load, and from which level), `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/keys` (which key does what), `/prompt` (how the message box looks, see below), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
 
-#### The same commands in the web page and in chat apps
+#### The same commands in the web page and in gateways
 
 Each slash command is written once, as a small class that answers with data (text, a table, a list to pick from), and the terminal, the web page and the chat platforms each draw that answer their own way. So `/help`, `/new`, `/tools`, `/volumes`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/ping`, `/info`, `/remember` and `/notes` work in all three:
 

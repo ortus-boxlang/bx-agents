@@ -99,9 +99,9 @@ bxAgents build
 bxAgents serve --port=8080
 ```
 
-Open **http://localhost:8080/chat/index.html**. You get the conversation sidebar on the left, the streaming transcript in the middle, and a header and composer in the colors of your `theme`:
+Open **http://localhost:8080/chat/index.html**. You get the left menu, the conversation sidebar, the streaming transcript, and a header and composer in the colors of your `theme`:
 
-![The generated web chat UI: a conversation sidebar, a multi-turn transcript, and a themed header/composer](../assets/webui-chat-light.png)
+![The generated web app: the left menu, a conversation with a tool call, and a themed header and composer](../assets/webui-chat-light.png)
 
 ### Dark mode
 
@@ -111,9 +111,9 @@ The `theme.dark` overrides (`accent`/`accentFg`) apply automatically when the pa
 
 ### Narrow screens
 
-The page is responsive with no separate mobile build - at a narrow viewport, the transcript keeps its full width and the conversation sidebar becomes an overlay instead of squeezing the content:
+The page is responsive with no separate mobile build - at a narrow viewport, the transcript keeps its full width and the menu becomes a drawer instead of squeezing the content:
 
-![The same page at a narrow viewport - the transcript keeps the full width, the sidebar overlays instead of squeezing it](../assets/webui-chat-mobile.png)
+![The same page at a narrow viewport, the transcript keeps the full width](../assets/webui-chat-mobile.png)
 
 ## The header and the Settings menu
 
@@ -122,10 +122,12 @@ The header keeps what you use every minute: **Chats** (shows or hides the sideba
 | Group | Items |
 |---|---|
 | **Conversation** | Fork this conversation, Export as Markdown, Clear messages, Compact older messages |
-| **You** | Notes (when the agent has a `notes` block), Appearance (mode, accent color, text size, density, saved in your browser), Dark or Light theme |
-| **Server** | Password, Access tokens |
+| **You** | Memory (when the agent has a `notes` block), Vault, Routines (when they are on), Appearance (mode, accent color, text size, density, saved in your browser), Dark or Light theme |
+| **Server** | Password, Access tokens, Logs, Gateways |
 
 ![The Settings menu open, with the Conversation, You and Server groups](../assets/webui/settings-menu.png)
+
+The menu on the left has a page for each of these and more; see [the web app, page by page](../conventions/web-ui.md#the-pages).
 
 In the message box, the paperclip attaches a picture or a text file (you can also paste or drop them), the lightning button opens the `/` commands menu, and the arrow sends. While the agent works the arrow steers the run and a stop button appears.
 
@@ -143,9 +145,9 @@ The page loads fine either way, but a call without the matching key gets a 401 a
 
 ## Access tokens for administrators
 
-With `agentApi: { tokens: true, manageTokens: true }` in `Agent.yaml`, a caller with an `admin` token sees **Settings**, **Access tokens**. The panel lists tokens, creates one (a name, a scope of `chat` or `admin`, and how long it lasts, such as `90d`), shows the secret once for you to copy, and revokes tokens. `manageTokens` is off by default and a `chat` token gets `403`. The same thing from a shell is `bxAgents token create|list|revoke`.
+With `agentApi: { tokens: true, manageTokens: true }` in `Agent.yaml`, a caller with an `admin` token sees the **Access** page, and **Access tokens** in the Settings menu. The panel lists tokens, creates one (a name, a scope of `chat` or `admin`, and how long it lasts, such as `90d`), shows the secret once for you to copy, and revokes tokens. `manageTokens` is off by default and a `chat` token gets `403`. The same thing from a shell is `bxAgents token create|list|revoke`.
 
-![The Access tokens panel: the token list, a new secret shown once, and the create form](../assets/webui/tokens-panel.png)
+![The Access page: the token list and the form that makes a token](../assets/webui/webui-access.png)
 
 ## One API for the page, the terminal and the gateways
 

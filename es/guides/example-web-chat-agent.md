@@ -142,7 +142,7 @@ La página carga bien en ambos casos, pero enviar un mensaje sin la clave corres
 
 Con `agentApi: { tokens: true, manageTokens: true }` en `Agent.yaml`, quien llama con un token `admin` ve **Settings**, **Tokens de acceso**. El panel lista los tokens, crea uno (un nombre, un alcance `chat` o `admin` y cuánto dura, por ejemplo `90d`), muestra el secreto una sola vez para que lo copies y revoca tokens. `manageTokens` está desactivado por defecto y un token `chat` recibe `403`. Lo mismo desde un shell es `bxAgents token create|list|revoke`.
 
-![El panel de tokens de acceso: la lista de tokens, un secreto nuevo mostrado una vez y el formulario de creación](../assets/webui/tokens-panel.png)
+![El panel de tokens de acceso: la lista de tokens, un secreto nuevo mostrado una vez y el formulario de creación](../assets/webui/webui-access.png)
 
 ## Una sola API para la página, la terminal y los gateways
 

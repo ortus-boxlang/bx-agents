@@ -253,7 +253,7 @@
 
 		
 		<h1 id="routines"><a href="#routines" id="routines" name="routines" class="anchor"></a>Routines</h1>
-<p>A routine is a prompt the agent runs on a schedule, as the person who made it. &quot;Every weekday at 9, check the build and tell me what broke&quot; is a routine. A person makes it by asking the agent, and the agent keeps it in the chat database. The answer can go to a chat app, and a routine can keep reports as files.</p>
+<p>A routine is a prompt the agent runs on a schedule, as the person who made it. &quot;Every weekday at 9, check the build and tell me what broke&quot; is a routine. A person makes it by asking the agent, and the agent keeps it in the chat database. The answer can go to a gateway, and a routine can keep reports as files.</p>
 <p>Routines are not <a href="/conventions/schedules/index.html">schedulers</a>. They are for the people who use the agent, not for the developer.</p>
 <div class="bxsites-table-wrap"><table class="table">
 <thead>
@@ -295,7 +295,7 @@
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>maxPromptLength</code></td><td><code>4000</code></td><td>The longest prompt, in characters (200 to 20000). Longer instructions belong in a <a href="/conventions/skills/index.html">skill</a></td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>approvalTimeout</code></td><td><code>24h</code></td><td>How long a run waits for a person to approve a tool (<code>5m</code> to <code>7d</code>)</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>timezone</code></td><td>the server's</td><td>The time zone cron expressions are read in, an IANA name such as <code>Europe/Madrid</code></td></tr>
-<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>summaryLength</code></td><td><code>1500</code></td><td>How many characters of an answer are sent to a chat app (200 to 4000)</td></tr>
+<tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>summaryLength</code></td><td><code>1500</code></td><td>How many characters of an answer are sent to a gateway (200 to 4000)</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>maxReportSize</code></td><td><code>256kb</code></td><td>The largest report file a routine may save (<code>1kb</code> to <code>5mb</code>)</td></tr>
 <tr x-show="!q || $el.textContent.toLowerCase().includes( q.toLowerCase() )"><td><code>maxReportFiles</code></td><td><code>500</code></td><td>The most files in one routine's results folder (10 to 5000)</td></tr>
 </tbody>
@@ -346,13 +346,13 @@
 <tr><th>Destination</th><th>Meaning</th></tr>
 </thead>
 <tbody>
-<tr><td>nothing said</td><td>The chat app chat the person is writing in, if that is where they asked. Otherwise the routine's own conversation</td></tr>
+<tr><td>nothing said</td><td>The gateway chat the person is writing in, if that is where they asked. Otherwise the routine's own conversation</td></tr>
 <tr><td><code>routine</code></td><td>The routine's own conversation only</td></tr>
-<tr><td><code>gateway:telegram</code> (any chat app)</td><td>A chat on that <a href="/conventions/gateways/index.html">chat app</a></td></tr>
+<tr><td><code>gateway:telegram</code> (any gateway)</td><td>A chat on that <a href="/conventions/gateways/index.html">gateway</a></td></tr>
 </tbody>
 </table></div>
-<p>Chat apps belong to the person who runs the agent. A person writing from a chat app may send a routine's answer to their own chat there. Anyone else is limited to the routine's own conversation, and the local user can choose a chat app, naming the chat when it has talked to more than one. A chat app can only write to a chat it has already heard from, because that is when the agent learns its address (and for Teams, the address it needs to reply). If the chat app has talked to nobody, the agent tells the owner to message the bot once.</p>
-<p>What is sent is a summary: the answer cut to <code>summaryLength</code> characters, headed <code>Routine &lt;name&gt;:</code>, and a last line naming the reports the run saved. The whole answer is in the routine's conversation. A message that cannot be sent (the chat app is not connected, the chat is unknown, the platform refuses) counts as a failed run, so three in a row pause the routine, and <code>routines.log</code> says why. The log never holds the text.</p>
+<p>Gateways belong to the person who runs the agent. A person writing from a gateway may send a routine's answer to their own chat there. Anyone else is limited to the routine's own conversation, and the local user can choose a gateway, naming the chat when it has talked to more than one. A gateway can only write to a chat it has already heard from, because that is when the agent learns its address (and for Teams, the address it needs to reply). If the gateway has talked to nobody, the agent tells the owner to message the bot once.</p>
+<p>What is sent is a summary: the answer cut to <code>summaryLength</code> characters, headed <code>Routine &lt;name&gt;:</code>, and a last line naming the reports the run saved. The whole answer is in the routine's conversation. A message that cannot be sent (the gateway is not connected, the chat is unknown, the platform refuses) counts as a failed run, so three in a row pause the routine, and <code>routines.log</code> says why. The log never holds the text.</p>
 <p>A run that stopped for an approval is not sent anywhere once a person answers: its answer is in its conversation.</p>
 <h2 id="reports"><a href="#reports" id="reports" name="reports" class="anchor"></a>Reports</h2>
 <p>A routine can save what it found as files: <code>report_save( file, content )</code> while it runs. They go in <code>&lt;data home&gt;/routines/&lt;name&gt;-&lt;id&gt;/</code>, are never overwritten (a name already used becomes <code>report-2.md</code>), and are never deleted automatically.</p>
@@ -378,7 +378,7 @@
 </tbody>
 </table></div>
 <p><code>run</code> marks a routine due. It starts within a minute, by the heartbeat of a served app, so from a terminal that is not serving the app nothing starts until the app is running.</p>
-<p>The <code>/routines</code> and <code>/routine</code> commands are for the terminal and the web page. They are not on <a href="/conventions/gateways/index.html">chat apps</a> yet: a person there asks the agent, which has the <code>routine_*</code> tools.</p>
+<p>The <code>/routines</code> and <code>/routine</code> commands are for the terminal and the web page. They are not on <a href="/conventions/gateways/index.html">gateways</a> yet: a person there asks the agent, which has the <code>routine_*</code> tools.</p>
 <h3 id="reports-are-removed-by-a-person"><a href="#reports-are-removed-by-a-person" id="reports-are-removed-by-a-person" name="reports-are-removed-by-a-person" class="anchor"></a>Reports are removed by a person</h3>
 <p>Nothing in a chat deletes a file, and the agent has no tool for it. A person removes one report, or the old ones, from the terminal, the API or the web page:</p>
 <ul>
@@ -403,13 +403,13 @@
 <tr><td><code>POST /routines/reports/clean</code></td><td><code>name</code>, <code>olderThanDays</code> or <code>all</code>; removes only with <code>apply</code></td></tr>
 </tbody>
 </table></div>
-<p>Every route answers <code>404</code> with &quot;Routines are not turned on&quot; when the feature is off. People see only their own routines, and an admin may act on anyone's by id, or by a name only one owner has. An admin may also send a routine's answer to a chat app, which the tools do not allow for a chat-scope person.</p>
+<p>Every route answers <code>404</code> with &quot;Routines are not turned on&quot; when the feature is off. People see only their own routines, and an admin may act on anyone's by id, or by a name only one owner has. An admin may also send a routine's answer to a gateway, which the tools do not allow for a chat-scope person.</p>
 
 	
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/routines.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/routines.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Nov 11, 2026, 10&#x3a;36&#x3a;14 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20routines&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Froutines%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/routines.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/routines.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Nov 14, 2026, 8&#x3a;55&#x3a;55 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20routines&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Froutines%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 

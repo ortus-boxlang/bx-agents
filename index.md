@@ -3,7 +3,7 @@ title: BxAgents
 order: 1
 icon: phosphor-duotone:robot
 summary: Build AI agents by convention - a conventions-based framework for AI agents powered by BoxLang AI.
-description: Build AI agents by convention - a conventions-based framework for AI agents powered by BoxLang AI.
+description: Build AI agents by convention. A conventions-based framework for AI agents powered by BoxLang AI, with a twelve-page web app, an API, gateways, routines, a vault and backups built from your files.
 tags: [overview]
 toc: false
 ogImage: assets/og-home.png
@@ -21,10 +21,22 @@ layout: home
 **BxAgents** is a conventions-based AI agent framework for [BoxLang](https://www.boxlang.io),
 built on [ColdBox](https://www.coldbox.org) and
 [BX AI](https://ai.boxlang.io). You describe an agent
-with files and folders - not a framework's API surface - and `bxAgents build` assembles a
-real, runnable ColdBox application out of it.
+with files and folders, not a framework's API surface, and `bxAgents build` assembles a
+real, runnable ColdBox application out of it: a web app with twelve pages, an API with an OpenAPI
+document, twelve kinds of gateway, routines, a vault, backups, and tests that need no API key.
 
 ![A terminal session: bxAgents new scaffolds a project, bxAgents build assembles a ColdBox app, bxAgents inspect prints the agent, model and environment, and bxAgents serve starts it on http://127.0.0.1:8080](assets/cli-quickstart.svg)
+
+## Everything the build gives you
+
+| | |
+|---|---|
+| **Build** | [Folders are the API](conventions/agent-yaml.md). A [wizard](guides/new-wizard.md) and eight starters. [Sub-agents](conventions/subagents.md) you can also talk to directly. [Skills](conventions/skills.md) from a registry, or saved by the agent with your approval. Tests with no tokens. |
+| **Run** | A [web app](conventions/web-ui.md) with a left menu and twelve pages. A [terminal chat](guides/terminal-ui.md) with 33 slash commands. [Routines](conventions/routines.md) people make by asking. [Schedules](conventions/schedules.md), approvals, a packaged `.bxa` and six deploy targets. |
+| **Remember** | Memory in the chat database for every agent, per person, the same in the terminal, the web app and the API. Per-person notes and shared notes about the agent's work. A [data home](conventions/data.md) with volumes, and backups with restore. |
+| **Connect** | [Twelve gateway types](conventions/gateways/index.md), and routines that deliver to them. An [API](guides/agent-api.md) with 76 routes, OpenAPI and a BoxLang client. [MCP](conventions/mcp.md) in both directions, with [per-person sign-in](conventions/connect.md). A [vault](conventions/vault.md) with an activity log. |
+| **Operate** | Admin and member roles, tokens and people, `allowedIPs` and a rate limit. Five [logs](conventions/logs.md). The agent tree, its files and its token usage. Gateway state with a reconnect button. `bxAgents doctor`. |
+| **Extend** | [Extensions](conventions/extensions.md) add commands, keys, status items, listeners, schedulers, page slots, CLI verbs, tools, skills and gateway types. [Interceptors](conventions/interceptors.md), modules and a class-based `Agent.bx`. |
 
 ## What you can build
 
@@ -36,10 +48,12 @@ Pick the problem, write one file. Most of these have a working example in
 | Answer people where they are | [`gateways/slack.bx`](conventions/gateways/index.md) | A Slack bot over Socket Mode (also Telegram, Discord, Teams, WhatsApp, Twilio SMS, GitHub, Signal and email) |
 | Run a job every morning | [`schedules/Digest.bx`](conventions/schedules.md) | A task with `.cron()` that calls `run()`, started with the app, no cron daemon |
 | Let other systems call it | [`agentApi` in `Agent.yaml`](guides/agent-api.md) | One HTTP API at `/__bxagents` with an OpenAPI document and a BoxLang client, open on your machine or behind tokens; plus [`gateways/expose.bx`](conventions/gateways/index.md) for a REST path of your choosing, or an MCP server |
-| Keep a human in the loop | a tool that needs approval | The run waits for approve or reject, in the terminal, the [web chat](conventions/web-ui.md) or a chat gateway |
+| Keep a human in the loop | a tool that needs approval | The run waits for approve or reject, in the terminal, the [web app](conventions/web-ui.md) or a gateway |
+| Let people schedule their own work | [`routines: enabled: true`](conventions/routines.md) | A person asks, the agent makes a routine, a heartbeat runs it, reports are saved, and a summary can go to a gateway chat |
+| Give each specialist a seat | [`subagents/researcher/`](conventions/subagents.md) | A sub-agent in the web app's Talk to menu and `/agent`, with its own memory |
 | Connect it to your accounts | [`vault: {}`](conventions/vault.md) | API keys and logins sealed in the database, typed in a hidden box and never shown to the model; each person can keep their own |
 | Let each person sign in to a service | [`oauth:` on an `mcpServers` entry](conventions/connect.md) | Mail, calendars and ticket systems that ask each person to sign in: one click, tokens sealed in the database, the agent acts as them |
-| Add your own commands | [`extensions/hello.bx`](conventions/extensions.md) | A chat command, key, status item or listener, in the terminal chat, the web page and chat platforms |
+| Add your own commands | [`extensions/hello.bx`](conventions/extensions.md) | A chat command, key, status item or listener, in the terminal chat, the web app and gateways |
 | Test without spending tokens | [`tests/specs/AgentSpec.bx`](conventions/testing.md) | `mockResponses()` and agent matchers: specs run in CI with no API key and no network |
 | Ship it anywhere | `bxAgents package` | A portable `.bxa` and [deploy targets](conventions/deploy.md): local, SSH, FTP, SFTP, Docker, DigitalOcean |
 
@@ -64,13 +78,14 @@ folders - built leaf-first.
 Telegram, Slack, Discord, Email, WhatsApp, Teams, Twilio, GitHub and Signal, plus `http`,
 `cli` and `mock`.
 :::
-::: card title="A web chat UI, generated" icon="phosphor-duotone:globe-hemisphere-west" href="conventions/web-ui.md"
-Ask for it in a `gateways/` entry and the build produces a themeable, streaming chat front end with
-session history, notes, a Settings menu and slash commands.
+::: card title="A web app, generated" icon="phosphor-duotone:globe-hemisphere-west" href="conventions/web-ui.md"
+Ask for it in a `gateways/` entry and the build produces a themeable app with a left menu and
+twelve pages: chat, conversations, routines, registry, memory, vault, settings, and for admins the agent,
+gateways, logs, access and data.
 :::
 ::: card title="A full-screen terminal chat" icon="phosphor-duotone:terminal-window" href="guides/terminal-ui.md"
-`bxAgents chat` keeps your scrollback and has sessions, notes, `@file` and picture attachments,
-slash commands, a context meter and recording. It can start its own server or connect to a deployed one.
+`bxAgents chat` keeps your scrollback and has sessions, routines, notes, `@file` and picture attachments,
+33 slash commands, a context meter and recording. It can start its own server or connect to a deployed one.
 :::
 :::
 
@@ -132,25 +147,27 @@ real, working content layered on the same base skeleton.
 See [Agent Templates](agent-templates.md) for every generated file in detail, and how to
 publish your own.
 
-## A chat UI you didn't have to build
+## A web app you didn't have to build
 
-Set `exposes: "webui"` on a gateway and the build emits a complete front end - conversation
-history, streaming replies, notes, a Settings menu (appearance, password, access tokens),
-light/dark theming and a mobile layout - wired to your agent through the same HTTP API your own code can call.
+Set `exposes: "webui"` on a gateway and the build emits the whole app: a left menu with twelve pages,
+streaming chat with a Talk to menu for sub-agents, conversations you can filter, routines and their reports,
+a registry of tools, skills and volumes, memory and notes, a vault, light and dark theming and a phone layout.
+Admins also get Agent, Gateways, Logs, Access and Data and backups. It is wired to your agent through the same
+HTTP API your own code can call.
 
-![The generated web chat UI: a conversation sidebar on the left, a multi-turn transcript in the centre, and a themed header and message composer](assets/webui-chat-light.png)
+![The generated web app: the left menu, a conversation with a tool call and a formatted answer, and the model picker and context ring in the header](assets/webui-chat-light.png)
 
 ::: columns
 ::: column
 ![The same conversation with the theme toggle switched to dark](assets/webui-chat-dark.png)
 :::
 ::: column
-![The same page at a narrow viewport, where the transcript keeps the full width and the sidebar overlays it](assets/webui-chat-mobile.png)
+![The same page at a narrow viewport, where the menu becomes a drawer](assets/webui-chat-mobile.png)
 :::
 :::
 
-It is generated CSS and generated markup - [themeable from a `gateways/` entry](conventions/web-ui.md),
-with no front-end build step of your own.
+It is generated CSS and generated markup, [themeable from a `gateways/` entry](conventions/web-ui.md),
+with no front-end build step of your own. The [page-by-page guide](conventions/web-ui.md#the-pages) shows every page.
 
 ## What `build` actually produces
 
@@ -227,13 +244,13 @@ into the request path.
 ## Reach it from anywhere
 
 ::: cards
-::: card title="Chat platforms" icon="phosphor-duotone:plugs-connected" href="conventions/gateways/index.md"
+::: card title="Gateways" icon="phosphor-duotone:plugs-connected" href="conventions/gateways/index.md"
 Nine push-style gateways - Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio,
 GitHub and Signal - coordinated by one session with `reject` / `queue` / `steer` / `interrupt` policies.
 Each person and each thread has their own conversation, and slash commands work there too.
 :::
 ::: card title="HTTP and MCP" icon="phosphor-duotone:stack" href="guides/agent-api.md"
-Every agent serves an HTTP API with an OpenAPI document, open on your machine or behind tokens,
+Every agent serves an HTTP API (76 routes) with an OpenAPI document, open on your machine or behind tokens,
 `allowedIPs` and a rate limit. Host local MCP servers from `mcp/` so other clients can call your tools.
 :::
 ::: card title="Ship it" icon="phosphor-duotone:package" href="deployment-and-secrets.md"
@@ -262,7 +279,7 @@ One page per convention folder, start to finish.
 Exactly what `build` does, in order.
 :::
 ::: card title="CLI Reference" icon="phosphor-duotone:terminal-window" href="cli-reference.md"
-Every verb and its flags.
+Every one of the 28 verbs and its flags.
 :::
 ::: card title="Agent Templates" icon="phosphor-duotone:squares-four" href="agent-templates.md"
 Every built-in starter, GitHub/ForgeBox sourcing, and publishing your own.

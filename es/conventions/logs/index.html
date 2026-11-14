@@ -248,15 +248,15 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-is-never-written">What is never written</a></li><li class="toc-level-2"><a href="#rotation">Rotation</a></li><li class="toc-level-2"><a href="#reading-them">Reading them</a></li><li class="toc-level-2"><a href="#chat-apps">Chat apps</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-is-never-written">What is never written</a></li><li class="toc-level-2"><a href="#rotation">Rotation</a></li><li class="toc-level-2"><a href="#reading-them">Reading them</a></li><li class="toc-level-2"><a href="#gateways">Gateways</a></li></ul></details>
 		
 
 		
 		<h1 id="logs"><a href="#logs" id="logs" name="logs" class="anchor"></a>Logs</h1>
-<p>An agent writes what it does, and what goes wrong, to log files in the <code>logs/</code> folder of its <a href="/conventions/data/index.html">data home</a>. There is one file per area, so a broken chat app is not buried in the noise of a busy API:</p>
+<p>An agent writes what it does, and what goes wrong, to log files in the <code>logs/</code> folder of its <a href="/conventions/data/index.html">data home</a>. There is one file per area, so a broken gateway is not buried in the noise of a busy API:</p>
 <pre><code>&lt;data home&gt;/logs/
   agent.log       startup, errors in a turn, tool failures
-  gateways.log    every chat app: connect, disconnect, send failures. The gateway's name starts each line
+  gateways.log    every gateway: connect, disconnect, send failures. The gateway's name starts each line
   routines.log    routines: created, changed, run, skipped, failed, delivered
   heartbeat.log   each tick of the routine scheduler that did something
   api.log         refused calls and sign-in failures
@@ -282,22 +282,22 @@ bxAgents logs gateways --tail=500 --level=warn --grep=telegram
 bxAgents logs api --json
 </code></pre>
 <p><code>--level</code> shows that level and anything more serious (<code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code>), <code>--grep</code> keeps the lines that contain the text (case does not matter), and <code>--tail</code> is how many lines, up to 1000. Only the end of a log is read, so a big log is as quick as a small one.</p>
-<p><strong>In the web page</strong>, for an admin, <strong>Settings</strong> has a <strong>Logs</strong> item and a <strong>Chat apps</strong> item (see <a href="/conventions/web-ui/index.html#logs-and-chat-apps">the web UI</a>). A small red count on the Settings button says errors were logged since the app started.</p>
+<p><strong>In the web page</strong>, for an admin, the menu has a <strong>Logs</strong> page and a <strong>Gateways</strong> page (see <a href="/conventions/web-ui/index.html#logs-and-gateways">the web UI</a>). A red count on the <strong>Logs</strong> item says how many sources logged an error since the app started.</p>
 <p><strong>Over the API</strong>, for an admin: <code>GET /logs</code> lists the logs and how many sources logged an error since the app started, and <code>GET /logs?area=gateways&amp;tail=200&amp;level=warn&amp;q=text</code> gives lines. The client has <code>logs()</code>. See <a href="/conventions/agent-bx/index.html">the agent API</a>.</p>
-<h2 id="chat-apps"><a href="#chat-apps" id="chat-apps" name="chat-apps" class="anchor"></a>Chat apps</h2>
-<p><code>GET /gateways</code> (and <strong>Chat apps</strong> in the web page) says, for each chat app the project names:</p>
+<h2 id="gateways"><a href="#gateways" id="gateways" name="gateways" class="anchor"></a>Gateways</h2>
+<p><code>GET /gateways</code> (and <strong>Gateways</strong> in the web page) says, for each gateway the project names:</p>
 <ul>
 <li>whether it is <strong>connected</strong>, <strong>stopped</strong>, <strong>failing</strong> (stopped, with an error logged) or <strong>not registered</strong>;</li>
 <li>which of its credentials are set, by the name of the environment variable and set or not set, never the value;</li>
 <li>when it last had a conversation, and its last error.</li>
 </ul>
-<p>The chat apps themselves are still set up in <code>gateways/&lt;name&gt;.bx</code> and <code>.env</code>, and read when the app starts. See <a href="/conventions/gateways/index.html">gateways</a>.</p>
+<p>The gateways themselves are still set up in <code>gateways/&lt;name&gt;.bx</code> and <code>.env</code>, and read when the app starts. See <a href="/conventions/gateways/index.html">gateways</a>.</p>
 
 	
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/logs.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/logs.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Nov 11, 2026, 10&#x3a;36&#x3a;14 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20logs&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Flogs%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/logs.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/logs.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Nov 14, 2026, 8&#x3a;55&#x3a;55 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20logs&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Flogs%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
@@ -341,7 +341,7 @@ bxAgents logs api --json
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="En esta p&aacute;gina"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-is-never-written">What is never written</a></li><li class="toc-level-2"><a href="#rotation">Rotation</a></li><li class="toc-level-2"><a href="#reading-them">Reading them</a></li><li class="toc-level-2"><a href="#chat-apps">Chat apps</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="En esta p&aacute;gina"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-is-never-written">What is never written</a></li><li class="toc-level-2"><a href="#rotation">Rotation</a></li><li class="toc-level-2"><a href="#reading-them">Reading them</a></li><li class="toc-level-2"><a href="#gateways">Gateways</a></li></ul></nav>
 				</aside>
 			
 		</div>

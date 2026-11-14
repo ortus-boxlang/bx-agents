@@ -359,9 +359,9 @@ Rather than a new background-loop primitive, push-style gateways reach the app's
 
 ### Chats the app has heard from
 
-Each message that reaches a push-style gateway also notes its chat (the gateway's name, the chat id, who wrote, and for Teams the `serviceUrl`) in the chat database. Only addresses are kept, never message text. This is how [routines](../routines.md#where-the-answer-goes) learn where they can write to a chat app later, since a bot cannot write to a chat that has never written to it.
+Each message that reaches a push-style gateway also notes its chat (the gateway's name, the chat id, who wrote, and for Teams the `serviceUrl`) in the chat database. Only addresses are kept, never message text. This is how [routines](../routines.md#where-the-answer-goes) learn where they can write to a gateway later, since a bot cannot write to a chat that has never written to it.
 
-A reply to a command, and a reply when streaming is off, are sent under `data.text` as well as `data.content`. The chat apps read `text`, so before this a command reply could be dropped by Telegram.
+A reply to a command, and a reply when streaming is off, are sent under `data.text` as well as `data.content`. The gateways read `text`, so before this a command reply could be dropped by Telegram.
 
 ### Logging
 

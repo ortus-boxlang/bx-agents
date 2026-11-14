@@ -1,8 +1,8 @@
 ---
 title: "Slash commands"
 icon: phosphor-duotone:command
-summary: "All 26 chat commands: what each does, where it works (terminal, web page, chat platforms) and an example."
-description: "All 26 chat commands: what each does, where it works (terminal, web page, chat platforms) and an example."
+summary: "All 33 chat commands: what each does, where it works (terminal, web page, chat platforms) and an example."
+description: "All 33 chat commands: what each does, where it works (terminal, web page, chat platforms) and an example."
 tags: [guides, cli, tui, reference]
 ---
 
@@ -39,6 +39,8 @@ On a gateway, `/new`, `/clear`, `/compact`, `/sessions` and `/resume` are off un
 | `/help` | T W G | List the commands you can run here | `/help` |
 | `/info` | T W G | Agent, model, conversation, message count, notes and database | `/info` |
 | `/tools` | T W G | List the agent's tools | `/tools` |
+| `/volumes` | T W G | List the folders the agent may use, by name, mode and description. Never a folder on the machine | `/volumes` |
+| `/agent [name]` | T | Terminal only. List the agent and its sub-agents, or switch to one and start a new conversation with it. Every agent keeps its own memory. The web page has the **Talk to** menu for this, and a gateway always talks to the main agent | `/agent researcher` |
 | `/skills` | T W G | List the skills the agent can load, and its level: installed, project or agent | `/skills` |
 | `/routines [all]` | T W | List your [routines](../conventions/routines.md): schedule in words, status and next run (an admin adds `all`). | `/routines` |
 | `/routine <name> [run\|pause\|resume\|delete confirm\|reports\|report <file>]` | T W | Show one routine, or act on it. `delete` needs `confirm`, and no command removes a report | `/routine check-build pause` |
