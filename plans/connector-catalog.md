@@ -104,7 +104,9 @@ On a single-person agent the person is the local user, so nothing changes for th
 
 **No shared token.** A fixed account for everyone (a support bot with a read-only key, for example) is a normal `mcpServers` entry with `token: ${env.X}` or `${vault.X}`. It is not a connector, needs nothing from the catalog, and works as it does today. The docs say so in one line on the connectors page.
 
-This needs no bx-ai change for the credential, because every client is built with its own fixed token. The open part is routing: the agent builds its tool list once, so bx-agents wraps each connector tool and looks up the caller's client at call time. Task 3 confirms that wrapping works with bx-ai's tool objects.
+This needs no bx-ai change. Every client is built with its own fixed token, and routing needs no wrapping of tools either: `withMCPServer()` accepts any object that implements bx-ai's `IMCPClient`, builds the tools from its `listTools()`, and each `MCPTool` call hands `send()` the chat request, which says who is asking. `PerPersonMcpClient` is that object (a router); it looks up the caller's client in `ConnectorClients`. Task 3 proved it (below).
+
+The OAuth connectors keep bx-ai's own way: one client, each person's tokens in the token store, chosen per call by `subject`. `ConnectorClients` is for the token connectors.
 
 ## Connector options
 
@@ -208,7 +210,7 @@ CI rules (schema and safety only):
 
 1. **Verify and fix the data.** (done, see `connector-catalog-verification.md`) Re-check the 7 entries against provider docs (URL, auth, options, scopes, risk, env var). Atlassian is OAuth first and ships verified. Decide which others can offer OAuth now that Connect exists. Fix the schema so it covers both web and local program connectors.
 2. **Move the data.** (done) `src/main/bx/catalog/connectors/*.yaml`, `ConnectorCatalog` (loader and validator), `bxAgents connectors [list|show|check]`, a CI step, CODEOWNERS; the wizard and `add` read from it and `--mcp` keeps working.
-3. **Spike: per-person clients.** Build `ConnectorClients`, wrap a connector's tools so a call goes to the caller's client, and prove with the fake server that two people never see each other's token or session. A bx-ai pull request only if the wrapping cannot be done from bx-agents.
+3. **Spike: per-person clients.** (done) `ConnectorClients` and the `PerPersonMcpClient` router, proved with a fake server that two people never see each other's token or session. No bx-ai change.
 4. **Build support.** `connectors:` key: only, exclude, override, none; errors; expansion into `mcpServers`; dormant until a credential exists; specs and a fixture.
 5. **Connection service.** Rows for every connector with state, risk, auth and options. Personal token connect through the vault, confirm step, tool switches and the 100 tool warning. The Connectors page, dialogs and tools drawer on the new shell, Settings link, Registry and Composition touches, `/connect`, CLI, `GET /connect`, gateways.
 6. **Routines and schedules.** Pin that a routine runs with its owner's connections; `runAs` on file schedules, validation and specs.
@@ -237,3 +239,8 @@ Decided: Atlassian ships in the first release, with no "unverified" badge. Task 
 
 - Task 1: done. Verification in `connector-catalog-verification.md`.
 - Task 2: done. The seven entries are YAML files with an `auth` list (OAuth first, token as fallback), typed options and a `verifiedOn` date. `ConnectorCatalog.check()` enforces the rules above (required fields, id equals file name, https only, no query string or user name in the address, option targets that fit the kind of connector, no secret anywhere, a reason for anything unverified). The wizard and `add mcp` read a compatibility view that gives the same output as the old private list; Supabase still starts read only. The old `wizard/catalog/mcp-servers.json` is gone.
+- Task 3: done. `ConnectorClients` (one MCP client per person per connector, a singleton for the application) and `PerPersonMcpClient` (the router an agent registers once with `withMCPServer()`). 12 specs run the real bx-ai `MCPTool` and a real `AiChatRequest` against a fake server that says which token and session each call used: tokens and sessions never cross, 24 calls at once from a cold start keep apart, a new token makes a new client and session, a refused or removed token leaves no client, `drop()` and `evictIdle()` forget clients, and `withMCPServer()` accepts the router. Findings the next tasks must handle:
+  - **Make the client at Connect.** Creating a client does the MCP handshake and a `tools/list` (which also finds a token the server refuses). Two first calls of one person at the same time wait for each other, and bx-ai's `doHandshake` marks the handshake done before the server answers, so a second call on a fresh client would go without a session. On the runtime's common thread pool, which can be a single thread in a small container, those waiting calls starved the handshake's own HTTP call and the run hung. Making the client when the person connects, on a thread of its own, avoids all of it; a spec shows the common pool is safe once Connect has done that.
+  - **Tools appear after the first Connect.** `withMCPServer()` reads the tool list once, so with nobody connected at start there are no tools. Task 5 registers the router again after a first Connect (as the OAuth path refreshes today) and must not register the same tools twice.
+  - **A refused token needs its own signal.** `forPerson()` returns nothing for it, so the call says "not connected". Task 5 records the rejection so the page and `/connect` can say "Needs attention".
+  - **Evict on a timer.** `evictIdle()` exists; task 5 calls it from the heartbeat.
