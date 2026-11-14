@@ -127,6 +127,9 @@ The secrets the agent uses, sealed in the chat database: list, add, edit, remove
 ::: card title="connect" icon="phosphor-duotone:plugs-connected" href="#connect"
 Sign in to the MCP servers that ask each person to sign in.
 :::
+::: card title="connectors" icon="phosphor-duotone:puzzle-piece" href="#connectors"
+The catalog of known connectors that ships with BX Agents: list them, show one, check the files.
+:::
 ::: card title="routines" icon="phosphor-duotone:clock-countdown" href="#routines"
 The scheduled routines: list, add, edit, pause, run, reports and clean-up.
 :::
@@ -905,6 +908,27 @@ bxAgents connect [--user=NAME] [--json]
 - With a name it prints an address and opens your browser, waits for the redirect on `127.0.0.1` (a free port, or `--port`), and finishes the sign in. `--no-open` only prints. `--timeout` is the seconds to wait, 300 by default.
 - `--remove` forgets your sign in. `--user` is whose: `local` by default, the one user an open server has.
 - Tokens are sealed in the project's chat database. Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
+
+### `connectors`
+
+The catalog of known connectors that ships with BX Agents: the remote MCP servers and local programs an agent can use, written as one YAML file each. This verb only reads those files; it never connects to anything. Signing in to one is [`connect`](#connect).
+
+```bash
+bxAgents connectors
+bxAgents connectors show supabase
+bxAgents connectors check [--dir=DIR]
+```
+
+```
+ID           NAME                              HOW IN              RISK    VERIFIED
+github       GitHub                            token               high    2026-11-14
+notion       Notion                            sign in, token      medium  2026-11-14
+git          Git                               no sign in          medium  2026-11-14
+```
+
+- Without a word it lists every connector with how a person gets in (a sign in, a token or neither), its risk and the day it was checked. `--json` prints the full entries for a script.
+- `show <id>` prints one connector: its address or command, risk, each way in with the environment variable a token goes in, and its options.
+- `check` reads every file and names each mistake with its file and field. It exits `1` when one is wrong, so a script or CI can use it. `--dir` checks a folder of files instead of the shipped catalog, which is how a contributor checks a new file before a pull request.
 
 ### `logs`
 

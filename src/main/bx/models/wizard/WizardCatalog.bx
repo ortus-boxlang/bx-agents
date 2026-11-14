@@ -1,8 +1,9 @@
 /**
  * What the `new` wizard can offer: model providers, web search providers, channels,
  * MCP servers, deploy targets, and the bx-ai tools behind each capability. The lists
- * that change over time (providers, channels, MCP servers) live as JSON in catalog/ so
- * they can be corrected without touching code; the rest is here.
+ * that change over time (providers, channels) live as JSON in catalog/ so they can be
+ * corrected without touching code; the MCP servers come from the connector catalog
+ * (src/main/bx/catalog/connectors, one YAML file each); the rest is here.
  *
  * Tool names come from bx-ai's own registry (aiToolRegistry().getKeys()), checked
  * against the bundled bx-ai; the file tools from its FileSystemTools class.
@@ -61,6 +62,9 @@ class {
 		]
 	}
 
+	/**
+	 * @return This catalog, with nothing loaded yet
+	 */
 	function init() {
 		variables.cache = {}
 		return this
@@ -150,6 +154,11 @@ class {
 		return load( "search" )
 	}
 
+	/**
+	 * @id A web search provider id
+	 *
+	 * @return The provider, or an empty struct for an id the catalog does not list
+	 */
 	struct function searchProvider( required string id ) {
 		return byId( searchProviders(), arguments.id )
 	}
@@ -161,26 +170,49 @@ class {
 		return load( "channels" )
 	}
 
+	/**
+	 * @id A channel id such as slack
+	 *
+	 * @return The channel, or an empty struct for an id the catalog does not list
+	 */
 	struct function channel( required string id ) {
 		return byId( channels(), arguments.id )
 	}
 
 	/**
+	 * The MCP servers the wizard offers. They come from the connector catalog (catalog/connectors/*.yaml), seen through
+	 * its wizard view, so the wizard, `add mcp` and `bxAgents connectors` never disagree.
+	 *
 	 * @return The MCP servers that work with the bundled bx-ai
 	 */
 	array function mcpServers() {
-		return load( "mcp-servers" ).filter( entry => entry.available ?: true )
+		return connectors().wizardEntries().filter( entry => entry.available ?: true )
 	}
 
 	/**
-	 * @return The MCP servers listed but not usable yet, with the reason
+	 * @return The MCP servers listed but not usable yet, with the reason. The connector catalog lists none
 	 */
 	array function unavailableMcpServers() {
-		return load( "mcp-servers" ).filter( entry => !( entry.available ?: true ) )
+		return connectors().wizardEntries().filter( entry => !( entry.available ?: true ) )
 	}
 
+	/**
+	 * @id A connector id such as github
+	 *
+	 * @return The server as the wizard sees it, or an empty struct for an id the catalog does not list
+	 */
 	struct function mcpServer( required string id ) {
-		return byId( load( "mcp-servers" ), arguments.id )
+		return byId( connectors().wizardEntries(), arguments.id )
+	}
+
+	/**
+	 * @return The connector catalog this wizard reads its MCP servers from
+	 */
+	private any function connectors() {
+		if ( !variables.cache.keyExists( "connectors" ) ) {
+			variables.cache[ "connectors" ] = new "models.connectors.ConnectorCatalog@bxagents"()
+		}
+		return variables.cache[ "connectors" ]
 	}
 
 	/**
@@ -207,10 +239,18 @@ class {
 		return readOnlyFileToolNames().append( static.FILE_TOOLS_WRITE.map( tool => tool.name ), true )
 	}
 
+	/**
+	 * @return The names of the file tools that only read
+	 */
 	array function readOnlyFileToolNames() {
 		return static.FILE_TOOLS_READ.map( tool => tool.name )
 	}
 
+	/**
+	 * @name The catalog file, without its extension
+	 *
+	 * @return The parsed JSON, read once
+	 */
 	private array function load( required string name ) {
 		if ( !variables.cache.keyExists( arguments.name ) ) {
 			var path = getDirectoryFromPath( getCurrentTemplatePath() ) & "catalog/" & arguments.name & ".json"
@@ -219,6 +259,12 @@ class {
 		return variables.cache[ arguments.name ]
 	}
 
+	/**
+	 * @entries A list of entries that each have an id
+	 * @id The id to find
+	 *
+	 * @return The entry, or an empty struct
+	 */
 	private struct function byId( required array entries, required string id ) {
 		var match = arguments.entries.filter( entry => entry.id == id )
 		return match.len() ? match[ 1 ] : {}

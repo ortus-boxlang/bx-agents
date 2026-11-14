@@ -24,7 +24,7 @@ It replaces the private list the wizard keeps today (`src/main/bx/models/wizard/
 
 ## Catalog files
 
-`catalog/connectors/<id>.yaml`. Illustrative; the exact fields are fixed in task 1.
+`src/main/bx/catalog/connectors/<id>.yaml`, shipped inside the module (it moved from the top level `catalog/` so the build packages it with everything else the module reads). The exact fields are fixed in task 1 and written down in `connector-catalog-verification.md`; the example below is the first version, and the real files and `ConnectorCatalog` are the truth.
 
 ```yaml
 id: github
@@ -206,8 +206,8 @@ CI rules (schema and safety only):
 
 ## Tasks
 
-1. **Verify and fix the data.** Re-check the 7 entries against provider docs (URL, auth, options, scopes, risk, env var). Atlassian is OAuth first and ships verified. Decide which others can offer OAuth now that Connect exists. Fix the schema so it covers both web and local program connectors.
-2. **Move the data.** `catalog/connectors/*.yaml`, a loader, a validator and `bxAgents connectors check`; CI job; the wizard and `add` read from it. `--mcp` keeps working.
+1. **Verify and fix the data.** (done, see `connector-catalog-verification.md`) Re-check the 7 entries against provider docs (URL, auth, options, scopes, risk, env var). Atlassian is OAuth first and ships verified. Decide which others can offer OAuth now that Connect exists. Fix the schema so it covers both web and local program connectors.
+2. **Move the data.** (done) `src/main/bx/catalog/connectors/*.yaml`, `ConnectorCatalog` (loader and validator), `bxAgents connectors [list|show|check]`, a CI step, CODEOWNERS; the wizard and `add` read from it and `--mcp` keeps working.
 3. **Spike: per-person clients.** Build `ConnectorClients`, wrap a connector's tools so a call goes to the caller's client, and prove with the fake server that two people never see each other's token or session. A bx-ai pull request only if the wrapping cannot be done from bx-agents.
 4. **Build support.** `connectors:` key: only, exclude, override, none; errors; expansion into `mcpServers`; dormant until a credential exists; specs and a fixture.
 5. **Connection service.** Rows for every connector with state, risk, auth and options. Personal token connect through the vault, confirm step, tool switches and the 100 tool warning. The Connectors page, dialogs and tools drawer on the new shell, Settings link, Registry and Composition touches, `/connect`, CLI, `GET /connect`, gateways.
@@ -232,3 +232,8 @@ No open questions remain. Implementation starts after the other update in flight
 - The wizard's current Atlassian entry sends the token as a Bearer, which is wrong for a personal token. The catalog entry is OAuth only. A service account key for a fixed account is a plain `mcpServers` entry with `Authorization: Bearer`.
 
 Decided: Atlassian ships in the first release, with no "unverified" badge. Task 1 verifies it properly (the header an API token goes in, and whether it can use OAuth through Connect). If something cannot be confirmed, we say so here before release; we do not label it verified.
+
+## Progress
+
+- Task 1: done. Verification in `connector-catalog-verification.md`.
+- Task 2: done. The seven entries are YAML files with an `auth` list (OAuth first, token as fallback), typed options and a `verifiedOn` date. `ConnectorCatalog.check()` enforces the rules above (required fields, id equals file name, https only, no query string or user name in the address, option targets that fit the kind of connector, no secret anywhere, a reason for anything unverified). The wizard and `add mcp` read a compatibility view that gives the same output as the old private list; Supabase still starts read only. The old `wizard/catalog/mcp-servers.json` is gone.

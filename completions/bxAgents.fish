@@ -25,6 +25,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -a 'chat' -d 'Interactive REPL chat with a built agent'
     complete -c $cmd -n __bxagents_needs_verb -a 'clean' -d 'Remove a project\'s .build/ and dist/ output'
     complete -c $cmd -n __bxagents_needs_verb -a 'connect' -d 'Sign in to the MCP servers of a project that ask each person to sign in: connect [name]'
+    complete -c $cmd -n __bxagents_needs_verb -a 'connectors' -d 'The catalog of known connectors that ships with BX Agents: connectors [list|show...'
     complete -c $cmd -n __bxagents_needs_verb -a 'data' -d 'Where the agent keeps everything: the data home, the size of each part and the volumes it...'
     complete -c $cmd -n __bxagents_needs_verb -a 'deploy' -d 'Deploy to a target'
     complete -c $cmd -n __bxagents_needs_verb -a 'doctor' -d 'Diagnose the environment and project - runtime, modules, env vars'
@@ -130,6 +131,9 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb connect' -l timeout -x
     complete -c $cmd -n '__bxagents_using_verb connect' -l user -x
     complete -c $cmd -n '__bxagents_using_verb connect' -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb connectors' -l dir -x
+    complete -c $cmd -n '__bxagents_using_verb connectors' -l json
+    complete -c $cmd -n '__bxagents_using_verb connectors' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb data' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb data' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb deploy' -l destination -x -a '(__fish_complete_directories)'
@@ -184,7 +188,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb new' -l guard -x -a 'off flag block'
     complete -c $cmd -n '__bxagents_using_verb new' -l host -x
     complete -c $cmd -n '__bxagents_using_verb new' -l max-tokens -x
-    complete -c $cmd -n '__bxagents_using_verb new' -l mcp -x -a 'github stripe notion atlassian cloudflare supabase git'
+    complete -c $cmd -n '__bxagents_using_verb new' -l mcp -x -a 'atlassian cloudflare git github notion stripe supabase'
     complete -c $cmd -n '__bxagents_using_verb new' -l memory -x -a 'cache file'
     complete -c $cmd -n '__bxagents_using_verb new' -l model -x
     complete -c $cmd -n '__bxagents_using_verb new' -l name -x
@@ -272,5 +276,5 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb vault' -l scope -x
     complete -c $cmd -n '__bxagents_using_verb vault' -l user -x
     complete -c $cmd -n '__bxagents_using_verb vault' -a '(__fish_complete_directories)'
-    complete -c $cmd -n '__bxagents_using_verb help' -a 'add backup build chat clean connect data deploy doctor extensions hash-password inspect invoke logs models new notes package restore routines serve sessions skills stats test token users vault help'
+    complete -c $cmd -n '__bxagents_using_verb help' -a 'add backup build chat clean connect connectors data deploy doctor extensions hash-password inspect invoke logs models new notes package restore routines serve sessions skills stats test token users vault help'
 end

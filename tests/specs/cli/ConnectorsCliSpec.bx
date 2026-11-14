@@ -1,0 +1,120 @@
+/**
+ * `bxAgents connectors`: list the catalog, show one connector, and check a folder of files the way CI does.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * Runs the verb the way the CLI does.
+	 *
+	 * @positionals What came after the verb
+	 * @options More options of the verb
+	 *
+	 * @return The verb's { exitCode, message }
+	 */
+	private struct function connectors( array positionals = [], struct options = {} ) {
+		var all = { _positionals : arguments.positionals };
+		all.append( arguments.options );
+		return new bxagents.models.cli.Connectors().run( all );
+	}
+
+	/**
+	 * The three subcommands, against the shipped catalog and against a folder with a mistake in it.
+	 */
+	function run() {
+		describe( "cli.Connectors", function() {
+
+			it( "lists every connector with how a person gets in, its risk and when it was checked", function() {
+				var result = connectors();
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( result.message ).toInclude( "github" );
+				expect( result.message ).toInclude( "sign in, token" );
+				expect( result.message ).toInclude( "no sign in" );
+				expect( result.message ).toInclude( "7 connectors" );
+				expect( result.message ).toInclude( "Nothing is active until a person connects one" );
+			} );
+
+			it( "lists the same with the word list", function() {
+				expect( connectors( [ "list" ] ).message ).toBe( connectors().message );
+			} );
+
+			it( "prints the catalog as JSON for a script", function() {
+				var parsed = jsonDeserialize( connectors( [ "list" ], { json : true } ).message );
+
+				expect( parsed ).toHaveLength( 7 );
+				expect( parsed.map( c => c.id ) ).toInclude( "supabase" );
+			} );
+
+			it( "shows one connector: address, risk, ways in, options and the environment variable of a token", function() {
+				var text = connectors( [ "show", "supabase" ] ).message;
+
+				expect( text ).toInclude( "Supabase (supabase)" );
+				expect( text ).toInclude( "Address:  https://mcp.supabase.com/mcp" );
+				expect( text ).toInclude( "Risk:     high." );
+				expect( text ).toInclude( "SUPABASE_ACCESS_TOKEN" );
+				expect( text ).toInclude( "read_only (boolean, sent as query read_only, default true)" );
+			} );
+
+			it( "shows a local program with the command and what it needs on the PATH", function() {
+				var text = connectors( [ "show", "git" ] ).message;
+
+				expect( text ).toInclude( "Command:  uvx mcp-server-git  (needs uvx on the PATH)" );
+				expect( text ).toInclude( "None. It runs on the machine the agent runs on." );
+			} );
+
+			it( "says which ones exist when the id is wrong or missing", function() {
+				expect( () => connectors( [ "show", "nope" ] ) ).toThrow( "BxAgents.UnknownConnector" );
+				expect( () => connectors( [ "show" ] ) ).toThrow( "BxAgents.MissingConnector" );
+				try {
+					connectors( [ "show", "nope" ] );
+				} catch ( any e ) {
+					expect( e.message ).toInclude( "atlassian, cloudflare, git, github, notion, stripe, supabase" );
+				}
+			} );
+
+			it( "refuses a subcommand it does not know", function() {
+				expect( () => connectors( [ "connect" ] ) ).toThrow( "BxAgents.UnknownConnectorsCommand" );
+			} );
+
+			it( "checks the shipped catalog and exits 0", function() {
+				var result = connectors( [ "check" ] );
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( result.message ).toInclude( "7 connectors checked, no problems" );
+			} );
+
+			describe( "checking a folder with a mistake", function() {
+
+				beforeEach( function() {
+					variables.dir = getTempDirectory() & "bxa-connectors-" & createUUID();
+					directoryCreate( dir, true );
+					fileWrite( dir & "/demo.yaml", "id: other" & char( 10 ) & "name: Demo" & char( 10 ) & "summary: Short" & char( 10 ) );
+				} );
+
+				afterEach( function() {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				} );
+
+				it( "names each problem with its file and field, and exits 1", function() {
+					var result = connectors( [ "check" ], { dir : dir } );
+
+					expect( result.exitCode ).toBe( 1 );
+					expect( result.message ).toInclude( "demo.yaml [transport]: [transport] is required." );
+					expect( result.message ).toInclude( "problems found" );
+				} );
+
+				it( "gives the same as JSON, with ok false", function() {
+					var result = connectors( [ "check" ], { dir : dir, json : true } );
+					var parsed = jsonDeserialize( result.message );
+
+					expect( result.exitCode ).toBe( 1 );
+					expect( parsed.ok ).toBeFalse();
+					expect( parsed.errors.map( e => e.field ) ).toInclude( "risk" );
+				} );
+			} );
+		} );
+	}
+
+}
