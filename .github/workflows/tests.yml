@@ -119,7 +119,8 @@ jobs:
       # The same check also runs as a spec (ConnectorCatalogSpec), so it gates the merge either way.
       - name: Check the connector catalog
         run: |
-          java -cp "$(ls src/test/resources/libs/boxlang-[0-9]*.jar | head -1):build/classes/java/main" \
+          jar="$(find src/test/resources/libs -maxdepth 1 -name 'boxlang-[0-9]*.jar' | head -n 1)"
+          java -cp "${jar}:build/classes/java/main" \
             ortus.boxlang.runtime.BoxRunner --bx-config boxlang.json module:bxagents connectors check
 
       - name: Run TestBox Suite
