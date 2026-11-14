@@ -114,6 +114,10 @@ class {
 	 * @return This verb's own { exitCode, message } result
 	 */
 	private struct function chatWithScreen( required any session, required struct options ) {
+		// --agent=NAME talks to a sub-agent directly; an unknown name stops here, before the screen opens
+		if ( len( trim( arguments.options.agent ?: "" ) ) ) {
+			arguments.session.withAgent( trim( arguments.options.agent ) )
+		}
 		// the commands the chat has: the built-ins, then what the project's and the person's extensions add
 		var commands = new "models.chat.commands.CommandCatalog@bxagents"().standard()
 		var extensions = arguments.options._extensions ?: new "models.extensions.ExtensionService@bxagents"( projectRoot : trim( arguments.options.projectRoot ?: "" ), transport : "tui" )
@@ -185,6 +189,17 @@ class {
 
 		if ( wantsScreen( arguments.options ) ) {
 			return chatWithScreen( new "models.cli.chat.InProcessSession@bxagents"( agent, user, openSessions( arguments.root ), openConnections( arguments.root, user, agent ) ).withData( new "models.data.ProjectData@bxagents"().appDataOf( arguments.root ) ).withRoutines( new "models.routines.ProjectRoutines@bxagents"().boundFor( arguments.root, user ) ), arguments.options )
+		}
+
+		// the plain loop talks to a sub-agent through the same tree the screen uses
+		if ( len( trim( arguments.options.agent ?: "" ) ) ) {
+			var tree = new "models.api.AgentTree@bxagents"( agent )
+			var chosen = tree.find( trim( arguments.options.agent ) )
+			if ( isNull( chosen ) ) {
+				var known = tree.names().toList( ", " )
+				throw( type = "BxAgents.UnknownAgent", message = "There is no agent called [#trim( arguments.options.agent )#]. Ask for one of: #known#" )
+			}
+			agent = chosen
 		}
 
 		// MiniConsole shells out to `stty` to set up raw terminal mode, so it
@@ -310,6 +325,9 @@ class {
 
 		if ( len( trim( arguments.banner ) ) ) {
 			println( arguments.banner )
+		}
+		if ( len( trim( arguments.options.agent ?: "" ) ) ) {
+			throw( type = "BxAgents.AgentNeedsScreen", message = "--agent needs the full-screen chat over HTTP. Drop --no-tui, or run in a terminal." )
 		}
 
 		// Constructed after everything that can fail without a terminal, for

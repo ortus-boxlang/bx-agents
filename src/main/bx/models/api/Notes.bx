@@ -31,12 +31,43 @@ class {
 		}
 		var me = variables.caller.id()
 		var agentName = agentOwner()
+		var agentStats = variables.kept.stats( "agent", agentName )
 		return Outcome::done( {
 			"provider" : "sqlite",
 			"admin"    : variables.caller.isAdmin(),
 			"user"     : { "owner" : me, "notes" : variables.kept.list( "user", me ), "stats" : variables.kept.stats( "user", me ) },
-			"agent"    : { "owner" : agentName, "notes" : variables.kept.list( "agent", agentName ), "stats" : variables.kept.stats( "agent", agentName ) }
+			// the agent's notes are global: one set for every agent and sub-agent, so the owner is the provider's own, not an agent's name
+			"agent"    : { "owner" : agentStats.owner ?: agentName, "notes" : variables.kept.list( "agent", agentName ), "stats" : agentStats }
 		} )
+	}
+
+	/**
+	 * Removes every note of one scope: the caller's own about themselves, or the agent's (an admin's call).
+	 *
+	 * @scope `user` or `agent`
+	 *
+	 * @return An Outcome: { cleared : count }, bad_request, no_notes or forbidden
+	 */
+	any function clear( required string scope ) {
+		if ( !keeps() ) {
+			return none()
+		}
+		var named = scopeOf( arguments.scope )
+		if ( !len( named ) ) {
+			return Outcome::failed( "bad_request", "scope must be user or agent" )
+		}
+		if ( named == "agent" && !variables.caller.isAdmin() ) {
+			return Outcome::failed( "forbidden", "Clearing the notes of the agent needs an admin token" )
+		}
+		// through the provider's own list and remove, so a provider of the project's own works too
+		var owner = ownerOf( named )
+		var removed = 0
+		for ( var note in variables.kept.list( named, owner ) ) {
+			if ( variables.kept.remove( named, owner, note.id ) ) {
+				removed++
+			}
+		}
+		return Outcome::done( { "ok" : true, "cleared" : removed } )
 	}
 
 	/**

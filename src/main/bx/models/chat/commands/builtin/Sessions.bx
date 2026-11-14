@@ -5,14 +5,24 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 	}
 
 	string function hint() {
-		return "list your recent conversations"
+		return "list your recent conversations: /sessions [text] [--agent=NAME]"
 	}
 
 	any function run( required any context, required string args ) {
 		var reply = arguments.context.reply()
-		var recent = arguments.context.chat().sessions()
+		var filters = {}
+		var words = []
+		for ( var word in listToArray( trim( arguments.args ), " " ) ) {
+			if ( word.startsWith( "--agent=" ) ) {
+				filters[ "agent" ] = mid( word, 9, len( word ) )
+			} else {
+				words.append( word )
+			}
+		}
+		filters[ "q" ] = words.toList( " " )
+		var recent = arguments.context.chat().sessions( 20, filters )
 		if ( !recent.len() ) {
-			return reply.text( "No conversations yet." )
+			return reply.text( structCount( filters ) && ( len( filters.q ) || len( filters.agent ?: "" ) ) ? "No conversations match." : "No conversations yet." )
 		}
 		var rows = []
 		var number = 0

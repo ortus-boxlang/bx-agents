@@ -1,0 +1,84 @@
+/**
+ * api.Notes: the caller's own notes and the agent's, which are global (every agent and sub-agent shares one set),
+ * and clearing a scope.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.Notes", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-notes-api-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.provider = new bxagents.models.notes.SqliteNotesProvider( store );
+				variables.lead = aiAgent( name : "lead", model : aiModel( provider : "mock" ) );
+				lead.withMiddleware( new bxagents.models.notes.NotesMiddleware( provider, "lead" ) );
+				variables.scout = aiAgent( name : "scout", model : aiModel( provider : "mock" ) );
+				scout.withMiddleware( new bxagents.models.notes.NotesMiddleware( provider, "scout" ) );
+				variables.admin = new bxagents.models.api.Caller( id = "root", scope = "admin" );
+				variables.ada = new bxagents.models.api.Caller( id = "ada" );
+				variables.bob = new bxagents.models.api.Caller( id = "bob" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function notesOf( agent, caller ) {
+				return new bxagents.models.api.Notes( agent, caller );
+			}
+
+			it( "gives every agent the same agent notes, and each person their own", function() {
+				notesOf( lead, admin ).add( "agent", "the repo uses Gradle" );
+				notesOf( lead, ada ).add( "user", "likes tea" );
+
+				var fromScout = notesOf( scout, bob ).all().data();
+				expect( fromScout.agent.notes.map( n => n.text ) ).toBe( [ "the repo uses Gradle" ] );
+				expect( fromScout.agent.owner ).toBe( "agent" );
+				expect( fromScout.user.notes ).toBeEmpty();
+				expect( notesOf( scout, ada ).all().data().user.notes.map( n => n.text ) ).toBe( [ "likes tea" ] );
+			} );
+
+			it( "clears the caller's own notes and nobody else's", function() {
+				notesOf( lead, ada ).add( "user", "likes tea" );
+				notesOf( lead, ada ).add( "user", "lives in Lima" );
+				notesOf( lead, bob ).add( "user", "likes coffee" );
+
+				var done = notesOf( lead, ada ).clear( "user" );
+
+				expect( done.succeeded() ).toBeTrue();
+				expect( done.data().cleared ).toBe( 2 );
+				expect( notesOf( lead, ada ).all().data().user.notes ).toBeEmpty();
+				expect( notesOf( lead, bob ).all().data().user.notes ).toHaveLength( 1 );
+			} );
+
+			it( "lets only an admin clear the agent's notes, for every agent at once", function() {
+				notesOf( lead, admin ).add( "agent", "one" );
+				notesOf( scout, admin ).add( "agent", "two" );
+
+				var refused = notesOf( lead, ada ).clear( "agent" );
+				expect( refused.code() ).toBe( "forbidden" );
+				expect( notesOf( lead, admin ).all().data().agent.notes ).toHaveLength( 2 );
+
+				var done = notesOf( scout, admin ).clear( "agent" );
+				expect( done.data().cleared ).toBe( 2 );
+				expect( notesOf( lead, admin ).all().data().agent.notes ).toBeEmpty();
+			} );
+
+			it( "says 0 when there was nothing to clear, and refuses a scope that is neither", function() {
+				expect( notesOf( lead, ada ).clear( "user" ).data().cleared ).toBe( 0 );
+				expect( notesOf( lead, ada ).clear( "everything" ).code() ).toBe( "bad_request" );
+			} );
+
+			it( "says the agent keeps no notes when it has no notes block", function() {
+				var plain = aiAgent( name : "plain", model : aiModel( provider : "mock" ) );
+
+				expect( notesOf( plain, ada ).clear( "user" ).code() ).toBe( "no_notes" );
+			} );
+
+		} );
+	}
+
+}

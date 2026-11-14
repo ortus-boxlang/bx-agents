@@ -94,6 +94,20 @@ class extends="testbox.system.BaseSpec" {
 				expect( provider.list( "agent", "helper" ) ).toBeEmpty();
 			} );
 
+			it( "/notes clear forgets your notes, /notes clear agent the agent's", function() {
+				provider.add( "user", "alice", "likes tea" );
+				provider.add( "user", "alice", "lives in Lima" );
+				provider.add( "agent", "helper", "the repo uses Gradle" );
+
+				var out = say( sessionWith( kept ), [ "/notes clear", "/notes clear agent", "/notes clear nobody" ] );
+
+				expect( out ).toInclude( "Cleared 2 notes." );
+				expect( out ).toInclude( "Cleared 1 agent note." );
+				expect( out ).toInclude( "Usage: /notes clear [agent]" );
+				expect( provider.list( "user", "alice" ) ).toBeEmpty();
+				expect( provider.list( "agent", "helper" ) ).toBeEmpty();
+			} );
+
 			it( "answers an unknown id and a missing text without changing anything", function() {
 				var out = say( sessionWith( kept ), [ "/notes remove nosuchid", "/notes edit nosuchid text", "/remember", "/notes edit onlyid" ] );
 
@@ -107,7 +121,7 @@ class extends="testbox.system.BaseSpec" {
 				var out = say( sessionWith( kept ), [ "/notes stats" ] );
 
 				expect( out ).toInclude( "user  (alice)" );
-				expect( out ).toInclude( "agent (helper)" );
+				expect( out ).toInclude( "agent (shared)" );
 				expect( out ).toInclude( "In the system prompt: 9 characters" );
 			} );
 

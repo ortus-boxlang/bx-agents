@@ -331,6 +331,15 @@ class {
 			// ChatDb because this is where the configured path literally is;
 			// ChatDb only ever knows the datasource NAME.
 			lines.append( "		// SQLite creates the db file, but not the directory holding it. The data home also gets its folders and README" )
+			// a restore an admin asked for over the API waits for this start, before the database is opened
+			lines.append( '		try {' )
+			lines.append( '			var asked = new "models.data.DataBackup@bxagents"( dataHome() ).applyPending()' )
+			lines.append( '			if ( !asked.isEmpty() ) {' )
+			lines.append( '				systemOutput( "[bxagents] " & ( asked.keyExists( "error" ) ? "The restore asked for did not run: " & asked.error : "Restored " & asked.restored.toList( ", " ) & " from the backup asked for." ), true )' )
+			lines.append( '			}' )
+			lines.append( '		} catch ( any e ) {' )
+			lines.append( '			systemOutput( "[bxagents] The restore asked for did not run: " & e.message, true )' )
+			lines.append( '		}' )
 			lines.append( '		var ready = dataHome().ensure( databaseFile( "#Strings::bxLiteral( arguments.databasePath )#" ) )' )
 			lines.append( '		if ( len( ready.warning ) ) {' )
 			lines.append( '			systemOutput( "[bxagents] " & ready.warning, true )' )

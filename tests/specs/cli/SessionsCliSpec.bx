@@ -40,6 +40,17 @@ class extends="testbox.system.BaseSpec" {
 				expect( function() { run_( "rename" ); } ).toThrow( "BxAgents.MissingSession" );
 			} );
 
+			it( "lists only the conversations of one agent or whose title has some text", function() {
+				if ( !usesDefaultPath ) { return; }
+				new bxagents.models.store.SessionStore( bxagents.models.store.ChatStore::forFile( root & "/data/chat.db" ) ).touch( "alice", "c-4", "ask about sources", 2, "terminal", "researcher" );
+
+				var byAgent = run_( "list", { agent : "researcher" } ).message.listToArray( char( 10 ) );
+				expect( byAgent ).toHaveLength( 1 );
+				expect( byAgent[ 1 ] ).toInclude( "ask about sources" );
+				expect( run_( "list", { q : "REPORT" } ).message ).toInclude( "write the report" );
+				expect( run_( "list", { q : "REPORT" } ).message ).notToInclude( "launch" );
+			} );
+
 			it( "lists the user's conversations, newest first and numbered, or as JSON", function() {
 				if ( !usesDefaultPath ) { return; }
 

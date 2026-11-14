@@ -45,6 +45,117 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "Reading a skill", function() {
+
+				it( "answers not_found for a skill the agent does not have, and bad_request without a name", function() {
+					expect( service.skill( ada, "no-such-skill" ).code() ).toBe( "not_found" );
+					expect( service.skill( ada, "  " ).code() ).toBe( "bad_request" );
+				} );
+
+			} );
+
+			describe( "The agent tree and talking to a sub-agent", function() {
+
+				beforeEach( function() {
+					variables.scout = new FakeAgent().named( "scout" );
+					variables.researcher = new FakeAgent().named( "researcher" ).withSubAgent( scout );
+					variables.lead = new FakeAgent().named( "lead" ).withSubAgent( researcher );
+					variables.team = new bxagents.models.api.AgentService( lead, store );
+				} );
+
+				it( "lists every agent, parents first, with what each one has", function() {
+					var tree = team.agents();
+
+					expect( tree.map( ( a ) => a.name ) ).toBe( [ "lead", "researcher", "scout" ] );
+					expect( tree.map( ( a ) => a.parent ) ).toBe( [ "", "lead", "researcher" ] );
+					expect( tree[ 2 ].description ).toBe( "I am researcher" );
+					expect( tree[ 2 ].tools ).toBe( [ "researcher_tool" ] );
+					expect( tree[ 2 ].skills ).toBe( [ "researcher-skill" ] );
+					expect( tree[ 2 ].model ).toBe( "fakeai/m-researcher" );
+				} );
+
+				it( "puts the tree in the agent's own answer, next to the names", function() {
+					var about = team.about( ada ).data();
+
+					expect( about.agents ).toHaveLength( 3 );
+					expect( about.agents[ 1 ].name ).toBe( "lead" );
+				} );
+
+				it( "finds an agent by name at any depth, and takes blank or the main agent's name as the main agent", function() {
+					expect( team.agentFor( "scout" ).getAgentName() ).toBe( "scout" );
+					expect( team.agentFor( "" ).getAgentName() ).toBe( "lead" );
+					expect( team.agentFor( "lead" ).getAgentName() ).toBe( "lead" );
+					expect( isNull( team.agentFor( "ghost" ) ) ).toBeTrue();
+				} );
+
+				it( "says bad_request for a name that is not in the tree, and names the ones that are", function() {
+					expect( team.checkAgent( "" ).succeeded() ).toBeTrue();
+					expect( team.checkAgent( "researcher" ).succeeded() ).toBeTrue();
+					var refused = team.checkAgent( "ghost" );
+					expect( refused.code() ).toBe( "bad_request" );
+					expect( refused.reason() ).toInclude( "researcher" );
+				} );
+
+				it( "runs a turn on the sub-agent asked for, and on nobody else", function() {
+					team.turns( "researcher" ).run( ada, { input : "dig" } );
+
+					expect( researcher.seen().input ).toBe( "dig" );
+					expect( lead.seen() ).toBe( {} );
+				} );
+
+				it( "keeps a conversation with the agent it started with and refuses another", function() {
+					var id = createUUID();
+					team.turns( "researcher" ).run( ada, { input : "dig", conversationId : id } );
+
+					expect( store.rows( "SELECT agent FROM conversations WHERE id = :id", { id : id } )[ 1 ].agent ).toBe( "researcher" );
+					expect( team.turns( "researcher" ).run( ada, { input : "more", conversationId : id } ).succeeded() ).toBeTrue();
+					var wrong = team.turns().run( ada, { input : "hello", conversationId : id } );
+					expect( wrong.code() ).toBe( "conflict" );
+					expect( wrong.reason() ).toBe( "This conversation belongs to researcher" );
+					expect( team.turns( "scout" ).run( ada, { input : "x", conversationId : id } ).code() ).toBe( "conflict" );
+				} );
+
+				it( "keeps a main agent conversation with the main agent, by its name or blank", function() {
+					var id = createUUID();
+					team.turns().run( ada, { input : "hi", conversationId : id } );
+
+					expect( store.rows( "SELECT agent FROM conversations WHERE id = :id", { id : id } )[ 1 ].agent ).toBe( "" );
+					expect( team.turns( "lead" ).run( ada, { input : "again", conversationId : id } ).succeeded() ).toBeTrue();
+					var wrong = team.turns( "scout" ).run( ada, { input : "no", conversationId : id } );
+					expect( wrong.code() ).toBe( "conflict" );
+					expect( wrong.reason() ).toBe( "This conversation belongs to lead" );
+				} );
+
+				it( "starts a conversation for a sub-agent, which then holds it", function() {
+					var id = team.conversations().create( ada, "ask scout", "scout" ).data().conversationId;
+
+					expect( team.sessions().byId( "ada", id ).agent ).toBe( "scout" );
+					expect( team.turns().run( ada, { input : "hi", conversationId : id } ).code() ).toBe( "conflict" );
+					expect( team.turns( "scout" ).run( ada, { input : "hi", conversationId : id } ).succeeded() ).toBeTrue();
+				} );
+
+				it( "lists and filters conversations by agent, the main agent under its own name", function() {
+					team.turns( "researcher" ).run( ada, { input : "a", conversationId : createUUID() } );
+					team.turns().run( ada, { input : "b", conversationId : createUUID() } );
+
+					var rows = team.conversations().list( caller = ada ).data().sessions;
+					expect( rows.map( ( c ) => c.agent ).sort( "text" ) ).toBe( [ "lead", "researcher" ] );
+					expect( team.conversations().list( caller = ada, agent = "researcher" ).data().total ).toBe( 1 );
+					expect( team.conversations().list( caller = ada, agent = "lead" ).data().total ).toBe( 1 );
+				} );
+
+				it( "clears and deletes a conversation's memory in every agent that may hold part of it", function() {
+					var made = team.conversations().create( ada, "x", "researcher" ).data().conversationId;
+
+					team.conversations().delete( ada, made );
+
+					expect( lead.clearedMemory() ).toBe( [ "ada/" & made ] );
+					expect( researcher.clearedMemory() ).toBe( [ "ada/" & made ] );
+					expect( scout.clearedMemory() ).toBe( [ "ada/" & made ] );
+				} );
+
+			} );
+
 			describe( "Conversations", function() {
 
 				it( "starts a conversation under the caller, with the surface it came from", function() {
@@ -76,6 +187,79 @@ class extends="testbox.system.BaseSpec" {
 					expect( service.conversations().list( ada, 50, "", true ).code() ).toBe( "forbidden" );
 					// an ordinary list is still only the caller's own
 					expect( service.conversations().list( ada ).data().sessions ).toHaveLength( 1 );
+				} );
+
+				it( "pages and filters the list, and says how many match in all", function() {
+					for ( var n = 1; n <= 30; n++ ) {
+						service.sessions().touch( "ada", "c#n#", n % 2 ? "alpha #n#" : "beta #n#", 2, n % 5 == 0 ? "terminal" : "web", n % 3 == 0 ? "researcher" : "" );
+					}
+					var conversations = service.conversations();
+
+					var page = conversations.list( ada ).data();
+					expect( page.sessions ).toHaveLength( 25 );
+					expect( page.total ).toBe( 30 );
+					expect( page.limit ).toBe( 25 );
+					expect( page.offset ).toBe( 0 );
+					expect( conversations.list( caller = ada, offset = 25 ).data().sessions ).toHaveLength( 5 );
+					expect( conversations.list( caller = ada, q = "alpha" ).data().total ).toBe( 15 );
+					expect( conversations.list( caller = ada, agent = "researcher" ).data().total ).toBe( 10 );
+					expect( conversations.list( caller = ada, agent = "fake" ).data().total ).toBe( 20 );
+					expect( conversations.list( caller = ada, source = "terminal" ).data().total ).toBe( 6 );
+					expect( conversations.list( caller = ada, limit = 1000 ).data().limit ).toBe( 100 );
+				} );
+
+				it( "names the main agent on rows that stored none", function() {
+					service.sessions().touch( "ada", "m1", "main", 2, "web" );
+					service.sessions().touch( "ada", "r1", "other", 2, "web", "researcher" );
+
+					var rows = service.conversations().list( ada ).data().sessions;
+					expect( rows.map( ( c ) => c.agent ).sort( "text" ) ).toBe( [ "fake", "researcher" ] );
+				} );
+
+				it( "adds the facet counts only when asked, the main agent under its name", function() {
+					service.sessions().touch( "ada", "m1", "main", 2, "web" );
+					service.sessions().touch( "ada", "r1", "other", 2, "terminal", "researcher" );
+
+					expect( service.conversations().list( ada ).data().keyExists( "facets" ) ).toBeFalse();
+					var facets = service.conversations().list( caller = ada, facets = true ).data().facets;
+					expect( facets.source ).toBe( { web : 1, terminal : 1 } );
+					expect( facets.agent ).toBe( { fake : 1, researcher : 1 } );
+				} );
+
+				it( "clears the memory of one conversation, keeps the row and says how many messages went", function() {
+					var admin = new bxagents.models.api.Caller( id = "root", scope = "admin" );
+					service.sessions().touch( "ada", "c1", "plan", 6 );
+
+					var cleared = service.conversations().clearMemory( ada, "c1" );
+
+					expect( cleared.data().conversations ).toBe( 1 );
+					expect( cleared.data().messages ).toBe( 6 );
+					expect( service.sessions().byId( "ada", "c1" ).messageCount ).toBe( 0 );
+					expect( agent.clearedMemory() ).toBe( [ "ada/c1" ] );
+					// somebody else's conversation, and none named, are refused
+					expect( service.conversations().clearMemory( bob, "c1" ).code() ).toBe( "not_found" );
+					expect( service.conversations().clearMemory( ada ).code() ).toBe( "bad_request" );
+				} );
+
+				it( "clears every conversation's memory for an admin only, or only those of one agent", function() {
+					var admin = new bxagents.models.api.Caller( id = "root", scope = "admin" );
+					service.sessions().touch( "ada", "m1", "main", 4 );
+					service.sessions().touch( "bob", "m2", "main too", 2 );
+					service.sessions().touch( "ada", "r1", "other", 10, "web", "researcher" );
+
+					expect( service.conversations().clearMemory( caller = ada, all = true ).code() ).toBe( "forbidden" );
+
+					var one = service.conversations().clearMemory( caller = admin, all = true, agent = "researcher" );
+					expect( one.data() ).toBe( { conversations : 1, messages : 10 } );
+					expect( service.sessions().byId( "ada", "m1" ).messageCount ).toBe( 4 );
+
+					var every = service.conversations().clearMemory( caller = admin, all = true );
+					expect( every.data().conversations ).toBe( 3 );
+					expect( every.data().messages ).toBe( 6 );
+					expect( service.sessions().byId( "bob", "m2" ).messageCount ).toBe( 0 );
+					// by the main agent's name too
+					service.sessions().touch( "ada", "m3", "main", 4 );
+					expect( service.conversations().clearMemory( caller = admin, all = true, agent = "fake" ).data().conversations ).toBe( 3 );
 				} );
 
 				it( "lists times as ISO 8601 text, not date objects", function() {

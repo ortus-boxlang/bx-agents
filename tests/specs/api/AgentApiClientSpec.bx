@@ -57,6 +57,32 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			it( "reaches the clear and skill reading routes, and names the agent a turn is for", function() {
+				client.clearNotes( "agent" );
+				client.clearMemory( all = true, agent = "researcher" );
+				client.clearMemory( conversationId = "c1" );
+				client.readSkill( "release notes" );
+				client.invoke( input = "hi", agent = "researcher" );
+				client.invoke( input = "hello" );
+				client.cancel( "t1", "stop", "researcher" );
+				client.pending( "t1", "researcher" );
+				client.createSession( "Dig", "scout" );
+
+				expect( seen.paths[ 1 ] ).toBe( "/agent-api/notes/clear" );
+				expect( seen.methods[ 1 ] ).toBe( "POST" );
+				expect( jsonDeserialize( seen.bodies[ 1 ] ) ).toBe( { scope : "agent" } );
+				expect( jsonDeserialize( seen.bodies[ 2 ] ) ).toBe( { all : true, agent : "researcher" } );
+				expect( jsonDeserialize( seen.bodies[ 3 ] ) ).toBe( { conversationId : "c1" } );
+				expect( seen.paths[ 2 ] ).toBe( "/agent-api/memory/clear" );
+				expect( seen.paths[ 4 ] ).toInclude( "/agent-api/skills/read?name=release" );
+				expect( seen.methods[ 4 ] ).toBe( "GET" );
+				expect( jsonDeserialize( seen.bodies[ 5 ] ).agent ).toBe( "researcher" );
+				expect( jsonDeserialize( seen.bodies[ 6 ] ).keyExists( "agent" ) ).toBeFalse();
+				expect( jsonDeserialize( seen.bodies[ 7 ] ).agent ).toBe( "researcher" );
+				expect( seen.paths[ 8 ] ).toInclude( "agent=researcher" );
+				expect( jsonDeserialize( seen.bodies[ 9 ] ) ).toBe( { title : "Dig", agent : "scout" } );
+			} );
+
 			it( "reaches each routines route with the verb and body it takes", function() {
 				client.routines();
 				client.routines( true );
@@ -140,6 +166,19 @@ class extends="testbox.system.BaseSpec" {
 				expect( seen.paths[ 1 ] ).toInclude( "limit=5" );
 				expect( seen.paths[ 1 ] ).toInclude( "source=web" );
 				expect( seen.paths[ 1 ] ).toInclude( "all=1" );
+			} );
+
+			it( "asks for a page of conversations by text, agent, dates and offset, with the facets when it says so", function() {
+				client.sessions( limit = 25, offset = 50, q = "plan", agent = "researcher", since = "2026-01-01", before = "2026-02-01", facets = true );
+
+				var path = seen.paths[ 1 ];
+				expect( path ).toInclude( "offset=50" );
+				expect( path ).toInclude( "q=plan" );
+				expect( path ).toInclude( "agent=researcher" );
+				expect( path ).toInclude( "since=2026-01-01" );
+				expect( path ).toInclude( "before=2026-02-01" );
+				expect( path ).toInclude( "facets=1" );
+				expect( path ).notToInclude( "all=1" );
 			} );
 
 			it( "reads an export as text", function() {

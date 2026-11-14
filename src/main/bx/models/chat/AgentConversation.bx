@@ -19,6 +19,9 @@ class {
 	 */
 	function init( required any agent, string userId = "", any sessions, string conversationId = "", any connections ) {
 		variables.agent = arguments.agent
+		// the main agent, and the name of the sub-agent being talked to ( blank for the main agent ): see withAgent()
+		variables.rootAgent = arguments.agent
+		variables.selected = ""
 		variables.connectionMode = isNull( arguments.connections ) ? nullValue() : arguments.connections
 		variables.sessions = isNull( arguments.sessions ) ? nullValue() : arguments.sessions
 		variables.conversationId = len( arguments.conversationId ) ? arguments.conversationId : createUUID()
@@ -56,6 +59,55 @@ class {
 
 	string function agentName() {
 		return variables.agent.getConfig().name
+	}
+
+	/**
+	 * @return The name of the sub-agent being talked to, blank for the main agent
+	 */
+	string function selectedAgent() {
+		return variables.selected
+	}
+
+	/**
+	 * @return Every agent that can be talked to: [ { name, parent, description, tools, skills, model } ], the main agent first
+	 */
+	array function agents() {
+		return new "models.api.AgentTree@bxagents"( variables.rootAgent ).nodes()
+	}
+
+	/**
+	 * Talks to a sub-agent directly, from here on: its own memory, its own conversations. The conversation in
+	 * hand stays with the agent it started with, so call newThread() or resumeSession() after switching.
+	 *
+	 * @name A name from agents(); blank or the main agent's name is the main agent
+	 *
+	 * @return This, or throws when the tree has no agent by that name
+	 */
+	any function withAgent( required string name ) {
+		var tree = new "models.api.AgentTree@bxagents"( variables.rootAgent )
+		var found = tree.find( arguments.name )
+		if ( isNull( found ) ) {
+			throw( type = "BxAgents.UnknownAgent", message = "There is no agent called [#trim( arguments.name )#]. Ask for one of: #tree.names().toList( ', ' )#" )
+		}
+		variables.agent = found
+		variables.selected = tree.isMain( arguments.name ) ? "" : trim( arguments.name )
+		variables.conversations = isNull( variables.sessions ) ? nullValue() : new "models.api.Conversations@bxagents"( variables.agent, variables.sessions )
+		return this
+	}
+
+	/**
+	 * Switches to another agent and starts a new conversation with it (a conversation belongs to the agent it started with).
+	 *
+	 * @return { ok, agent, id } or { ok : false, reason }
+	 */
+	struct function switchAgent( required string name ) {
+		try {
+			withAgent( arguments.name )
+		} catch ( "BxAgents.UnknownAgent" e ) {
+			return { ok : false, reason : e.message }
+		}
+		newThread()
+		return { ok : true, agent : agentName(), id : variables.conversationId }
 	}
 
 	string function modelName() {
@@ -235,6 +287,15 @@ class {
 	}
 
 	/**
+	 * @name A skill's name
+	 *
+	 * @return { name, description, origin, size, savedAt, body, truncated }, or an empty struct when the agent has no such skill
+	 */
+	struct function skillText( required string name ) {
+		return new "models.skills.SkillLibrary@bxagents"( isNull( variables.data ) ? "" : variables.data.home() ).read( arguments.name )
+	}
+
+	/**
 	 * @return The names of the tools the agent has
 	 */
 	array function tools() {
@@ -293,10 +354,18 @@ class {
 	}
 
 	/**
-	 * @return The user's recent conversations, most recent first: [ { id, title, messageCount, updatedAt } ]
+	 * @filters { q? (title contains), agent?, source?, since?, before?, offset? }, all optional
+	 *
+	 * @return The user's recent conversations, most recent first: [ { id, title, messageCount, agent, updatedAt } ]
 	 */
-	array function sessions( numeric limit = 20 ) {
-		return keepsSessions() ? variables.sessions.list( variables.userId, arguments.limit ) : []
+	array function sessions( numeric limit = 20, struct filters = {} ) {
+		if ( !keepsSessions() ) {
+			return []
+		}
+		var asked = duplicate( arguments.filters )
+		asked[ "limit" ] = arguments.limit
+		asked[ "mainAgent" ] = variables.rootAgent.getAgentName() ?: ""
+		return variables.sessions.search( variables.userId, asked ).rows
 	}
 
 	/**
@@ -313,6 +382,10 @@ class {
 		var found = len( trim( arguments.reference ) ) ? variables.sessions.resolve( variables.userId, arguments.reference ) : variables.sessions.latest( variables.userId )
 		if ( found.isEmpty() ) {
 			return { ok : false, reason : len( trim( arguments.reference ) ) ? "There is no conversation [#arguments.reference#]. Type /sessions to see them." : "There are no earlier conversations." }
+		}
+		// a conversation belongs to the agent it started with: carry on with that one
+		if ( ( found.agent ?: "" ) != variables.selected ) {
+			withAgent( found.agent ?: "" )
 		}
 		variables.conversationId = found.id
 		variables.threadId = createUUID()
@@ -373,7 +446,8 @@ class {
 		var shown = len( trim( arguments.title ) ) ? arguments.title : "Fork of " & ( len( conversationTitle() ) ? conversationTitle() : "a conversation" )
 		var named = variables.sessions.titleOf( shown )
 		var count = variables.agent.getMemoryMessages( variables.userId, forkId ).len()
-		variables.sessions.touch( variables.userId, forkId, named, count )
+		// the copy belongs to the same agent as the conversation it was copied from
+		variables.sessions.touch( variables.userId, forkId, named, count, "", variables.sessions.byId( variables.userId, variables.conversationId ).agent ?: "" )
 		variables.conversationId = forkId
 		variables.threadId = createUUID()
 		return { ok : true, id : forkId, title : named, messages : count }
@@ -429,7 +503,7 @@ class {
 		var shown = len( trim( arguments.title ) ) ? arguments.title : ( len( arguments.data.title ?: "" ) ? arguments.data.title : "Imported conversation" )
 		var named = variables.sessions.titleOf( shown )
 		var count = variables.agent.getMemoryMessages( variables.userId, newId ).len()
-		variables.sessions.touch( variables.userId, newId, named, count )
+		variables.sessions.touch( variables.userId, newId, named, count, "", variables.selected )
 		variables.conversationId = newId
 		variables.threadId = createUUID()
 		return { ok : true, id : newId, title : named, messages : count }

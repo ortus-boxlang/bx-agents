@@ -28,8 +28,8 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'restore' = 'Put a backup back into the data home: restore <FILE>'
 		'routines' = 'The scheduled routines of a project'
 		'serve' = 'Serve a built project via boxlang-miniserver'
-		'sessions' = 'List, rename, fork, delete, export and import the conversations in the chat database'
-		'skills' = 'Skills from skills.boxlang.io: skills <find|install|list|update|remove>'
+		'sessions' = 'List, rename, fork, delete, clear, export and import the conversations in the chat...'
+		'skills' = 'Skills from skills.boxlang.io: skills <find|install|list|show|update|remove>'
 		'stats' = 'What the model calls used: tokens by model, provider, day or user, once Agent.yaml says...'
 		'test' = 'Run a project''s own tests/specs via TestBox'
 		'token' = 'Issue, list and revoke access tokens for a deployed agent'
@@ -104,6 +104,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		)
 		'build:positional' = 'dir'
 		'chat' = @(
+			@{ Name = 'agent'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'api-path'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'connect'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'continue'; Value = $false; Choices = @(); Dir = $false }
@@ -266,10 +267,12 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		)
 		'serve:positional' = 'dir'
 		'sessions' = @(
+			@{ Name = 'agent'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'file'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'json'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'q'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'session'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'user'; Value = $true; Choices = @(); Dir = $false }
 		)

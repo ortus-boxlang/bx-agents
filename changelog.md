@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Web page revamp
+
+- A left menu (Main and Admin groups, folds to icons, a drawer on a phone, a skip link) and a hash router in the one generated page. Pages: Conversations (paged, filtered), Routines (member and admin views), Registry (tools grouped, skills with a reader, volumes), Memory (notes, global agent notes, conversation memory with clear), Vault, Settings, and for admins Gateways, Logs, Access (tokens, people). The sidebar shows 25 conversations with Show more and a quick filter. Talk to picker for sub-agents. The Settings menu keeps every item.
+
 The first public release of BxAgents - a conventions-based framework for building AI
 agents in BoxLang, powered by [BoxLang AI](https://boxlang.ortusbooks.com/boxlang-+-++/modules/bx-ai)
 and built on [ColdBox](https://coldbox.ortusbooks.com).

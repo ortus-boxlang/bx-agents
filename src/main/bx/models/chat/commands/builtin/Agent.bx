@@ -1,0 +1,45 @@
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "agent"
+	}
+
+	string function hint() {
+		return "pick the agent to talk to: /agent, or /agent <name>"
+	}
+
+	/**
+	 * The terminal holds one agent for the whole chat. On the web the page asks for the agent with each message
+	 * (Talk to), and a chat app always talks to the main agent.
+	 */
+	array function transports() {
+		return [ "tui" ]
+	}
+
+	/**
+	 * /agent lists the agents; /agent <name> switches to one and starts a new conversation with it (a conversation
+	 * belongs to the agent it started with). Every agent keeps its own memory.
+	 */
+	any function run( required any context, required string args ) {
+		var chat = arguments.context.chat()
+		var reply = arguments.context.reply()
+		var agents = chat.agents()
+		if ( agents.len() < 2 ) {
+			return reply.text( "This agent has no sub-agents to talk to." )
+		}
+		if ( !len( arguments.args ) ) {
+			var current = chat.selectedAgent()
+			return reply.choose( "Which agent?", agents.map( a => {
+				label : a.name,
+				hint  : ( len( a.description ) ? a.description : "" ) & ( len( a.parent ) ? "  (under #a.parent#)" : "  (main agent)" ) & ( ( len( current ) ? current : agents[ 1 ].name ) == a.name ? "  (talking to)" : "" ),
+				line  : "/agent " & a.name
+			} ) )
+		}
+		var switched = chat.switchAgent( arguments.args )
+		if ( !switched.ok ) {
+			return reply.warn( switched.reason )
+		}
+		return reply.reset().conversation( switched.id ).text( "Now talking to #switched.agent#, in a new conversation." )
+	}
+
+}

@@ -345,7 +345,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( html ).toInclude( 'id="convList"' );
 				expect( html ).toInclude( "function loadConversations()" );
 				expect( html ).toInclude( "function selectConversation(" );
-				expect( html ).toInclude( "function startConversation()" );
+				expect( html ).toInclude( "function startConversation( agent )" );
 				expect( html ).toInclude( '"/sessions/rename"' );
 				expect( html ).toInclude( '"/sessions/delete"' );
 				// A title is whatever the user typed first, so it must never be
@@ -625,6 +625,163 @@ class extends="testbox.system.BaseSpec" {
 				var html = fileRead( appDir & "/chat/index.html" );
 				expect( html ).toInclude( "@media ( max-width: 40rem )" );
 				expect( html ).toInclude( "prefers-reduced-motion" );
+			} );
+
+			describe( "shell", function() {
+
+				it( "wraps the page in a skip link, a labelled left menu and a main region that holds the chat and the page host", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( 'class="skip-link" href="##content"' );
+					expect( html ).toInclude( '<nav id="mainNav" aria-label="Main">' );
+					expect( html ).toInclude( '<main id="content" tabindex="-1">' );
+					expect( html ).toInclude( 'id="page-chat"' );
+					expect( html ).toInclude( 'id="pageView" hidden' );
+					// the hamburger drives the phone drawer
+					expect( html ).toInclude( 'id="navBtn"' );
+					expect( html ).toInclude( 'aria-controls="mainNav"' );
+				} );
+
+				it( "joins the shell styles and script in, leaving no placeholder behind", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).notToInclude( "__SHELL_STYLES__" );
+					expect( html ).notToInclude( "__SHELL_SCRIPT__" );
+					expect( html ).toInclude( "##mainNav a.nav-item[aria-current=""page""]" );
+					expect( html ).toInclude( "function registerPage(" );
+					expect( html ).toInclude( "function shellStart()" );
+				} );
+
+				it( "routes by hash, keeps the chat in the document, and sends a page the server does not offer to the chat", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "window.addEventListener( ""hashchange""" );
+					expect( html ).toInclude( "history.replaceState( null, """", ""##/chat"" )" );
+					// a member's menu is built from the capabilities, never from the address
+					expect( html ).toInclude( "function pageAvailable( def )" );
+					expect( html ).toInclude( "function buildNav()" );
+				} );
+
+				it( "folds the menu to icons, remembers it, and makes it a drawer on a phone", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "body[data-nav=""folded""]" );
+					expect( html ).toInclude( "body[data-drawer=""open""]" );
+					expect( html ).toInclude( "localStorage.setItem( NAV_STORAGE" );
+					// Escape closes the drawer and Tab stays inside it
+					expect( html ).toInclude( "function closeDrawer()" );
+					expect( html ).toInclude( "evt.key === ""Tab""" );
+				} );
+
+				it( "shows the count of logged errors on the Logs item", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "function shellBadge( id, count )" );
+					expect( html ).toInclude( "shellBadge( ""logs"", count )" );
+				} );
+
+			} );
+
+			describe( "pages", function() {
+
+				it( "registers a page per area, in the Main and Admin groups, each shown by a capability", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					for ( var id in [ "routines", "registry", "memory", "vault", "settings", "gateways", "logs", "access" ] ) {
+						expect( html ).toInclude( "id: ""#id#""," );
+					}
+					expect( html ).toInclude( "group: ""admin""" );
+					// an admin page is not offered to a member: it needs a capability the server only grants an admin
+					expect( html ).toInclude( "cap: function ( caps ) { return !!caps.gateways; }" );
+					expect( html ).toInclude( "cap: function ( caps ) { return !!caps.logs; }" );
+				} );
+
+				it( "says gateways, not chat apps, and keeps every item of the Settings menu", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "title: ""Gateways""" );
+					expect( html ).toInclude( '<h2 id="gatewaysTitle">Gateways</h2>' );
+					expect( html ).toInclude( 'aria-label="Gateways"' );
+					expect( html ).notToInclude( "Chat apps" );
+					// Notes, Vault, Routines, Access tokens, Logs and Gateways stay in the menu, next to their pages
+					for ( var buttonId in [ "notesBtn", "vaultBtn", "routinesBtn", "tokensBtn", "logsBtn", "gatewaysBtn", "appearanceBtn", "themeBtn", "keyBtn" ] ) {
+						expect( html ).toInclude( 'id="#buttonId#"' );
+					}
+					expect( html ).notToInclude( "legacy.hidden = true" );
+				} );
+
+				it( "keeps both routine dialogs and sends the agent's vault ask to the Vault page", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( 'id="routineEditor"' );
+					expect( html ).toInclude( 'id="routineReports"' );
+					expect( html ).toInclude( "var routinesHook = null;" );
+					expect( html ).toInclude( "shellGo( ""vault"" )" );
+				} );
+
+				it( "has a Conversations page that asks the server for a page at a time with its filters and facets", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "id: ""conversations""," );
+					expect( html ).toInclude( """/sessions?limit="" + state.limit + ""&offset="" + state.offset + ""&facets=1""" );
+					for ( var param in [ "&q=", "&source=", "&agent=", "&since=", "&before=", "&all=1" ] ) {
+						expect( html ).toInclude( param );
+					}
+					// every row can be opened, renamed, forked, exported and deleted, and several deleted at once
+					expect( html ).toInclude( "/sessions/fork" );
+					expect( html ).toInclude( "Delete selected" );
+				} );
+
+				it( "shows 25 conversations in the sidebar, with Show more and a quick filter, and trusts a remembered one further down", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "var CONV_PAGE = 25;" );
+					expect( html ).toInclude( 'id="convFilter"' );
+					expect( html ).toInclude( 'id="convMoreBtn"' );
+					expect( html ).notToInclude( "/sessions?limit=100" );
+					expect( html ).toInclude( "conversationsTotal > conversations.length" );
+				} );
+
+				it( "draws the Appearance controls in the Settings page as well as in the popup", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "function drawAppearanceInto( el, inPage )" );
+					expect( html ).toInclude( ".appearance-ui.in-page" );
+				} );
+
 			} );
 
 			it( "recovers when the remembered conversation no longer exists", function() {
