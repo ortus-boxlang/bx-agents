@@ -212,7 +212,7 @@ CI rules (schema and safety only):
 2. **Move the data.** (done) `src/main/bx/catalog/connectors/*.yaml`, `ConnectorCatalog` (loader and validator), `bxAgents connectors [list|show|check]`, a CI step, CODEOWNERS; the wizard and `add` read from it and `--mcp` keeps working.
 3. **Spike: per-person clients.** (done) `ConnectorClients` and the `PerPersonMcpClient` router, proved with a fake server that two people never see each other's token or session. No bx-ai change.
 4. **Build support.** (done) The `connectors:` key: only, exclude, override, none; errors that name the closest id; the resolved set stamped into the app; specs and fixtures. See Progress for two changes to the first plan.
-5. **Connection service.** Rows for every connector with state, risk, auth and options. Personal token connect through the vault, confirm step, tool switches and the 100 tool warning. The Connectors page, dialogs and tools drawer on the new shell, Settings link, Registry and Composition touches, `/connect`, CLI, `GET /connect`, gateways.
+5. **Connection service and surfaces.** Split into 5.1 to 5.8 in the section "Task 5 breakdown" below.
 6. **Routines and schedules.** Pin that a routine runs with its owner's connections; `runAs` on file schedules, validation and specs.
 7. **Wizard.** Show all connectors, exclude or pick, write the `connectors` block.
 8. **Docs.** Catalog page generated from the data, connectors reference, contributor guide, Git note, updates to connect, mcp, vault, agent-yaml, schedules, new-wizard, cli-reference and web-ui. Each with its `docs/versions/1.0.x` copy.
@@ -247,3 +247,53 @@ Decided: Atlassian ships in the first release, with no "unverified" badge. Task 
 - Task 4: done. `ConnectorSettings` reads the `connectors` key (`problems()` for the validator, `resolve()` for the build), the loader accepts it, `ProjectValidator` names every mistake (an unknown id comes with the closest one), and the build stamps the resolved set into `handlers/AgentApi.bx` as `connectors` for the connection service of task 5. `inspect` has a new `connectors` section. Override settings are `timeout`, `options` (checked against the catalog entry's options and their types), `scopes` (sign in connectors only) and `tools` (the allow list of the tools drawer); a token or secret is refused there. Two changes to the first plan:
   - **Resolving does not attach anything.** The plan said each connector expands into an `mcpServers` entry at build. With every connector offered by default that would contact seven servers (and start the Git program) on every start of every agent. Instead the build produces the set a person can connect to, and a connector is attached to the running agent only when someone connects it (task 5, on the router of task 3 for tokens and the existing OAuth path for sign in). Nothing contacts a server until then.
   - **An `mcpServers` name shadows a connector, with a warning.** The plan said a name in both is a build error. The wizard writes `mcpServers` entries named `github`, `notion` and so on, so with every connector offered by default that error would break projects that already build. An entry with a connector's name now replaces the catalog entry and the build warns.
+
+## Task 5 breakdown
+
+Task 5 is the largest. It is built in eight steps, each with its own specs and its own commit, so every step can be reviewed and run on its own.
+
+### Design in one page
+
+- **One service for every surface.** `ConnectorService` is what the web page, the API, `bxAgents connect`, the terminal `/connect` and the gateways all ask, as `ConnectionService` is today. It wraps the existing OAuth path (`ConnectionService`, unchanged for `mcpServers` entries with `oauth`) and adds the token and local program paths.
+- **A row per connector, for one person.** `{ id, name, icon, summary, transport, risk, riskNote, docs, verifiedOn, ways, state, options, tools }`. `state` is one of `available`, `connected`, `needs_attention`, and for a local program `ready` or `needs_program`. Never a token, never a secret value.
+- **Where things are kept.** No new table. The `preferences` table (userId, prefKey, prefValue) holds each person's option values (`connector.<id>.options`), tool switches (`connector.<id>.tools`) and a note that a credential was refused (`connector.<id>.status`). The one thing that belongs to the agent, whether a local program is switched on, uses a fixed owner id in the same table. A personal token is a vault secret in the user scope named by the catalog's `envVar`, with its `hosts` set to the connector's host, so the vault itself refuses to send it anywhere else. A sign in keeps its tokens in the sealed OAuth records, as now.
+- **Connect, by way in.**
+  - *Sign in:* the existing flow (`start()`, the callback, `complete()`), reached through the connector's id.
+  - *Token:* the token is sent once, checked by making the person's client (`ConnectorClients.forPerson()`: the handshake and a `tools/list`, so a refused token is found at Connect), sealed into the vault, and the connector is attached to the running agent. The value never comes back.
+  - *Local program:* enabling it checks the program is on the PATH, writes the options, and starts the one shared process.
+  - A high or medium risk connector needs `confirm: true` in the request; the surfaces show the `riskNote` first.
+- **Attaching to the running agent.** Nothing is attached at start. The first Connect of a connector registers it once (the router of task 3 for a token, `withMCPServer( url, options )` as today for a sign in, a command entry for a program), and never twice. The agent gets the tools with no restart. `ConnectorClients.evictIdle()` runs from the heartbeat.
+- **Tool switches.** Per person and connector, under the admin's `override.tools` allow list as a ceiling. A switched off tool is refused at call time inside the router (certain). Keeping it out of what the model is offered is a spike (5.3): bx-ai's `beforeLLMCall` middleware gets the chat request, and may be able to drop tools per call.
+- **The tool count warning** counts the tools a person has on across connectors. The limit is `connectors.toolWarning` (default 100), a new key of `ConnectorSettings`.
+- **Routines.** A routine runs as its owner, so it already uses the owner's connections. A file schedule with `runAs` is task 6.
+
+### API shape (the agent API, all for the caller; the caller is never named in a request)
+
+| Route | Does |
+|---|---|
+| `GET /connectors` | The rows for the caller, the catalog policy (mode, left out, replaced by `mcpServers`), and `{ toolsOn, toolWarning, over }` |
+| `POST /connectors/connect` | `{ id, method : "oauth" | "token" | "program", token?, options?, confirm }`. A sign in answers `{ authorizationUrl }`; a token or program answers the new row |
+| `POST /connectors/disconnect` | `{ id }`: forgets the caller's token or sign in, drops their client |
+| `POST /connectors/options` | `{ id, options }`: changes the caller's option values |
+| `GET /connectors/tools?id=` | The connector's tools as the caller's client lists them, with each one's switch, `asksFirst` and whether the admin turned it off |
+| `POST /connectors/tools` | `{ id, tool | all | none | readonly, on }` |
+| `GET /connect`, `POST /connect`, `POST /connect/remove`, `GET /connect/callback` | Stay as they are, so what was built for sign in keeps working. The callback stays the one public route |
+
+Errors use the existing `Outcome` codes (`not_found`, `bad_request`, `forbidden`, `conflict`). Risk confirmation missing is `bad_request` with the `riskNote` in the reason.
+
+### The steps
+
+1. **5.1 Preferences and rows.** `ConnectorPrefs` over the `preferences` table (options, tool switches, status), and `ConnectorService.list()` building the rows and states from the resolved set, the vault, the OAuth tokens and the PATH check. Specs for every state.
+2. **5.2 Connect and disconnect.** Token connect through the vault and `ConnectorClients`, sign in through the existing service, the risk confirmation, the refused token becoming `needs_attention`, disconnect. Specs against the fake bearer server and the fake OAuth server.
+3. **5.3 Attach and tool switches.** Attach on first Connect without duplicates, tool switches and the admin ceiling enforced in the router, `evictIdle()` on the heartbeat, the spike on offering only a person's tools to the model, the tool count and `connectors.toolWarning`. Specs, including two people.
+4. **5.4 The API.** Routes, `AgentService` methods, the contract and OpenAPI, `AgentApiClient`, handler coverage, and the real HTTP integration test. Specs for every route and every refusal.
+5. **5.5 The web page.** The Connectors page on the new shell: cards, tabs, the connect dialogs, the tools drawer; the Settings link replaces the old Connections dialog; the Registry chip and the Composition lines. Checked in a real browser at 1280, 768 and 390 wide against a served app, as an admin and as a member; screenshots.
+6. **5.6 The terminal.** `/connect` lists every connector with its state, `/connect <id>` connects (a masked prompt for a token, never an argument), `/connect <id> tools`, and `bxAgents connect` and `connectors` in a project show the same rows. Local, remote and served modes.
+7. **5.7 Gateways.** `/connect` lists the rows; `/connect <id>` answers with the one-time sign in link; for a token connector it answers with a one-time link to the web form, never asking for a token in the chat. The gateway docs follow.
+8. **5.8 Hardening.** A token never appears in any response, log, audit row or error; the vault secret is host locked; two people through the API never see each other's state; a connect without confirmation is refused; limits on how many connectors and options a request carries.
+
+### Decisions needed before 5.2
+
+1. **Who can switch on a local program** (Git) on a served agent. It is one shared process on the server. Proposed: an admin only when served, anyone in the terminal (where there is one person).
+2. **A token connector in a gateway chat.** Proposed: the chat gets a one-time link to the web form, as the vault does for a secret the agent asks for. The alternative is to say "connect it on the web page".
+3. **Keeping tools out of what the model is offered.** Proposed: refuse at call time (certain), and add per person filtering if the 5.3 spike shows `beforeLLMCall` can do it. The alternative is to ship call time refusal only.
