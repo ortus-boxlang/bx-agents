@@ -132,6 +132,20 @@ Every served agent has an HTTP API at `/__bxagents` (open on your own machine, b
 
 If your project also has a `gateways/*` entry with `{ exposes: "agent", path: "/api/chat" }`, the agent is reachable at `POST http://localhost:8080/api/chat/invoke` (and `/stream`, `/batch`, `/info` - see [gateways/](../conventions/gateways/index.md)). An `exposes: "webui"` entry adds the browser chat page.
 
+### See the web app
+
+If you scaffolded with `--template=webui-chat`, `bxAgents serve` also serves the web app at `/chat`. This is the whole of it, in three minutes:
+
+<video controls preload="metadata" poster="/assets/video/web-trailer-poster.png" style="max-width:100%">
+  <source src="/assets/video/web-trailer.mp4" type="video/mp4">
+  <source src="/assets/video/web-trailer.webm" type="video/webm">
+  <track kind="captions" src="/assets/video/web-trailer.vtt" srclang="en" label="English" default>
+</video>
+
+![The web app: the left menu, a conversation with a tool call and a formatted answer, and the model picker in the header](../assets/webui/webui-chat.png)
+
+Every page is described in [the web app guide](../conventions/web-ui.md#the-pages).
+
 ## 6. Inspect, package, deploy
 
 ```bash

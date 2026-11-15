@@ -1135,6 +1135,11 @@ class {
 		var kept = service().notes( callerOf( event ) )
 		if ( event.getHTTPMethod() == "POST" ) {
 			var body = event.getHTTPContent( json : true )
+			// say so when nothing came, rather than "scope and text are required" for a field the caller did send
+			if ( !isStruct( body ) || body.isEmpty() ) {
+				answer( event, failed( "bad_request", "The request had no JSON body. Send { ""scope"": ""user"" or ""agent"", ""text"": ""..."" }" ) )
+				return
+			}
 			answer( event, kept.add( body.scope ?: "user", body.text ?: "" ) )
 			return
 		}

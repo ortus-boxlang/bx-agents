@@ -30,6 +30,8 @@ mcpServers:
 The sign in above is real, against a small fake mail service ([`tools/demo/fake-oauth-mcp.bxs`](https://github.com/ortus-boxlang/bx-agents/tree/development/tools/demo)); the agent's first answer is scripted.
 
 
+![The Connections panel with mail connected](../assets/webui/connections.png)
+
 ## What you write
 
 | Key under `oauth` | Meaning |

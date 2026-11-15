@@ -58,6 +58,8 @@ The web app a `gateways/` entry with `exposes: "webui"` builds: a left menu with
 
 ![The generated web app: the left menu, a conversation with a tool call, and the model picker and context ring in the header](docs/assets/webui/webui-chat.png)
 
+[Watch the trailer](docs/assets/video/web-trailer.mp4): just over three minutes through every page, narrated, with captions (`.vtt`).
+
 The terminal chat, with sessions, routines, notes, `@file` and picture attachments, slash commands and a context meter (the answers here come from a scripted demo model). `bxAgents chat --server` starts its own server and `--connect=<url> --token=<token>` talks to a deployed one:
 
 ![bxAgents chat in a terminal: slash commands, a tool call and a formatted answer](docs/assets/tui/chat-terminal.gif)

@@ -133,6 +133,8 @@ toolOptions:
 - An entry may be `${env.NAME}` to take a folder from the environment.
 - `bxAgents new` can write all of this for you: see [the new wizard](../guides/new-wizard.md).
 
+![The Memory page: your notes, the agent's shared notes and conversation memory](../assets/webui/webui-memory.png)
+
 ## Notes
 
 An agent can keep short notes: things about the user ("prefers short answers") and things about its own work ("the repo uses Gradle"). They are off until the block is there:

@@ -1,0 +1,72 @@
+/**
+ * api.RequestBody: waits for the first bytes of a declared body. The miniserver reads a body with available() == 0
+ * as "empty" and remembers it, so a body that arrives a moment after the headers was lost (see the class).
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/** A stream whose bytes show up after some calls to available(), the way a body arrives after its headers */
+	private function lateStream( required numeric afterCalls ) {
+		var state = { calls : 0 };
+		var after = arguments.afterCalls;
+		return {
+			available : function() {
+				state.calls++;
+				return state.calls > after ? 12 : 0;
+			},
+			calls : function() {
+				return state.calls;
+			}
+		};
+	}
+
+	function run() {
+		describe( "api.RequestBody", function() {
+
+			it( "does nothing for a request that declares no body", function() {
+				var stream = lateStream( 5 );
+
+				expect( new bxagents.models.api.RequestBody().await( {}, stream ) ).toBe( 0 );
+				expect( new bxagents.models.api.RequestBody().await( { "content-length" : "0" }, stream ) ).toBe( 0 );
+				expect( stream.calls() ).toBe( 0 );
+			} );
+
+			it( "waits until the first bytes of a declared body are there", function() {
+				var stream = lateStream( 3 );
+
+				new bxagents.models.api.RequestBody().await( { "content-length" : "28" }, stream );
+
+				expect( stream.calls() ).toBe( 4 );
+			} );
+
+			it( "does not wait when the body is already there", function() {
+				var stream = lateStream( 0 );
+
+				new bxagents.models.api.RequestBody().await( { "content-length" : "28" }, stream );
+
+				expect( stream.calls() ).toBe( 1 );
+			} );
+
+			it( "gives up after its limit and lets the normal read answer", function() {
+				var stream = lateStream( 1000000 );
+				var waited = new bxagents.models.api.RequestBody( limit = 30 ).await( { "content-length" : "28" }, stream );
+
+				expect( waited ).toBeGTE( 30 );
+				expect( waited ).toBeLT( 2000 );
+			} );
+
+			it( "does nothing where there is no request stream to ask (a spec, the terminal)", function() {
+				expect( new bxagents.models.api.RequestBody().await( { "content-length" : "28" } ) ).toBeLT( 50 );
+			} );
+
+			it( "does not fail when the stream cannot say what it holds", function() {
+				var broken = { available : function() {
+					throw( type = "Test.Broken", message = "closed" );
+				} };
+
+				expect( new bxagents.models.api.RequestBody().await( { "content-length" : "28" }, broken ) ).toBeGTE( 0 );
+			} );
+
+		} );
+	}
+
+}

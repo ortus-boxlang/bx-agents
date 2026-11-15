@@ -358,6 +358,8 @@ La verja **falla cerrada**: si la variable nombrada está sin definir o vacía e
 !!! warning
     `tokenEnvVar` nombra una **variable**, nunca el secreto en sí. `build` rechaza un valor que no sea un nombre válido de variable de entorno, precisamente para que aquí no se pueda commitear un token literal por error. Solo el nombre de la variable llega al código generado.
 
+![La página Access de la web app: la lista de tokens y el formulario que crea un token](../assets/webui/webui-access.png)
+
 ### Tokens de acceso para un agente desplegado
 
 Un secreto compartido (`tokenEnvVar`) basta para un solo llamador. Para dejar entrar a varias personas o máquinas, cada una con un nombre que puedes revocar, activa los tokens emitidos:

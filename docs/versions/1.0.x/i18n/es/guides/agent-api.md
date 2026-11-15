@@ -97,6 +97,8 @@ Una ejecución pertenece a quien la empezó.
 
 Las conversaciones también pertenecen a quien llama: `sessions()` las lista, las más nuevas primero (un admin puede pasar `all = true` para ver las de todos), y `createSession`, `renameSession`, `forkSession`, `deleteSession`, `history` y `export` trabajan sobre una. `notes()` y `preferences()` guardan lo que el agente debe recordar de quien llama. `command( "/context" )` ejecuta cualquier [comando de barra](slash-commands.md) que esa persona pueda usar.
 
+![La página Access de la web app, que es un cliente de esta API](../assets/webui/webui-access.png)
+
 ## Tokens de acceso por la API
 
 Con `manageTokens: true` un admin puede crear tokens sin una shell en el servidor:
@@ -108,6 +110,153 @@ client.revokeToken( "ci" );
 ```
 
 La misma lista, creación y revocación están en el panel **Tokens** de la [página web](../conventions/web-ui.md) (se muestra a los admins en un servidor que lo permite). Un token `chat` recibe `403`. Sin `manageTokens`, las rutas no existen.
+
+## Todas las rutas
+
+Todas las rutas cuelgan de `/__bxagents` (o de tu `agentApi.path`). Hay 76 rutas (83 pares de verbo y ruta); las rutas de tokens solo existen con `manageTokens: true`. La tabla sale de la lista única de `ApiContract.bx` con la que el build crea las rutas y el documento OpenAPI; la autoridad es el documento que un servidor en marcha entrega en `GET /openapi`, que además trae las formas de petición y respuesta. Las descripciones de la columna Hace son las del propio documento OpenAPI, en inglés. **Admin** responde `403` a quien no es admin; **Open** no necesita token ni en una API cerrada.
+
+### Turns
+
+| Ruta | Quién | Hace |
+|---|---|---|
+| `POST /invoke` | Quien llama | One whole turn: the agent's answer once it is done. |
+| `POST /stream` | Quien llama | One turn as a stream of thread, chunk and done frames (the small subset of events). |
+| `POST /batch` | Quien llama | Several inputs, one after another, in one conversation. |
+| `POST /events` | Quien llama | One turn as the full stream: thread, chunk, tool, suspended, error and done frames. |
+
+### About the agent
+
+| Ruta | Quién | Hace |
+|---|---|---|
+| `GET /info` | Quien llama | What is served: name, model and the routes of the agent. |
+| `GET /tools` | Quien llama | The tools the agent has. |
+| `GET /health` | Abierta | Is the server up. |
+| `GET /profiles` | Quien llama | The models a caller may ask for with options.profile. |
+| `GET /whoami` | Quien llama | Who the server takes the caller to be: id, scope and where the call came from. |
+| `GET /volumes` | Quien llama | The folders the agent may use, by name and mode. |
+| `GET /logs` | Admin | The agent's logs: which there are, or the last lines of one. |
+| `POST /gateways/reconnect` | Admin | Stops and starts one gateway in place, so a fixed credential or a dropped connection does not need an app restart. |
+| `GET /gateways` | Admin | The gateways and the state of each: connected, which credentials are set (never their values), last activity, last error and the chats each has talked to (ids and when, never text). |
+| `GET /skills/read` | Quien llama | One skill's SKILL.md text with its origin, size and when it was saved. |
+| `GET /skills` | Quien llama | The skills the agent can load: name, description and whether the project or the agent wrote it. |
+| `GET /agent/composition` | Admin | How the agent is put together in one call: what comes in, its parts, the agent tree, what goes out and the tools that ask first. |
+| `GET /agent/files` | Admin | The project's own files that are safe to show (Agent.yaml, instructions, tools, skills, subagents, gateways), by relative path and size. |
+| `GET /agent/file` | Admin | One of those files as text, read only; secrets in Agent.yaml are shown as stars and a long file is cut. |
+| `GET /agent` | Quien llama | The agent in full: model, window, tools, the agent tree (agents, each sub-agent a caller may talk to directly) and what this server can do (capabilities). |
+| `GET /usage` | Admin | Tokens by day and by model: a small snapshot, off until usage is turned on (then enabled is false). |
+| `GET /data/backups` | Admin | The backups of the data home, newest first, and the restore waiting for the next start. |
+| `POST /data/backup` | Admin | Makes a backup of the data home now. |
+| `GET /data/backup` | Admin | Downloads one backup as a zip. |
+| `POST /data/restore` | Admin | Schedules a backup to be put back the next time the app starts; what is there is kept as before-restore. |
+| `POST /extensions/reload` | Admin | Loads the extensions again, as /reload does in the terminal. |
+| `GET /extensions` | Admin | The extensions this app loaded, with what each adds and what went wrong. |
+| `GET /data` | Admin | Where the agent keeps everything, how big each part is, and where each volume is. |
+| `POST /ping` | Quien llama | Asks a model for one word to see that it answers. |
+| `GET /context` | Quien llama | What the next turn would send, by part, against the model's window. |
+| `GET /status` | Quien llama | The status items extensions show. |
+| `GET /slots` | Quien llama | What extensions put in the page's slots. |
+| `GET /openapi` | Quien llama | This description of the API, as an OpenAPI 3 document. |
+
+### Runs
+
+| Ruta | Quién | Hace |
+|---|---|---|
+| `POST /cancel` | Quien llama | Stops a run. |
+| `POST /steer` | Quien llama | Adds a message to a run that is going. |
+| `POST /resume` | Quien llama | Carries on a run that paused for approval, as a stream. |
+| `GET /pending` | Quien llama | What a paused run is waiting to have approved. |
+
+### Conversations
+
+| Ruta | Quién | Hace |
+|---|---|---|
+| `POST /sessions/rename` | Quien llama | Names one of the caller's conversations. |
+| `POST /sessions/fork` | Quien llama | Copies a conversation under a new name. |
+| `POST /sessions/delete` | Quien llama | Deletes a conversation and its messages. |
+| `POST /sessions` | Quien llama | Starts a conversation, for the main agent or one named in agent. |
+| `GET /sessions` | Quien llama | A page of the caller's conversations, newest first, with the total that match. |
+| `GET /export` | Quien llama | One conversation as a file, Markdown or a page of HTML. |
+| `GET /history` | Quien llama | The messages of one conversation. |
+| `POST /clear` | Quien llama | Deletes the messages of a conversation, keeps the conversation. |
+| `POST /compact` | Quien llama | Summarizes the older messages and keeps the recent ones. |
+| `POST /memory/clear` | Quien llama | Forgets the messages of conversations and keeps the conversations: one of the caller's (conversationId), or with all (an admin) every conversation, or those of one agent. |
+
+### Routines
+
+| Ruta | Quién | Hace |
+|---|---|---|
+| `POST /routines/reports/clean` | Quien llama | Removes the reports of a routine older than some days, or all of them. |
+| `POST /routines/reports/delete` | Quien llama | Removes one report file of a routine. |
+| `GET /routines/reports` | Quien llama | The report files of a routine, newest first. |
+| `GET /routines/report` | Quien llama | One report file of a routine as text; a long one is cut and says so. |
+| `POST /routines/update` | Quien llama | Changes a routine's schedule, prompt or where its answer goes. |
+| `POST /routines/pause` | Quien llama | Stops a routine from running until it is resumed. |
+| `POST /routines/resume` | Quien llama | Starts a paused routine again and forgets its failures. |
+| `POST /routines/run` | Quien llama | Makes a routine due now; the heartbeat starts it within a minute. |
+| `POST /routines/delete` | Quien llama | Deletes a routine. |
+| `GET /routines/schedule` | Quien llama | What a schedule means before it is saved: the stored form, the reading in words and the next run. |
+| `GET /routines/get` | Quien llama | One routine in full, with its prompt. |
+| `POST /routines` | Quien llama | Makes a routine. |
+| `GET /routines` | Quien llama | The caller's routines with the schedule in words, status, next and last run and where the answer goes. |
+
+### Vault
+
+| Ruta | Quién | Hace |
+|---|---|---|
+| `GET /vault/activity` | Admin | The vault's key status and its recent audit lines: what was used, by whom and when. |
+| `POST /vault/update` | Quien llama | Changes a secret: its value, description or hosts. |
+| `POST /vault/remove` | Quien llama | Removes a secret. |
+| `POST /vault` | Quien llama | Stores a secret. |
+| `GET /vault` | Quien llama | The secrets the caller can use, by name, never a value: their own and the agent's. |
+
+### Accounts
+
+| Ruta | Quién | Hace |
+|---|---|---|
+| `POST /users/admin` | Admin | Makes an account an admin, or takes that away. |
+| `GET /users` | Admin | The sign-in accounts and whether each is an admin. |
+
+### Preferences
+
+| Ruta | Quién | Hace |
+|---|---|---|
+| `POST /preferences/set` | Quien llama | Keeps one setting of the caller. |
+| `POST /preferences/delete` | Quien llama | Forgets one setting of the caller. |
+| `GET /preferences` | Quien llama | The caller's settings. |
+
+### Commands
+
+| Ruta | Quién | Hace |
+|---|---|---|
+| `GET /commands` | Quien llama | The slash commands this caller may run. |
+| `POST /command` | Quien llama | Runs one slash command. |
+
+### Connections
+
+| Ruta | Quién | Hace |
+|---|---|---|
+| `GET /connect/callback` | Abierta | Where a provider sends the person back after they sign in. |
+| `POST /connect/remove` | Quien llama | Forgets the caller's sign in to one server. |
+| `POST /connect` | Quien llama | Starts a sign in for the caller and answers with the address to send them to. |
+| `GET /connect` | Quien llama | The servers that ask people to sign in, and which the caller has connected. |
+
+### Notes
+
+| Ruta | Quién | Hace |
+|---|---|---|
+| `POST /notes/clear` | Quien llama | Removes every note of one scope and says how many: the caller's own (user) or the agent's (agent, which takes an admin). |
+| `POST /notes/update` | Quien llama | Changes a note. |
+| `POST /notes/remove` | Quien llama | Removes a note. |
+| `POST /notes` | Quien llama | Adds a note. |
+| `GET /notes` | Quien llama | The notes about the caller and about the agent's own work. |
+
+### Tokens
+
+| Ruta | Quién | Hace |
+|---|---|---|
+| `POST /tokens/revoke` | Admin | Stops a token working. |
+| `POST /tokens` | Admin | Makes an access token. |
+| `GET /tokens` | Admin | The access tokens, never a secret. |
 
 ## Errores
 

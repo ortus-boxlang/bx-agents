@@ -13,6 +13,8 @@ class extends="testbox.system.BaseSpec" {
 					new bxagents.models.data.DataHome( projectRoot = dir, configured = dir & "/home", environment = {} )
 				);
 				variables.before = aiGlobalSkills().slice( 1, aiGlobalSkills().len() );
+				// a spec that builds an app adds that app's skills to the process-wide list; these start from none
+				aiGlobalSkills().clear();
 			} );
 
 			afterEach( function() {
@@ -111,6 +113,69 @@ class extends="testbox.system.BaseSpec" {
 					projectSkill( "house-style" );
 
 					expect( library.listing().filter( s => s.name == "house-style" )[ 1 ].origin ).toBe( "project" );
+				} );
+
+			} );
+
+			describe( "the skills of an app's skills/ folder", function() {
+
+				/** Writes dir/app/skills/<name>/SKILL.md and answers the skills/ folder */
+				function appSkill( required string name ) {
+					var skills = dir & "/app/skills";
+					directoryCreate( skills & "/" & arguments.name, true, true );
+					fileWrite( skills & "/" & arguments.name & "/SKILL.md", "---#char( 10 )#name: #arguments.name##char( 10 )#description: #arguments.name# one#char( 10 )#---#char( 10 )#Body.", "UTF-8" );
+					return skills;
+				}
+
+				it( "lists skills shipped in a folder as project skills, and the agent can load them", function() {
+					appSkill( "refund-policy" );
+					var skills = appSkill( "weekly-report" );
+					aiGlobalSkills().clear();
+
+					var added = library.loadFolder( skills );
+
+					expect( added.sort( "text" ) ).toBe( [ "refund-policy", "weekly-report" ] );
+					var listed = library.listing();
+					expect( listed.map( s => s.name ) ).toBe( [ "refund-policy", "weekly-report" ] );
+					expect( listed.filter( s => s.origin == "project" ) ).toHaveLength( 2 );
+					// what the agent is given is this same list, so loadSkill finds the text
+					expect( aiGlobalSkills().filter( s => s.getName() == "refund-policy" )[ 1 ].getContent() ).toInclude( "Body." );
+					expect( library.read( "refund-policy" ).body ).toInclude( "Body." );
+				} );
+
+				it( "reads the folder of a built app, with the installed ones marked and the agent's own listed beside them", function() {
+					var skills = appSkill( "shipped" );
+					appSkill( "from-registry" );
+					fileWrite( skills & "/.installed.json", jsonSerialize( [ "from-registry" ] ), "UTF-8" );
+					aiGlobalSkills().clear();
+					library.save( "mine", "Agent one.", "Steps." );
+
+					library.loadFolder( skills );
+					library.load();
+
+					var origins = {};
+					library.listing().each( s => origins[ s.name ] = s.origin );
+					expect( origins ).toBe( { "from-registry" : "installed", "mine" : "agent", "shipped" : "project" } );
+				} );
+
+				it( "is safe to run twice, keeps a skill the list already has, and reads a changed one again", function() {
+					var skills = appSkill( "once" );
+					aiGlobalSkills().clear();
+					var other = projectSkill( "taken" );
+					appSkill( "taken" );
+
+					expect( library.loadFolder( skills ) ).toBe( [ "once" ] );
+					fileWrite( skills & "/once/SKILL.md", "---#char( 10 )#name: once#char( 10 )#description: changed#char( 10 )#---#char( 10 )#New.", "UTF-8" );
+					expect( library.loadFolder( skills ) ).toBeEmpty();
+
+					expect( library.listing().filter( s => s.name == "once" ) ).toHaveLength( 1 );
+					expect( library.listing().filter( s => s.name == "once" )[ 1 ].description ).toBe( "changed" );
+					expect( aiGlobalSkills().filter( s => s.getName() == "taken" )[ 1 ].getFilePath() ).toInclude( "project-skills" );
+				} );
+
+				it( "adds nothing for a folder that is not there", function() {
+					expect( library.loadFolder( dir & "/nothing" ) ).toBeEmpty();
+					expect( library.loadFolder( "" ) ).toBeEmpty();
 				} );
 
 			} );
