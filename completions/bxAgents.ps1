@@ -201,6 +201,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'app'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'channels'; Value = $true; Choices = @('web', 'api', 'telegram', 'slack', 'discord', 'whatsapp-cloud', 'teams', 'twilio', 'github', 'email', 'signal'); Dir = $false }
 			@{ Name = 'class'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'connectors'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'deploy'; Value = $true; Choices = @('docker', 'digitalocean', 'ssh', 'sftp', 'ftp', 'local'); Dir = $false }
 			@{ Name = 'description'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'destination'; Value = $true; Choices = @(); Dir = $true }

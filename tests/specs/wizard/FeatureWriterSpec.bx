@@ -133,6 +133,23 @@ class extends="testbox.system.BaseSpec" {
 				} ).toThrow( type = "BxAgents.FeaturesNeedYaml" );
 			} );
 
+			it( "writes the connectors a person left out, and none, and the loader and validator accept both", function() {
+				var some = parent & "/connectors-some";
+				scaffolder.scaffold( some, "some", "claude/claude-sonnet-5", "x", "minimal", false, { connectors : { exclude : [ "stripe", "cloudflare" ] } } );
+				var parsed = new bxagents.models.build.AgentYamlLoader().load( some & "/Agent.yaml" );
+
+				expect( parsed.config.connectors ).toBe( { exclude : [ "stripe", "cloudflare" ] } );
+				expect( bxagents.models.connectors.ConnectorSettings::problems( parsed.config ) ).toBeEmpty();
+				expect( bxagents.models.connectors.ConnectorSettings::resolve( parsed.config ).available.map( c => c.id ) ).notToInclude( "stripe" );
+
+				var off = parent & "/connectors-none";
+				scaffolder.scaffold( off, "off", "claude/claude-sonnet-5", "x", "minimal", false, { connectors : "none" } );
+				var none = new bxagents.models.build.AgentYamlLoader().load( off & "/Agent.yaml" );
+
+				expect( none.config.connectors ).toBe( "none" );
+				expect( bxagents.models.connectors.ConnectorSettings::resolve( none.config ).available ).toBeEmpty();
+			} );
+
 			it( "scaffolds a project with every feature on and the validator accepts it", function() {
 				var dir = parent & "/full";
 				scaffolder.scaffold( dir, "full", "claude/claude-sonnet-5", "does everything", "minimal", false, {

@@ -18,7 +18,7 @@ class extends="testbox.system.BaseSpec" {
 					[ "time", "search", "files" ], "brave",
 					"pick", [ "readFile", "writeFile" ], [ "tmp", "custom" ], "/data/docs", "",
 					"file",
-					[ "github" ], "ok",
+					[ "stripe" ],
 					[ "web", "telegram" ],
 					"users", "ada", "pw", "pw", "Ada Lovelace", false,
 					"flag",
@@ -39,7 +39,8 @@ class extends="testbox.system.BaseSpec" {
 				expect( plan.files.tools ).toBe( [ "readFile", "writeFile" ] );
 				expect( plan.files.folders ).toBe( [ "tmp", "/data/docs" ] );
 				expect( plan.memory ).toBe( "file" );
-				expect( plan.mcp ).toBe( [ "github" ] );
+				expect( plan.mcp ).toBe( [] );
+				expect( plan.connectors ).toBe( { mode : "exclude", ids : [ "stripe" ] } );
 				expect( plan.channels ).toBe( [ "web", "telegram" ] );
 				expect( plan.web.auth ).toBe( "users" );
 				expect( plan.web.users ).toHaveLength( 1 );
@@ -187,10 +188,27 @@ class extends="testbox.system.BaseSpec" {
 				expect( prompter.asked().filter( q => q.title == "Which folders may they use?" ) ).toHaveLength( 2 );
 			} );
 
-			it( "offers the MCP servers that work today", function() {
+			it( "writes the connectors that were left out into the features, and offers none when every one was left out", function() {
+				var some = wizardFor( [ "bot", "", "minimal", "openai", "", false, [], "cache", [ "stripe", "cloudflare" ], [], "off", "bars", [ "agent", "folder", "user", "clock" ], [ "ctx", "profile" ], "none", "create" ] );
+				var plan = some.run().plan;
+				var planner = new bxagents.models.wizard.ProjectPlan( new bxagents.models.wizard.WizardCatalog() );
+
+				expect( plan.connectors ).toBe( { mode : "exclude", ids : [ "stripe", "cloudflare" ] } );
+				expect( planner.toFeatures( plan ).connectors ).toBe( { exclude : [ "stripe", "cloudflare" ] } );
+				expect( planner.toCommand( plan ) ).toInclude( "--connectors=exclude:stripe,cloudflare" );
+
+				var all = new bxagents.models.wizard.WizardCatalog().mcpServers().map( e => e.id );
+				var none = wizardFor( [ "bot", "", "minimal", "openai", "", false, [], "cache", all, [], "off", "bars", [ "agent", "folder", "user", "clock" ], [ "ctx", "profile" ], "none", "create" ] );
+				expect( planner.toFeatures( none.run().plan ).connectors ).toBe( "none" );
+			} );
+
+			it( "offers every connector and asks which to leave out", function() {
 				var wizard = wizardFor( [ "bot", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "bars", [ "agent", "folder", "user", "clock" ], [ "ctx", "profile" ], "none", "create" ] );
-				wizard.run();
-				var mcp = prompter.asked().filter( q => q.title == "Connect any MCP servers?" )[ 1 ];
+				var plan = wizard.run().plan;
+				var mcp = prompter.asked().filter( q => q.title == "Leave out any connectors?" )[ 1 ];
+
+				// nothing left out: every connector is offered, which is what no `connectors:` key means
+				expect( plan.connectors.mode ).toBe( "all" );
 
 				expect( mcp.choices.map( c => c.value ) ).toInclude( "github" );
 				expect( mcp.choices.map( c => c.value ) ).toInclude( "git" );

@@ -180,6 +180,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb new' -l app -x
     complete -c $cmd -n '__bxagents_using_verb new' -l channels -x -a 'web api telegram slack discord whatsapp-cloud teams twilio github email signal'
     complete -c $cmd -n '__bxagents_using_verb new' -l class
+    complete -c $cmd -n '__bxagents_using_verb new' -l connectors -x
     complete -c $cmd -n '__bxagents_using_verb new' -l deploy -x -a 'docker digitalocean ssh sftp ftp local'
     complete -c $cmd -n '__bxagents_using_verb new' -l description -x
     complete -c $cmd -n '__bxagents_using_verb new' -l destination -x -a '(__fish_complete_directories)'
