@@ -24,7 +24,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -a 'build' -d 'Build a project into a generated app'
     complete -c $cmd -n __bxagents_needs_verb -a 'chat' -d 'Interactive REPL chat with a built agent'
     complete -c $cmd -n __bxagents_needs_verb -a 'clean' -d 'Remove a project\'s .build/ and dist/ output'
-    complete -c $cmd -n __bxagents_needs_verb -a 'connect' -d 'Sign in to the MCP servers of a project that ask each person to sign in: connect [name]'
+    complete -c $cmd -n __bxagents_needs_verb -a 'connect' -d 'Connect the connectors and sign in to the MCP servers of a project: connect [id]...'
     complete -c $cmd -n __bxagents_needs_verb -a 'connectors' -d 'The catalog of known connectors that ships with BX Agents: connectors [list|show...'
     complete -c $cmd -n __bxagents_needs_verb -a 'data' -d 'Where the agent keeps everything: the data home, the size of each part and the volumes it...'
     complete -c $cmd -n __bxagents_needs_verb -a 'deploy' -d 'Deploy to a target'
@@ -129,6 +129,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb connect' -l port -x
     complete -c $cmd -n '__bxagents_using_verb connect' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb connect' -l timeout -x
+    complete -c $cmd -n '__bxagents_using_verb connect' -l token-env -x
     complete -c $cmd -n '__bxagents_using_verb connect' -l user -x
     complete -c $cmd -n '__bxagents_using_verb connect' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb connectors' -l dir -x

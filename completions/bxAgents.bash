@@ -89,7 +89,7 @@ _bxagents_complete() {
 			build) flags="--environment= --generatorVersion= --projectRoot= --verbose" ;;
 			chat) flags="--agent= --api-path= --connect= --continue --no-tui --port= --projectRoot= --record --server --session= --token= --user=" ;;
 			clean) flags="--force --projectRoot=" ;;
-			connect) flags="--port= --projectRoot= --timeout= --user=" ;;
+			connect) flags="--port= --projectRoot= --timeout= --token-env= --user=" ;;
 			connectors) flags="--dir= --json --projectRoot=" ;;
 			data) flags="--projectRoot=" ;;
 			deploy) flags="--destination= --name= --projectRoot= --target=" ;;

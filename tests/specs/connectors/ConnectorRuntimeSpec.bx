@@ -133,6 +133,15 @@ class extends="testbox.system.BaseSpec" {
 				expect( started ).toBe( [ "uvx", "closed" ] );
 			} );
 
+			it( "says the tools of a switched on program are listed by the running agent, not through the sign in side", function() {
+				settings.set( "*", "git", "enabled", { on : true, by : "ada", at : "now" } );
+				// a runtime that can list a sign in connector, as the real one can: a program must still not be asked of it
+				var withSignIn = new bxagents.models.connectors.ConnectorRuntime( agent, service, clients, { settings : settings, vault : vault, oauthTools : id => [ { name : "from_sign_in" } ] } );
+				var listing = new bxagents.models.connectors.ConnectorTools( service, settings, clients, { lister : ( id, person ) => withSignIn.toolsOf( id ), cacheSeconds : 0 } );
+
+				expect( () => listing.tools( "git", "ada" ) ).toThrow( "BxAgents.NotConnected" );
+			} );
+
 			it( "says a connector is not attached when its tools are asked for before", function() {
 				expect( () => runtime.toolsOf( "git" ) ).toThrow( "BxAgents.NotConnected" );
 			} );
