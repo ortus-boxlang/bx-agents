@@ -154,7 +154,8 @@ class {
 		if ( variables.programClients.keyExists( arguments.id ) ) {
 			return listed( variables.programClients[ arguments.id ].listTools(), arguments.id )
 		}
-		if ( !isSimpleValue( variables.oauthTools ) ) {
+		// a local program is listed by the client that started it; only a sign in connector is listed through the sign in side
+		if ( !isSimpleValue( variables.oauthTools ) && variables.service.entryOf( arguments.id ).transport == "http" ) {
 			return variables.oauthTools( arguments.id )
 		}
 		throw( type = "BxAgents.NotConnected", message = "The tools of [#arguments.id#] are listed by the running agent, where the program is started. Open the chat or the connectors page of the web UI." )

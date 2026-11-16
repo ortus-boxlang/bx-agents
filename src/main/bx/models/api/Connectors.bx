@@ -157,10 +157,14 @@ class {
 			case "BxAgents.UnknownSetting":
 				return new Outcome( ok = false, code = "bad_request", reason = arguments.error.message )
 		}
+		if ( arguments.error.type == "BxAgents.UnknownConnection" ) {
+			return new Outcome( ok = false, code = "not_found", reason = arguments.error.message )
+		}
 		if ( left( arguments.error.type, 8 ) == "MCPOAuth" || arguments.error.type == "MCPAuthorizationRequired" ) {
 			return new Outcome( ok = false, code = "bad_request", reason = arguments.error.message )
 		}
-		rethrow
+		// this runs after the catch that called it, so there is nothing to rethrow: throw the same error again
+		throw( object = arguments.error )
 	}
 
 }
