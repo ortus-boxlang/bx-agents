@@ -35,38 +35,38 @@ class {
 	/**
 	 * @id The connector
 	 * @person The person
-	 * @request { method : token | oauth | program, token, options : { key : value }, confirm : true, admin : whether the caller is an admin }
+	 * @asked { method : token | oauth | program, token, options : { key : value }, confirm : true, admin : whether the caller is an admin }
 	 *
 	 * @return { connected : whether they are in now, authorizationUrl : for a sign in, row }
 	 */
-	struct function connect( required string id, required string person, struct request = {} ) {
+	struct function connect( required string id, required string person, struct asked = {} ) {
 		var row = rowOf( arguments.id, arguments.person )
-		var method = lCase( arguments.request.method ?: "" )
+		var method = lCase( arguments.asked.method ?: "" )
 		var ways = row.transport == "stdio" ? [ "program" ] : row.ways.map( w => w == "bearer" ? "token" : w )
 		if ( !ways.contains( method ) ) {
 			throw( type = "BxAgents.BadConnectRequest", message = "#row.name# can be connected with: #ways.toList( ', ' )#. Say which with method." )
 		}
-		if ( [ "medium", "high" ].contains( row.risk ) && ( arguments.request.confirm ?: false ) != true ) {
+		if ( [ "medium", "high" ].contains( row.risk ) && ( arguments.asked.confirm ?: false ) != true ) {
 			throw( type = "BxAgents.ConfirmationRequired", message = "#row.name# is #row.risk# risk. #row.riskNote# Connect it again with confirm set to true once you have read this." )
 		}
 		switch ( method ) {
 			case "token":
-				return connectToken( row, arguments.person, arguments.request )
+				return connectToken( row, arguments.person, arguments.asked )
 			case "oauth":
-				return connectOAuth( row, arguments.person, arguments.request )
+				return connectOAuth( row, arguments.person, arguments.asked )
 			default:
-				return switchOn( row, arguments.person, arguments.request )
+				return switchOn( row, arguments.person, arguments.asked )
 		}
 	}
 
 	/**
 	 * @id The connector
 	 * @person The person
-	 * @request { admin : whether the caller is an admin }
+	 * @asked { admin : whether the caller is an admin }
 	 *
 	 * @return { connected : false, row }
 	 */
-	struct function disconnect( required string id, required string person, struct request = {} ) {
+	struct function disconnect( required string id, required string person, struct asked = {} ) {
 		var row = rowOf( arguments.id, arguments.person )
 		if ( !len( row.connectedWith ) ) {
 			throw( type = "BxAgents.NotConnected", message = "#row.name# is not connected, so there is nothing to disconnect." )
@@ -79,7 +79,7 @@ class {
 			variables.oauth.disconnect( arguments.id, arguments.person )
 			variables.settings.remove( arguments.person, arguments.id, "status" )
 		} else {
-			adminOnly( row, arguments.request, "switch off" )
+			adminOnly( row, arguments.asked, "switch off" )
 			variables.settings.remove( "*", arguments.id, "enabled" )
 		}
 		return { connected : false, row : variables.service.get( arguments.id, arguments.person ) }
@@ -91,17 +91,17 @@ class {
 	 * @id The connector
 	 * @person The person
 	 * @options { key : value }
-	 * @request { admin : whether the caller is an admin }
+	 * @asked { admin : whether the caller is an admin }
 	 *
 	 * @return { row }
 	 */
-	struct function setOptions( required string id, required string person, required struct options, struct request = {} ) {
+	struct function setOptions( required string id, required string person, required struct options, struct asked = {} ) {
 		var row = rowOf( arguments.id, arguments.person )
 		if ( !row.options.len() ) {
 			throw( type = "BxAgents.BadConnectRequest", message = "#row.name# has no options." )
 		}
 		if ( row.transport == "stdio" ) {
-			adminOnly( row, arguments.request, "change the options of" )
+			adminOnly( row, arguments.asked, "change the options of" )
 			variables.settings.set( "*", arguments.id, "options", checkedOptions( row, arguments.options ) )
 		} else if ( row.ways.contains( "oauth" ) && !row.ways.contains( "bearer" ) ) {
 			throw( type = "BxAgents.BadConnectRequest", message = optionsForTokenOnly( row ) )
@@ -130,19 +130,19 @@ class {
 	/**
 	 * @row The connector's row
 	 * @person The person
-	 * @request The connect request
+	 * @asked The connect request
 	 *
 	 * @return { connected : true, row }
 	 */
-	private struct function connectToken( required struct row, required string person, required struct request ) {
-		var token = trim( toString( arguments.request.token ?: "" ) )
+	private struct function connectToken( required struct row, required string person, required struct asked ) {
+		var token = trim( toString( arguments.asked.token ?: "" ) )
 		if ( !len( token ) ) {
 			throw( type = "BxAgents.BadConnectRequest", message = "#row.name# needs a token. #tokenHelp( row )#" )
 		}
 		if ( reFind( "\s", token ) || len( token ) > 4096 ) {
 			throw( type = "BxAgents.BadConnectRequest", message = "That does not look like a token: it has spaces or line breaks in it, or is far too long." )
 		}
-		var values = checkedOptions( row, arguments.request.options ?: {} )
+		var values = checkedOptions( row, arguments.asked.options ?: {} )
 		var entry = variables.service.entryOf( row.id )
 		var tried = variables.clients.probe( ConnectorEndpoint::of( entry, values, "bearer" ), token )
 		if ( tried.refused ) {
@@ -170,12 +170,12 @@ class {
 	/**
 	 * @row The connector's row
 	 * @person The person
-	 * @request The connect request
+	 * @asked The connect request
 	 *
 	 * @return { connected : false, authorizationUrl, row }
 	 */
-	private struct function connectOAuth( required struct row, required string person, required struct request ) {
-		if ( ( arguments.request.options ?: {} ).count() ) {
+	private struct function connectOAuth( required struct row, required string person, required struct asked ) {
+		if ( ( arguments.asked.options ?: {} ).count() ) {
 			throw( type = "BxAgents.BadConnectRequest", message = optionsForTokenOnly( arguments.row ) )
 		}
 		if ( isSimpleValue( variables.oauth ) ) {
@@ -188,17 +188,17 @@ class {
 	/**
 	 * @row The connector's row
 	 * @person The person
-	 * @request The connect request
+	 * @asked The connect request
 	 *
 	 * @return { connected : true, row }
 	 */
-	private struct function switchOn( required struct row, required string person, required struct request ) {
-		adminOnly( arguments.row, arguments.request, "switch on" )
+	private struct function switchOn( required struct row, required string person, required struct asked ) {
+		adminOnly( arguments.row, arguments.asked, "switch on" )
 		if ( !arguments.row.programFound ) {
 			throw( type = "BxAgents.ProgramMissing", message = "#arguments.row.name# needs #arguments.row.program# on the PATH of the machine the agent runs on, and it is not there. #( variables.service.entryOf( arguments.row.id ).requires.help ?: '' )#" )
 		}
 		if ( arguments.row.options.len() ) {
-			variables.settings.set( "*", arguments.row.id, "options", checkedOptions( arguments.row, arguments.request.options ?: {} ) )
+			variables.settings.set( "*", arguments.row.id, "options", checkedOptions( arguments.row, arguments.asked.options ?: {} ) )
 		}
 		variables.settings.set( "*", arguments.row.id, "enabled", { on : true, by : arguments.person, at : dateTimeFormat( now(), "yyyy-MM-dd HH:mm:ss" ) } )
 		return { connected : true, row : variables.service.get( arguments.row.id, arguments.person ) }
@@ -208,13 +208,13 @@ class {
 	 * A local program is one process for everyone, so on a served agent one person's choice would decide for all of them.
 	 *
 	 * @row The connector's row
-	 * @request The request, for admin
+	 * @asked The request, for admin
 	 * @what What is being done, for the message
 	 *
 	 * @throws BxAgents.Forbidden when the agent is served and the caller is not an admin
 	 */
-	private void function adminOnly( required struct row, required struct request, required string what ) {
-		if ( variables.served && ( arguments.request.admin ?: false ) != true ) {
+	private void function adminOnly( required struct row, required struct asked, required string what ) {
+		if ( variables.served && ( arguments.asked.admin ?: false ) != true ) {
 			throw( type = "BxAgents.Forbidden", message = "Only an admin can #arguments.what# #arguments.row.name# for this agent: it is one program that everyone who uses the agent shares." )
 		}
 	}
