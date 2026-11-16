@@ -141,6 +141,22 @@ class extends="testbox.system.BaseSpec" {
 				expect( offeredTo( "grace", held ) ).toBe( held );
 			} );
 
+			it( "offers no connector tool when it cannot read who has connected, and still offers the agent's own", function() {
+				var broken = { list : person => { throw( type = "Spec.Broken", message = "no database" ); }, ids : () => [ "github" ] };
+				var failing = new bxagents.models.connectors.ConnectorToolMiddleware( broken, tools );
+				var packet = { tools : schemas( [ "github__search_repositories", "answer_question" ] ) };
+				failing.beforeLLMCall( { chatRequest : requestFor( "ada" ), dataPacket : packet } );
+
+				expect( packet.tools.map( t => t.function.name ) ).toBe( [ "answer_question" ] );
+			} );
+
+			it( "never fails the building of an agent when the connectors cannot be set up", function() {
+				var store = { datasource : () => { throw( type = "Spec.Broken", message = "no datasource" ); } };
+				var made = new bxagents.models.connectors.ConnectorWiring().attach( new tests.specs.api.FakeAgent(), {}, { store : store } );
+
+				expect( isObject( made ) ).toBeTrue();
+			} );
+
 			it( "understands the Claude tool format as well", function() {
 				var packet = { tools : [ { name : "github__x", description : "", input_schema : {} }, { name : "keep", description : "", input_schema : {} } ] };
 				middleware.beforeLLMCall( { chatRequest : requestFor( "linus" ), dataPacket : packet } );

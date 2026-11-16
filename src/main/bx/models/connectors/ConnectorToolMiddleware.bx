@@ -38,8 +38,16 @@ class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 		}
 		var who = toString( arguments.context.chatRequest.getUserId() ?: "" )
 		var open = {}
-		for ( var row in variables.service.list( who ) ) {
-			open[ row.id ] = [ "connected", "needs_attention" ].contains( row.state )
+		try {
+			for ( var row in variables.service.list( who ) ) {
+				open[ row.id ] = [ "connected", "needs_attention" ].contains( row.state )
+			}
+		} catch ( any e ) {
+			// when what a person has connected cannot be read, none of the connector tools are offered
+			open = {}
+			for ( var id in variables.service.ids() ) {
+				open[ id ] = false
+			}
 		}
 		packet.tools = packet.tools.map( schema => keepAllowed( schema, who, open ) ).filter( schema => !isNull( schema ) )
 		return AiMiddlewareResult.continue()

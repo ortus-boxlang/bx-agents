@@ -48,6 +48,21 @@ class {
 	}
 
 	/**
+	 * The chat store the vault works on: the app's own database as an inline datasource, so it needs no datasource to be
+	 * registered. Other parts that keep rows in the same database (the connectors) use it.
+	 *
+	 * @databaseFile The SQLite file. Leave blank inside the built app
+	 *
+	 * @return A ChatStore, the same one for the same file
+	 */
+	any function storeFor( string databaseFile = "" ) {
+		var explicit = len( arguments.databaseFile ) ? arguments.databaseFile : ( variables.pinned ?: "" )
+		var file = ( len( explicit ) ? explicit : appDatabaseFile() ).replace( "\", "/", "all" )
+		service( file )
+		return static.stores[ file ]
+	}
+
+	/**
 	 * The OAuth token store of the same database: sign-ins of MCP servers, sealed with the vault key.
 	 *
 	 * @databaseFile The SQLite file. Leave blank inside the built app

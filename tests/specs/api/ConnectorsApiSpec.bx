@@ -32,7 +32,8 @@ class extends="testbox.system.BaseSpec" {
 						entry.url = fake.mcpUrl();
 					}
 				}
-				variables.service = new bxagents.models.api.AgentService( new FakeAgent(), store, nullValue(), { connectors : policy } );
+				variables.agent = new FakeAgent();
+				variables.service = new bxagents.models.api.AgentService( agent, store, nullValue(), { connectors : policy } );
 				variables.ada = new bxagents.models.api.Caller( id = "ada", source = "web" );
 				variables.bob = new bxagents.models.api.Caller( id = "bob", source = "web" );
 			} );
@@ -126,7 +127,7 @@ class extends="testbox.system.BaseSpec" {
 				service.connectors( ada ).connect( { id : "github", method : "token", token : "tok-ada", confirm : true } );
 				service.connectors( bob ).connect( { id : "github", method : "token", token : "tok-bob", confirm : true } );
 
-				expect( new bxagents.models.connectors.ConnectorWiring().stackOf( new FakeAgent(), {} ).runtime.attached() ).toBe( [ "github" ] );
+				expect( new bxagents.models.connectors.ConnectorWiring().stackOf( variables.agent, {} ).runtime.attached() ).toBe( [ "github" ] );
 			} );
 
 		} );
