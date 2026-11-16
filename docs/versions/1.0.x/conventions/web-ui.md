@@ -103,6 +103,10 @@ What the agent can use, in three tabs. **Tools** lists every tool grouped by whe
 
 ![A skill open in the reader](../assets/webui/webui-registry-skills.png)
 
+### Connectors
+
+The [connectors](connectors.md) the agent offers, as cards, with tabs for **All**, **Connected**, **Needs attention** and **In Agent.yaml** (the services written under `mcpServers`). **Connect** asks for a token or starts a sign in, and shows the risk first for medium and high risk connectors. **Tools** opens a drawer to turn single tools on or off. A banner warns when too many tools are on. Everyone connects their own account; only an admin can connect a local program such as Git.
+
 ### Memory
 
 Three things the agent remembers. **About you** holds your notes. **About the agent** holds the shared notes the agent keeps about its own work, the same for everyone who uses it. **Conversation memory** shows what the memory holds for conversations and clears it, for one conversation or for all of them (all is for admins), keeping the conversations themselves. Each note list shows how full it is and about how many tokens it adds to every conversation.

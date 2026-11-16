@@ -893,18 +893,23 @@ bxAgents restore FILE [--home=DIR] [--force]
 
 ### `connect`
 
-Sign in to the services of a project that ask each person to sign in (an `mcpServers` entry with an `oauth` key). See [connect](conventions/connect.md).
+Connect the built-in [connectors](conventions/connectors.md) (GitHub, Stripe, Notion, Atlassian, Cloudflare, Supabase, Git) and sign in to the services of a project that ask each person to sign in (an `mcpServers` entry with an `oauth` key, see [connect](conventions/connect.md)).
 
 ```bash
 bxAgents connect
 bxAgents connect mail [--port=8765] [--no-open] [--timeout=300]
 bxAgents connect mail --remove
 bxAgents connect [--user=NAME] [--json]
+bxAgents connect github --token-env=GITHUB_TOKEN --confirm   # a script: no hidden box
+bxAgents connect github --stdin --confirm                     # token piped in
+bxAgents connect github tools off delete_file                 # also: tools on NAME, tools off all, tools readonly
+bxAgents connect github off                                   # disconnect
 ```
 
 ![bxAgents connect mail: the address, the wait, then connected](assets/tui/connect-cli.png)
 
-- Without a name it lists the services and whether you are connected (`--json` for a script).
+- Without a name it lists the connectors and services and whether you are connected (`--json` for a script).
+- A connector that takes a token asks for it in a hidden box. Medium and high risk connectors show what they can do and need a yes, or `--confirm`. The token is checked with the service before it is sealed.
 - With a name it prints an address and opens your browser, waits for the redirect on `127.0.0.1` (a free port, or `--port`), and finishes the sign in. `--no-open` only prints. `--timeout` is the seconds to wait, 300 by default.
 - `--remove` forgets your sign in. `--user` is whose: `local` by default, the one user an open server has.
 - Tokens are sealed in the project's chat database. Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.

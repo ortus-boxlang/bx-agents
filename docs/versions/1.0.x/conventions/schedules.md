@@ -62,6 +62,16 @@ Everything is reached when a task fires, not when `configure()` runs, so a sched
 
 If a class names a parent already (`class extends="my.BaseScheduler" {`), the build leaves it alone. Make your parent extend `bxagents.Scheduler` to keep the methods above.
 
+## Running as a person
+
+A task can run the agent as a person, so it uses that person's [connectors](connectors.md) and no one else's:
+
+```javascript
+task( "pr-digest" ).cron( "0 8 * * MON" ).call( () => runAs( "ada" ).run( "summarize my open pull requests" ) )
+```
+
+`runAs( person )` accepts the local user, an account of the web app, or someone who has talked to the agent. A name the agent does not know throws `BxAgents.UnknownPerson`, so a typo never runs as nobody.
+
 ## Cron
 
 `.cron( "..." )` is BoxLang's own and takes **5 fields** (`minute hour day-of-month month day-of-week`) or **6 fields** with seconds in front:

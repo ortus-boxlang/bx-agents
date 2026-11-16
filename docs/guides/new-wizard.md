@@ -104,6 +104,10 @@ mcpServers:
 
 Picking a high-risk server shows what it can do before you continue. **Git** runs as a program on your machine (`uvx mcp-server-git`), so it needs [uv](https://docs.astral.sh/uv/) installed where the agent runs, and it works in the folder you start the agent from. The wizard writes it as a `command` entry; see [programs as MCP servers](../conventions/mcp.md#servers-that-run-as-a-program).
 
+## Connectors
+
+Every [connector](../conventions/connectors.md) is offered by default. The wizard asks **Leave out any connectors?** and writes a `connectors:` key only when you leave some out (or all). Nothing is connected by creating the project.
+
 ## After it is created
 
 ![The final screen after the project is created](../assets/tui/wizard-done.png)
@@ -131,6 +135,7 @@ bxAgents new support-bot --name=support-bot --model=claude --with=time,fetch,sea
 | `--max-tokens`, `--timeout` | A positive whole number (tokens, seconds) |
 | `--memory` | `cache` or `file` |
 | `--mcp` | MCP server ids (a list) |
+| `--connectors` | `all`, `none`, `only:a,b` or `exclude:a,b` |
 | `--channels` | `web`, `api`, or channel ids (a list) |
 | `--web-auth` | `open` or `key`. Users need passwords, so they come from the wizard or from `gateways/webui.bx` |
 | `--guard` | `off`, `flag` or `block` |
