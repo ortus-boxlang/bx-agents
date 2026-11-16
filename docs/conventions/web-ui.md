@@ -2,7 +2,7 @@
 title: The web app
 icon: phosphor-duotone:chat-circle-text
 summary: The generated web app - thirteen pages, streaming chat, routines, vault, logs and backups.
-description: The generated web app: a left menu and thirteen pages (chat, conversations, routines, registry, memory, vault, settings, agent, gateways, logs, access, data and backups), streaming, approvals and a SQLite store.
+description: The generated web app: a left menu and thirteen pages (chat, conversations, routines, registry, connectors, memory, vault, settings, agent, gateways, logs, access, data and backups), streaming, approvals and a SQLite store.
 tags: [conventions, gateways, web-ui]
 ---
 
