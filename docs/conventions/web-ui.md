@@ -1,14 +1,14 @@
 ---
 title: The web app
 icon: phosphor-duotone:chat-circle-text
-summary: The generated web app - twelve pages, streaming chat, routines, vault, logs and backups.
-description: The generated web app: a left menu and twelve pages (chat, conversations, routines, registry, memory, vault, settings, agent, gateways, logs, access, data and backups), streaming, approvals and a SQLite store.
+summary: The generated web app - thirteen pages, streaming chat, routines, vault, logs and backups.
+description: The generated web app: a left menu and thirteen pages (chat, conversations, routines, registry, memory, vault, settings, agent, gateways, logs, access, data and backups), streaming, approvals and a SQLite store.
 tags: [conventions, gateways, web-ui]
 ---
 
 # The web app
 
-A `gateways/*.bx` entry with `exposes: "webui"` ships a complete web app for the agent: a left menu with [twelve pages](#the-pages), a chat with streaming, reasoning, tool calls and human-in-the-loop approvals, per-visitor theming, and a real SQLite store behind it.
+A `gateways/*.bx` entry with `exposes: "webui"` ships a complete web app for the agent: a left menu with [thirteen pages](#the-pages), a chat with streaming, reasoning, tool calls and human-in-the-loop approvals, per-visitor theming, and a real SQLite store behind it.
 
 It lives under [gateways/](gateways/index.md) because that is where exposures are declared, but it is a subsystem in its own right, which is why it has its own page.
 
@@ -66,7 +66,7 @@ The page is one generated file with a **left menu** and a **header**. The menu h
 
 | Group | Pages | Who sees it |
 |---|---|---|
-| Main | Chat, Conversations, Routines, Registry, Memory, Vault, Settings | everyone who can sign in |
+| Main | Chat, Conversations, Routines, Registry, Connectors, Memory, Vault, Settings | everyone who can sign in |
 | Admin | Agent, Gateways, Logs, Access, Data and backups | [admins](#admins-and-members) only |
 
 A member never sees the Admin group, and the server refuses the routes behind it anyway. The menu folds to icons (the choice is remembered in the browser), the **Logs** item carries a red count of the sources that logged an error since the app started, and nothing that the old single page offered was removed: the header, the Settings gear and the [extension slots](extensions.md#the-web-page-slots-and-web) are all still there.
@@ -106,6 +106,8 @@ What the agent can use, in three tabs. **Tools** lists every tool grouped by whe
 ### Connectors
 
 The [connectors](connectors.md) the agent offers, as cards, with tabs for **All**, **Connected**, **Needs attention** and **In Agent.yaml** (the services written under `mcpServers`). **Connect** asks for a token or starts a sign in, and shows the risk first for medium and high risk connectors. **Tools** opens a drawer to turn single tools on or off. A banner warns when too many tools are on. Everyone connects their own account; only an admin can connect a local program such as Git.
+
+![The Connectors page](../assets/webui/connectors.png)
 
 ### Memory
 

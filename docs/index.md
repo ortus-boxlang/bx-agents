@@ -3,7 +3,7 @@ title: BxAgents
 order: 1
 icon: phosphor-duotone:robot
 summary: Build AI agents by convention - a conventions-based framework for AI agents powered by BoxLang AI.
-description: Build AI agents by convention. A conventions-based framework for AI agents powered by BoxLang AI, with a twelve-page web app, an API, gateways, routines, a vault and backups built from your files.
+description: Build AI agents by convention. A conventions-based framework for AI agents powered by BoxLang AI, with a thirteen-page web app, an API, gateways, routines, a vault and backups built from your files.
 tags: [overview]
 toc: false
 ogImage: assets/og-home.png
@@ -22,7 +22,7 @@ layout: home
 built on [ColdBox](https://www.coldbox.org) and
 [BX AI](https://ai.boxlang.io). You describe an agent
 with files and folders, not a framework's API surface, and `bxAgents build` assembles a
-real, runnable ColdBox application out of it: a web app with twelve pages, an API with an OpenAPI
+real, runnable ColdBox application out of it: a web app with thirteen pages, an API with an OpenAPI
 document, twelve kinds of gateway, routines, a vault, backups, and tests that need no API key.
 
 ![A terminal session: bxAgents new scaffolds a project, bxAgents build assembles a ColdBox app, bxAgents inspect prints the agent, model and environment, and bxAgents serve starts it on http://127.0.0.1:8080](assets/cli-quickstart.svg)
@@ -42,7 +42,7 @@ document, twelve kinds of gateway, routines, a vault, backups, and tests that ne
 | | |
 |---|---|
 | **Build** | [Folders are the API](conventions/agent-yaml.md). A [wizard](guides/new-wizard.md) and eight starters. [Sub-agents](conventions/subagents.md) you can also talk to directly. [Skills](conventions/skills.md) from a registry, or saved by the agent with your approval. Tests with no tokens. |
-| **Run** | A [web app](conventions/web-ui.md) with a left menu and twelve pages. A [terminal chat](guides/terminal-ui.md) with 33 slash commands. [Routines](conventions/routines.md) people make by asking. [Schedules](conventions/schedules.md), approvals, a packaged `.bxa` and six deploy targets. |
+| **Run** | A [web app](conventions/web-ui.md) with a left menu and thirteen pages. A [terminal chat](guides/terminal-ui.md) with 33 slash commands. [Routines](conventions/routines.md) people make by asking. [Schedules](conventions/schedules.md), approvals, a packaged `.bxa` and six deploy targets. |
 | **Remember** | Memory in the chat database for every agent, per person, the same in the terminal, the web app and the API. Per-person notes and shared notes about the agent's work. A [data home](conventions/data.md) with volumes, and backups with restore. |
 | **Connect** | [Twelve gateway types](conventions/gateways/index.md), and routines that deliver to them. An [API](guides/agent-api.md) with 76 routes, OpenAPI and a BoxLang client. [MCP](conventions/mcp.md) in both directions, with [per-person sign-in](conventions/connect.md) and seven built-in [connectors](conventions/connectors.md). A [vault](conventions/vault.md) with an activity log. |
 | **Operate** | Admin and member roles, tokens and people, `allowedIPs` and a rate limit. Five [logs](conventions/logs.md). The agent tree, its files and its token usage. Gateway state with a reconnect button. `bxAgents doctor`. |
@@ -90,7 +90,7 @@ Telegram, Slack, Discord, Email, WhatsApp, Teams, Twilio, GitHub and Signal, plu
 :::
 ::: card title="A web app, generated" icon="phosphor-duotone:globe-hemisphere-west" href="conventions/web-ui.md"
 Ask for it in a `gateways/` entry and the build produces a themeable app with a left menu and
-twelve pages: chat, conversations, routines, registry, memory, vault, settings, and for admins the agent,
+thirteen pages: chat, conversations, routines, registry, connectors, memory, vault, settings, and for admins the agent,
 gateways, logs, access and data.
 :::
 ::: card title="A full-screen terminal chat" icon="phosphor-duotone:terminal-window" href="guides/terminal-ui.md"
@@ -159,7 +159,7 @@ publish your own.
 
 ## A web app you didn't have to build
 
-Set `exposes: "webui"` on a gateway and the build emits the whole app: a left menu with twelve pages,
+Set `exposes: "webui"` on a gateway and the build emits the whole app: a left menu with thirteen pages,
 streaming chat with a Talk to menu for sub-agents, conversations you can filter, routines and their reports,
 a registry of tools, skills and volumes, memory and notes, a vault, light and dark theming and a phone layout.
 Admins also get Agent, Gateways, Logs, Access and Data and backups. It is wired to your agent through the same

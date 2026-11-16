@@ -14,6 +14,8 @@ A **connector** is a ready-made connection to a service that has an MCP server. 
 - **Sealed.** Tokens are stored in the [vault](vault.md), locked to the host of the service. The model never sees one.
 - **Your own servers still work.** The services you write under `mcpServers` in [Agent.yaml](agent-yaml.md) are separate. An `mcpServers` entry with the same name as a connector replaces that connector, and the build warns.
 
+![The Connectors page, with Git connected](../assets/webui/connectors.png)
+
 ## States
 
 | State | Meaning |
