@@ -326,3 +326,17 @@ Errors use the existing `Outcome` codes (`not_found`, `bad_request`, `forbidden`
 **5.6 (done).** One console, `ConnectorsConsole`, for the chat's `/connect` and `bxAgents connect`: the list with each person's state (the services written in Agent.yaml below it), connecting (the risk and a yes, the connector's options, then the token in a hidden box), `NAME off`, `NAME tools` (by name, with `tools off NAME`, `tools on NAME`, `tools off all`, `tools readonly`) and `NAME options key=value`. A token is never an argument: a hidden box, `--stdin`, or `--token-env=NAME` at a terminal (the chat refuses `--token-env` outside the terminal, where it would read the server's environment for a stranger). The local source asks the same service as the web routes (`api.Connectors`), the remote source asks the routes over HTTP; the CLI runs on a stand-in agent, so a connection is kept and the real agent attaches it when it starts (a program's tools are listed by the running agent). A sign in at a terminal is caught on 127.0.0.1 and waited for. The old `bxAgents connect` and `/connect` for the Agent.yaml services keep working by name. Docs come with task 8.
 
 **5.7 (done, smaller than planned).** On a chat platform `/connect` lists the connectors and your state; a sign in connector gives a link that is yours alone and works once (after `--confirm` for a connector that can change things); a token connector is never asked for in the chat: the bot says so and points to the Connectors page of the web app (`BXAGENTS_PUBLIC_URL` plus the web UI path, which the build writes into the generated agent factory as `webPath`) and says a token connected there belongs to the web account, not the chat identity; a local program is left to an admin at the web app or the terminal. Decision 5 (the pasted secret catcher) was dropped: a token pasted anyway goes to the model and the stored conversation like any message, so the reply says to delete the message and make a new token, and the docs say so. Multi repo (several Git connections attached to sub folders of the data root) is next.
+
+**5.8 (done).** Hardening: option values reject control characters, anything over 500 characters, and a leading `-` for `arg` options; tokens are sealed with `hosts:[host]`; leak specs for every refusal; two-person isolation through the API. `ConnectorRuntime.toolsOf` uses a connector's own tools for `transport: http` only.
+
+**6 (done).** `runAs( person )` in a schedule: `PersonCheck` accepts the local user, a web app account or someone who has talked to the agent; `ScheduledRun` forces `userId`. An unknown name throws `BxAgents.UnknownPerson`.
+
+**7 (done).** Wizard: `--connectors` (`all`, `none`, `only:a,b`, `exclude:a,b`) and the question "Leave out any connectors?". Every connector is offered unless left out.
+
+**8 (done).** Docs with the 1.0.x mirror: `connectors.md`, the generated `connector-catalog.md` (`tools/generate-connector-docs.bxs`, `--check`, `ConnectorDocsSpec`), and updates to agent-yaml, connect, schedules, web-ui, gateways, vault, new-wizard, cli-reference, index and nav.
+
+**9 (done).** Home page tile, the page count (thirteen), a Connectors screenshot and a narrated walkthrough video (Kokoro `af_heart`).
+
+**10 (done).** Changelog entries for connectors, connect, `runAs` and the wizard flag.
+
+**Deferred.** Multi-repo Git (data root sub-folders: one at a time, named instances, or none), account linking for gateways, a video with a finished Agent.yaml sign in once bx-ai ships fix 334.
