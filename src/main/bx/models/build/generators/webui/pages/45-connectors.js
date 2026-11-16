@@ -124,7 +124,8 @@
 				if ( row.connectedWith === "token" ) { return "You connected with your own token" + tools; }
 				if ( row.connectedWith === "oauth" ) { return "You signed in" + tools; }
 				if ( row.connectedWith === "program" ) { return "Switched on for everyone who uses this agent" + tools; }
-				return row.transport === "stdio" ? "Runs on the machine the agent runs on, in its folder." : "Not connected.";
+				if ( row.transport === "stdio" ) { return capabilities.admin ? "Runs on the machine the agent runs on, in its folder." : "Not switched on. An admin switches it on for everyone who uses this agent."; }
+				return "Not connected.";
 			}
 
 			function card( row ) {
@@ -146,18 +147,20 @@
 				var on = row.state === "connected" || row.state === "needs_attention";
 				var program = row.transport === "stdio";
 				var list = [];
+				// a local program is one process for everyone who uses the agent: only an admin switches it on or off
+				var memberOfProgram = program && !capabilities.admin;
 				if ( row.state === "needs_program" ) {
 					if ( row.docs ) { list.push( h( "a", { class: "btn", href: row.docs, target: "_blank", rel: "noopener" }, [ h( "span", { html: icon( "arrow-square-out" ) } ), h( "span", { text: "How to install " + row.program } ) ] ) ); }
 					return list;
 				}
-				if ( !on || row.state === "needs_attention" ) {
+				if ( ( !on || row.state === "needs_attention" ) && !memberOfProgram ) {
 					var word = row.state === "needs_attention" ? "Reconnect" : ( program ? "Switch on" : "Connect" );
 					list.push( btn( row.state === "needs_attention" ? "arrows-clockwise" : "plug", word, function () { openConnect( row ); }, "primary", { "aria-label": word + " " + row.name } ) );
 				}
 				if ( row.state === "connected" ) {
 					list.push( btn( "wrench", "Tools", function () { openTools( row ); }, null, { "aria-label": "Tools of " + row.name } ) );
 				}
-				if ( on ) {
+				if ( on && !memberOfProgram ) {
 					list.push( btn( "x", program ? "Switch off" : "Disconnect", function () { disconnect( row ); }, null, { "aria-label": ( program ? "Switch off " : "Disconnect " ) + row.name } ) );
 				}
 				return list;
