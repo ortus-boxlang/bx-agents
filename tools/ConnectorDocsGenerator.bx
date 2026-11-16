@@ -1,0 +1,90 @@
+import bxagents.models.connectors.ConnectorCatalog;
+
+/**
+ * Builds the catalog page of the docs (`docs/conventions/connector-catalog.md`) from the connector files that ship with BX
+ * Agents, so the page cannot say anything the files do not. `tools/generate-connector-docs.bxs` writes it, to `docs/` and to
+ * its copy in `docs/versions/1.0.x/`, and a spec fails when either is out of date.
+ */
+class {
+
+	/**
+	 * @return The page, as text
+	 */
+	static string function render() {
+		var catalog = new ConnectorCatalog()
+		var lf = char( 10 )
+		var out = []
+		out.append( "---" )
+		out.append( "title: connector catalog" )
+		out.append( "icon: phosphor-duotone:puzzle-piece" )
+		out.append( "summary: The connectors that ship with BX Agents: what each one does, how a person connects it, how risky it is, and its options." )
+		out.append( "description: The connectors that ship with BX Agents: what each one does, how a person connects it, how risky it is, and its options." )
+		out.append( "tags: [conventions, mcp, secrets]" )
+		out.append( "---" )
+		out.append( "" )
+		out.append( "## Connector catalog" )
+		out.append( "" )
+		out.append( "This page is written from the connector files in `src/main/bx/catalog/connectors/` (`tools/generate-connector-docs.bxs`), so it says what the product does. See [connectors](connectors.md) for how they work, and [how to add one](connectors.md##adding-a-connector)." )
+		out.append( "" )
+		out.append( "| Connector | Connects with | Risk | What it does |" )
+		out.append( "|---|---|---|---|" )
+		for ( var entry in catalog.all() ) {
+			out.append( "| [#entry.name#](###entry.id#) | #how( entry )# | #entry.risk# | #entry.summary# |" )
+		}
+		for ( var entry in catalog.all() ) {
+			out.append( "" )
+			out.append( "#### #entry.name#" )
+			out.append( "" )
+			out.append( "`#entry.id#`. #entry.summary#." )
+			out.append( "" )
+			out.append( "- **Connects with:** #how( entry )#." )
+			out.append( "- **Risk:** #entry.risk#. #entry.riskNote#" )
+			if ( entry.transport == "http" ) {
+				out.append( "- **Address:** `#entry.url#`" )
+			} else {
+				out.append( "- **Runs:** `#entry.command.toList( ' ' )#` on the machine the agent runs on. It needs `#entry.requires.program#` on the PATH. #entry.requires.help ?: ''#" )
+			}
+			for ( var method in entry.auth ) {
+				if ( method.type == "bearer" ) {
+					out.append( "- **Token:** sealed in the vault as `#method.envVar#`, only for #hostOf( entry )#. #method.help ?: ''##method.verified ? '' : ' (not verified yet)'#" )
+				} else if ( method.type == "oauth" ) {
+					out.append( "- **Sign in:** OAuth#method.scopes.len() ? ' with the scopes ' & method.scopes.map( s => '`' & s & '`' ).toList( ', ' ) : ''#.#method.verified ? '' : ' (not verified yet)'#" )
+				}
+			}
+			if ( entry.options.len() ) {
+				out.append( "" )
+				out.append( "| Option | What it does | Goes to | For |" )
+				out.append( "|---|---|---|---|" )
+				for ( var option in entry.options ) {
+					out.append( "| `#option.key#` | #option.help# | #option.target# `#option.name#` | #len( option.onlyWith ) ? ( option.onlyWith == 'bearer' ? 'a token' : option.onlyWith ) : 'every way in'# |" )
+				}
+			}
+			out.append( "" )
+			out.append( "[Documentation](#entry.docs#). Checked on #entry.verifiedOn#." )
+		}
+		return out.toList( lf ) & lf
+	}
+
+	/**
+	 * @entry A connector
+	 *
+	 * @return How a person connects it, in words
+	 */
+	private static string function how( required struct entry ) {
+		if ( arguments.entry.transport == "stdio" ) {
+			return "a local program (an admin)"
+		}
+		var ways = arguments.entry.auth.map( m => m.type == "oauth" ? "sign in" : "token" )
+		return ways.toList( " or " )
+	}
+
+	/**
+	 * @entry A connector
+	 *
+	 * @return The host its token is sealed for
+	 */
+	private static string function hostOf( required struct entry ) {
+		return reReplace( arguments.entry.url, "^https?://([^/:]+).*$", "\1" )
+	}
+
+}

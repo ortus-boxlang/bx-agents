@@ -1,0 +1,31 @@
+import tools.ConnectorDocsGenerator;
+
+/**
+ * Writes the connector catalog page of the docs, to docs/conventions/ and to its copy in docs/versions/1.0.x/conventions/.
+ *
+ *   java -cp <boxlang.jar> ortus.boxlang.runtime.BoxRunner --bx-config boxlang.json tools/generate-connector-docs.bxs           write the pages
+ *   java -cp <boxlang.jar> ortus.boxlang.runtime.BoxRunner --bx-config boxlang.json tools/generate-connector-docs.bxs --check   fail if a page is out of date
+ *
+ * Run it after changing a file in src/main/bx/catalog/connectors/.
+ */
+root = getDirectoryFromPath( getCurrentTemplatePath() ).reReplace( "[\\\/]tools[\\\/]?$", "" );
+check = server.cli.parsed.options.keyExists( "check" );
+page = ConnectorDocsGenerator::render().trim() & char( 10 );
+stale = [];
+
+for( folder in [ "/docs/conventions", "/docs/versions/1.0.x/conventions" ] ){
+	path = root & folder & "/connector-catalog.md";
+	if( check ){
+		if( !fileExists( path ) || fileRead( path ).replace( char( 13 ), "", "all" ).trim() != page.trim() ){
+			stale.append( path );
+		}
+	} else {
+		fileWrite( path, page );
+		println( "Wrote " & path );
+	}
+}
+
+if( stale.len() ){
+	println( "Out of date: " & stale.toList( ", " ) & ". Run tools/generate-connector-docs.bxs." );
+	throw( type = "ConnectorDocsStale", message = "The connector catalog page is out of date" );
+}

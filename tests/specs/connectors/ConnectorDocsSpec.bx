@@ -1,0 +1,21 @@
+import tools.ConnectorDocsGenerator;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "connector catalog docs page", function() {
+
+			it( "matches the generator in docs and in the 1.0.x copy (run tools/generate-connector-docs.bxs)", function() {
+				var root = getDirectoryFromPath( getCurrentTemplatePath() ).reReplace( "[\\/]tests[\\/]specs[\\/]connectors[\\/]?$", "" );
+				var page = ConnectorDocsGenerator::render().replace( char( 13 ), "", "all" ).trim();
+				for ( var folder in [ "/docs/conventions", "/docs/versions/1.0.x/conventions" ] ) {
+					var file = root & folder & "/connector-catalog.md";
+					expect( fileExists( file ) ).toBeTrue( "missing #file#" );
+					expect( fileRead( file ).replace( char( 13 ), "", "all" ).trim() ).toBe( page, "#file# is stale" );
+				}
+			} );
+
+		} );
+	}
+
+}
