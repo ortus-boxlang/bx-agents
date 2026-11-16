@@ -756,6 +756,20 @@ class extends="testbox.system.BaseSpec" {
 					expect( html ).toInclude( "{ readonly: true }" );
 				} );
 
+				it( "replaces the old Connections dialog with the Connectors page: Settings links to it and the Registry marks connector tools", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).notToInclude( "connectPanel" );
+					expect( html ).notToInclude( "connectBtn" );
+					expect( html ).toInclude( "shellGo( ""connectors"" )" );
+					expect( html ).toInclude( "From a connector" );
+					// the services written in Agent.yaml still sign in, from their own tab
+					expect( html ).toInclude( "/connect/remove" );
+				} );
+
 				it( "says gateways, not chat apps, and keeps every item of the Settings menu", function() {
 					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 					var appDir = newAppDir();

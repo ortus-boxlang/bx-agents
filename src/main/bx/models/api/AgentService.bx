@@ -381,8 +381,29 @@ class {
 			variables.appData ?: nullValue(),
 			variables.store ?: nullValue(),
 			variables.gatewayInfo ?: nullValue(),
-			!isNull( routinesSettings() )
+			!isNull( routinesSettings() ),
+			connectorsInUse()
 		)
+	}
+
+	/**
+	 * @return What the composition shows of the connectors: { policy, names, attached }, or an empty struct when the agent offers none
+	 */
+	private struct function connectorsInUse() {
+		if ( !hasConnectors() ) {
+			return {}
+		}
+		try {
+			var stack = new "models.connectors.ConnectorWiring@bxagents"().stackOf( variables.agent, variables.connectorPolicy, { apiPath : variables.apiPath } )
+			var names = {}
+			for ( var entry in variables.connectorPolicy.available ) {
+				names[ entry.id ] = entry.name
+			}
+			return { policy : stack.service.policy(), names : names, attached : stack.runtime.attached() }
+		} catch ( any e ) {
+			// the page still shows the rest of the composition
+			return {}
+		}
 	}
 
 	/**

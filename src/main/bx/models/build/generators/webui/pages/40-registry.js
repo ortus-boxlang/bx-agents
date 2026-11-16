@@ -21,7 +21,12 @@
 				var groups = h( "div" );
 				body.appendChild( h( "div", { class: "pg-actions", style: "margin-bottom:1rem" }, [ search ] ) );
 				body.appendChild( groups );
-				apiGet( "/tools" ).then( function ( payload ) {
+				// the connectors' ids, so a tool that comes from one says so (their tools are named <id>__<tool>)
+				var asked = [ apiGet( "/tools" ), capabilities.connectors ? apiGet( "/connectors" ) : Promise.resolve( null ) ];
+				Promise.all( asked ).then( function ( got ) {
+					var payload = got[ 0 ];
+					var connectorIds = ( got[ 1 ] && got[ 1 ].connectors ? got[ 1 ].connectors : [] ).map( function ( c ) { return c.id; } );
+					function fromConnector( name ) { var cut = name.indexOf( "__" ); return cut > 0 && connectorIds.indexOf( name.slice( 0, cut ) ) >= 0; }
 					if ( route.stale() ) { return; }
 					if ( !payload ) { failed( "Could not load the tools." ); return; }
 					var tools = payload.tools || [];
@@ -47,6 +52,7 @@
 								list.appendChild( h( "li", { style: "padding:0.5rem 0;border-top:1px solid var(--border)" }, [
 									h( "div", { class: "pg-actions" }, [
 										h( "code", { text: t.name } ),
+										fromConnector( t.name ) ? h( "span", { class: "chip" }, [ h( "span", { html: icon( "puzzle-piece" ) } ), "From a connector" ] ) : null,
 										t.approval || t.asksFirst ? h( "span", { class: "chip warn" }, [ h( "span", { html: icon( "hand-palm" ) } ), "Asks first" ] ) : null
 									] ),
 									h( "p", { class: "pg-note", style: "margin:0.2rem 0 0", text: t.description || "" } )
