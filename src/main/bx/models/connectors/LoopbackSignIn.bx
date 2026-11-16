@@ -1,0 +1,40 @@
+/**
+ * Lets the connectors sign in at a terminal that has no public address: the provider sends the browser back to a short
+ * lived listener on 127.0.0.1 (LocalConnections), which finishes the sign in in the background. It stands in for the
+ * server's own ConnectionService in the connect actions, which only need to start a sign in and forget one.
+ */
+class {
+
+	/**
+	 * @connections A LocalConnections over the sign in entries of the connectors
+	 */
+	function init( required any connections ) {
+		variables.connections = arguments.connections
+		return this
+	}
+
+	/**
+	 * @name The connector's id
+	 * @person The person
+	 *
+	 * @return { authorizationUrl }
+	 *
+	 * @throws BxAgents.BadConnectRequest when the sign in could not be started
+	 */
+	struct function start( required string name, required string person ) {
+		var started = variables.connections.start( arguments.name )
+		if ( !started.ok ) {
+			throw( type = "BxAgents.BadConnectRequest", message = started.reason )
+		}
+		return { authorizationUrl : started.authorizationUrl }
+	}
+
+	/**
+	 * @name The connector's id
+	 * @person The person
+	 */
+	void function disconnect( required string name, required string person ) {
+		variables.connections.remove( arguments.name )
+	}
+
+}

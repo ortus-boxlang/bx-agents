@@ -2,7 +2,10 @@
  * `connect` CLI verb - sign in to the MCP servers of a project that ask each person to sign in (an `mcpServers`
  * entry with an `oauth` key in Agent.yaml).
  *
- *   bxAgents connect                      lists the servers and whether you are connected
+ *   bxAgents connect                      lists the connectors and the servers, and whether you are connected
+ *   bxAgents connect github               connects a connector: the risk, then your token in a hidden box
+ *   bxAgents connect github --token-env=GITHUB_TOKEN --confirm   the same without a box, for a script (--stdin pipes it in)
+ *   bxAgents connect github tools off delete_file    and: tools, tools on NAME, tools off all, tools readonly, off, options key=value
  *   bxAgents connect mail                 signs in to the server named mail
  *   bxAgents connect mail --remove        forgets your sign in to it
  *   bxAgents connect mail --port=8765     uses that port for the return address (register http://127.0.0.1:8765/callback)
@@ -16,6 +19,7 @@
  */
 import bxModules.bxagents.models.api.Caller;
 import bxModules.bxagents.models.connect.OAuthServers;
+import bxModules.bxagents.models.connectors.ConnectorSettings;
 
 class {
 
@@ -35,13 +39,18 @@ class {
 
 		var config = new "models.build.AgentConfigResolver@bxagents"().resolve( projectRoot = projectRoot )
 		var entries = OAuthServers::of( config )
-		if ( !entries.len() ) {
-			return { exitCode : 1, message : "No mcpServers entry in this project has an `oauth` key, so there is nothing to connect to. Add one to Agent.yaml, for example `oauth: true`." }
+		var offered = ConnectorSettings::resolve( config ).available.len() > 0
+		if ( !entries.len() && !offered ) {
+			return { exitCode : 1, message : "This project offers no connectors (`connectors: none`) and no mcpServers entry has an `oauth` key, so there is nothing to connect to. Add one to Agent.yaml, for example `oauth: true`." }
 		}
 
 		var file = new "models.store.ChatStorePath@bxagents"().forProject( projectRoot )
 		directoryCreate( getDirectoryFromPath( file ), true, true )
 		var wiring = new "models.vault.VaultWiring@bxagents"().pin( file )
+		// the connectors and everything typed after the first word go through the console, unless the first word is a service written in Agent.yaml
+		if ( offered && !entries.some( e => e.name == name ) ) {
+			return new "models.connectors.ConnectTerminal@bxagents"().run( arguments.options, config, subject, wiring, entries )
+		}
 		var settings = { wiring : wiring }
 		if ( isClosure( arguments.options._clientFactory ?: "" ) ) {
 			settings[ "clientFactory" ] = arguments.options._clientFactory

@@ -1,0 +1,109 @@
+/**
+ * The connectors of an agent on a server, for the terminal chat that talks to it (`chat --url`): the same routes the web
+ * page uses, so the server decides who the person is (their token) and keeps their tokens. A sign in returns the address
+ * to open; the provider sends the person back to the server's own address.
+ *
+ * Every answer is a plain struct: { ok : true, ...data } or { ok : false, reason }.
+ */
+class {
+
+	/**
+	 * @baseUrl The server root
+	 * @agentClient An AgentClient
+	 */
+	function init( required string baseUrl, required any agentClient ) {
+		variables.baseUrl = arguments.baseUrl
+		variables.agentClient = arguments.agentClient
+		return this
+	}
+
+	/**
+	 * @return True when the server offers connectors
+	 */
+	boolean function available() {
+		try {
+			var seen = variables.agentClient.getJson( variables.baseUrl, "connectors" )
+			return ( seen.success ?: false ) && ( seen.connectors ?: [] ).len() > 0
+		} catch ( any e ) {
+			return false
+		}
+	}
+
+	/**
+	 * @return Why there is nothing to connect to
+	 */
+	string function why() {
+		return "This server offers no connectors (or is too old to have them)."
+	}
+
+	/**
+	 * @return { ok, user, policy, connectors : [ row ], summary }
+	 */
+	struct function list() {
+		return answer( variables.agentClient.getJson( variables.baseUrl, "connectors" ) )
+	}
+
+	/**
+	 * @asked { id, method, token, options, confirm }
+	 *
+	 * @return { ok, connected, authorizationUrl, row } or { ok : false, reason }
+	 */
+	struct function connect( required struct asked ) {
+		return answer( variables.agentClient.postJson( variables.baseUrl, "connectors/connect", arguments.asked, 60 ) )
+	}
+
+	/**
+	 * @id The connector
+	 *
+	 * @return { ok, connected, row } or { ok : false, reason }
+	 */
+	struct function disconnect( required string id ) {
+		return answer( variables.agentClient.postJson( variables.baseUrl, "connectors/disconnect", { id : arguments.id } ) )
+	}
+
+	/**
+	 * @id The connector
+	 *
+	 * @return { ok, id, tools, summary } or { ok : false, reason }
+	 */
+	struct function tools( required string id ) {
+		return answer( variables.agentClient.getJson( variables.baseUrl, "connectors/tools", { id : arguments.id }, 60 ) )
+	}
+
+	/**
+	 * @id The connector
+	 * @change { tool, on } or { all } or { readonly }
+	 *
+	 * @return { ok, id, tools, summary } or { ok : false, reason }
+	 */
+	struct function setTools( required string id, required struct change ) {
+		var body = { id : arguments.id }
+		body.append( arguments.change )
+		return answer( variables.agentClient.postJson( variables.baseUrl, "connectors/tools", body ) )
+	}
+
+	/**
+	 * @id The connector
+	 * @options { key : value }
+	 *
+	 * @return { ok, row } or { ok : false, reason }
+	 */
+	struct function setOptions( required string id, required struct options ) {
+		return answer( variables.agentClient.postJson( variables.baseUrl, "connectors/options", { id : arguments.id, options : arguments.options } ) )
+	}
+
+	/**
+	 * @seen What the server answered
+	 *
+	 * @return The plain struct the terminal works with
+	 */
+	private struct function answer( required struct seen ) {
+		if ( !( arguments.seen.success ?: false ) ) {
+			return { ok : false, reason : arguments.seen.error ?: arguments.seen.reason ?: "That did not work." }
+		}
+		var made = { ok : true }
+		made.append( arguments.seen )
+		return made
+	}
+
+}

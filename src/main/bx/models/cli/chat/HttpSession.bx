@@ -62,6 +62,16 @@ class {
 	}
 
 	/**
+	 * @admin Not used: the server knows who the person is by their token
+	 *
+	 * @return The connectors on the server: a RemoteConnectorSource, or a NoConnectorSource when it has none
+	 */
+	any function connectors( boolean admin = true ) {
+		var remote = new "models.connectors.RemoteConnectorSource@bxagents"( variables.baseUrl, variables.client )
+		return remote.available() ? remote : new "models.connectors.NoConnectorSource@bxagents"()
+	}
+
+	/**
 	 * @return What the screen calls the user: the server knows who they are by their token
 	 */
 	string function userId() {

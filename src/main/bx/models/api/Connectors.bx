@@ -11,13 +11,14 @@ class {
 	 * @stack The parts of ConnectorWiring: { service, settings, clients, tools, runtime, oauth, vault }
 	 * @caller The Caller
 	 * @served True when the agent serves more than one person, so a local program is for admins
+	 * @deps { oauth : { start( id, person ), disconnect( id, person ) } to use instead of the stack's, for a terminal that catches the provider's redirect itself }
 	 */
-	function init( required struct stack, required any caller, boolean served = true ) {
+	function init( required struct stack, required any caller, boolean served = true, struct deps = {} ) {
 		variables.stack = arguments.stack
 		variables.caller = arguments.caller
 		variables.actions = new "models.connectors.ConnectorActions@bxagents"(
 			arguments.stack.service, arguments.stack.settings,
-			{ vault : arguments.stack.vault, clients : arguments.stack.clients, oauth : arguments.stack.oauth, served : arguments.served }
+			{ vault : arguments.stack.vault, clients : arguments.stack.clients, oauth : arguments.deps.oauth ?: arguments.stack.oauth, served : arguments.served }
 		)
 		return this
 	}

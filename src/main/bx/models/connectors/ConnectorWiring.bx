@@ -68,6 +68,24 @@ class {
 	}
 
 	/**
+	 * Forgets the parts of one agent, closing its clients. For a command that borrowed a stand-in agent for one run.
+	 *
+	 * @agent The AiAgent the parts were made for
+	 */
+	void function forget( required any agent ) {
+		var key = keyOf( arguments.agent )
+		if ( !stacks().containsKey( key ) ) {
+			return
+		}
+		try {
+			stacks().get( key ).clients.close()
+		} catch ( any e ) {
+			// nothing to close
+		}
+		stacks().remove( key )
+	}
+
+	/**
 	 * @agent The AiAgent
 	 *
 	 * @return What tells one agent from another for the life of the process

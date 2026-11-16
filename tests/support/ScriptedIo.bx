@@ -1,0 +1,76 @@
+/**
+ * A stand-in for the terminal of the connectors console: it keeps every line written and answers the questions from a
+ * script, so a spec can say what the person typed.
+ */
+class {
+
+	/**
+	 * @answers The answers in the order they are asked: { secret : "...", text : "...", yes : true | false, pick : "..." } one per question
+	 * @canAsk False to be a place nobody can be asked (a chat platform, a pipe)
+	 */
+	function init( array answers = [], boolean canAsk = true ) {
+		variables.answers = arguments.answers
+		variables.asking = arguments.canAsk
+		variables.lines = []
+		variables.asked = []
+		return this
+	}
+
+	/**
+	 * @return Every line, in order, with how it was said
+	 */
+	array function written() {
+		return variables.lines
+	}
+
+	/**
+	 * @return Every line as one text
+	 */
+	string function everything() {
+		return variables.lines.map( l => l.text ).toList( char( 10 ) )
+	}
+
+	/**
+	 * @return The questions asked, in order
+	 */
+	array function questions() {
+		return variables.asked
+	}
+
+	void function text( required string line ) { variables.lines.append( { kind : "text", text : arguments.line } ) }
+
+	void function ok( required string line ) { variables.lines.append( { kind : "ok", text : arguments.line } ) }
+
+	void function warn( required string line ) { variables.lines.append( { kind : "warn", text : arguments.line } ) }
+
+	boolean function canAsk() { return variables.asking }
+
+	boolean function isGateway() { return false }
+
+	any function ask( required string question, struct options = {} ) { return next( "ask", arguments.question, "text" ) }
+
+	any function askSecret( required string question, string help = "" ) { return next( "secret", arguments.question, "secret" ) }
+
+	boolean function confirm( required string question ) {
+		var answer = next( "confirm", arguments.question, "yes" )
+		return !isNull( answer ) && answer == true
+	}
+
+	any function choose( required string question, required array choices ) { return next( "choose", arguments.question, "pick" ) }
+
+	/**
+	 * @kind What is asked
+	 * @question The question
+	 * @key Which key of the next answer holds the reply
+	 */
+	private any function next( required string kind, required string question, required string key ) {
+		variables.asked.append( arguments.question )
+		if ( !variables.answers.len() ) {
+			return nullValue()
+		}
+		var answer = variables.answers[ 1 ]
+		variables.answers.deleteAt( 1 )
+		return answer[ arguments.key ] ?: nullValue()
+	}
+
+}
