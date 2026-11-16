@@ -1,0 +1,77 @@
+/**
+ * Where a connector is reached for one person: the address and headers its options make.
+ *
+ * An option's `target` says where its value goes: a `query` value is added to the address, a `header` value is sent as a
+ * header, a `path` value is added as a path segment. A boolean that is true is sent as `true`; false, or an empty text, is
+ * left out. An option with `onlyWith` applies only to that way in (Stripe's connected account is for a token only).
+ */
+class {
+
+	/**
+	 * @entry The connector as offered (ConnectorService.entryOf)
+	 * @values The option values to use: { key : value }. A key left out gets the option's default
+	 * @authType The way in the person uses: bearer or oauth
+	 *
+	 * @return { id, url, headers, timeout } where timeout is left out when the admin set none
+	 */
+	static struct function of( required struct entry, struct values = {}, string authType = "bearer" ) {
+		var query = []
+		var segments = []
+		var headers = {}
+		for ( var option in arguments.entry.options ) {
+			if ( len( option.onlyWith ) && option.onlyWith != arguments.authType ) {
+				continue
+			}
+			var raw = arguments.values.keyExists( option.key ) ? arguments.values[ option.key ] : option.default
+			var text = option.type == "boolean" ? ( isBoolean( raw ) && raw ? "true" : "" ) : toString( raw )
+			if ( !len( text ) ) {
+				continue
+			}
+			if ( option.target == "query" ) {
+				query.append( option.name & "=" & encodeForURL( text ) )
+			} else if ( option.target == "header" ) {
+				headers[ option.name ] = text
+			} else if ( option.target == "path" ) {
+				segments.append( encodeForURL( text ) )
+			}
+		}
+		var out = {
+			id      : arguments.entry.id,
+			url     : arguments.entry.url & ( segments.len() ? "/" & segments.toList( "/" ) : "" ) & ( query.len() ? "?" & query.toList( "&" ) : "" ),
+			headers : headers
+		}
+		if ( ( arguments.entry.timeout ?: 0 ) > 0 ) {
+			out.timeout = arguments.entry.timeout
+		}
+		return out
+	}
+
+	/**
+	 * The `mcpServers` entries the sign in side works with, one for each offered connector that has a sign in. A sign in
+	 * client is shared by everyone, so its address uses the admin's option values, never a person's.
+	 *
+	 * @available The offered connectors (ConnectorSettings::resolve().available)
+	 *
+	 * @return [ { name, url, oauth, headers, timeout } ]
+	 */
+	static array function oauthEntries( required array available ) {
+		var out = []
+		for ( var entry in arguments.available ) {
+			var method = entry.auth.filter( m => m.type == "oauth" )
+			if ( entry.transport != "http" || !method.len() ) {
+				continue
+			}
+			var where = ConnectorEndpoint::of( entry, {}, "oauth" )
+			var made = { name : entry.id, url : where.url, oauth : method[ 1 ].scopes.len() ? { scopes : method[ 1 ].scopes } : true }
+			if ( where.headers.count() ) {
+				made.headers = where.headers
+			}
+			if ( where.keyExists( "timeout" ) ) {
+				made.timeout = where.timeout
+			}
+			out.append( made )
+		}
+		return out
+	}
+
+}

@@ -309,3 +309,10 @@ Errors use the existing `Outcome` codes (`not_found`, `bad_request`, `forbidden`
 ### Progress on task 5
 
 - **5.1 done.** Migration 14 adds `connector_settings`; `ConnectorSettingsStore` keeps options, tool switches, status and the agent's `enabled` flag as JSON per owner and connector; `ConnectorService` builds the rows and states (`available`, `connected`, `needs_attention`, `needs_program`) from the build's resolved set, the vault's user scope, an OAuth check and the PATH. An agent scope vault secret of the same name is the developer's own token and does not count as a person's connection. The build now stamps the whole resolved set (`mode`, `available`, `excluded`, `shadowed`) so the page can show the catalog policy. `ProgramFinder` is shared with `doctor`.
+- **5.2 done.** `ConnectorActions` connects, disconnects, changes options and marks a refused token; `ConnectorEndpoint` makes a person's address and headers from the option values and the sign in entries; `ConnectorClients.probe()` tries a token without keeping a client. Behaviour:
+  - A medium or high risk connector is connected only with `confirm: true`; the refusal carries the risk note.
+  - A token is tried first. A refused token and an unreachable server each store nothing and say which it was. A good token is sealed in the vault in the person's scope with the connector's host as its only allowed host. A new token replaces the old one and drops the old client.
+  - A sign in is started and the address handed back. Options of a person's own are refused for a sign in connector, because its client is shared by everyone: its address uses the admin's `override.options`. (A per person sign in client is possible later, in the style of `ConnectorClients`.)
+  - A local program on a served agent is switched on or off by an admin only. Its options belong to the agent (owner `*`).
+  - Disconnecting removes the token (or the sign in) and a note that it was refused, and keeps the person's tool switches and options.
+  - No message, result or error carries a token; specs check this for each refusal.

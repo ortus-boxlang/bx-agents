@@ -66,7 +66,7 @@ class implements="java:com.sun.net.httpserver.HttpHandler" {
 	}
 
 	/**
-	 * @return [ { method, token, session } ] every call it took, in order
+	 * @return [ { method, token, session, uri } ] every call it took, in order
 	 */
 	array function requests() {
 		return variables.log.toArray().map( entry => duplicate( entry ) )
@@ -94,7 +94,7 @@ class implements="java:com.sun.net.httpserver.HttpHandler" {
 			var session = arguments.exchange.getRequestHeaders().getFirst( "Mcp-Session-Id" ) ?: ""
 			var message = jsonDeserialize( createObject( "java", "java.lang.String" ).init( arguments.exchange.getRequestBody().readAllBytes(), "UTF-8" ) )
 			var method = message.method ?: ""
-			variables.log.add( { method : method, token : token, session : session } )
+			variables.log.add( { method : method, token : token, session : session, uri : arguments.exchange.getRequestURI().toString() } )
 			if ( left( method, 14 ) == "notifications/" ) {
 				arguments.exchange.sendResponseHeaders( 202, -1 )
 				return

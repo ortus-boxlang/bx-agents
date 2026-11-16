@@ -73,6 +73,18 @@ class {
 
 	/**
 	 * @id A connector id
+	 *
+	 * @return The connector as offered (the catalog entry with the admin's overrides), or an empty struct. It has the address and
+	 *         the options' targets, so it is for the server side only: a row is what a person is shown
+	 */
+	struct function entryOf( required string id ) {
+		var wanted = arguments.id
+		var match = variables.policy.available.filter( c => c.id == wanted )
+		return match.len() ? duplicate( match[ 1 ] ) : {}
+	}
+
+	/**
+	 * @id A connector id
 	 * @person The person
 	 *
 	 * @return The row, or an empty struct for a connector the agent does not offer
@@ -128,7 +140,7 @@ class {
 			icon          : item.icon,
 			summary       : item.summary,
 			transport     : item.transport,
-			host          : item.transport == "http" ? reReplace( item.url, "^https://([^/:]+).*$", "\1" ) : "",
+			host          : item.transport == "http" ? reReplace( item.url, "^https?://([^/:]+).*$", "\1" ) : "",
 			program       : item.transport == "stdio" ? item.requires.program : "",
 			programFound  : found,
 			risk          : item.risk,

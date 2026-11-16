@@ -82,6 +82,35 @@ class {
 	}
 
 	/**
+	 * Tries a token against the server without keeping anything: a client of its own makes the handshake and asks for the
+	 * tools, and is closed. Used by Connect, so a refused token is found before it is stored.
+	 *
+	 * @connector { id, url, timeout, headers } the connector, with the person's option values applied
+	 * @token The token to try
+	 *
+	 * @return { ok, refused : the server said no to this token, reason }
+	 */
+	struct function probe( required struct connector, required string token ) {
+		var trial = new bxModules.bxai.models.mcp.MCPHttpClient( arguments.connector.url ).withBearerToken( arguments.token ).withHandshake( true )
+		if ( arguments.connector.keyExists( "timeout" ) ) {
+			trial.withTimeout( arguments.connector.timeout )
+		}
+		if ( arguments.connector.keyExists( "headers" ) && arguments.connector.headers.count() ) {
+			trial.withHeaders( arguments.connector.headers )
+		}
+		try {
+			var answer = trial.listTools()
+			if ( answer.isSuccess() ) {
+				return { ok : true, refused : false, reason : "" }
+			}
+			var refused = [ 401, 403 ].contains( answer.getStatusCode() )
+			return { ok : false, refused : refused, reason : refused ? "the server refused it" : answer.getError() }
+		} finally {
+			closeQuietly( trial )
+		}
+	}
+
+	/**
 	 * The object an agent registers once, which routes every call to the caller's client.
 	 *
 	 * @connector { id, url, prefix, timeout, headers } the connector

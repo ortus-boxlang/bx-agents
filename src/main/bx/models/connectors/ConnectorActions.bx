@@ -1,0 +1,304 @@
+import bxModules.bxagents.models.connectors.ConnectorEndpoint;
+
+/**
+ * What a person can do with a connector: connect it, disconnect it, change its options. The web page, the API, the
+ * terminal and the gateways all call this, so the rules are the same everywhere:
+ *
+ * - a connector that can change something (medium or high risk) is connected only with `confirm: true`, after the person has
+ *   been shown what it can do;
+ * - a token is tried against the server first. A server that refuses it gets nothing stored; one that cannot be reached
+ *   gets nothing stored either, and the person is told which it was. A good token is sealed in the vault under the person,
+ *   locked to the connector's host;
+ * - a sign in is started and the address to open is handed back. The rest happens at the callback;
+ * - a local program is shared by everyone who uses the agent, so on a served agent only an admin switches it on or off;
+ * - nothing here ever returns, logs or puts in a message the token.
+ *
+ * Every refusal is a `BxAgents.*` error whose message is for the person.
+ */
+class {
+
+	/**
+	 * @service The ConnectorService
+	 * @settings The ConnectorSettingsStore
+	 * @deps { vault : a VaultService, clients : a ConnectorClients, oauth : { start( name, person ), disconnect( name, person ) }, served : true when the agent is served }
+	 */
+	function init( required any service, required any settings, struct deps = {} ) {
+		variables.service = arguments.service
+		variables.settings = arguments.settings
+		variables.vault = arguments.deps.vault ?: ""
+		variables.clients = arguments.deps.clients ?: ""
+		variables.oauth = arguments.deps.oauth ?: ""
+		variables.served = arguments.deps.served ?: false
+		return this
+	}
+
+	/**
+	 * @id The connector
+	 * @person The person
+	 * @request { method : token | oauth | program, token, options : { key : value }, confirm : true, admin : whether the caller is an admin }
+	 *
+	 * @return { connected : whether they are in now, authorizationUrl : for a sign in, row }
+	 */
+	struct function connect( required string id, required string person, struct request = {} ) {
+		var row = rowOf( arguments.id, arguments.person )
+		var method = lCase( arguments.request.method ?: "" )
+		var ways = row.transport == "stdio" ? [ "program" ] : row.ways.map( w => w == "bearer" ? "token" : w )
+		if ( !ways.contains( method ) ) {
+			throw( type = "BxAgents.BadConnectRequest", message = "#row.name# can be connected with: #ways.toList( ', ' )#. Say which with method." )
+		}
+		if ( [ "medium", "high" ].contains( row.risk ) && ( arguments.request.confirm ?: false ) != true ) {
+			throw( type = "BxAgents.ConfirmationRequired", message = "#row.name# is #row.risk# risk. #row.riskNote# Connect it again with confirm set to true once you have read this." )
+		}
+		switch ( method ) {
+			case "token":
+				return connectToken( row, arguments.person, arguments.request )
+			case "oauth":
+				return connectOAuth( row, arguments.person, arguments.request )
+			default:
+				return switchOn( row, arguments.person, arguments.request )
+		}
+	}
+
+	/**
+	 * @id The connector
+	 * @person The person
+	 * @request { admin : whether the caller is an admin }
+	 *
+	 * @return { connected : false, row }
+	 */
+	struct function disconnect( required string id, required string person, struct request = {} ) {
+		var row = rowOf( arguments.id, arguments.person )
+		if ( !len( row.connectedWith ) ) {
+			throw( type = "BxAgents.NotConnected", message = "#row.name# is not connected, so there is nothing to disconnect." )
+		}
+		if ( row.connectedWith == "token" ) {
+			variables.vault.remove( row.tokenName, { scope : "user", owner : arguments.person, actor : arguments.person, via : "connect" } )
+			variables.settings.remove( arguments.person, arguments.id, "status" )
+			dropClient( arguments.id, arguments.person )
+		} else if ( row.connectedWith == "oauth" ) {
+			variables.oauth.disconnect( arguments.id, arguments.person )
+			variables.settings.remove( arguments.person, arguments.id, "status" )
+		} else {
+			adminOnly( row, arguments.request, "switch off" )
+			variables.settings.remove( "*", arguments.id, "enabled" )
+		}
+		return { connected : false, row : variables.service.get( arguments.id, arguments.person ) }
+	}
+
+	/**
+	 * Changes the values of a connector's options.
+	 *
+	 * @id The connector
+	 * @person The person
+	 * @options { key : value }
+	 * @request { admin : whether the caller is an admin }
+	 *
+	 * @return { row }
+	 */
+	struct function setOptions( required string id, required string person, required struct options, struct request = {} ) {
+		var row = rowOf( arguments.id, arguments.person )
+		if ( !row.options.len() ) {
+			throw( type = "BxAgents.BadConnectRequest", message = "#row.name# has no options." )
+		}
+		if ( row.transport == "stdio" ) {
+			adminOnly( row, arguments.request, "change the options of" )
+			variables.settings.set( "*", arguments.id, "options", checkedOptions( row, arguments.options ) )
+		} else if ( row.ways.contains( "oauth" ) && !row.ways.contains( "bearer" ) ) {
+			throw( type = "BxAgents.BadConnectRequest", message = optionsForTokenOnly( row ) )
+		} else {
+			variables.settings.set( arguments.person, arguments.id, "options", checkedOptions( row, arguments.options ) )
+			// a client made with the old values would go to the old place
+			dropClient( arguments.id, arguments.person )
+		}
+		return { row : variables.service.get( arguments.id, arguments.person ) }
+	}
+
+	/**
+	 * Notes that a person's token was refused by the server, so their row asks for attention. Called when a call comes back
+	 * 401 or 403 for a token that worked before.
+	 *
+	 * @id The connector
+	 * @person The person
+	 * @reason Why, in a sentence for the person
+	 */
+	void function markRefused( required string id, required string person, string reason = "The server refused this token." ) {
+		variables.settings.set( arguments.person, arguments.id, "status", { state : "needs_attention", reason : arguments.reason, at : dateTimeFormat( now(), "yyyy-MM-dd HH:mm:ss" ) } )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @row The connector's row
+	 * @person The person
+	 * @request The connect request
+	 *
+	 * @return { connected : true, row }
+	 */
+	private struct function connectToken( required struct row, required string person, required struct request ) {
+		var token = trim( toString( arguments.request.token ?: "" ) )
+		if ( !len( token ) ) {
+			throw( type = "BxAgents.BadConnectRequest", message = "#row.name# needs a token. #tokenHelp( row )#" )
+		}
+		if ( reFind( "\s", token ) || len( token ) > 4096 ) {
+			throw( type = "BxAgents.BadConnectRequest", message = "That does not look like a token: it has spaces or line breaks in it, or is far too long." )
+		}
+		var values = checkedOptions( row, arguments.request.options ?: {} )
+		var entry = variables.service.entryOf( row.id )
+		var tried = variables.clients.probe( ConnectorEndpoint::of( entry, values, "bearer" ), token )
+		if ( tried.refused ) {
+			throw( type = "BxAgents.TokenRefused", message = "#row.name# refused this token. Check that it is current and has the access the agent needs. Nothing was saved." )
+		}
+		if ( !tried.ok ) {
+			throw( type = "BxAgents.CouldNotReach", message = "Could not reach #row.host# to check the token (#tried.reason#). Nothing was saved. Try again in a moment." )
+		}
+		variables.vault.set( row.tokenName, token, {
+			scope       : "user",
+			owner       : arguments.person,
+			hosts       : [ row.host ],
+			description : "#row.name# token, connected by #arguments.person#",
+			actor       : arguments.person,
+			via         : "connect"
+		} )
+		if ( row.options.len() ) {
+			variables.settings.set( arguments.person, row.id, "options", values )
+		}
+		variables.settings.remove( arguments.person, row.id, "status" )
+		dropClient( row.id, arguments.person )
+		return { connected : true, row : variables.service.get( row.id, arguments.person ) }
+	}
+
+	/**
+	 * @row The connector's row
+	 * @person The person
+	 * @request The connect request
+	 *
+	 * @return { connected : false, authorizationUrl, row }
+	 */
+	private struct function connectOAuth( required struct row, required string person, required struct request ) {
+		if ( ( arguments.request.options ?: {} ).count() ) {
+			throw( type = "BxAgents.BadConnectRequest", message = optionsForTokenOnly( arguments.row ) )
+		}
+		if ( isSimpleValue( variables.oauth ) ) {
+			throw( type = "BxAgents.BadConnectRequest", message = "Signing in is not available here." )
+		}
+		var started = variables.oauth.start( arguments.row.id, arguments.person )
+		return { connected : false, authorizationUrl : started.authorizationUrl, row : arguments.row }
+	}
+
+	/**
+	 * @row The connector's row
+	 * @person The person
+	 * @request The connect request
+	 *
+	 * @return { connected : true, row }
+	 */
+	private struct function switchOn( required struct row, required string person, required struct request ) {
+		adminOnly( arguments.row, arguments.request, "switch on" )
+		if ( !arguments.row.programFound ) {
+			throw( type = "BxAgents.ProgramMissing", message = "#arguments.row.name# needs #arguments.row.program# on the PATH of the machine the agent runs on, and it is not there. #( variables.service.entryOf( arguments.row.id ).requires.help ?: '' )#" )
+		}
+		if ( arguments.row.options.len() ) {
+			variables.settings.set( "*", arguments.row.id, "options", checkedOptions( arguments.row, arguments.request.options ?: {} ) )
+		}
+		variables.settings.set( "*", arguments.row.id, "enabled", { on : true, by : arguments.person, at : dateTimeFormat( now(), "yyyy-MM-dd HH:mm:ss" ) } )
+		return { connected : true, row : variables.service.get( arguments.row.id, arguments.person ) }
+	}
+
+	/**
+	 * A local program is one process for everyone, so on a served agent one person's choice would decide for all of them.
+	 *
+	 * @row The connector's row
+	 * @request The request, for admin
+	 * @what What is being done, for the message
+	 *
+	 * @throws BxAgents.Forbidden when the agent is served and the caller is not an admin
+	 */
+	private void function adminOnly( required struct row, required struct request, required string what ) {
+		if ( variables.served && ( arguments.request.admin ?: false ) != true ) {
+			throw( type = "BxAgents.Forbidden", message = "Only an admin can #arguments.what# #arguments.row.name# for this agent: it is one program that everyone who uses the agent shares." )
+		}
+	}
+
+	/**
+	 * Checks the options the person gave against the connector's, and merges them over what is there.
+	 *
+	 * @row The connector's row
+	 * @given { key : value }
+	 *
+	 * @return Every option's value after the change, { key : value }
+	 */
+	private struct function checkedOptions( required struct row, required struct given ) {
+		var known = {}
+		for ( var option in arguments.row.options ) {
+			known[ option.key ] = option
+		}
+		var merged = {}
+		for ( var option in arguments.row.options ) {
+			merged[ option.key ] = option.value
+		}
+		for ( var key in arguments.given.keyArray() ) {
+			if ( !known.keyExists( key ) ) {
+				throw( type = "BxAgents.BadConnectRequest", message = "[#key#] is not an option of #arguments.row.name#. Its options are: #arguments.row.options.map( o => o.key ).toList( ', ' )#." )
+			}
+			var value = arguments.given[ key ]
+			if ( known[ key ].type == "boolean" ) {
+				if ( !isBoolean( value ) ) {
+					throw( type = "BxAgents.BadConnectRequest", message = "The option [#key#] must be true or false." )
+				}
+				merged[ key ] = value ? true : false
+			} else {
+				if ( !isSimpleValue( value ) || len( toString( value ) ) > 500 || reFind( "[\r\n\t]", toString( value ) ) ) {
+					throw( type = "BxAgents.BadConnectRequest", message = "The option [#key#] must be one line of text of at most 500 characters." )
+				}
+				merged[ key ] = toString( value )
+			}
+		}
+		return merged
+	}
+
+	/**
+	 * @id The connector
+	 * @person The person
+	 *
+	 * @return The connector's row
+	 *
+	 * @throws BxAgents.UnknownConnector when the agent does not offer it
+	 */
+	private struct function rowOf( required string id, required string person ) {
+		var found = variables.service.get( arguments.id, arguments.person )
+		if ( !found.count() ) {
+			throw( type = "BxAgents.UnknownConnector", message = "This agent does not offer a connector called [#arguments.id#]. It offers: #variables.service.ids().toList( ', ' )#." )
+		}
+		return found
+	}
+
+	/**
+	 * @id The connector
+	 * @person The person
+	 */
+	private void function dropClient( required string id, required string person ) {
+		if ( isObject( variables.clients ) ) {
+			variables.clients.drop( arguments.id, arguments.person )
+		}
+	}
+
+	/**
+	 * @row The connector's row
+	 *
+	 * @return The help text for its token
+	 */
+	private string function tokenHelp( required struct row ) {
+		var methods = variables.service.entryOf( arguments.row.id ).auth.filter( m => m.type == "bearer" )
+		return methods.len() ? methods[ 1 ].help : ""
+	}
+
+	/**
+	 * @row The connector's row
+	 *
+	 * @return The sentence for options that cannot be set per person
+	 */
+	private string function optionsForTokenOnly( required struct row ) {
+		return "#arguments.row.name# is connected with a sign in, which everyone shares, so its options are the ones the admin set (connectors: override). Options of your own apply to a token connection."
+	}
+
+}
