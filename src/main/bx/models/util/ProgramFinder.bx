@@ -1,0 +1,44 @@
+/**
+ * Finds a program the way the shell would: a path as given, or a name looked for in each folder of the PATH (with the
+ * Windows suffixes there). Used by `doctor` and by the connectors, which need to know whether a local program can start.
+ */
+class {
+
+	/**
+	 * @program A program name, or a path
+	 *
+	 * @return The full path of the program, or "" when it cannot be found
+	 */
+	static string function find( required string program ) {
+		var isWindows = lCase( createObject( "java", "java.lang.System" ).getProperty( "os.name" ) ).contains( "win" )
+		var suffixes = isWindows ? [ "", ".exe", ".cmd", ".bat", ".com" ] : [ "" ]
+		var candidates = []
+		if ( arguments.program contains "/" || arguments.program contains "\\" ) {
+			candidates = suffixes.map( suffix => arguments.program & suffix )
+		} else {
+			var separator = createObject( "java", "java.io.File" ).pathSeparator
+			for ( var folder in ( createObject( "java", "java.lang.System" ).getenv( "PATH" ) ?: "" ).listToArray( separator ) ) {
+				for ( var suffix in suffixes ) {
+					candidates.append( folder & "/" & arguments.program & suffix )
+				}
+			}
+		}
+		for ( var path in candidates ) {
+			var file = createObject( "java", "java.io.File" ).init( path )
+			if ( file.isFile() && file.canExecute() ) {
+				return file.getPath()
+			}
+		}
+		return ""
+	}
+
+	/**
+	 * @program A program name, or a path
+	 *
+	 * @return True when the program can be found
+	 */
+	static boolean function exists( required string program ) {
+		return len( ProgramFinder::find( arguments.program ) ) > 0
+	}
+
+}

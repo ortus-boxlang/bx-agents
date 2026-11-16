@@ -214,6 +214,15 @@ class {
 				statements : [
 					"UPDATE notes SET owner = 'agent' WHERE scope = 'agent' AND owner <> 'agent'"
 				]
+			},
+			{
+				// what a person has set for a connector (option values, tool switches, a note that a credential was refused) and
+				// whether the agent switched a local program on (owner '*'). Apart from `preferences`, which the web page writes
+				// through its own route; only the connector service writes here. A secret is never kept here (see ConnectorSettingsStore).
+				version    : 14,
+				statements : [
+					"CREATE TABLE IF NOT EXISTS connector_settings ( owner VARCHAR(255) NOT NULL, connector VARCHAR(64) NOT NULL, settingKey VARCHAR(32) NOT NULL, value TEXT NOT NULL, updatedAt DATETIME, PRIMARY KEY ( owner, connector, settingKey ) )"
+				]
 			}
 		]
 	}

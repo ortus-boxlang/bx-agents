@@ -1,0 +1,168 @@
+/**
+ * The connectors an agent offers, and where one person stands with each of them. It is what the connect routes, the web
+ * page, `bxAgents connect`, the terminal's `/connect` and the gateways all ask, so they cannot disagree.
+ *
+ * A row is for one person and carries no secret: it says what the connector is, what it can do (risk), how the person can
+ * get in, whether they are in (`state`), the values of its options for them and which tools they switched off.
+ *
+ *   state `available`        offered, and this person has not connected it
+ *   state `connected`        a sign in, a token of their own, or (a local program) switched on for the agent
+ *   state `needs_attention`  their token was refused: connect it again
+ *   state `needs_program`    a local program that is not on the PATH of the machine the agent runs on
+ *
+ * Where each fact comes from: the offered set is the build's (`connectors:` resolved against the catalog); a token is a
+ * vault secret in the person's own scope, named by the catalog's `envVar` (an agent scope secret of the same name is the
+ * developer's own `mcpServers` token, not a connection of this person); a sign in is asked of the OAuth side; a refused
+ * credential and the person's options and tool switches are in `connector_settings`.
+ */
+import bxModules.bxagents.models.util.ProgramFinder;
+
+class {
+
+	/**
+	 * @policy { mode, available : [ connector ], excluded, shadowed } as the build resolved it (ConnectorSettings::resolve)
+	 * @settings A ConnectorSettingsStore
+	 * @deps { vault : a VaultService, signedIn : ( connectorId, person ) => boolean, programExists : ( program ) => boolean }
+	 */
+	function init( required struct policy, required any settings, struct deps = {} ) {
+		variables.policy = {
+			mode      : arguments.policy.mode ?: "none",
+			available : arguments.policy.available ?: [],
+			excluded  : arguments.policy.excluded ?: [],
+			shadowed  : arguments.policy.shadowed ?: []
+		}
+		variables.settings = arguments.settings
+		variables.vault = arguments.deps.vault ?: ""
+		variables.signedIn = arguments.deps.signedIn ?: ( ( connectorId, person ) => false )
+		variables.programExists = arguments.deps.programExists ?: ( program => ProgramFinder::exists( program ) )
+		return this
+	}
+
+	/**
+	 * @return { mode : all | only | exclude | none, excluded : [ ids ], shadowed : [ ids ], count : how many are offered }
+	 */
+	struct function policy() {
+		return { mode : variables.policy.mode, excluded : variables.policy.excluded, shadowed : variables.policy.shadowed, count : variables.policy.available.len() }
+	}
+
+	/**
+	 * @return The ids of the connectors that are offered
+	 */
+	array function ids() {
+		return variables.policy.available.map( c => c.id )
+	}
+
+	/**
+	 * @id A connector id
+	 *
+	 * @return True when the agent offers it
+	 */
+	boolean function offers( required string id ) {
+		return variables.policy.available.some( c => c.id == id )
+	}
+
+	/**
+	 * @person The person, as the agent knows them ("local" in the terminal, "slack:U01ADA" in a chat)
+	 *
+	 * @return One row per connector the agent offers
+	 */
+	array function list( required string person ) {
+		var who = arguments.person
+		return variables.policy.available.map( c => rowFor( c, who ) )
+	}
+
+	/**
+	 * @id A connector id
+	 * @person The person
+	 *
+	 * @return The row, or an empty struct for a connector the agent does not offer
+	 */
+	struct function get( required string id, required string person ) {
+		var wanted = arguments.id
+		var match = variables.policy.available.filter( c => c.id == wanted )
+		return match.len() ? rowFor( match[ 1 ], arguments.person ) : {}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @entry One offered connector, with the admin's overrides applied
+	 * @person The person
+	 *
+	 * @return The row
+	 */
+	private struct function rowFor( required struct entry, required string person ) {
+		var item = arguments.entry
+		var who = arguments.person
+		var saved = variables.settings.get( who, item.id, "options" )
+		var status = variables.settings.get( who, item.id, "status" )
+		var switchedOff = variables.settings.get( who, item.id, "tools" ).off ?: []
+		var tokenMethod = item.auth.filter( m => m.type == "bearer" )
+		var ways = item.auth.map( m => m.type )
+
+		var connectedWith = ""
+		var state = "available"
+		var found = true
+		if ( item.transport == "stdio" ) {
+			found = variables.programExists( item.requires.program )
+			if ( !found ) {
+				state = "needs_program"
+			} else if ( variables.settings.get( "*", item.id, "enabled" ).on ?: false ) {
+				state = "connected"
+				connectedWith = "program"
+			}
+		} else {
+			if ( ways.contains( "oauth" ) && variables.signedIn( item.id, who ) ) {
+				connectedWith = "oauth"
+			} else if ( tokenMethod.len() && hasOwnToken( tokenMethod[ 1 ].envVar, who ) ) {
+				connectedWith = "token"
+			}
+			if ( len( connectedWith ) ) {
+				state = connectedWith == "token" && ( status.state ?: "" ) == "needs_attention" ? "needs_attention" : "connected"
+			}
+		}
+
+		return {
+			id            : item.id,
+			name          : item.name,
+			icon          : item.icon,
+			summary       : item.summary,
+			transport     : item.transport,
+			host          : item.transport == "http" ? reReplace( item.url, "^https://([^/:]+).*$", "\1" ) : "",
+			program       : item.transport == "stdio" ? item.requires.program : "",
+			programFound  : found,
+			risk          : item.risk,
+			riskNote      : item.riskNote,
+			docs          : item.docs,
+			verifiedOn    : item.verifiedOn,
+			ways          : ways,
+			tokenName     : tokenMethod.len() ? tokenMethod[ 1 ].envVar : "",
+			state         : state,
+			connectedWith : connectedWith,
+			reason        : state == "needs_attention" ? ( status.reason ?: "" ) : "",
+			options       : item.options.map( option => {
+				var out = duplicate( option )
+				out.value = saved.keyExists( option.key ) ? saved[ option.key ] : option.default
+				return out
+			} ),
+			tools         : { allowed : item.tools, off : switchedOff },
+			timeout       : item.timeout,
+			overridden    : item.overridden
+		}
+	}
+
+	/**
+	 * @name The name of the secret
+	 * @person The person
+	 *
+	 * @return True when the person has a secret of that name in their own scope
+	 */
+	private boolean function hasOwnToken( required string name, required string person ) {
+		if ( !isObject( variables.vault ) ) {
+			return false
+		}
+		var wanted = arguments.name
+		return variables.vault.list( arguments.person, { scope : "user" } ).some( secret => secret.name == wanted )
+	}
+
+}

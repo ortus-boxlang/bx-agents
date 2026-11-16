@@ -47,7 +47,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "stamps the connectors a person can connect to into the handler, and hands them to the service", function() {
 				var dir = newAppDir();
 				var source = fileRead( generator.generate( dir, {}, [], {
-					connectors : [ { id : "notion", name : "Notion", risk : "medium" } ]
+					connectors : { mode : "only", available : [ { id : "notion", name : "Notion", risk : "medium" } ], excluded : [], shadowed : [] }
 				} ).path );
 
 				expect( source ).notToInclude( "__CONNECTORS__" );
@@ -59,7 +59,9 @@ class extends="testbox.system.BaseSpec" {
 				var source = fileRead( generator.generate( newAppDir(), {} ).path );
 
 				expect( source ).notToInclude( "__CONNECTORS__" );
-				expect( source ).toInclude( 'connectors : jsonDeserialize( "[]" )' );
+				expect( source ).toInclude( 'connectors : jsonDeserialize( "{' );
+				expect( source ).toInclude( '""available"":[]' );
+				expect( source ).toInclude( '""mode"":""none""' );
 			} );
 
 			it( "stamps the agent's name, data home and volumes in, for the volume list and the data report", function() {

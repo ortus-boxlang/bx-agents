@@ -26,6 +26,7 @@
  * deliberately NOT checked here.
  */
 import bxModules.bxagents.models.util.EntryConfigReader;
+import bxModules.bxagents.models.util.ProgramFinder;
 
 class {
 
@@ -152,26 +153,7 @@ class {
 	 * @return The full path of the program, or "" when it cannot be found
 	 */
 	private string function findProgram( required string program ) {
-		var isWindows = lCase( createObject( "java", "java.lang.System" ).getProperty( "os.name" ) ).contains( "win" )
-		var suffixes = isWindows ? [ "", ".exe", ".cmd", ".bat", ".com" ] : [ "" ]
-		var candidates = []
-		if ( arguments.program contains "/" || arguments.program contains "\\" ) {
-			candidates = suffixes.map( suffix => arguments.program & suffix )
-		} else {
-			var separator = createObject( "java", "java.io.File" ).pathSeparator
-			for ( var folder in ( createObject( "java", "java.lang.System" ).getenv( "PATH" ) ?: "" ).listToArray( separator ) ) {
-				for ( var suffix in suffixes ) {
-					candidates.append( folder & "/" & arguments.program & suffix )
-				}
-			}
-		}
-		for ( var path in candidates ) {
-			var file = createObject( "java", "java.io.File" ).init( path )
-			if ( file.isFile() && file.canExecute() ) {
-				return file.getPath()
-			}
-		}
-		return ""
+		return ProgramFinder::find( arguments.program )
 	}
 
 	/**

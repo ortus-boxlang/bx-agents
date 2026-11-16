@@ -1,0 +1,120 @@
+/**
+ * What a person has set for a connector, kept in the `connector_settings` table of the shared chat database:
+ *
+ *   owner       the person's id, in the form the vault uses (`slack:U01ADA`, `local`), or `*` for the agent itself
+ *   connector   the connector's id (`github`)
+ *   settingKey  `options` (the person's option values), `tools` (`{ "off" : [ tool names ] }`), `status` (`{ state, reason, at }`
+ *               when a credential was refused) or `enabled` (`{ on, by, at }` for a local program, owner `*`)
+ *   value       JSON
+ *
+ * It is apart from the `preferences` table on purpose: the web page writes that one through its own route, and only the
+ * connector service writes this one. A secret is never kept here: a personal token is a vault secret, a sign in is a sealed
+ * OAuth record.
+ */
+class {
+
+	static {
+		KEYS = [ "options", "tools", "status", "enabled" ]
+		// the owner of what belongs to the agent and not to a person
+		AGENT_OWNER = "*"
+	}
+
+	/**
+	 * @store A ChatStore, already migrated
+	 */
+	function init( required any store ) {
+		variables.store = arguments.store
+		return this
+	}
+
+	/**
+	 * @owner The person, or * for the agent
+	 * @connector The connector's id
+	 * @key options, tools, status or enabled
+	 *
+	 * @return The saved value, or an empty struct when nothing was saved
+	 */
+	struct function get( required string owner, required string connector, required string key ) {
+		checkedKey( arguments.key )
+		var found = variables.store.rows(
+			"SELECT value FROM connector_settings WHERE owner = :owner AND connector = :connector AND settingKey = :key",
+			{ owner : arguments.owner, connector : arguments.connector, key : arguments.key }
+		)
+		if ( !found.len() ) {
+			return {}
+		}
+		var parsed = jsonDeserialize( found[ 1 ].value )
+		return isStruct( parsed ) ? parsed : {}
+	}
+
+	/**
+	 * Saves a value, replacing the one that was there.
+	 *
+	 * @owner The person, or * for the agent
+	 * @connector The connector's id
+	 * @key options, tools, status or enabled
+	 * @value What to keep
+	 */
+	void function set( required string owner, required string connector, required string key, required struct value ) {
+		checkedKey( arguments.key )
+		variables.store.exec(
+			"INSERT INTO connector_settings ( owner, connector, settingKey, value, updatedAt ) VALUES ( :owner, :connector, :key, :value, :now )
+			 ON CONFLICT ( owner, connector, settingKey ) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt",
+			{
+				owner     : arguments.owner,
+				connector : arguments.connector,
+				key       : arguments.key,
+				value     : jsonSerialize( arguments.value ),
+				now       : { value : now(), cfsqltype : "timestamp" }
+			}
+		)
+	}
+
+	/**
+	 * @owner The person, or * for the agent
+	 * @connector The connector's id
+	 * @key options, tools, status or enabled
+	 *
+	 * @return True when a value was there
+	 */
+	boolean function remove( required string owner, required string connector, required string key ) {
+		checkedKey( arguments.key )
+		var gone = variables.store.exec(
+			"DELETE FROM connector_settings WHERE owner = :owner AND connector = :connector AND settingKey = :key",
+			{ owner : arguments.owner, connector : arguments.connector, key : arguments.key }
+		)
+		return ( gone.recordCount ?: gone.updateCount ?: 0 ) > 0
+	}
+
+	/**
+	 * Forgets everything one person set for one connector, for example when they disconnect it.
+	 *
+	 * @owner The person, or * for the agent
+	 * @connector The connector's id
+	 *
+	 * @return How many values were removed
+	 */
+	numeric function removeAll( required string owner, required string connector ) {
+		var count = variables.store.rows(
+			"SELECT COUNT(*) AS n FROM connector_settings WHERE owner = :owner AND connector = :connector",
+			{ owner : arguments.owner, connector : arguments.connector }
+		)[ 1 ].n
+		variables.store.exec(
+			"DELETE FROM connector_settings WHERE owner = :owner AND connector = :connector",
+			{ owner : arguments.owner, connector : arguments.connector }
+		)
+		return count
+	}
+
+	/**
+	 * @key A key
+	 *
+	 * @throws BxAgents.UnknownSetting when it is not one the table holds
+	 */
+	private void function checkedKey( required string key ) {
+		if ( !static.KEYS.findNoCase( arguments.key ) ) {
+			throw( type = "BxAgents.UnknownSetting", message = "[#arguments.key#] is not a connector setting. They are: #static.KEYS.toList( ', ' )#" )
+		}
+	}
+
+}
