@@ -1,0 +1,41 @@
+/**
+ * The agent, asked on behalf of one person by a scheduled task: what `runAs( "ada" )` gives a file schedule. The person
+ * is who the agent knows the run as, so their memory, their notes and their connectors (GitHub with their own token)
+ * are the ones used, and nobody else's.
+ */
+class {
+
+	/**
+	 * @agent The agent to run
+	 * @person Who the run is for
+	 */
+	function init( required any agent, required string person ) {
+		variables.agent = arguments.agent
+		variables.person = arguments.person
+		return this
+	}
+
+	/**
+	 * @return The person the run is for
+	 */
+	string function person() {
+		return variables.person
+	}
+
+	/**
+	 * Sends a message to the agent as the person. The arguments are the agent's own `run()` arguments; a `userId` of the
+	 * caller's own is not allowed to name somebody else.
+	 *
+	 * @input The message (or messages) to send
+	 * @params Parameters for the run
+	 * @options Options for the run
+	 *
+	 * @return What the agent answered
+	 */
+	function run( required any input, struct params = {}, struct options = {} ) {
+		var asked = duplicate( arguments.options )
+		asked[ "userId" ] = variables.person
+		return variables.agent.run( arguments.input, arguments.params, asked )
+	}
+
+}

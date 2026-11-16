@@ -1,0 +1,51 @@
+/**
+ * A scheduled task that acts as one person: the run is for them whatever the task passes, and only a person the agent
+ * knows can be named.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * The specs.
+	 */
+	function run() {
+		describe( "runAs", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-runas-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "runs the agent as the person, and a userId the task passes cannot name somebody else", function() {
+				var seen = [];
+				var agent = { run : ( input, params, options ) => { seen.append( options ); return "done"; } };
+				var scheduled = new bxagents.models.runtime.ScheduledRun( agent, "ada" );
+
+				expect( scheduled.run( "summarize", {}, { userId : "grace", temperature : 0 } ) ).toBe( "done" );
+				expect( seen[ 1 ].userId ).toBe( "ada" );
+				expect( seen[ 1 ].temperature ).toBe( 0 );
+			} );
+
+			it( "knows the local user, an active account and anyone who has talked to the agent, and nobody else", function() {
+				store.exec( "INSERT INTO users ( id, username, passwordHash, displayName, isAdmin, isActive, createdAt ) VALUES ( 'u1', 'ada', 'x', 'Ada', 0, 1, '2026-01-01' )" );
+				store.exec( "INSERT INTO users ( id, username, passwordHash, displayName, isAdmin, isActive, createdAt ) VALUES ( 'u2', 'gone', 'x', 'Gone', 0, 0, '2026-01-01' )" );
+				store.exec( "INSERT INTO conversations ( id, userId, title, createdAt, updatedAt ) VALUES ( 'c1', 'slack:U01ADA', 'hi', '2026-01-01', '2026-01-01' )" );
+				var check = new bxagents.models.runtime.PersonCheck( store );
+
+				expect( check.exists( "local" ) ).toBeTrue();
+				expect( check.exists( "ada" ) ).toBeTrue();
+				expect( check.exists( "slack:U01ADA" ) ).toBeTrue();
+				expect( check.exists( "gone" ) ).toBeFalse();
+				expect( check.exists( "adda" ) ).toBeFalse();
+				expect( check.exists( "" ) ).toBeFalse();
+			} );
+
+		} );
+	}
+
+}
