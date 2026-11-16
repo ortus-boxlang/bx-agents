@@ -24,6 +24,7 @@ import bxModules.bxagents.models.util.Strings;
 import bxModules.bxagents.models.wizard.WizardCatalog;
 import bxModules.bxagents.models.routines.RoutineSettings;
 import bxModules.bxagents.models.connectors.ConnectorSettings;
+import bxModules.bxagents.models.util.EntryConfigReader;
 
 class {
 
@@ -1003,12 +1004,36 @@ class {
 			// connectors (the catalog): the tool filter, and the ones somebody had connected before a restart
 			// only the `connectors:` key is written in: the catalog is read where the app runs
 			var connectorKey = arguments.resolvedConfig.keyExists( "connectors" ) ? { "connectors" : arguments.resolvedConfig.connectors } : {}
+			var webPath = webUiPathOf( arguments.discovery )
 			if ( ConnectorSettings::resolve( connectorKey ).available.len() ) {
+				// where the web app is served, so a chat platform can be told where to connect a token
+				if ( len( webPath ) ) {
+					connectorKey[ "webPath" ] = webPath
+				}
 				statements.append( 'new "models.connectors.ConnectorWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( connectorKey )# )' )
 			}
 		}
 
 		return { statements : statements, nodes : nodes }
+	}
+
+	/**
+	 * @discovery The raw discovery struct
+	 *
+	 * @return The path the web UI is served at (the first `gateways/*` entry with `exposes: "webui"`), or an empty string
+	 */
+	private string function webUiPathOf( required struct discovery ) {
+		for ( var gw in ( arguments.discovery.gateways ?: [] ) ) {
+			try {
+				var config = EntryConfigReader::read( gw.path )
+				if ( !isNull( config ) && ( config.exposes ?: "" ) == "webui" ) {
+					return len( config.path ?: "" ) ? config.path : "/"
+				}
+			} catch ( any e ) {
+				// an entry that cannot be read is reported by the validator, not here
+			}
+		}
+		return ""
 	}
 
 	/**

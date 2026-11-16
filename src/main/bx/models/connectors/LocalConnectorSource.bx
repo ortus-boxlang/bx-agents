@@ -34,6 +34,15 @@ class {
 	}
 
 	/**
+	 * @return The address of the web app of this agent, for a person who must connect a token there; empty when the app has no public address or no web UI
+	 */
+	string function webApp() {
+		var base = trim( getSystemSetting( "BXAGENTS_PUBLIC_URL", "" ) ).reReplace( "/+$", "" )
+		var path = variables.stack.webPath ?: ""
+		return len( base ) && len( path ) ? base & ( path == "/" ? "" : path ) : ""
+	}
+
+	/**
 	 * @return { ok, user, policy, connectors : [ row ], summary }
 	 */
 	struct function list() {

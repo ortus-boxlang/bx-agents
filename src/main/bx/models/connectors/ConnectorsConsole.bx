@@ -171,6 +171,13 @@ class {
 				method = lCase( word ) == "signin" ? "oauth" : lCase( word )
 			}
 		}
+		if ( variables.io.isGateway() && gatewayRefuses( row, ways ) ) {
+			return
+		}
+		if ( variables.io.isGateway() && ways.contains( "oauth" ) ) {
+			// a chat platform cannot show a hidden box: the sign in link is what it can give
+			method = "oauth"
+		}
 		if ( !ways.contains( method ) ) {
 			variables.io.warn( "#row.name# can be connected with: #ways.map( w => w == 'oauth' ? 'signin' : w ).toList( ', ' )#." )
 			return
@@ -185,7 +192,7 @@ class {
 		if ( [ "medium", "high" ].contains( row.risk ) ) {
 			variables.io.text( "#row.risk# risk: #row.riskNote#" )
 			if ( !( arguments.flags.confirm ?: false ) && !variables.io.confirm( "Connect #row.name#?" ) ) {
-				variables.io.warn( variables.io.canAsk() ? "Not connected." : "Not connected: #row.name# can change things. Add --confirm to say you have read this." )
+				variables.io.warn( variables.io.canAsk() ? "Not connected." : ( variables.io.isGateway() ? "Not connected yet. Send /connect #row.id# --confirm to say you have read this and get your sign in link." : "Not connected: #row.name# can change things. Add --confirm to say you have read this." ) )
 				return
 			}
 		}
@@ -218,6 +225,34 @@ class {
 		} else {
 			variables.io.ok( ( method == "program" ? "Switched on #row.name#." : "Connected to #row.name#." ) & " Type connect #row.id# tools to choose what the agent may use." )
 		}
+	}
+
+	/**
+	 * What a chat platform cannot do, said once: a token is never typed in a chat, and a local program is for an admin at the web app or the terminal.
+	 *
+	 * @row The connector
+	 * @ways How it can be connected: token, oauth or program
+	 *
+	 * @return True when it said so and the connect stops there
+	 */
+	private boolean function gatewayRefuses( required struct row, required array ways ) {
+		if ( arguments.ways.contains( "program" ) ) {
+			variables.io.text( "#arguments.row.name# is a program that runs on the machine the agent runs on, so an admin switches it on or off, in the web app or at the terminal." )
+			return true
+		}
+		if ( arguments.ways.contains( "oauth" ) ) {
+			return false
+		}
+		var address = variables.source.webApp()
+		variables.io.text( "#arguments.row.name# needs your own token. A token is never typed in a chat: the chat platform keeps the message and the model provider receives it." )
+		if ( len( address ) ) {
+			variables.io.text( "Connect it in the web app, on the Connectors page: #address#" )
+			variables.io.text( "A token connected there belongs to your web account, not to your identity in this chat." )
+		} else {
+			variables.io.text( "Connect it with `bxAgents connect #arguments.row.id#` at the terminal, or ask an admin to set the public address of this agent (BXAGENTS_PUBLIC_URL) so the web app can be linked here." )
+		}
+		variables.io.text( "If a token was pasted here by mistake, delete the message and make a new token." )
+		return true
 	}
 
 	/**
@@ -286,6 +321,10 @@ class {
 	 * @row The connector
 	 */
 	private void function disconnect( required struct row ) {
+		if ( arguments.row.transport == "stdio" && variables.io.isGateway() ) {
+			variables.io.text( "#arguments.row.name# is a program shared by everyone who uses the agent, so an admin switches it off, in the web app or at the terminal." )
+			return
+		}
 		var done = variables.source.disconnect( arguments.row.id )
 		if ( done.ok ) {
 			variables.io.ok( ( arguments.row.transport == "stdio" ? "Switched off " : "Disconnected from " ) & arguments.row.name & "." )

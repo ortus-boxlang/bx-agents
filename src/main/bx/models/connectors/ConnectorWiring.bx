@@ -20,7 +20,7 @@ class {
 	 * @policy { mode, toolWarning, available, excluded, shadowed } as the build resolved it
 	 * @options { apiPath : where the agent API is served, store : a ChatStore (default: the app's), vault : a VaultService, programExists, clientFactory }
 	 *
-	 * @return { policy, settings, vault, oauth, service, clients, tools, runtime }
+	 * @return { webPath, policy, settings, vault, oauth, service, clients, tools, runtime }
 	 */
 	struct function stackOf( required any agent, required struct policy, struct options = {} ) {
 		var key = keyOf( arguments.agent )
@@ -113,7 +113,7 @@ class {
 		// building the agent never fails because of a connector: without the parts the agent has no connector tools, and
 		// the next call that needs them tries again
 		try {
-			var stack = stackOf( arguments.agent, policy, arguments.options )
+			var stack = stackOf( arguments.agent, policy, arguments.options.copy().append( { webPath : arguments.config.webPath ?: "" } ) )
 			arguments.agent.withMiddleware( new "models.connectors.ConnectorToolMiddleware@bxagents"( stack.service, stack.tools ) )
 			stack.runtime.restore()
 		} catch ( any e ) {
@@ -161,7 +161,7 @@ class {
 			{ settings : settings, vault : vault, oauthRefresh : () => oauth.refresh(), oauthTools : id => oauth.tools( id ) }
 		)
 		holder.runtime = runtime
-		return { policy : arguments.policy, settings : settings, vault : vault, oauth : oauth, service : service, clients : clients, tools : holder.tools, runtime : runtime }
+		return { webPath : arguments.options.webPath ?: "", policy : arguments.policy, settings : settings, vault : vault, oauth : oauth, service : service, clients : clients, tools : holder.tools, runtime : runtime }
 	}
 
 	/**

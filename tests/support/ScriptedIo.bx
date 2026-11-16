@@ -7,10 +7,12 @@ class {
 	/**
 	 * @answers The answers in the order they are asked: { secret : "...", text : "...", yes : true | false, pick : "..." } one per question
 	 * @canAsk False to be a place nobody can be asked (a chat platform, a pipe)
+	 * @gateway True to be a chat platform such as Slack
 	 */
-	function init( array answers = [], boolean canAsk = true ) {
+	function init( array answers = [], boolean canAsk = true, boolean gateway = false ) {
 		variables.answers = arguments.answers
 		variables.asking = arguments.canAsk
+		variables.onGateway = arguments.gateway
 		variables.lines = []
 		variables.asked = []
 		return this
@@ -45,7 +47,7 @@ class {
 
 	boolean function canAsk() { return variables.asking }
 
-	boolean function isGateway() { return false }
+	boolean function isGateway() { return variables.onGateway }
 
 	any function ask( required string question, struct options = {} ) { return next( "ask", arguments.question, "text" ) }
 

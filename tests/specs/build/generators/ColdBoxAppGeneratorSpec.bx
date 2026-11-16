@@ -123,6 +123,22 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileRead( result.applicationBx ) ).toBe( fileRead( own ) );
 			} );
 
+			it( "writes the path of the web UI next to the connectors key, so a chat platform can say where to connect a token", function() {
+				var buildDir = newBuildDir();
+				var root = fixtures & "/gateways-webui";
+				var result = generator.generate(
+					projectRoot    = root,
+					buildDir       = buildDir,
+					resolvedConfig = resolver.resolve( projectRoot = root ),
+					discovery      = new bxagents.models.build.ProjectDiscoverer().discover( root )
+				);
+				var factory = fileRead( buildDir & "/agent/GeneratedAgentFactory.bx" );
+
+				expect( factory ).toInclude( "ConnectorWiring" );
+				expect( factory ).toInclude( "webPath" );
+				expect( factory ).toInclude( "/chat" );
+			} );
+
 			it( "registers the schedulers through this.schedulers so they start and stop with the app", function() {
 				var buildDir = newBuildDir();
 				var result = generator.generate(

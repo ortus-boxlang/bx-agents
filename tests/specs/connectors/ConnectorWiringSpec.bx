@@ -1,0 +1,52 @@
+import bxagents.models.connectors.ConnectorSettings;
+
+/**
+ * What ConnectorWiring keeps for the whole application: the parts, once per agent, and the path of the web UI.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * The specs.
+	 */
+	function run() {
+		describe( "ConnectorWiring", function() {
+
+			beforeEach( function() {
+				new bxagents.models.connectors.ConnectorWiring().reset();
+				variables.dir = createTempDirectory( prefix = "bxagents-wiring-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.agent = new tests.specs.api.FakeAgent();
+			} );
+
+			afterEach( function() {
+				new bxagents.models.connectors.ConnectorWiring().reset();
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "keeps the path of the web UI that the generated agent was given, for the chat platforms", function() {
+				new bxagents.models.connectors.ConnectorWiring().attach( agent, { webPath : "/chat" }, { store : store } );
+				var stack = new bxagents.models.connectors.ConnectorWiring().stackOf( agent, {} );
+
+				expect( stack.webPath ).toBe( "/chat" );
+			} );
+
+			it( "makes one set of parts for one agent, and another for another agent", function() {
+				var wiring = new bxagents.models.connectors.ConnectorWiring();
+				var first = wiring.stackOf( agent, ConnectorSettings::resolve( {} ), { store : store } );
+
+				expect( wiring.stackOf( agent, {} ).service.ids() ).toBe( first.service.ids() );
+				expect( wiring.stackOf( new tests.specs.api.FakeAgent(), {}, { store : store } ).service.ids() ).toBeEmpty();
+			} );
+
+			it( "builds the agent without connectors when the project turned them off", function() {
+				new bxagents.models.connectors.ConnectorWiring().attach( agent, { connectors : "none" }, { store : store } );
+
+				expect( new bxagents.models.connectors.ConnectorWiring().stackOf( agent, {}, { store : store } ).service.ids() ).toBeEmpty();
+			} );
+
+		} );
+	}
+
+}

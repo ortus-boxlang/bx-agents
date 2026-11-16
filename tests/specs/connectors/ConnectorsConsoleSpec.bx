@@ -137,6 +137,76 @@ class extends="testbox.system.BaseSpec" {
 				expect( io.everything() ).toInclude( "nope" );
 			} );
 
+			describe( "on a chat platform", function() {
+
+				/**
+				 * @address The web app address the source knows
+				 *
+				 * @return A console over a source with a token connector, a sign in connector and a program
+				 */
+				function gatewayConsole( string address = "" ) {
+					variables.io = new tests.support.ScriptedIo( [], false, true );
+					var rows = [
+						{ id : "github", name : "GitHub", transport : "http", ways : [ "bearer" ], risk : "high", riskNote : "It can change things.", host : "api.github.com", state : "available", program : "", options : [], reason : "" },
+						{ id : "atlassian", name : "Atlassian", transport : "http", ways : [ "oauth", "bearer" ], risk : "medium", riskNote : "It can change work items.", host : "mcp.atlassian.com", state : "available", program : "", options : [], reason : "" },
+						{ id : "git", name : "Git", transport : "stdio", ways : [ "none" ], risk : "medium", riskNote : "It can change repositories.", host : "", state : "connected", program : "uvx", options : [], reason : "" }
+					];
+					var sent = [];
+					variables.sent = sent;
+					var source = {
+						available : () => true,
+						why : () => "nothing",
+						webApp : () => address,
+						list : () => { return { ok : true, connectors : rows, summary : {} }; },
+						connect : asked => { sent.append( asked ); return { ok : true, connected : false, authorizationUrl : "https://auth.example.com/authorize?state=abc", row : {} }; },
+						disconnect : id => { sent.append( { disconnect : id } ); return { ok : true }; }
+					};
+					return new bxagents.models.connectors.ConnectorsConsole( source, io );
+				}
+
+				it( "sends a person who wants a token connector to the web app, and never asks for the token", function() {
+					gatewayConsole( "https://agent.example.com/chat" ).run( [ "github" ], { confirm : true } );
+
+					expect( io.everything() ).toInclude( "A token is never typed in a chat" );
+					expect( io.everything() ).toInclude( "https://agent.example.com/chat" );
+					expect( io.everything() ).toInclude( "belongs to your web account" );
+					expect( io.everything() ).toInclude( "delete the message" );
+					expect( io.questions() ).toBeEmpty();
+					expect( sent ).toBeEmpty();
+				} );
+
+				it( "says to ask an admin for the public address when the agent has none", function() {
+					gatewayConsole( "" ).run( [ "github" ] );
+
+					expect( io.everything() ).toInclude( "BXAGENTS_PUBLIC_URL" );
+					expect( io.everything() ).toInclude( "bxAgents connect github" );
+				} );
+
+				it( "gives a sign in link that is theirs alone, after they say they have read the risk", function() {
+					gatewayConsole( "https://agent.example.com/chat" ).run( [ "atlassian" ] );
+
+					expect( io.everything() ).toInclude( "Send /connect atlassian --confirm" );
+					expect( sent ).toBeEmpty();
+
+					gatewayConsole( "https://agent.example.com/chat" ).run( [ "atlassian" ], { confirm : true } );
+
+					expect( sent[ 1 ].method ).toBe( "oauth" );
+					expect( io.everything() ).toInclude( "https://auth.example.com/authorize?state=abc" );
+					expect( io.everything() ).toInclude( "for you alone" );
+					expect( io.everything() ).toInclude( "do not share it" );
+				} );
+
+				it( "leaves a local program to an admin at the web app or the terminal", function() {
+					gatewayConsole().run( [ "git" ], { confirm : true } );
+					expect( io.everything() ).toInclude( "an admin switches it on or off" );
+
+					gatewayConsole().run( [ "git", "off" ] );
+					expect( io.everything() ).toInclude( "an admin switches it off" );
+					expect( sent ).toBeEmpty();
+				} );
+
+			} );
+
 			it( "connects a service written in Agent.yaml by its name", function() {
 				var started = [];
 				var yaml = {
