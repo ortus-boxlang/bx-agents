@@ -247,8 +247,13 @@ class {
 				}
 				merged[ key ] = value ? true : false
 			} else {
-				if ( !isSimpleValue( value ) || len( toString( value ) ) > 500 || reFind( "[\r\n\t]", toString( value ) ) ) {
+				// one line of printable text: a control character in a header or an argument is how one value becomes two
+				if ( !isSimpleValue( value ) || len( toString( value ) ) > 500 || reFind( "[\x00-\x1f\x7f]", toString( value ) ) ) {
 					throw( type = "BxAgents.BadConnectRequest", message = "The option [#key#] must be one line of text of at most 500 characters." )
+				}
+				// a value that starts with a dash would be read as a flag of the program, not as the path or name it is for
+				if ( known[ key ].target == "arg" && left( toString( value ), 1 ) == "-" ) {
+					throw( type = "BxAgents.BadConnectRequest", message = "The option [#key#] cannot start with a dash: it would be read as a flag of the program." )
 				}
 				merged[ key ] = toString( value )
 			}
