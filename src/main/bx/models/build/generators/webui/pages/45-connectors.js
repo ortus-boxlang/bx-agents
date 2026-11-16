@@ -29,8 +29,37 @@
 			[ tabsHost, status, banner, body ].forEach( function ( node ) { root.appendChild( node ); } );
 			var data = null;
 			var servers = null;
+			var timer = null;
+			var openDialog = null;
 
 			function say( text ) { status.textContent = text || ""; status.hidden = !text; }
+			function stopWatching() { if ( timer ) { clearInterval( timer ); timer = null; } }
+			function failedText( res, fallback ) {
+				return res.json().then( function ( parsed ) { return ( parsed && ( parsed.reason || parsed.error ) ) || fallback; } ).catch( function () { return fallback; } );
+			}
+
+			// Asks every two seconds until what the person is signing in to shows as connected, for three minutes at most
+			function watchUntil( check, done, gaveUp ) {
+				stopWatching();
+				var tries = 0;
+				timer = setInterval( function () {
+					tries += 1;
+					reloadQuietly().then( function () {
+						if ( check() ) { stopWatching(); done(); } else if ( tries > 90 ) { stopWatching(); gaveUp(); }
+					} );
+				}, 2000 );
+			}
+
+			function reloadQuietly() {
+				var asked = [ apiGet( "/connectors" ) ];
+				if ( capabilities.connections ) { asked.push( apiGet( "/connect" ) ); }
+				return Promise.all( asked ).then( function ( got ) {
+					if ( route.stale() ) { return; }
+					if ( got[ 0 ] && got[ 0 ].success ) { data = got[ 0 ]; }
+					if ( got[ 1 ] && got[ 1 ].success ) { servers = got[ 1 ].servers || []; }
+					draw();
+				} );
+			}
 
 			function rowsFor( which ) {
 				var all = ( data && data.connectors ) || [];
@@ -109,8 +138,188 @@
 					h( "p", { class: "conn-summary", text: row.summary || "" } ),
 					h( "div", { class: "conn-chips" }, wayChips( row ) ),
 					h( "p", { class: "pg-note conn-line", text: whoLine( row ) } ),
-					h( "div", { class: "pg-actions conn-actions", "data-for": row.id } )
+					h( "div", { class: "pg-actions conn-actions" }, actionsFor( row ) )
 				] );
+			}
+
+			function actionsFor( row ) {
+				var on = row.state === "connected" || row.state === "needs_attention";
+				var program = row.transport === "stdio";
+				var list = [];
+				if ( row.state === "needs_program" ) {
+					if ( row.docs ) { list.push( h( "a", { class: "btn", href: row.docs, target: "_blank", rel: "noopener" }, [ h( "span", { html: icon( "arrow-square-out" ) } ), h( "span", { text: "How to install " + row.program } ) ] ) ); }
+					return list;
+				}
+				if ( !on || row.state === "needs_attention" ) {
+					var word = row.state === "needs_attention" ? "Reconnect" : ( program ? "Switch on" : "Connect" );
+					list.push( btn( row.state === "needs_attention" ? "arrows-clockwise" : "plug", word, function () { openConnect( row ); }, "primary", { "aria-label": word + " " + row.name } ) );
+				}
+				if ( on ) {
+					list.push( btn( "x", program ? "Switch off" : "Disconnect", function () { disconnect( row ); }, null, { "aria-label": ( program ? "Switch off " : "Disconnect " ) + row.name } ) );
+				}
+				return list;
+			}
+
+			function disconnect( row ) {
+				say( "" );
+				apiPost( "/connectors/disconnect", { id: row.id } ).then( function ( res ) {
+					if ( res.ok ) { say( ( row.transport === "stdio" ? "Switched off " : "Disconnected from " ) + row.name + "." ); return reloadQuietly(); }
+					return failedText( res, "Could not disconnect." ).then( say );
+				} ).catch( function () { say( "Could not disconnect." ); } );
+			}
+
+			// ---- The connect dialog: risk, how, the connector's own options, then the token or the sign in ----
+			function openConnect( row ) {
+				var program = row.transport === "stdio";
+				var ways = program ? [ "program" ] : ( row.ways || [] ).map( function ( w ) { return w === "bearer" ? "token" : w; } );
+				var method = ways[ 0 ];
+				var dlg = h( "dialog", { class: "conn-dialog", "aria-labelledby": "cd-title" } );
+				var errorLine = h( "p", { class: "pg-error", role: "alert", hidden: true } );
+				var waiting = h( "p", { class: "pg-note", role: "status", "aria-live": "polite", hidden: true } );
+				var body = h( "div", { class: "conn-dialog-body" } );
+				var submit = btn( "plug", "Connect", null, "primary", { type: "submit" } );
+				var confirmBox = null;
+				var tokenInput = null;
+				var fields = {};
+
+				function close() { stopWatching(); dlg.close(); }
+				function fail( text ) { errorLine.hidden = !text; errorLine.textContent = text || ""; }
+
+				var risk = null;
+				if ( row.risk === "medium" || row.risk === "high" ) {
+					confirmBox = h( "input", { type: "checkbox", id: "cd-confirm" } );
+					risk = h( "div", { class: "conn-risk " + row.risk }, [
+						h( "p", { style: "margin:0" }, [ h( "span", { html: icon( "shield-check" ) } ), h( "strong", { text: " " + CONNECTOR_RISK[ row.risk ] + ". " } ), row.riskNote || "" ] ),
+						h( "label", { for: "cd-confirm", class: "conn-confirm" }, [ confirmBox, " I have read this and want to connect " + row.name + "." ] )
+					] );
+				}
+
+				function optionFields() {
+					var wanted = method === "token" ? "bearer" : method;
+					var shown = method === "oauth" ? [] : ( row.options || [] ).filter( function ( o ) { return !o.onlyWith || o.onlyWith === wanted; } );
+					fields = {};
+					var nodes = [];
+					shown.forEach( function ( o ) {
+						var id = "cd-opt-" + o.key;
+						var input = o.type === "boolean"
+							? h( "input", { type: "checkbox", id: id, checked: o.value === true || o.value === "true" ? true : null } )
+							: h( "input", { type: "text", id: id, value: o.value === undefined || o.value === null ? "" : String( o.value ), autocomplete: "off" } );
+						fields[ o.key ] = { input: input, boolean: o.type === "boolean" };
+						nodes.push( o.type === "boolean"
+							? h( "label", { for: id, class: "conn-check" }, [ input, h( "span", {}, [ o.label, o.help ? h( "span", { class: "pg-note", style: "display:block", text: o.help } ) : null ] ) ] )
+							: h( "div", { class: "conn-field" }, [ h( "label", { for: id, text: o.label } ), input, o.help ? h( "span", { class: "pg-note", text: o.help } ) : null ] ) );
+					} );
+					return nodes;
+				}
+
+				function drawBody() {
+					body.textContent = "";
+					fail( "" );
+					submit.querySelector( "span:last-child" ).textContent = method === "oauth" ? "Continue to " + row.host : ( program ? "Switch on" : "Connect" );
+					if ( method === "token" ) {
+						tokenInput = h( "input", { type: "password", id: "cd-token", autocomplete: "new-password", required: true, placeholder: "Paste the token" } );
+						body.appendChild( h( "div", { class: "conn-field" }, [
+							h( "label", { for: "cd-token", text: "Your token" } ), tokenInput,
+							h( "span", { class: "pg-note", text: "It is checked with " + row.host + ", then sealed in the vault as yours, " + ( row.tokenName ? "named " + row.tokenName + ", " : "" ) + "and only ever sent to " + row.host + ". It is not shown again." } ),
+							row.docs ? h( "a", { href: row.docs, target: "_blank", rel: "noopener", text: "Where to get one" } ) : null
+						] ) );
+					} else if ( method === "oauth" ) {
+						tokenInput = null;
+						body.appendChild( h( "p", { class: "pg-note", text: "You sign in on " + row.host + ". BX Agents never sees your password. The agent then acts as you." } ) );
+					} else {
+						tokenInput = null;
+						body.appendChild( h( "p", { class: "pg-note", text: "Runs " + row.program + " on the machine the agent runs on. Everyone who uses this agent shares it, so only an admin switches it on." } ) );
+					}
+					optionFields().forEach( function ( node ) { body.appendChild( node ); } );
+				}
+
+				var picker = null;
+				if ( ways.length > 1 ) {
+					picker = h( "fieldset", { class: "conn-ways" }, [ h( "legend", { text: "How do you want to connect?" } ) ] );
+					ways.forEach( function ( w ) {
+						var radio = h( "input", { type: "radio", name: "cd-way", value: w, checked: w === method ? true : null } );
+						radio.addEventListener( "change", function () { method = w; drawBody(); } );
+						picker.appendChild( h( "label", {}, [ radio, w === "oauth" ? " Sign in with " + row.name : " Paste a token" ] ) );
+					} );
+				}
+
+				var form = h( "form", { autocomplete: "off", class: "conn-dialog-form pg" }, [
+					h( "div", { class: "conn-dialog-head" }, [
+						h( "span", { class: "conn-icon", html: icon( row.icon || "puzzle-piece" ) } ),
+						h( "h2", { id: "cd-title", text: ( row.state === "needs_attention" ? "Reconnect " : ( program ? "Switch on " : "Connect " ) ) + row.name } ),
+						btn( "x", "", close, null, { "aria-label": "Close" } )
+					] ),
+					risk, picker, body, errorLine, waiting,
+					h( "div", { class: "pg-actions" }, [ submit, btn( "x", "Cancel", close ) ] )
+				] );
+				form.addEventListener( "submit", function ( evt ) {
+					evt.preventDefault();
+					if ( confirmBox && !confirmBox.checked ) { fail( "Tick the box to say you have read this." ); return; }
+					var asked = { id: row.id, method: method, confirm: !!( confirmBox && confirmBox.checked ) };
+					var options = {};
+					Object.keys( fields ).forEach( function ( key ) { options[ key ] = fields[ key ].boolean ? fields[ key ].input.checked : fields[ key ].input.value.trim(); } );
+					if ( Object.keys( options ).length ) { asked.options = options; }
+					if ( method === "token" ) {
+						asked.token = tokenInput.value;
+						// the token leaves the box at once: nothing on this page keeps it after this request
+						tokenInput.value = "";
+					}
+					fail( "" );
+					submit.disabled = true;
+					apiPost( "/connectors/connect", asked ).then( function ( res ) {
+						if ( !res.ok ) { submit.disabled = false; return failedText( res, "Could not connect." ).then( fail ); }
+						return res.json().then( function ( answer ) {
+							if ( answer.authorizationUrl ) {
+								// a link as well as a new tab: a browser may refuse a tab that a script opens after a request
+								waiting.hidden = false;
+								waiting.textContent = "";
+								waiting.appendChild( h( "a", { href: answer.authorizationUrl, target: "_blank", rel: "noopener", text: "Open the sign in for " + row.name } ) );
+								waiting.appendChild( document.createTextNode( ". Come back here when you are done." ) );
+								window.open( answer.authorizationUrl, "_blank", "noopener" );
+								watchUntil( function () {
+									return ( data.connectors || [] ).some( function ( r ) { return r.id === row.id && r.state === "connected"; } );
+								}, function () { dlg.close(); say( "Connected to " + row.name + "." ); }, function () { submit.disabled = false; fail( "Nobody came back in time. Try again." ); } );
+								return;
+							}
+							dlg.close();
+							say( ( program ? "Switched on " : "Connected to " ) + row.name + "." );
+							return reloadQuietly();
+						} );
+					} ).catch( function () { submit.disabled = false; fail( "Could not connect." ); } );
+				} );
+
+				dlg.appendChild( form );
+				dlg.addEventListener( "close", function () { stopWatching(); dlg.remove(); openDialog = null; } );
+				document.body.appendChild( dlg );
+				openDialog = dlg;
+				drawBody();
+				dlg.showModal();
+			}
+
+			// ---- The services written in Agent.yaml: the same sign in the old Connections dialog had ----
+			function connectServer( name ) {
+				say( "" );
+				apiPost( "/connect", { name: name } ).then( function ( res ) {
+					return res.json().then( function ( answer ) {
+						if ( !res.ok || !answer.authorizationUrl ) { say( ( answer && ( answer.reason || answer.error ) ) || "Could not start the sign in." ); return; }
+						status.hidden = false;
+						status.textContent = "";
+						status.appendChild( h( "a", { href: answer.authorizationUrl, target: "_blank", rel: "noopener", text: "Open the sign in for " + name } ) );
+						status.appendChild( document.createTextNode( ". Come back here when you are done." ) );
+						window.open( answer.authorizationUrl, "_blank", "noopener" );
+						watchUntil( function () {
+							return ( servers || [] ).some( function ( s ) { return s.name === name && s.connected; } );
+						}, function () { say( "Connected to " + name + "." ); }, function () { say( "Nobody came back in time. Try again." ); } );
+					} );
+				} ).catch( function () { say( "Could not start the sign in." ); } );
+			}
+
+			function disconnectServer( name ) {
+				stopWatching();
+				apiPost( "/connect/remove", { name: name } ).then( function ( res ) {
+					if ( res.ok ) { say( "Disconnected from " + name + "." ); return reloadQuietly(); }
+					return failedText( res, "Could not disconnect." ).then( say );
+				} ).catch( function () { say( "Could not disconnect." ); } );
 			}
 
 			function drawCards() {
@@ -150,7 +359,11 @@
 							chip
 						] ),
 						s.problem ? h( "p", { class: "pg-error", role: "alert", text: s.problem } ) : null,
-						h( "div", { class: "pg-actions conn-actions", "data-for": s.name } )
+						h( "div", { class: "pg-actions conn-actions" }, [
+							s.connected
+								? btn( "x", "Disconnect", function () { disconnectServer( s.name ); }, null, { "aria-label": "Disconnect " + s.name } )
+								: btn( "plug", "Connect", function () { connectServer( s.name ); }, "primary", { "aria-label": "Connect " + s.name } )
+						] )
 					] ) );
 				} );
 				body.appendChild( list );
@@ -180,5 +393,6 @@
 
 			search.addEventListener( "input", function () { if ( data ) { draw(); } } );
 			load();
+			return function () { stopWatching(); if ( openDialog ) { openDialog.close(); } };
 		}
 	} );

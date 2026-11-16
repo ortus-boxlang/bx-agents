@@ -18,7 +18,7 @@ class {
 	 * @agent The AiAgent (anything with withMCPServer() and listMCPServers())
 	 * @service The ConnectorService
 	 * @clients The ConnectorClients
-	 * @deps { settings : the ConnectorSettingsStore, vault : a VaultService, oauthRefresh : () => how many servers the sign in side added }
+	 * @deps { settings : the ConnectorSettingsStore, vault : a VaultService, oauthRefresh : () => how many servers the sign in side added, oauthTools : ( id ) => the tool definitions of a sign in connector, programClient : ( entry, started ) => an MCP client for a local program }
 	 */
 	function init( required any agent, required any service, required any clients, struct deps = {} ) {
 		variables.agent = arguments.agent
@@ -27,6 +27,9 @@ class {
 		variables.settings = arguments.deps.settings ?: ""
 		variables.vault = arguments.deps.vault ?: ""
 		variables.oauthRefresh = arguments.deps.oauthRefresh ?: ""
+		variables.oauthTools = arguments.deps.oauthTools ?: ""
+		variables.programClient = arguments.deps.programClient ?: ( ( entry, started ) => MCP( { command : started.command, env : started.env } ) )
+		variables.programClients = {}
 		variables.done = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).newKeySet()
 		return this
 	}
@@ -112,6 +115,9 @@ class {
 	}
 
 	/**
+	 * The program is started once, as the agent's own process, and its client is kept: the agent uses it for the calls and
+	 * the tools list reads the same client, so what the page shows is what the agent has.
+	 *
 	 * @entry The connector as offered
 	 *
 	 * @return True when the agent now has the program's tools
@@ -120,8 +126,68 @@ class {
 		var values = isObject( variables.settings ) ? variables.settings.get( "*", arguments.entry.id, "options" ) : {}
 		var started = ConnectorEndpoint::command( arguments.entry, values )
 		var before = variables.agent.listMCPServers().len()
-		variables.agent.withMCPServer( { command : started.command, env : started.env }, { prefix : arguments.entry.id } )
-		return variables.agent.listMCPServers().len() > before
+		var client = variables.programClient( arguments.entry, started )
+		variables.agent.withMCPServer( client, { prefix : arguments.entry.id } )
+		if ( variables.agent.listMCPServers().len() > before ) {
+			variables.programClients[ arguments.entry.id ] = client
+			return true
+		}
+		try {
+			client.close()
+		} catch ( any e ) {
+			// it never started
+		}
+		return false
+	}
+
+	/**
+	 * The tools a connector brings, as the server lists them (name, description, annotations), for the connectors that are
+	 * not reached with one person's token: a local program, and a sign in.
+	 *
+	 * @id The connector
+	 *
+	 * @return [ { name, description, annotations } ]
+	 *
+	 * @throws BxAgents.NotConnected when it is not attached
+	 */
+	array function toolsOf( required string id ) {
+		if ( variables.programClients.keyExists( arguments.id ) ) {
+			return listed( variables.programClients[ arguments.id ].listTools(), arguments.id )
+		}
+		if ( !isSimpleValue( variables.oauthTools ) ) {
+			return variables.oauthTools( arguments.id )
+		}
+		throw( type = "BxAgents.NotConnected", message = "[#arguments.id#] is not attached to the agent." )
+	}
+
+	/**
+	 * Closes what this started: the local programs.
+	 */
+	void function close() {
+		for ( var id in variables.programClients.keyArray() ) {
+			try {
+				variables.programClients[ id ].close()
+			} catch ( any e ) {
+				// already gone
+			}
+		}
+		variables.programClients = {}
+	}
+
+	/**
+	 * @answer What listTools() answered
+	 * @id The connector, for the message
+	 *
+	 * @return The tool definitions
+	 *
+	 * @throws BxAgents.CouldNotReach when the answer is not a success
+	 */
+	private array function listed( required any answer, required string id ) {
+		if ( !arguments.answer.isSuccess() ) {
+			throw( type = "BxAgents.CouldNotReach", message = "Could not list the tools of [#arguments.id#]: #arguments.answer.getError()#" )
+		}
+		var data = arguments.answer.getData()
+		return isArray( data ) ? data : ( data.tools ?: [] )
 	}
 
 	/**

@@ -114,6 +114,29 @@ class extends="testbox.system.BaseSpec" {
 				expect( added ).toBe( [ "github" ] );
 			} );
 
+			it( "starts a local program once, keeps its client and lists its tools as the program says them", function() {
+				settings.set( "*", "git", "enabled", { on : true, by : "ada", at : "now" } );
+				var started = [];
+				var program = {
+					listTools : () => { return { isSuccess : () => true, getData : () => { return { tools : [ { name : "git_status", description : "Status", annotations : { readOnlyHint : true } } ] }; } }; },
+					close : () => { started.append( "closed" ); }
+				};
+				var owner = new bxagents.models.connectors.ConnectorRuntime( agent, service, clients, { settings : settings, vault : vault, programClient : ( entry, command ) => { started.append( command.command[ 1 ] ); return program; } } );
+
+				expect( owner.attach( "git", "ada" ) ).toBeTrue();
+				expect( owner.attach( "git", "grace" ) ).toBeFalse();
+				expect( started ).toBe( [ "uvx" ] );
+				expect( added ).toBe( [ "git" ] );
+				expect( owner.toolsOf( "git" )[ 1 ].annotations.readOnlyHint ).toBeTrue();
+
+				owner.close();
+				expect( started ).toBe( [ "uvx", "closed" ] );
+			} );
+
+			it( "says a connector is not attached when its tools are asked for before", function() {
+				expect( () => runtime.toolsOf( "git" ) ).toThrow( "BxAgents.NotConnected" );
+			} );
+
 			it( "builds a program command from its options, as a list that is never joined into a shell string", function() {
 				var entry = service.entryOf( "git" );
 				var made = ConnectorEndpoint::command( entry, {} );

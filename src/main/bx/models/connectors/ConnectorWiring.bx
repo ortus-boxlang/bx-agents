@@ -44,6 +44,11 @@ class {
 			} catch ( any e ) {
 				// nothing to close
 			}
+			try {
+				stacks().get( key ).runtime.close()
+			} catch ( any e ) {
+				// nothing to close
+			}
 			stacks().remove( key )
 		}
 	}
@@ -129,11 +134,15 @@ class {
 			1800,
 			{ endpointFor : ( id, person ) => holder.tools.endpointFor( id, person ), toolGate : ( id, person, tool ) => holder.tools.gate( id, person, tool ) }
 		)
-		holder.tools = new "models.connectors.ConnectorTools@bxagents"( service, settings, clients, { ownTools : () => ( theAgent.getConfig().toolCount ?: 0 ) } )
+		holder.tools = new "models.connectors.ConnectorTools@bxagents"(
+			service, settings, clients,
+			{ ownTools : () => ( theAgent.getConfig().toolCount ?: 0 ), lister : ( id, person ) => holder.runtime.toolsOf( id ) }
+		)
 		var runtime = new "models.connectors.ConnectorRuntime@bxagents"(
 			arguments.agent, service, clients,
-			{ settings : settings, vault : vault, oauthRefresh : () => oauth.refresh() }
+			{ settings : settings, vault : vault, oauthRefresh : () => oauth.refresh(), oauthTools : id => oauth.tools( id ) }
 		)
+		holder.runtime = runtime
 		return { policy : arguments.policy, settings : settings, vault : vault, oauth : oauth, service : service, clients : clients, tools : holder.tools, runtime : runtime }
 	}
 

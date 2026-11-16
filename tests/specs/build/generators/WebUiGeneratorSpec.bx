@@ -729,6 +729,20 @@ class extends="testbox.system.BaseSpec" {
 					expect( html ).toInclude( "Needs attention" );
 				} );
 
+				it( "connects a connector from a dialog that asks for the risk, clears the token before it sends it and never keeps it", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "apiPost( ""/connectors/connect"", asked )" );
+					expect( html ).toInclude( "apiPost( ""/connectors/disconnect""" );
+					expect( html ).toInclude( "tokenInput.value = """";" );
+					expect( html ).toInclude( "I have read this and want to connect" );
+					// a person is told to tick the risk box before anything is sent
+					expect( html ).toInclude( "Tick the box to say you have read this." );
+				} );
+
 				it( "says gateways, not chat apps, and keeps every item of the Settings menu", function() {
 					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 					var appDir = newAppDir();
