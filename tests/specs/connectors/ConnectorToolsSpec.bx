@@ -92,10 +92,11 @@ class extends="testbox.system.BaseSpec" {
 			it( "lists the tools the server brings, all on, with what the server says about reading and deleting", function() {
 				var listed = tools.tools( "github", "ada" );
 
-				expect( listed.map( t => t.name ) ).toBe( [ "search_repositories", "create_issue", "delete_file" ] );
+				// by name, whatever order the server listed them in (the fake lists them as search, create, delete)
+				expect( listed.map( t => t.name ) ).toBe( [ "create_issue", "delete_file", "search_repositories" ] );
 				expect( listed.every( t => t.on ) ).toBeTrue();
 				expect( listed.every( t => !t.locked ) ).toBeTrue();
-				expect( listed[ 1 ].readOnly ).toBeTrue();
+				expect( listed[ 3 ].readOnly ).toBeTrue();
 				expect( listed[ 2 ].readOnly ).toBeFalse();
 				expect( fake.requests().map( r => r.token ).toSet().toArray() ).toBe( [ "tok-ada" ] );
 			} );
@@ -161,7 +162,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( tools.gate( "github", "grace", "delete_file" ) ).toInclude( "turned off for GitHub by this agent's admin" );
 				expect( () => tools.set( "github", "ada", { tool : "delete_file", on : true } ) ).toThrow( "BxAgents.Forbidden" );
 				// all on turns on only what the admin allows
-				expect( tools.set( "github", "ada", { all : true } ).filter( t => t.on ).map( t => t.name ) ).toBe( [ "search_repositories", "create_issue" ] );
+				expect( tools.set( "github", "ada", { all : true } ).filter( t => t.on ).map( t => t.name ) ).toBe( [ "create_issue", "search_repositories" ] );
 			} );
 
 			it( "refuses the call through the router and sends nothing to the server for a tool the person turned off", function() {

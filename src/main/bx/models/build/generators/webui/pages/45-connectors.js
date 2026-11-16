@@ -154,6 +154,9 @@
 					var word = row.state === "needs_attention" ? "Reconnect" : ( program ? "Switch on" : "Connect" );
 					list.push( btn( row.state === "needs_attention" ? "arrows-clockwise" : "plug", word, function () { openConnect( row ); }, "primary", { "aria-label": word + " " + row.name } ) );
 				}
+				if ( row.state === "connected" ) {
+					list.push( btn( "wrench", "Tools", function () { openTools( row ); }, null, { "aria-label": "Tools of " + row.name } ) );
+				}
 				if ( on ) {
 					list.push( btn( "x", program ? "Switch off" : "Disconnect", function () { disconnect( row ); }, null, { "aria-label": ( program ? "Switch off " : "Disconnect " ) + row.name } ) );
 				}
@@ -294,6 +297,98 @@
 				openDialog = dlg;
 				drawBody();
 				dlg.showModal();
+			}
+
+			// ---- The tools drawer: a switch per tool, kept for this person only. The admin's ceiling shows as a lock ----
+			function openTools( row ) {
+				var drawer = h( "dialog", { class: "conn-drawer pg", "aria-labelledby": "td-title" } );
+				var intro = h( "p", { class: "pg-note", role: "status", "aria-live": "polite" } );
+				var warning = h( "div", { class: "conn-risk high", role: "status", hidden: true } );
+				var search = h( "input", { type: "search", placeholder: "Search the tools", "aria-label": "Search the tools" } );
+				var list = h( "ul", { class: "conn-tools", "aria-label": "Tools of " + row.name } );
+				var foot = h( "p", { class: "pg-note" } );
+				var errorLine = h( "p", { class: "pg-error", role: "alert", hidden: true } );
+				var tools = [];
+				var summary = ( data && data.summary ) || {};
+
+				function fail( text ) { errorLine.hidden = !text; errorLine.textContent = text || ""; }
+				function close() { drawer.close(); }
+
+				function take( answer ) {
+					// by name, so a tool is where the person looks for it whatever order the server listed them in
+					tools = ( answer.tools || [] ).slice().sort( function ( a, b ) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : 0; } );
+					summary = answer.summary || summary;
+					draw();
+				}
+
+				function change( body ) {
+					fail( "" );
+					body.id = row.id;
+					return apiPost( "/connectors/tools", body ).then( function ( res ) {
+						if ( !res.ok ) { return failedText( res, "Could not change the tools." ).then( fail ); }
+						return res.json().then( take );
+					} ).catch( function () { fail( "Could not change the tools." ); } );
+				}
+
+				var anyHint = function () { return tools.some( function ( t ) { return t.readOnly === true || t.readOnly === false; } ); };
+
+				function draw() {
+					var on = tools.filter( function ( t ) { return t.on; } ).length;
+					intro.textContent = "Choose what the agent may use. " + on + " of " + tools.length + " on. Your choice is kept for you.";
+					warning.hidden = !summary.over;
+					warning.textContent = "";
+					if ( summary.over ) {
+						warning.appendChild( h( "span", { html: icon( "warning" ) } ) );
+						warning.appendChild( document.createTextNode( " The agent has " + summary.toolsOn + " tools on across all connectors. Models answer better with fewer than " + summary.toolWarning + "." ) );
+					}
+					var term = search.value.trim().toLowerCase();
+					var shown = tools.filter( function ( t ) { return !term || ( t.name + " " + ( t.description || "" ) ).toLowerCase().indexOf( term ) >= 0; } );
+					list.textContent = "";
+					shown.forEach( function ( t ) {
+						var id = "tool-" + t.name;
+						var box = h( "input", { type: "checkbox", id: id, checked: t.on ? true : null, disabled: t.locked ? true : null } );
+						box.addEventListener( "change", function () { change( { tool: t.name, on: box.checked } ); } );
+						list.appendChild( h( "li", { class: "conn-tool" }, [
+							h( "div", { class: "conn-tool-text" }, [
+								h( "label", { for: id }, [ h( "code", { text: t.name } ) ] ),
+								t.description ? h( "span", { class: "pg-note", text: t.description } ) : null,
+								t.locked ? h( "span", { class: "pg-note" }, [ h( "span", { html: icon( "lock-key" ) } ), " Turned off by your admin" ] ) : null
+							] ),
+							t.destructive === true ? h( "span", { class: "chip warn" }, [ h( "span", { html: icon( "warning" ) } ), "Can delete" ] ) : null,
+							t.readOnly === true ? h( "span", { class: "chip ok" }, [ "Reads only" ] ) : null,
+							h( "span", { class: "conn-switch" }, [ box, h( "span", { class: "conn-switch-track", "aria-hidden": "true" } ) ] )
+						] ) );
+					} );
+					foot.textContent = term ? "Showing " + shown.length + " of " + tools.length + "." : "";
+				}
+
+				search.addEventListener( "input", draw );
+				var actions = [
+					btn( "check", "All on", function () { change( { all: true } ); } ),
+					btn( "prohibit", "All off", function () { change( { all: false } ); } )
+				];
+				var readOnlyBtn = btn( "hand-palm", "Read only", function () { change( { readonly: true } ); } );
+				drawer.appendChild( h( "div", { class: "conn-drawer-body" }, [
+					h( "div", { class: "conn-dialog-head" }, [
+						h( "span", { class: "conn-icon", html: icon( row.icon || "puzzle-piece" ) } ),
+						h( "h2", { id: "td-title", text: row.name + " tools" } ),
+						btn( "x", "", close, null, { "aria-label": "Close" } )
+					] ),
+					intro,
+					h( "div", { class: "pg-actions", id: "td-actions" }, actions.concat( [ readOnlyBtn ] ) ),
+					search, warning, errorLine, list, foot
+				] ) );
+				drawer.addEventListener( "close", function () { drawer.remove(); reloadQuietly(); } );
+				document.body.appendChild( drawer );
+				openDialog = drawer;
+				list.appendChild( h( "li", {}, [ pageNote( "Loading the tools." ) ] ) );
+				drawer.showModal();
+				apiGet( "/connectors/tools?id=" + encodeURIComponent( row.id ) ).then( function ( answer ) {
+					if ( !answer || !answer.success ) { list.textContent = ""; fail( "Could not list the tools of " + row.name + "." ); return; }
+					take( answer );
+					// the server may not say which tools only read: then there is nothing to filter on
+					readOnlyBtn.hidden = !anyHint();
+				} );
 			}
 
 			// ---- The services written in Agent.yaml: the same sign in the old Connections dialog had ----
