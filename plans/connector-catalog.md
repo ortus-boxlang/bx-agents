@@ -316,3 +316,5 @@ Errors use the existing `Outcome` codes (`not_found`, `bad_request`, `forbidden`
   - A local program on a served agent is switched on or off by an admin only. Its options belong to the agent (owner `*`).
   - Disconnecting removes the token (or the sign in) and a note that it was refused, and keeps the person's tool switches and options.
   - No message, result or error carries a token; specs check this for each refusal.
+
+**5.3 (done).** `ConnectorTools` (list, switch one/all/read only, admin ceiling, gate at call time, tool count against `toolWarning`), `ConnectorRuntime` (attaches a connector once, after the first Connect or at restart), `ConnectorToolMiddleware` (the model is offered only the tools that person may use; OpenAI and Claude formats) and `ConnectorEndpoint::command` for local programs. Two changes to the plan: idle clients are swept lazily on the next use instead of by a heartbeat, and the tool offering spike worked, so switched off tools are hidden as well as refused. Not done: stopping a local program when it is disabled (its calls are refused instead).

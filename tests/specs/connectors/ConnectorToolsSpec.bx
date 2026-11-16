@@ -1,0 +1,230 @@
+import bxagents.models.connectors.ConnectorSettings;
+
+/**
+ * The tools of a connected connector and a person's switches: what is listed, the admin's ceiling, one tool, all, read only,
+ * the refusal at call time through the real MCPTool, and the count that warns when there are too many.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * @userId The person
+	 *
+	 * @return A real AiChatRequest that runs as them
+	 */
+	private any function requestFor( required string userId ) {
+		return new bxModules.bxai.models.requests.AiChatRequest( new bxModules.bxai.models.runnables.AiMessage(), {}, { userId : arguments.userId } );
+	}
+
+	/**
+	 * @config The agent's config, for the connectors key
+	 * @annotated True to have the server say which tools only read
+	 *
+	 * @return The connectors as offered, with github pointed at the fake server
+	 */
+	private struct function policyFor( struct config = {} ) {
+		var policy = ConnectorSettings::resolve( arguments.config );
+		for ( var entry in policy.available ) {
+			if ( entry.id == "github" ) {
+				entry.url = variables.fake.mcpUrl();
+			}
+		}
+		return policy;
+	}
+
+	/**
+	 * @name A tool name
+	 * @readOnly Whether it only reads, or an empty string for a server that does not say
+	 *
+	 * @return A tool for the fake server
+	 */
+	private struct function tool( required string name, any readOnly = "" ) {
+		var made = { name : arguments.name, description : "the #arguments.name# tool" };
+		if ( isBoolean( arguments.readOnly ) ) {
+			made.annotations = { readOnlyHint : arguments.readOnly };
+		}
+		return made;
+	}
+
+	/**
+	 * The specs.
+	 */
+	function run() {
+		describe( "ConnectorTools", function() {
+
+			beforeEach( function() {
+				variables.fake = new tests.support.FakeBearerMcp().start().withTools( [ tool( "search_repositories", true ), tool( "create_issue", false ), tool( "delete_file", false ) ] );
+				variables.dir = getTempDirectory() & "bxa-ctools-" & createUUID();
+				directoryCreate( dir, true );
+				variables.file = dir & "/chat.db";
+				variables.chat = bxagents.models.store.ChatStore::forFile( file );
+				variables.settings = new bxagents.models.connectors.ConnectorSettingsStore( chat );
+				variables.vault = new bxagents.models.vault.VaultWiring().service( file );
+				variables.clients = new bxagents.models.connectors.ConnectorClients(
+					( id, person ) => {
+						try { return vault.resolve( "GITHUB_PERSONAL_ACCESS_TOKEN", { user : person, host : "127.0.0.1", via : "spec" } ); } catch ( any e ) { return ""; }
+					},
+					1800,
+					{ endpointFor : ( id, person ) => variables.tools.endpointFor( id, person ), toolGate : ( id, person, name ) => variables.tools.gate( id, person, name ) }
+				);
+				connectBoth();
+			} );
+
+			afterEach( function() {
+				clients.close();
+				fake.stop();
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			/**
+			 * Serves a service and a tools object over the fake server, with Ada and Grace both holding a token of their own.
+			 *
+			 * @config The agent's config
+			 */
+			private void function connectBoth( struct config = {} ) {
+				vault.set( "GITHUB_PERSONAL_ACCESS_TOKEN", "tok-ada", { scope : "user", owner : "ada" } );
+				vault.set( "GITHUB_PERSONAL_ACCESS_TOKEN", "tok-grace", { scope : "user", owner : "grace" } );
+				variables.service = new bxagents.models.connectors.ConnectorService( policyFor( arguments.config ), settings, { vault : vault, programExists : p => true } );
+				variables.tools = new bxagents.models.connectors.ConnectorTools( service, settings, clients, { cacheSeconds : 0 } );
+			}
+
+			it( "lists the tools the server brings, all on, with what the server says about reading and deleting", function() {
+				var listed = tools.tools( "github", "ada" );
+
+				expect( listed.map( t => t.name ) ).toBe( [ "search_repositories", "create_issue", "delete_file" ] );
+				expect( listed.every( t => t.on ) ).toBeTrue();
+				expect( listed.every( t => !t.locked ) ).toBeTrue();
+				expect( listed[ 1 ].readOnly ).toBeTrue();
+				expect( listed[ 2 ].readOnly ).toBeFalse();
+				expect( fake.requests().map( r => r.token ).toSet().toArray() ).toBe( [ "tok-ada" ] );
+			} );
+
+			it( "says to connect first when the person has not", function() {
+				expect( () => tools.tools( "github", "linus" ) ).toThrow( "BxAgents.NotConnected" );
+				expect( () => tools.tools( "nope", "ada" ) ).toThrow( "BxAgents.UnknownConnector" );
+			} );
+
+			it( "turns one tool off for one person only, and refuses the call at once with a reason that says how to get it back", function() {
+				var after = tools.set( "github", "ada", { tool : "delete_file", on : false } );
+
+				expect( after.filter( t => t.name == "delete_file" )[ 1 ].on ).toBeFalse();
+				expect( after.filter( t => t.name == "create_issue" )[ 1 ].on ).toBeTrue();
+				expect( tools.tools( "github", "grace" ).every( t => t.on ) ).toBeTrue();
+				expect( tools.gate( "github", "ada", "delete_file" ) ).toInclude( "You turned delete_file off" );
+				expect( tools.gate( "github", "grace", "delete_file" ) ).toBe( "" );
+				expect( settings.get( "ada", "github", "tools" ).off ).toBe( [ "delete_file" ] );
+			} );
+
+			it( "turns it back on", function() {
+				tools.set( "github", "ada", { tool : "delete_file", on : false } );
+				tools.set( "github", "ada", { tool : "delete_file", on : true } );
+
+				expect( tools.gate( "github", "ada", "delete_file" ) ).toBe( "" );
+				expect( settings.get( "ada", "github", "tools" ).off ).toBeEmpty();
+			} );
+
+			it( "turns every tool off or on at once", function() {
+				expect( tools.set( "github", "ada", { all : false } ).every( t => !t.on ) ).toBeTrue();
+				expect( tools.set( "github", "ada", { all : true } ).every( t => t.on ) ).toBeTrue();
+			} );
+
+			it( "keeps only the tools the server says only read for read only", function() {
+				var after = tools.set( "github", "ada", { readonly : true } );
+
+				expect( after.filter( t => t.on ).map( t => t.name ) ).toBe( [ "search_repositories" ] );
+			} );
+
+			it( "has no read only setting for a server that does not say which tools only read", function() {
+				fake.withTools( [ tool( "a" ), tool( "b" ) ] );
+
+				try {
+					tools.set( "github", "ada", { readonly : true } );
+					fail( "it made up a read only set" );
+				} catch ( any e ) {
+					expect( e.type ).toBe( "BxAgents.BadConnectRequest" );
+					expect( e.message ).toInclude( "does not say which of its tools only read" );
+				}
+			} );
+
+			it( "refuses a tool the connector does not have and a change it does not understand", function() {
+				expect( () => tools.set( "github", "ada", { tool : "nope", on : false } ) ).toThrow( "BxAgents.BadConnectRequest" );
+				expect( () => tools.set( "github", "ada", {} ) ).toThrow( "BxAgents.BadConnectRequest" );
+			} );
+
+			it( "holds to the admin's ceiling: a tool outside it is locked for everyone and cannot be turned on", function() {
+				connectBoth( { connectors : { override : { github : { tools : [ "search_repositories", "create_issue" ] } } } } );
+				var listed = tools.tools( "github", "ada" );
+
+				expect( listed.filter( t => t.name == "delete_file" )[ 1 ].locked ).toBeTrue();
+				expect( listed.filter( t => t.name == "delete_file" )[ 1 ].on ).toBeFalse();
+				expect( tools.gate( "github", "grace", "delete_file" ) ).toInclude( "turned off for GitHub by this agent's admin" );
+				expect( () => tools.set( "github", "ada", { tool : "delete_file", on : true } ) ).toThrow( "BxAgents.Forbidden" );
+				// all on turns on only what the admin allows
+				expect( tools.set( "github", "ada", { all : true } ).filter( t => t.on ).map( t => t.name ) ).toBe( [ "search_repositories", "create_issue" ] );
+			} );
+
+			it( "refuses the call through the router and sends nothing to the server for a tool the person turned off", function() {
+				tools.set( "github", "ada", { tool : "delete_file", on : false } );
+				var router = clients.router( { id : "github", url : fake.mcpUrl() } );
+				var mcpTool = new bxModules.bxai.models.tools.MCPTool( router, { name : "delete_file", description : "", inputSchema : {} }, "github" );
+				var before = fake.requests().filter( r => r.method == "tools/call" ).len();
+
+				var refused = mcpTool.invoke( {}, requestFor( "ada" ) );
+				var allowed = mcpTool.invoke( {}, requestFor( "grace" ) );
+
+				expect( refused ).toInclude( "You turned delete_file off for GitHub" );
+				expect( fake.requests().filter( r => r.method == "tools/call" ).len() ).toBe( before + 1 );
+				expect( allowed ).toInclude( "tool=delete_file" );
+				expect( allowed ).toInclude( "token=tok-grace" );
+			} );
+
+			it( "counts the tools a person has on across connectors, with the agent's own, and warns above the limit", function() {
+				tools.set( "github", "ada", { tool : "delete_file", on : false } );
+				var count = new bxagents.models.connectors.ConnectorTools( service, settings, clients, { cacheSeconds : 0, ownTools : () => 4 } );
+
+				var ada = count.summary( "ada" );
+
+				expect( ada.byConnector ).toBe( { github : 2 } );
+				expect( ada.toolsOn ).toBe( 6 );
+				expect( ada.toolWarning ).toBe( 100 );
+				expect( ada.over ).toBeFalse();
+				expect( count.summary( "grace" ).toolsOn ).toBe( 7 );
+				expect( count.summary( "linus" ).byConnector ).toBeEmpty();
+			} );
+
+			it( "says it is over when the count passes the admin's limit", function() {
+				connectBoth( { connectors : { toolWarning : 10 } } );
+				var count = new bxagents.models.connectors.ConnectorTools( service, settings, clients, { cacheSeconds : 0, ownTools : () => 8 } );
+
+				var ada = count.summary( "ada" );
+
+				expect( ada.toolWarning ).toBe( 10 );
+				expect( ada.toolsOn ).toBe( 11 );
+				expect( ada.over ).toBeTrue();
+			} );
+
+			it( "still answers the count when one connector's tools cannot be listed, and names it", function() {
+				fake.stop();
+				var count = new bxagents.models.connectors.ConnectorTools( service, settings, clients, { cacheSeconds : 0 } );
+
+				var ada = count.summary( "ada" );
+
+				expect( ada.unavailable ).toBe( [ "github" ] );
+				expect( ada.byConnector ).toBeEmpty();
+			} );
+
+			it( "makes the address a person's options make, for the client of their own", function() {
+				var supabase = ConnectorSettings::resolve( {} ).available.filter( c => c.id == "supabase" )[ 1 ];
+				supabase.url = fake.mcpUrl();
+				var own = new bxagents.models.connectors.ConnectorService( { mode : "all", available : [ supabase ], excluded : [], shadowed : [] }, settings, { vault : vault } );
+				settings.set( "ada", "supabase", "options", { project_ref : "abc123" } );
+				var mine = new bxagents.models.connectors.ConnectorTools( own, settings, clients );
+
+				expect( mine.endpointFor( "supabase", "ada" ).url ).toInclude( "project_ref=abc123" );
+				expect( mine.endpointFor( "supabase", "grace" ).url ).notToInclude( "project_ref" );
+			} );
+		} );
+	}
+
+}

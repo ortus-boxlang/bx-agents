@@ -1,0 +1,89 @@
+import bxModules.bxai.models.middleware.AiMiddlewareResult;
+
+/**
+ * Offers the model only the connector tools the person it is talking to may use.
+ *
+ * The agent holds the tools of every connector somebody connected, one set for all. Left alone, the model would be told
+ * about GitHub's tools in a conversation with somebody who never connected GitHub, and about a tool a person turned off.
+ * Before each call to the model this takes out of the request the tools that person cannot use: those of a connector they
+ * have not connected, the ones they switched off and the ones the admin turned off. The model never sees them, so it does
+ * not try them and does not spend a turn on an error. The call is refused as well (the router), so this is not the only guard.
+ *
+ * A connector tool is named `<connector id>__<tool>`; every other tool is left alone.
+ */
+class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
+
+	/**
+	 * @service The ConnectorService
+	 * @tools The ConnectorTools
+	 */
+	function init( required any service, required any tools ) {
+		super.init()
+		variables.service = arguments.service
+		variables.connectorTools = arguments.tools
+		variables.name = "ConnectorTools"
+		variables.description = "Offers the model only the connector tools the person may use"
+		return this
+	}
+
+	/**
+	 * Takes the tools the person cannot use out of the request about to be sent.
+	 *
+	 * @context { chatRequest, dataPacket } of the call
+	 */
+	AiMiddlewareResult function beforeLLMCall( required struct context ) {
+		var packet = arguments.context.dataPacket ?: {}
+		if ( !isArray( packet.tools ?: "" ) || !packet.tools.len() ) {
+			return AiMiddlewareResult.continue()
+		}
+		var who = toString( arguments.context.chatRequest.getUserId() ?: "" )
+		var open = {}
+		for ( var row in variables.service.list( who ) ) {
+			open[ row.id ] = [ "connected", "needs_attention" ].contains( row.state )
+		}
+		packet.tools = packet.tools.map( schema => keepAllowed( schema, who, open ) ).filter( schema => !isNull( schema ) )
+		return AiMiddlewareResult.continue()
+	}
+
+	/**
+	 * @schema One tool in the provider's format
+	 * @who The person
+	 * @open { connector id : whether the person has connected it }
+	 *
+	 * @return The tool, with the ones a person cannot use taken out of a group of declarations, or nothing when the tool itself is not theirs
+	 */
+	private any function keepAllowed( required any schema, required string who, required struct open ) {
+		var schema = arguments.schema
+		if ( isStruct( schema ) && isArray( schema.functionDeclarations ?: "" ) ) {
+			var who = arguments.who
+			var open = arguments.open
+			schema.functionDeclarations = schema.functionDeclarations.filter( d => allowed( d.name ?: "", who, open ) )
+			return schema.functionDeclarations.len() ? schema : nullValue()
+		}
+		var name = isStruct( schema ) ? ( schema.function.name ?: schema.name ?: "" ) : ""
+		return allowed( name, arguments.who, arguments.open ) ? schema : nullValue()
+	}
+
+	/**
+	 * @name The tool's name as the model sees it
+	 * @who The person
+	 * @open { connector id : whether the person has connected it }
+	 *
+	 * @return True when the model may be offered it
+	 */
+	private boolean function allowed( required string name, required string who, required struct open ) {
+		var at = find( "__", arguments.name )
+		if ( at < 2 ) {
+			return true
+		}
+		var id = left( arguments.name, at - 1 )
+		if ( !arguments.open.keyExists( id ) ) {
+			return true
+		}
+		if ( !arguments.open[ id ] ) {
+			return false
+		}
+		return variables.connectorTools.gate( id, arguments.who, mid( arguments.name, at + 2, len( arguments.name ) ) ) == ""
+	}
+
+}

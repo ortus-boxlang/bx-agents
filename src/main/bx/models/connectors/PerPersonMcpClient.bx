@@ -102,9 +102,13 @@ class implements="bxModules.bxai.models.mcp.IMCPClient" {
 		if ( !len( person ) ) {
 			return response( false, {}, "No one is behind this call, so there are no #variables.connector.id# credentials to use." )
 		}
-		var target = variables.registry.forPerson( variables.connector, person )
+		var target = variables.registry.forPerson( variables.registry.endpointOf( variables.connector, person ), person )
 		if ( isNull( target ) ) {
 			return response( false, {}, "#variables.connector.id# is not connected for this person. Ask them to connect it." )
+		}
+		var why = variables.registry.gateFor( variables.connector.id, person, arguments.tool )
+		if ( len( why ) ) {
+			return response( false, {}, why )
 		}
 		return target.send( arguments.tool, arguments.args, arguments.context )
 	}
@@ -167,7 +171,7 @@ class implements="bxModules.bxai.models.mcp.IMCPClient" {
 	 */
 	private any function discoveryClient() {
 		var person = variables.registry.lastConnected( variables.connector.id )
-		return len( person ) ? variables.registry.forPerson( variables.connector, person ) : nullValue()
+		return len( person ) ? variables.registry.forPerson( variables.registry.endpointOf( variables.connector, person ), person ) : nullValue()
 	}
 
 	/**

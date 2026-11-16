@@ -157,6 +157,15 @@ class extends="testbox.system.BaseSpec" {
 				expect( text ).toInclude( "connectors.override.github.scopes does not apply: [github] has no sign in, only a token" );
 			} );
 
+			it( "carries the tool warning limit, 100 unless the key sets one, and refuses one that is not a sensible number", function() {
+				expect( ConnectorSettings::resolve( {} ).toolWarning ).toBe( 100 );
+				expect( ConnectorSettings::resolve( { connectors : { toolWarning : 60 } } ).toolWarning ).toBe( 60 );
+				expect( problemsOf( { connectors : { toolWarning : 60 } } ) ).toBeEmpty();
+				for ( var bad in [ 5, 5000, "many", 12.5 ] ) {
+					expect( problemsOf( { connectors : { toolWarning : bad } } )[ 1 ] ).toInclude( "connectors.toolWarning must be a whole number from 10 to 2000" );
+				}
+			} );
+
 			it( "lets an mcpServers entry with a connector's name replace that connector", function() {
 				var config = { mcpServers : [ { name : "github", url : "https://example.com/mcp" }, "https://other.example.com/mcp" ] };
 				var result = ConnectorSettings::resolve( config );

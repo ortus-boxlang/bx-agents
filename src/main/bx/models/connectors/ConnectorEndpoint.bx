@@ -47,6 +47,37 @@ class {
 	}
 
 	/**
+	 * How a local program connector is started: its command, with the options that are arguments added, and its environment.
+	 * An `arg` option adds its name and its value (a boolean that is true adds the name alone); an `env` option sets a variable.
+	 * Nothing is joined into a shell string: the command is a list, so a value cannot become another command.
+	 *
+	 * @entry The connector as offered
+	 * @values The option values: { key : value }. A key left out gets the option's default
+	 *
+	 * @return { command : [ program, args... ], env : { NAME : value } }
+	 */
+	static struct function command( required struct entry, struct values = {} ) {
+		var parts = duplicate( arguments.entry.command )
+		var env = {}
+		for ( var option in arguments.entry.options ) {
+			var raw = arguments.values.keyExists( option.key ) ? arguments.values[ option.key ] : option.default
+			var text = option.type == "boolean" ? ( isBoolean( raw ) && raw ? "true" : "" ) : toString( raw )
+			if ( !len( text ) ) {
+				continue
+			}
+			if ( option.target == "arg" ) {
+				parts.append( option.name )
+				if ( option.type != "boolean" ) {
+					parts.append( text )
+				}
+			} else if ( option.target == "env" ) {
+				env[ option.name ] = text
+			}
+		}
+		return { command : parts, env : env }
+	}
+
+	/**
 	 * The `mcpServers` entries the sign in side works with, one for each offered connector that has a sign in. A sign in
 	 * client is shared by everyone, so its address uses the admin's option values, never a person's.
 	 *

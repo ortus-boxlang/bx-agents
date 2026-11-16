@@ -20,6 +20,7 @@ class implements="java:com.sun.net.httpserver.HttpHandler" {
 		variables.sessions = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
 		variables.log = createObject( "java", "java.util.concurrent.CopyOnWriteArrayList" ).init()
 		variables.refused = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).newKeySet()
+		variables.tools = [ { "name" : "whoami", "description" : "Says which token and session the call used", "inputSchema" : { "type" : "object", "properties" : {} } } ]
 		return this
 	}
 
@@ -47,6 +48,24 @@ class implements="java:com.sun.net.httpserver.HttpHandler" {
 			variables.httpServer.stop( 0 )
 			variables.httpServer = ""
 		}
+	}
+
+	/**
+	 * Replaces the tools it lists (the default is one tool, `whoami`).
+	 *
+	 * @tools [ { name, description, annotations } ]
+	 *
+	 * @return This
+	 */
+	function withTools( required array tools ) {
+		variables.tools = arguments.tools.map( t => {
+			var made = { "name" : t.name, "description" : t.description ?: "", "inputSchema" : { "type" : "object", "properties" : {} } };
+			if ( t.keyExists( "annotations" ) ) {
+				made[ "annotations" ] = t.annotations;
+			}
+			return made;
+		} );
+		return this;
 	}
 
 	/**
@@ -109,11 +128,11 @@ class implements="java:com.sun.net.httpserver.HttpHandler" {
 					result = { "protocolVersion" : "2025-06-18", "capabilities" : { "tools" : {} }, "serverInfo" : { "name" : "fake-bearer", "version" : "1.0" } }
 					break
 				case "tools/list":
-					result = { "tools" : [ { "name" : "whoami", "description" : "Says which token and session the call used", "inputSchema" : { "type" : "object", "properties" : {} } } ] }
+					result = { "tools" : variables.tools }
 					break
 				case "tools/call":
 					var openedBy = variables.sessions.containsKey( session ) ? variables.sessions.get( session ) : "none"
-					result = { "content" : [ { "type" : "text", "text" : "token=#token#;session=#session#;opened-by=#openedBy#" } ] }
+					result = { "content" : [ { "type" : "text", "text" : "token=#token#;session=#session#;opened-by=#openedBy#;tool=#message.params.name ?: ''#" } ] }
 					break
 			}
 			reply( arguments.exchange, 200, { "jsonrpc" : "2.0", "id" : message.id ?: nullValue(), "result" : result }, headers )

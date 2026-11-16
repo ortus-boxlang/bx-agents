@@ -11,6 +11,9 @@
  *         tools: [ search_repositories ]
  *   connectors: none                   # the catalog is off
  *
+ * `toolWarning` (a number, 100 by default) is how many tools a person may have on across connectors before the page says it is
+ * too many for the model to choose well.
+ *
  * Offering a connector does not connect it: nothing is attached to the agent until a person connects, so an agent that
  * offers every connector still contacts none of them. It is evaluated in this order: `only`, then `exclude`, then `override`.
  *
@@ -20,7 +23,7 @@
 class {
 
 	static {
-		KEYS = [ "only", "exclude", "override" ]
+		KEYS = [ "only", "exclude", "override", "toolWarning" ]
 		OVERRIDE_KEYS = [ "timeout", "options", "scopes", "tools" ]
 	}
 
@@ -57,6 +60,9 @@ class {
 			}
 		}
 
+		if ( raw.keyExists( "toolWarning" ) && ( !isNumeric( raw.toolWarning ) || raw.toolWarning < 10 || raw.toolWarning > 2000 || raw.toolWarning != int( raw.toolWarning ) ) ) {
+			found.append( "connectors.toolWarning must be a whole number from 10 to 2000" )
+		}
 		var offered = ids
 		if ( raw.keyExists( "only" ) ) {
 			var onlyList = listOf( raw.only, "connectors.only", ids, found )
@@ -92,7 +98,7 @@ class {
 	 * @config The resolved config struct of the agent
 	 * @catalog A ConnectorCatalog. Left out: the one that ships
 	 *
-	 * @return { mode : all | only | exclude | none, available : [ connector ], excluded : [ id ], shadowed : [ id ] }
+	 * @return { mode : all | only | exclude | none, toolWarning, available : [ connector ], excluded : [ id ], shadowed : [ id ] }
 	 */
 	static struct function resolve( required struct config, any catalog = "" ) {
 		var cat = isObject( arguments.catalog ) ? arguments.catalog : new "models.connectors.ConnectorCatalog@bxagents"()
@@ -126,11 +132,13 @@ class {
 		offered = offered.filter( id => !ownNames.findNoCase( id ) )
 
 		var available = offered.map( id => effective( cat.get( id ), overrides.keyExists( id ) && isStruct( overrides[ id ] ) ? overrides[ id ] : {} ) )
+		var warnAt = isStruct( raw ?: "" ) && isNumeric( raw.toolWarning ?: "" ) ? int( raw.toolWarning ) : 100
 		return {
-			mode      : mode,
-			available : available,
-			excluded  : cat.ids().filter( id => !offered.findNoCase( id ) && !shadowed.findNoCase( id ) ),
-			shadowed  : shadowed
+			mode        : mode,
+			toolWarning : warnAt,
+			available   : available,
+			excluded    : cat.ids().filter( id => !offered.findNoCase( id ) && !shadowed.findNoCase( id ) ),
+			shadowed    : shadowed
 		}
 	}
 

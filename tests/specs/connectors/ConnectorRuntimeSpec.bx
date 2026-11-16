@@ -1,0 +1,154 @@
+import bxagents.models.connectors.ConnectorSettings;
+import bxagents.models.connectors.ConnectorEndpoint;
+
+/**
+ * Attaching a connector to the agent once, and offering the model only the tools a person may use.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * @name A tool name
+	 *
+	 * @return A tool for the fake server
+	 */
+	private struct function tool( required string name ) {
+		return { name : arguments.name, description : "the #arguments.name# tool" };
+	}
+
+	/**
+	 * @names The tool names
+	 *
+	 * @return Tools in the OpenAI format
+	 */
+	private array function schemas( required array names ) {
+		return arguments.names.map( n => { type : "function", function : { name : n, description : n, parameters : {} } } );
+	}
+
+	/**
+	 * @userId The person
+	 *
+	 * @return A real AiChatRequest that runs as them
+	 */
+	private any function requestFor( required string userId ) {
+		return new bxModules.bxai.models.requests.AiChatRequest( new bxModules.bxai.models.runnables.AiMessage(), {}, { userId : arguments.userId } );
+	}
+
+	/**
+	 * @who The person
+	 * @names The tools the agent holds
+	 *
+	 * @return The names the model is left with
+	 */
+	private array function offeredTo( required string who, required array names ) {
+		var packet = { tools : schemas( arguments.names ) };
+		middleware.beforeLLMCall( { chatRequest : requestFor( arguments.who ), dataPacket : packet } );
+		return packet.tools.map( t => t.function.name );
+	}
+
+	/**
+	 * The specs.
+	 */
+	function run() {
+		describe( "ConnectorRuntime and ConnectorToolMiddleware", function() {
+
+			beforeEach( function() {
+				variables.fake = new tests.support.FakeBearerMcp().start().withTools( [ tool( "search_repositories" ), tool( "delete_file" ) ] );
+				variables.dir = getTempDirectory() & "bxa-crun-" & createUUID();
+				directoryCreate( dir, true );
+				variables.file = dir & "/chat.db";
+				variables.chat = bxagents.models.store.ChatStore::forFile( file );
+				variables.settings = new bxagents.models.connectors.ConnectorSettingsStore( chat );
+				variables.vault = new bxagents.models.vault.VaultWiring().service( file );
+				var policy = ConnectorSettings::resolve( {} );
+				for ( var entry in policy.available ) {
+					if ( entry.id == "github" ) {
+						entry.url = fake.mcpUrl();
+					}
+				}
+				variables.clients = new bxagents.models.connectors.ConnectorClients(
+					( id, person ) => {
+						try { return vault.resolve( "GITHUB_PERSONAL_ACCESS_TOKEN", { user : person, host : "127.0.0.1", via : "spec" } ); } catch ( any e ) { return ""; }
+					},
+					1800,
+					{ endpointFor : ( id, person ) => variables.tools.endpointFor( id, person ), toolGate : ( id, person, name ) => variables.tools.gate( id, person, name ) }
+				);
+				variables.service = new bxagents.models.connectors.ConnectorService( policy, settings, { vault : vault, programExists : p => true } );
+				variables.tools = new bxagents.models.connectors.ConnectorTools( service, settings, clients, { cacheSeconds : 0 } );
+				variables.middleware = new bxagents.models.connectors.ConnectorToolMiddleware( service, tools );
+				variables.added = [];
+				variables.agent = {
+					withMCPServer : ( server, config ) => { added.append( config.prefix ?: "" ); return agent; },
+					listMCPServers : () => added.map( p => { url : p, toolNames : [] } )
+				};
+				variables.runtime = new bxagents.models.connectors.ConnectorRuntime( agent, service, clients, { settings : settings, vault : vault } );
+			} );
+
+			afterEach( function() {
+				clients.close();
+				fake.stop();
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "attaches nothing until somebody has connected", function() {
+				expect( runtime.attach( "github", "ada" ) ).toBeFalse();
+				expect( runtime.restore() ).toBe( 0 );
+				expect( added ).toBeEmpty();
+			} );
+
+			it( "attaches a connector once, however many people connect it", function() {
+				vault.set( "GITHUB_PERSONAL_ACCESS_TOKEN", "tok-ada", { scope : "user", owner : "ada" } );
+				vault.set( "GITHUB_PERSONAL_ACCESS_TOKEN", "tok-grace", { scope : "user", owner : "grace" } );
+
+				expect( runtime.attach( "github", "ada" ) ).toBeTrue();
+				expect( runtime.attach( "github", "grace" ) ).toBeFalse();
+				expect( added ).toBe( [ "github" ] );
+				expect( runtime.attached() ).toBe( [ "github" ] );
+			} );
+
+			it( "attaches what was connected before a restart", function() {
+				vault.set( "GITHUB_PERSONAL_ACCESS_TOKEN", "tok-ada", { scope : "user", owner : "ada" } );
+
+				expect( runtime.restore() ).toBe( 1 );
+				expect( added ).toBe( [ "github" ] );
+			} );
+
+			it( "builds a program command from its options, as a list that is never joined into a shell string", function() {
+				var entry = service.entryOf( "git" );
+				var made = ConnectorEndpoint::command( entry, {} );
+
+				expect( made.command ).toBeArray();
+				expect( made.command[ 1 ] ).toBe( entry.command[ 1 ] );
+				expect( made.env ).toBeStruct();
+			} );
+
+			it( "offers a person only the connector tools they connected, and leaves other tools alone", function() {
+				vault.set( "GITHUB_PERSONAL_ACCESS_TOKEN", "tok-ada", { scope : "user", owner : "ada" } );
+				var held = [ "github__search_repositories", "github__delete_file", "answer_question" ];
+
+				expect( offeredTo( "ada", held ) ).toBe( held );
+				expect( offeredTo( "linus", held ) ).toBe( [ "answer_question" ] );
+			} );
+
+			it( "does not offer a tool the person turned off, to them only", function() {
+				vault.set( "GITHUB_PERSONAL_ACCESS_TOKEN", "tok-ada", { scope : "user", owner : "ada" } );
+				vault.set( "GITHUB_PERSONAL_ACCESS_TOKEN", "tok-grace", { scope : "user", owner : "grace" } );
+				tools.set( "github", "ada", { tool : "delete_file", on : false } );
+				var held = [ "github__search_repositories", "github__delete_file" ];
+
+				expect( offeredTo( "ada", held ) ).toBe( [ "github__search_repositories" ] );
+				expect( offeredTo( "grace", held ) ).toBe( held );
+			} );
+
+			it( "understands the Claude tool format as well", function() {
+				var packet = { tools : [ { name : "github__x", description : "", input_schema : {} }, { name : "keep", description : "", input_schema : {} } ] };
+				middleware.beforeLLMCall( { chatRequest : requestFor( "linus" ), dataPacket : packet } );
+
+				expect( packet.tools.map( t => t.name ) ).toBe( [ "keep" ] );
+			} );
+
+		} );
+	}
+
+}
