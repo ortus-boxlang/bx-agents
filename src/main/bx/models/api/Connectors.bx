@@ -1,0 +1,165 @@
+/**
+ * The connectors an agent offers, as the agent API shows them to a caller: which are available, which this person has
+ * connected, how to connect and disconnect, their options and the tools each brings. The person is always the caller;
+ * nothing a caller sends can name somebody else. An answer carries names, addresses and yes or no, never a token.
+ */
+import bxModules.bxagents.models.api.Outcome;
+
+class {
+
+	/**
+	 * @stack The parts of ConnectorWiring: { service, settings, clients, tools, runtime, oauth, vault }
+	 * @caller The Caller
+	 * @served True when the agent serves more than one person, so a local program is for admins
+	 */
+	function init( required struct stack, required any caller, boolean served = true ) {
+		variables.stack = arguments.stack
+		variables.caller = arguments.caller
+		variables.actions = new "models.connectors.ConnectorActions@bxagents"(
+			arguments.stack.service, arguments.stack.settings,
+			{ vault : arguments.stack.vault, clients : arguments.stack.clients, oauth : arguments.stack.oauth, served : arguments.served }
+		)
+		return this
+	}
+
+	/**
+	 * @return An Outcome: { user, policy : { mode, count, toolWarning }, connectors : [ row ] }
+	 */
+	any function all() {
+		var who = variables.caller.id()
+		return Outcome::done( {
+			"user"       : who,
+			"policy"     : variables.stack.service.policy(),
+			"connectors" : variables.stack.service.list( who ),
+			"summary"    : variables.stack.tools.summary( who )
+		} )
+	}
+
+	/**
+	 * @asked { id, method : token | oauth | program, token, options, confirm }
+	 *
+	 * @return An Outcome: { connected, authorizationUrl, row }, or the refusal
+	 */
+	any function connect( required struct asked ) {
+		var id = toString( arguments.asked.id ?: "" )
+		try {
+			var given = {
+				method  : arguments.asked.method ?: "",
+				token   : arguments.asked.token ?: "",
+				options : arguments.asked.options ?: {},
+				confirm : ( arguments.asked.confirm ?: false ) == true,
+				admin   : variables.caller.isAdmin()
+			}
+			var done = variables.actions.connect( id, variables.caller.id(), given )
+			if ( done.connected ) {
+				variables.stack.runtime.attach( id, variables.caller.id() )
+			}
+			return Outcome::done( clean( done ) )
+		} catch ( any e ) {
+			return refusal( e )
+		}
+	}
+
+	/**
+	 * @id The connector
+	 *
+	 * @return An Outcome: { connected : false, row }, or not_found
+	 */
+	any function disconnect( required string id ) {
+		try {
+			return Outcome::done( clean( variables.actions.disconnect( arguments.id, variables.caller.id(), { admin : variables.caller.isAdmin() } ) ) )
+		} catch ( any e ) {
+			return refusal( e )
+		}
+	}
+
+	/**
+	 * @id The connector
+	 * @options { key : value }
+	 *
+	 * @return An Outcome: { row }, or the refusal
+	 */
+	any function options( required string id, required struct options ) {
+		try {
+			return Outcome::done( clean( variables.actions.setOptions( arguments.id, variables.caller.id(), arguments.options, { admin : variables.caller.isAdmin() } ) ) )
+		} catch ( any e ) {
+			return refusal( e )
+		}
+	}
+
+	/**
+	 * @id The connector
+	 *
+	 * @return An Outcome: { id, tools : [ { name, description, on, locked, readOnly } ], summary }
+	 */
+	any function tools( required string id ) {
+		try {
+			return Outcome::done( {
+				"id"      : arguments.id,
+				"tools"   : variables.stack.tools.tools( arguments.id, variables.caller.id() ),
+				"summary" : variables.stack.tools.summary( variables.caller.id() )
+			} )
+		} catch ( any e ) {
+			return refusal( e )
+		}
+	}
+
+	/**
+	 * @id The connector
+	 * @change { tool, on } or { all } or { readonly }
+	 *
+	 * @return An Outcome: { id, tools, summary }
+	 */
+	any function setTools( required string id, required struct change ) {
+		try {
+			var tools = variables.stack.tools.set( arguments.id, variables.caller.id(), arguments.change )
+			return Outcome::done( { "id" : arguments.id, "tools" : tools, "summary" : variables.stack.tools.summary( variables.caller.id() ) } )
+		} catch ( any e ) {
+			return refusal( e )
+		}
+	}
+
+	/**
+	 * @done What an action answered
+	 *
+	 * @return The same without anything but the keys this API promises
+	 */
+	private struct function clean( required struct done ) {
+		var out = {}
+		for ( var key in [ "connected", "authorizationUrl", "row" ] ) {
+			if ( arguments.done.keyExists( key ) ) {
+				out[ key ] = arguments.done[ key ]
+			}
+		}
+		return out
+	}
+
+	/**
+	 * @error What was thrown
+	 *
+	 * @return The Outcome a known error means
+	 *
+	 * @throws The error itself when it is not one this class knows
+	 */
+	private any function refusal( required any error ) {
+		switch ( arguments.error.type ) {
+			case "BxAgents.UnknownConnector":
+				return new Outcome( ok = false, code = "not_found", reason = arguments.error.message )
+			case "BxAgents.Forbidden":
+				return new Outcome( ok = false, code = "forbidden", reason = arguments.error.message )
+			case "BxAgents.BadConnectRequest":
+			case "BxAgents.ConfirmationRequired":
+			case "BxAgents.NotConnected":
+			case "BxAgents.ProgramMissing":
+			case "BxAgents.TokenRefused":
+			case "BxAgents.CouldNotReach":
+			case "BxAgents.UnknownSetting":
+				return new Outcome( ok = false, code = "bad_request", reason = arguments.error.message )
+		}
+		if ( left( arguments.error.type, 8 ) == "MCPOAuth" || arguments.error.type == "MCPAuthorizationRequired" ) {
+			return new Outcome( ok = false, code = "bad_request", reason = arguments.error.message )
+		}
+		rethrow
+	}
+
+}

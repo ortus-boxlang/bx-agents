@@ -584,6 +584,68 @@ class {
 		return post( "notes/clear", { "scope" : arguments.scope } )
 	}
 
+	// ---- Connectors ----------------------------------------------------------------------
+
+	/** The connectors the agent offers, the state of each for the caller, and how many tools they have on. */
+	struct function connectors() {
+		return get( "connectors" )
+	}
+
+	/**
+	 * Connects one connector for the caller.
+	 *
+	 * @id The connector
+	 * @method token, oauth or program
+	 * @fields { token, options, confirm }
+	 *
+	 * @return { connected, authorizationUrl, row }
+	 */
+	struct function connectConnector( required string id, required string method, struct fields = {} ) {
+		var body = { "id" : arguments.id, "method" : arguments.method }
+		body.append( arguments.fields )
+		return post( "connectors/connect", body )
+	}
+
+	/**
+	 * Disconnects one connector for the caller.
+	 *
+	 * @id The connector
+	 */
+	struct function disconnectConnector( required string id ) {
+		return post( "connectors/disconnect", { "id" : arguments.id } )
+	}
+
+	/**
+	 * Changes the caller's option values for one connector.
+	 *
+	 * @id The connector
+	 * @options { key : value }
+	 */
+	struct function connectorOptions( required string id, required struct options ) {
+		return post( "connectors/options", { "id" : arguments.id, "options" : arguments.options } )
+	}
+
+	/**
+	 * The tools a connected connector brings.
+	 *
+	 * @id The connector
+	 */
+	struct function connectorTools( required string id ) {
+		return get( "connectors/tools", { "id" : arguments.id } )
+	}
+
+	/**
+	 * Switches the caller's tools of one connector.
+	 *
+	 * @id The connector
+	 * @change { tool, on } or { all } or { readonly }
+	 */
+	struct function setConnectorTools( required string id, required struct change ) {
+		var body = { "id" : arguments.id }
+		body.append( arguments.change )
+		return post( "connectors/tools", body )
+	}
+
 	// ---- Connections ---------------------------------------------------------------------
 
 	/** The servers that ask people to sign in, and which the caller has connected. */

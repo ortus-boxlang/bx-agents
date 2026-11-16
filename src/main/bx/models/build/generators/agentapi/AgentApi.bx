@@ -78,7 +78,7 @@ class {
 	private function service() {
 		// once per request: the probe for the shared database is a query
 		if ( !request.keyExists( "bxagentsService" ) ) {
-			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered(), { manageTokens : manageTokens(), data : appData(), connections : connectionService(), gateways : gatewayInfo(), routines : jsonDeserialize( "__ROUTINES__" ), connectors : jsonDeserialize( "__CONNECTORS__" ) } )
+			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered(), { manageTokens : manageTokens(), data : appData(), connections : connectionService(), gateways : gatewayInfo(), routines : jsonDeserialize( "__ROUTINES__" ), connectors : jsonDeserialize( "__CONNECTORS__" ), apiPath : apiPath(), served : accessMode() != "open" } )
 		}
 		return request.bxagentsService
 	}
@@ -1292,6 +1292,68 @@ class {
 		} else {
 			event.renderData( type : "html", statusCode : 400, data : page.refused( done.reason() ) )
 		}
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Connectors (the catalog: GitHub, Stripe, ... each person connects with their own token or sign in)
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * GET: the connectors the agent offers and the state of each for the caller, { user, policy, connectors, summary }.
+	 */
+	function connectors( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().connectors( callerOf( event ) ).all() )
+	}
+
+	/**
+	 * Body: { id, method, token, options, confirm }. Connects one connector for the caller.
+	 */
+	function connectConnector( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		answer( event, service().connectors( callerOf( event ) ).connect( event.getHTTPContent( json : true ) ) )
+	}
+
+	/**
+	 * Body: { id }. Disconnects one connector for the caller.
+	 */
+	function disconnectConnector( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		answer( event, service().connectors( callerOf( event ) ).disconnect( toString( body.id ?: "" ) ) )
+	}
+
+	/**
+	 * Body: { id, options }. Changes the caller's option values for one connector.
+	 */
+	function connectorOptions( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var body = event.getHTTPContent( json : true )
+		answer( event, service().connectors( callerOf( event ) ).options( toString( body.id ?: "" ), isStruct( body.options ?: "" ) ? body.options : {} ) )
+	}
+
+	/**
+	 * GET ?id=: the tools of one connected connector. POST { id, tool, on } or { id, all } or { id, readonly }: switches them.
+	 */
+	function connectorTools( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var kept = service().connectors( callerOf( event ) )
+		if ( event.getHTTPMethod() == "POST" ) {
+			var body = event.getHTTPContent( json : true )
+			answer( event, kept.setTools( toString( body.id ?: "" ), body ) )
+			return
+		}
+		answer( event, kept.tools( toString( rc.id ?: "" ) ) )
 	}
 
 	/**

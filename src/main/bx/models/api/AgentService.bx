@@ -36,6 +36,10 @@ class {
 		// an AppData: the data home and volumes of the app; without one the volume list is empty and there is no data report
 		variables.appData = arguments.options.data ?: nullValue()
 		variables.connectionService = arguments.options.connections ?: nullValue()
+		// the connectors the build resolved ({ mode, toolWarning, available, ... }); without any the connectors routes answer an empty list
+		variables.connectorPolicy = arguments.options.connectors ?: { mode : "none", toolWarning : 100, available : [], excluded : [], shadowed : [] }
+		variables.apiPath = arguments.options.apiPath ?: "/__bxagents"
+		variables.served = arguments.options.served ?: true
 		// a GatewayInfo: the chat apps and their state; without one the list is empty
 		variables.gatewayInfo = arguments.options.gateways ?: nullValue()
 		// the resolved routines settings when the build turned routines on (a struct), or false
@@ -245,6 +249,27 @@ class {
 	}
 
 	/**
+	 * @caller The Caller
+	 *
+	 * @return The connectors the agent offers and what the caller has connected
+	 */
+	any function connectors( required any caller ) {
+		var wiring = { apiPath : variables.apiPath }
+		if ( !isNull( variables.store ) ) {
+			wiring.store = variables.store
+		}
+		var stack = new "models.connectors.ConnectorWiring@bxagents"().stackOf( variables.agent, variables.connectorPolicy, wiring )
+		return new Connectors( stack, arguments.caller, variables.served )
+	}
+
+	/**
+	 * @return True when the agent offers at least one connector
+	 */
+	boolean function hasConnectors() {
+		return ( variables.connectorPolicy.available ?: [] ).len() > 0
+	}
+
+	/**
 	 * @return True when at least one MCP server asks people to sign in
 	 */
 	boolean function hasConnections() {
@@ -280,6 +305,7 @@ class {
 				"notes"         : notes( arguments.caller ).keeps(),
 				"vault"         : keepsSessions(),
 				"connections"   : hasConnections(),
+				"connectors"    : hasConnectors(),
 				"routines"      : !isNull( routinesSettings() ),
 				"admin"         : arguments.caller.isAdmin(),
 				"conversations" : keepsSessions(),

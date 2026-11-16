@@ -23,6 +23,7 @@
 import bxModules.bxagents.models.util.Strings;
 import bxModules.bxagents.models.wizard.WizardCatalog;
 import bxModules.bxagents.models.routines.RoutineSettings;
+import bxModules.bxagents.models.connectors.ConnectorSettings;
 
 class {
 
@@ -996,6 +997,15 @@ class {
 		if ( signInServers.len() ) {
 			// services that ask each person to sign in: the agent is told which ones this person has not connected
 			statements.append( 'new "models.connect.ConnectionWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( signInServers )# )' )
+		}
+
+		if ( arguments.accessorPath.isEmpty() ) {
+			// connectors (the catalog): the tool filter, and the ones somebody had connected before a restart
+			// only the `connectors:` key is written in: the catalog is read where the app runs
+			var connectorKey = arguments.resolvedConfig.keyExists( "connectors" ) ? { "connectors" : arguments.resolvedConfig.connectors } : {}
+			if ( ConnectorSettings::resolve( connectorKey ).available.len() ) {
+				statements.append( 'new "models.connectors.ConnectorWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( connectorKey )# )' )
+			}
 		}
 
 		return { statements : statements, nodes : nodes }
