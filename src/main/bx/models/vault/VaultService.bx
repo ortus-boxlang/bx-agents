@@ -210,7 +210,8 @@ class {
 	 * The value of a secret, for the runtime to put in a request. Never returned to the model.
 	 *
 	 * @name The secret
-	 * @options { user : who is asking, host : where it is about to be sent, via : tool or server asking }
+	 * @options { user : who is asking, host : where it is about to be sent, via : tool or server asking,
+	 *            ownOnly : true to read only the asker's own secret and never fall back to the agent's }
 	 *
 	 * @return The value
 	 */
@@ -218,7 +219,7 @@ class {
 		var user = arguments.options.user ?: ""
 		var host = lCase( arguments.options.host ?: "" )
 		var via = arguments.options.via ?: ""
-		var row = lookupFor( arguments.name, user )
+		var row = lookupFor( arguments.name, user, arguments.options.ownOnly ?: false )
 		if ( isNull( row ) ) {
 			var missing = { scope : len( user ) ? "user" : "agent", owner : user, name : arguments.name }
 			record( "use", missing, { actor : user, via : via, host : host, ok : false } )
@@ -355,14 +356,17 @@ class {
 	}
 
 	/**
-	 * The caller's own secret, else the agent's.
+	 * The caller's own secret, else the agent's (unless the caller asked for their own only).
 	 */
-	private any function lookupFor( required string name, string user = "" ) {
+	private any function lookupFor( required string name, string user = "", boolean ownOnly = false ) {
 		if ( len( arguments.user ) ) {
 			var own = lookup( { scope : "user", owner : arguments.user, name : arguments.name } )
 			if ( !isNull( own ) ) {
 				return own
 			}
+		}
+		if ( arguments.ownOnly ) {
+			return javaCast( "null", "" )
 		}
 		return lookup( { scope : "agent", owner : "", name : arguments.name } )
 	}

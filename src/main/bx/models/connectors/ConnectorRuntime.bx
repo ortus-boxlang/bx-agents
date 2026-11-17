@@ -28,7 +28,7 @@ class {
 		variables.vault = arguments.deps.vault ?: ""
 		variables.oauthRefresh = arguments.deps.oauthRefresh ?: ""
 		variables.oauthTools = arguments.deps.oauthTools ?: ""
-		variables.programClient = arguments.deps.programClient ?: ( ( entry, started ) => MCP( { command : started.command, env : started.env } ) )
+		variables.programClient = arguments.deps.programClient ?: ( ( entry, started ) => MCP( { command : started.command, env : ConnectorEndpoint::programEnvironment( hostEnvironment(), started.env ), inheritEnv : false } ) )
 		variables.programClients = {}
 		variables.done = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).newKeySet()
 		return this
@@ -211,6 +211,18 @@ class {
 		}
 		mine.sort( ( a, b ) => compare( toString( b.updatedAt ), toString( a.updatedAt ) ) )
 		return mine[ 1 ].owner
+	}
+
+	/**
+	 * @return The environment of the agent's own process, as { NAME : value }
+	 */
+	private struct function hostEnvironment() {
+		var out = {}
+		var env = createObject( "java", "java.lang.System" ).getenv()
+		for ( var name in env.keySet() ) {
+			out[ name ] = env.get( name )
+		}
+		return out
 	}
 
 }

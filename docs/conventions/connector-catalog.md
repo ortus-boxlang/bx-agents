@@ -50,13 +50,13 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 
 - **Connects with:** a local program (an admin).
 - **Risk:** medium. Can add, reset, commit, merge and switch branches. Described by its authors as in early development. Without a repository set it can reach every repository the process can.
-- **Runs:** `uvx mcp-server-git` on the machine the agent runs on. It needs `uvx` on the PATH. Install uv (https://docs.astral.sh/uv/) so the agent can start this server. It runs on the machine the agent runs on, in the folder you start the agent from.
+- **Runs:** `uvx mcp-server-git==2026.11.11` on the machine the agent runs on. It needs `uvx` on the PATH. Install uv (https://docs.astral.sh/uv/) so the agent can start this server. It runs on the machine the agent runs on, in the folder you start the agent from.
 
 | Option | What it does | Goes to | For |
 |---|---|---|---|
 | `repository` | A path inside a Git working tree. The server then works only in that repository. Left empty, it can read and write any repository the process can reach. | arg `--repository` | every way in |
 
-[Documentation](https://github.com/modelcontextprotocol/servers/tree/main/src/git). Checked on 2026-11-14.
+[Documentation](https://github.com/modelcontextprotocol/servers/tree/main/src/git). Checked on 2026-11-17.
 
 ## GitHub
 

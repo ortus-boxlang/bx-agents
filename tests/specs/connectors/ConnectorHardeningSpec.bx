@@ -111,6 +111,32 @@ class extends="testbox.system.BaseSpec" {
 				expect( () => vault.resolve( vault.list( "ada" )[ 1 ].name, { user : "bob", host : "127.0.0.1", via : "spec" } ) ).toThrow();
 			} );
 
+			it( "never lends a person the agent's own secret of the same name, and a disconnect leaves them without access", function() {
+				var vault = new bxagents.models.vault.VaultWiring().serviceFor( store );
+				// the developer put a shared token in the agent's vault, under the name the connector uses
+				vault.set( "GITHUB_PERSONAL_ACCESS_TOKEN", "ghp_SHAREDagent0123456789abcdefABCDEF", { scope : "agent" } );
+
+				// a person who has not connected is not connected, and the shared token is never offered to them
+				expect( service.connectors( bob ).all().data().connectors.filter( c => c.id == "github" )[ 1 ].state ).toBe( "available" );
+				expect( () => vault.resolve( "GITHUB_PERSONAL_ACCESS_TOKEN", { user : "bob", host : "127.0.0.1", via : "spec", ownOnly : true } ) ).toThrow();
+				expect( service.connectors( bob ).tools( "github" ).succeeded() ).toBeFalse();
+				expect( fake.requests() ).toBeEmpty();
+
+				// the run time path: the registry that the tools use finds no token for bob, so no client and no request
+				var github = ConnectorSettings::resolve( {} ).available.filter( c => c.id == "github" )[ 1 ];
+				github.url = fake.mcpUrl();
+				var stack = new bxagents.models.connectors.ConnectorWiring().stackOf( agent, ConnectorSettings::resolve( {} ), { store : store, vault : vault } );
+				expect( stack.clients.forPerson( stack.clients.endpointOf( github, "bob" ), "bob" ) ).toBeNull();
+				expect( fake.requests() ).toBeEmpty();
+
+				// connecting uses the person's own token, and disconnecting takes the access away again
+				service.connectors( ada ).connect( { id : "github", method : "token", token : TOKEN, confirm : true } );
+				expect( vault.resolve( "GITHUB_PERSONAL_ACCESS_TOKEN", { user : "ada", host : "127.0.0.1", via : "spec", ownOnly : true } ) ).toBe( TOKEN );
+				service.connectors( ada ).disconnect( "github" );
+				expect( () => vault.resolve( "GITHUB_PERSONAL_ACCESS_TOKEN", { user : "ada", host : "127.0.0.1", via : "spec", ownOnly : true } ) ).toThrow();
+				expect( service.connectors( ada ).tools( "github" ).succeeded() ).toBeFalse();
+			} );
+
 			it( "refuses an option value with a control character or, for a program, a leading dash", function() {
 				var broken = service.connectors( ada ).options( "github", { toolsets : "issues" & char( 13 ) & char( 10 ) & "X-Evil: 1" } );
 

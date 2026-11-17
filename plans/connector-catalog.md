@@ -329,7 +329,7 @@ Errors use the existing `Outcome` codes (`not_found`, `bad_request`, `forbidden`
 
 **5.8 (done).** Hardening: option values reject control characters, anything over 500 characters, and a leading `-` for `arg` options; tokens are sealed with `hosts:[host]`; leak specs for every refusal; two-person isolation through the API. `ConnectorRuntime.toolsOf` uses a connector's own tools for `transport: http` only.
 
-**6 (done).** `runAs( person )` in a schedule: `PersonCheck` accepts the local user, a web app account or someone who has talked to the agent; `ScheduledRun` forces `userId`. An unknown name throws `BxAgents.UnknownPerson`.
+**6 (dropped before release).** `runAs( person )` for file schedules was removed: it let project code act as any person with their connected accounts, and it ran as the wrong identity for web accounts. Routines already run as their owner. A schedule marked by the person as allowed to run as them is a later design.
 
 **7 (done).** Wizard: `--connectors` (`all`, `none`, `only:a,b`, `exclude:a,b`) and the question "Leave out any connectors?". Every connector is offered unless left out.
 
@@ -337,6 +337,6 @@ Errors use the existing `Outcome` codes (`not_found`, `bad_request`, `forbidden`
 
 **9 (done).** Home page tile, the page count (thirteen), a Connectors screenshot and a narrated walkthrough video (Kokoro `af_heart`).
 
-**10 (done).** Changelog entries for connectors, connect, `runAs` and the wizard flag.
+**10 (done).** Changelog entries for connectors, connect and the wizard flag.
 
 **Deferred.** Multi-repo Git (data root sub-folders: one at a time, named instances, or none), account linking for gateways, a video with a finished Agent.yaml sign in once bx-ai ships fix 334.

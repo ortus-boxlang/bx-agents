@@ -1002,8 +1002,13 @@ class {
 
 		if ( arguments.accessorPath.isEmpty() ) {
 			// connectors (the catalog): the tool filter, and the ones somebody had connected before a restart
-			// only the `connectors:` key is written in: the catalog is read where the app runs
+			// only the `connectors:` key and the names of mcpServers are written in: the catalog is read where the app runs
 			var connectorKey = arguments.resolvedConfig.keyExists( "connectors" ) ? { "connectors" : arguments.resolvedConfig.connectors } : {}
+			// the names of the developer's own mcpServers, and only the names: an entry of the same name replaces the connector, at run time too
+			var ownServers = ( arguments.resolvedConfig.mcpServers ?: [] ).filter( entry => isStruct( entry ) && len( entry.name ?: "" ) ).map( entry => { "name" : toString( entry.name ) } )
+			if ( ownServers.len() ) {
+				connectorKey[ "mcpServers" ] = ownServers
+			}
 			var webPath = webUiPathOf( arguments.discovery )
 			if ( ConnectorSettings::resolve( connectorKey ).available.len() ) {
 				// where the web app is served, so a chat platform can be told where to connect a token

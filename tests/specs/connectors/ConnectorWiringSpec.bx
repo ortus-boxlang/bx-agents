@@ -40,6 +40,14 @@ class extends="testbox.system.BaseSpec" {
 				expect( wiring.stackOf( new tests.specs.api.FakeAgent(), {}, { store : store } ).service.ids() ).toBeEmpty();
 			} );
 
+			it( "leaves out a connector that the developer replaced with an mcpServers entry of the same name, at run time", function() {
+				new bxagents.models.connectors.ConnectorWiring().attach( agent, { mcpServers : [ { name : "github" } ] }, { store : store } );
+				var ids = new bxagents.models.connectors.ConnectorWiring().stackOf( agent, {}, { store : store } ).service.ids();
+
+				expect( ids ).notToInclude( "github" );
+				expect( ids ).toInclude( "notion" );
+			} );
+
 			it( "builds the agent without connectors when the project turned them off", function() {
 				new bxagents.models.connectors.ConnectorWiring().attach( agent, { connectors : "none" }, { store : store } );
 

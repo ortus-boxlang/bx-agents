@@ -102,7 +102,7 @@ mcpServers:
 | Cloudflare | `CLOUDFLARE_API_TOKEN` | High: DNS, Workers, billable resources, depending on the token |
 | Supabase | `SUPABASE_ACCESS_TOKEN` | High: runs SQL. The address starts read-only |
 
-A high-risk connector shows what it can do before a person connects it. **Git** runs as a program on your machine (`uvx mcp-server-git`), so it needs [uv](https://docs.astral.sh/uv/) installed where the agent runs, and it works in the folder you start the agent from. The wizard writes it as a `command` entry; see [programs as MCP servers](../conventions/mcp.md#servers-that-run-as-a-program).
+A high-risk connector shows what it can do before a person connects it. **Git** runs as a program on your machine (`uvx mcp-server-git`, pinned to a version we have checked, and started without the agent's secrets in its environment), so it needs [uv](https://docs.astral.sh/uv/) installed where the agent runs, and it works in the folder you start the agent from. The wizard writes it as a `command` entry; see [programs as MCP servers](../conventions/mcp.md#servers-that-run-as-a-program).
 
 ## Connectors
 

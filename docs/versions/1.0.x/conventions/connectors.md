@@ -84,7 +84,7 @@ Each person can turn tools on and off, one by one, from the drawer on the web pa
 
 ## Scheduled runs
 
-A [schedule](schedules.md) runs as a person with `runAs`. It uses that person's connectors and no one else's.
+A [routine](routines.md) runs as the person who made it, so it uses that person's connectors. A `schedules/*.bx` file belongs to no person and gets no connector tools.
 
 ## API
 

@@ -53,28 +53,6 @@ class {
 	}
 
 	/**
-	 * The agent for one person, so a scheduled task acts as them: their memory, their notes and their connectors (GitHub with
-	 * their own token). The person has to be one the agent knows: the local user, an account of the web app, or someone
-	 * who has talked to it. A name nobody has is an error, so a typo does not run the agent as nobody.
-	 *
-	 *     task( "pr-digest" ).cron( "0 8 * * MON" ).call( () => runAs( "ada" ).run( "summarize my open pull requests" ) )
-	 *
-	 * @person Who the run is for
-	 * @name The declared name of the agent to run; the default agent when empty
-	 *
-	 * @return An object with run( input, params, options ) that runs as the person
-	 *
-	 * @throws BxAgents.UnknownPerson when the agent does not know the person
-	 */
-	function runAs( required string person, string name = "" ) {
-		var store = new "models.vault.VaultWiring@bxagents"().storeFor()
-		if ( !new "models.runtime.PersonCheck@bxagents"( store ).exists( arguments.person ) ) {
-			throw( type = "BxAgents.UnknownPerson", message = "The agent does not know a person called [#arguments.person#]. A scheduled task can run as the local user, an account of the web app, or someone who has talked to the agent." )
-		}
-		return new "models.runtime.ScheduledRun@bxagents"( agent( arguments.name ), arguments.person )
-	}
-
-	/**
 	 * @return The project's default agent (the root agent)
 	 */
 	function defaultAgent() {
