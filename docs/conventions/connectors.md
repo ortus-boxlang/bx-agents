@@ -28,7 +28,7 @@ A **connector** is a ready-made connection to a service that has an MCP server. 
 |---|---|
 | available | Offered, not connected by you |
 | connected | Connected, its tools are on |
-| needs attention | Connected, but the token failed or expired. Connect again |
+| needs attention | Connected, but the service refused the token (it failed, expired or was revoked), at connect time or during a call. Connect again |
 | needs a program | A local program the connector runs (such as `uvx` for Git) is not installed |
 
 ## Limit them in Agent.yaml
@@ -80,7 +80,7 @@ In chat, `--token-env` is honored only on the terminal (`tui`) transport. A toke
 
 ## Tools and the tool count
 
-Each person can turn tools on and off, one by one, from the drawer on the web page or with `tools` in the terminal. Tools are listed alphabetically. When the total on exceeds `toolWarning`, the page warns that the model may choose worse. An admin's `tools` override sets the ceiling for everyone.
+Each person can turn tools on and off, one by one, from the drawer on the web page or with `tools` in the terminal. Tools are listed alphabetically. When the total on exceeds `toolWarning`, the page warns that the model may choose worse. An admin's `tools` override sets the ceiling for everyone. A tool that is off, over the ceiling or not connected is refused when the model calls it, not only hidden from it.
 
 ## Scheduled runs
 

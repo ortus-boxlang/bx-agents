@@ -18,13 +18,15 @@ class {
 	 * @credentialFor A function ( connectorId, personId ) that returns the person's token, or an empty string
 	 * @idleSeconds How long a client can sit unused before evictIdle() forgets it
 	 * @hooks { endpointFor : ( connectorId, personId ) => connector, toolGate : ( connectorId, personId, tool ) => "" or the reason the call is refused }.
-	 *        endpointFor gives the address and headers that person's option values make; toolGate is the person's tool switches
+	 *        endpointFor gives the address and headers that person's option values make; toolGate is the person's tool switches.
+	 *        onRefused ( connectorId, personId, reason ) is told when a service refuses a person's token, so it can be shown as needing attention
 	 */
 	function init( required function credentialFor, numeric idleSeconds = 1800, struct hooks = {} ) {
 		variables.credentialFor = arguments.credentialFor
 		variables.idleSeconds = arguments.idleSeconds
 		variables.endpointFor = arguments.hooks.endpointFor ?: ""
 		variables.toolGate = arguments.hooks.toolGate ?: ""
+		variables.onRefused = arguments.hooks.onRefused ?: ""
 		variables.lastSweep = getTickCount()
 		variables.entries = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
 		variables.lastBy = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
@@ -75,6 +77,7 @@ class {
 			var warm = made.listTools()
 			if ( !warm.isSuccess() && [ 401, 403 ].contains( warm.getStatusCode() ) ) {
 				closeQuietly( made )
+				refused( arguments.connector.id, arguments.personId )
 				return nullValue()
 			}
 			if ( !warm.isSuccess() ) {
@@ -179,6 +182,23 @@ class {
 	 */
 	void function drop( required string connectorId, required string personId ) {
 		forget( keyOf( arguments.connectorId, arguments.personId ) )
+	}
+
+	/**
+	 * A service refused a person's token: the client held for them is forgotten and the person is told it needs attention.
+	 *
+	 * @connectorId The connector
+	 * @personId The person
+	 */
+	void function refused( required string connectorId, required string personId ) {
+		drop( arguments.connectorId, arguments.personId )
+		if ( isClosure( variables.onRefused ) || isCustomFunction( variables.onRefused ) ) {
+			try {
+				variables.onRefused( arguments.connectorId, arguments.personId, "The service refused this token. It may have expired or been revoked: connect it again." )
+			} catch ( any e ) {
+				// what a person sees must never stop a call from being answered
+			}
+		}
 	}
 
 	/**

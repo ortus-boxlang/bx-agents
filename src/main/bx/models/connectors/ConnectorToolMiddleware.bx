@@ -7,7 +7,9 @@ import bxModules.bxai.models.middleware.AiMiddlewareResult;
  * about GitHub's tools in a conversation with somebody who never connected GitHub, and about a tool a person turned off.
  * Before each call to the model this takes out of the request the tools that person cannot use: those of a connector they
  * have not connected, the ones they switched off and the ones the admin turned off. The model never sees them, so it does
- * not try them and does not spend a turn on an error. The call is refused as well (the router), so this is not the only guard.
+ * not try them and does not spend a turn on an error. The call is refused as well, so hiding is not the only guard: before a
+ * connector tool runs, `beforeToolCall` checks the same rules again, whether the tool is one a person connected, one they
+ * switched on and one the admin allows. A model that names a hidden tool anyway gets a refusal, not a result.
  *
  * A connector tool is named `<connector id>__<tool>`; every other tool is left alone.
  */
@@ -51,6 +53,41 @@ class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 		}
 		packet.tools = packet.tools.map( schema => keepAllowed( schema, who, open ) ).filter( schema => !isNull( schema ) )
 		return AiMiddlewareResult.continue()
+	}
+
+	/**
+	 * Refuses a connector tool the person may not use, at the moment the model calls it. Hiding a tool from the request is
+	 * not enough on its own: a model can name a tool it was never offered (from its training, or from an earlier turn), and the
+	 * provider runs whatever tool of the agent it names.
+	 *
+	 * @context { chatRequest, toolName, toolArgs, tool, toolCall } of the call
+	 */
+	AiMiddlewareResult function beforeToolCall( required struct context ) {
+		var name = toString( arguments.context.toolName ?: "" )
+		var at = find( "__", name )
+		if ( at < 2 ) {
+			return AiMiddlewareResult.continue()
+		}
+		var id = left( name, at - 1 )
+		var who = toString( arguments.context.chatRequest.getUserId() ?: "" )
+		try {
+			var known = variables.service.ids().findNoCase( id ) > 0
+			if ( !known ) {
+				return AiMiddlewareResult.continue()
+			}
+			var open = {}
+			for ( var row in variables.service.list( who ) ) {
+				open[ row.id ] = [ "connected", "needs_attention" ].contains( row.state )
+			}
+			if ( !( open[ id ] ?: false ) ) {
+				return AiMiddlewareResult.reject( "#id# is not connected for this person. Ask them to connect it." )
+			}
+			var why = variables.connectorTools.gate( id, who, mid( name, at + 2, len( name ) ) )
+			return len( why ) ? AiMiddlewareResult.reject( why ) : AiMiddlewareResult.continue()
+		} catch ( any e ) {
+			// when what a person may use cannot be read, no connector tool runs
+			return AiMiddlewareResult.reject( "This connector tool cannot be used right now." )
+		}
 	}
 
 	/**

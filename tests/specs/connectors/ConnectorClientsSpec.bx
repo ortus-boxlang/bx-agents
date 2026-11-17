@@ -178,6 +178,30 @@ class extends="testbox.system.BaseSpec" {
 				expect( fake.requests() ).toBeEmpty();
 			} );
 
+			it( "tells the person to connect again when a service refuses their token, at the first call and later", function() {
+				var told = [];
+				var watched = new bxagents.models.connectors.ConnectorClients(
+					( connectorId, personId ) => tokens[ personId ] ?: "", 1800, { onRefused : ( id, person, reason ) => { told.append( id & ":" & person & ":" & reason ); } }
+				);
+				var watchedTool = toolFor( watched.router( connector ) );
+
+				// a token that worked, then was revoked: the next call is refused, the client is forgotten and the person is told
+				expect( ask( watchedTool, "ada" ).token ).toBe( "tok-ada" );
+				fake.refuse( "tok-ada" );
+				ask( watchedTool, "ada" );
+				expect( told ).toHaveLength( 1 );
+				expect( told[ 1 ] ).toInclude( "fake:ada:" );
+				expect( watched.size() ).toBe( 0 );
+
+				// a token that is refused from the start
+				variables.tokens.mallory = "tok-revoked";
+				fake.refuse( "tok-revoked" );
+				ask( watchedTool, "mallory" );
+				expect( told ).toHaveLength( 2 );
+				expect( told[ 2 ] ).toInclude( "fake:mallory:" );
+				watched.close();
+			} );
+
 			it( "does not keep a client for a token the server refuses, and tells the person to connect again", function() {
 				variables.tokens.mallory = "tok-revoked";
 				fake.refuse( "tok-revoked" );

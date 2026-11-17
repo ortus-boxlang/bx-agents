@@ -182,6 +182,28 @@ class extends="testbox.system.BaseSpec" {
 				expect( packet.tools.map( t => t.function.name ) ).toBe( [ "answer_question" ] );
 			} );
 
+			it( "refuses a connector tool at call time when the person has not connected it, turned it off or the admin did, even though the model named it", function() {
+				vault.set( "GITHUB_PERSONAL_ACCESS_TOKEN", "tok-ada", { scope : "user", owner : "ada" } );
+				tools.set( "github", "ada", { tool : "delete_file", on : false } );
+				function callOf( who, name ) {
+					return middleware.beforeToolCall( { chatRequest : requestFor( who ), toolName : name, toolArgs : {}, tool : {}, toolCall : {} } );
+				}
+
+				expect( callOf( "ada", "github__search_repositories" ).isContinue() ).toBeTrue();
+				expect( callOf( "ada", "github__delete_file" ).isRejected() ).toBeTrue();
+				expect( callOf( "linus", "github__search_repositories" ).isRejected() ).toBeTrue();
+				// anything that is not a connector tool is none of this middleware's business
+				expect( callOf( "linus", "answer_question" ).isContinue() ).toBeTrue();
+				expect( callOf( "linus", "unknownconnector__x" ).isContinue() ).toBeTrue();
+			} );
+
+			it( "runs no connector tool when it cannot read who has connected", function() {
+				var broken = { list : person => { throw( type = "Spec.Broken", message = "no database" ); }, ids : () => [ "github" ] };
+				var failing = new bxagents.models.connectors.ConnectorToolMiddleware( broken, tools );
+
+				expect( failing.beforeToolCall( { chatRequest : requestFor( "ada" ), toolName : "github__search_repositories", toolArgs : {} } ).isRejected() ).toBeTrue();
+			} );
+
 			it( "never fails the building of an agent when the connectors cannot be set up", function() {
 				var store = { datasource : () => { throw( type = "Spec.Broken", message = "no datasource" ); } };
 				var made = new bxagents.models.connectors.ConnectorWiring().attach( new tests.specs.api.FakeAgent(), {}, { store : store } );

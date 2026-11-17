@@ -48,6 +48,17 @@ class {
 	}
 
 	/**
+	 * Notes that a service refused a person's credential, so the connector shows as needing attention until they connect it again.
+	 *
+	 * @owner The person
+	 * @connector The connector's id
+	 * @reason Why, in a sentence for the person
+	 */
+	void function markRefused( required string owner, required string connector, string reason = "The server refused this token." ) {
+		set( arguments.owner, arguments.connector, "status", { state : "needs_attention", reason : arguments.reason, at : dateTimeFormat( now(), "yyyy-MM-dd HH:mm:ss" ) } )
+	}
+
+	/**
 	 * Saves a value, replacing the one that was there.
 	 *
 	 * @owner The person, or * for the agent

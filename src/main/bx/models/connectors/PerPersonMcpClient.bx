@@ -110,7 +110,11 @@ class implements="bxModules.bxai.models.mcp.IMCPClient" {
 		if ( len( why ) ) {
 			return response( false, {}, why )
 		}
-		return target.send( arguments.tool, arguments.args, arguments.context )
+		var answer = target.send( arguments.tool, arguments.args, arguments.context )
+		if ( !answer.isSuccess() && [ 401, 403 ].contains( answer.getStatusCode() ) ) {
+			variables.registry.refused( variables.connector.id, person )
+		}
+		return answer
 	}
 
 	/**
