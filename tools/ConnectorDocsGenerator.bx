@@ -29,7 +29,7 @@ class {
 		out.append( "| Connector | Connects with | Risk | What it does |" )
 		out.append( "|---|---|---|---|" )
 		for ( var entry in catalog.all() ) {
-			out.append( "| [#entry.name#](###entry.id#) | #how( entry )# | #entry.risk# | #entry.summary# |" )
+			out.append( "| [#cell( entry.name )#](###slug( entry.name )#) | #how( entry )# | #entry.risk# | #cell( entry.summary )# |" )
 		}
 		for ( var entry in catalog.all() ) {
 			out.append( "" )
@@ -63,6 +63,24 @@ class {
 			out.append( "[Documentation](#entry.docs#). Checked on #entry.verifiedOn#." )
 		}
 		return out.toList( lf ) & lf
+	}
+
+	/**
+	 * @text Any text
+	 *
+	 * @return The text safe inside a table cell: a pipe would end the cell
+	 */
+	private static string function cell( required string text ) {
+		return arguments.text.replace( "|", "\|", "all" )
+	}
+
+	/**
+	 * @heading The text of a heading
+	 *
+	 * @return The anchor a Markdown renderer gives it: lower case, words joined by a dash, punctuation dropped
+	 */
+	private static string function slug( required string heading ) {
+		return reReplace( reReplace( arguments.heading.lcase(), "[^a-z0-9 -]", "", "all" ).trim(), " +", "-", "all" )
 	}
 
 	/**

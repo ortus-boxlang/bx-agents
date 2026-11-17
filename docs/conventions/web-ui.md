@@ -161,7 +161,7 @@ For admins. Where the agent keeps everything (the [data home](data.md)) and how 
 
 ### Settings
 
-**Appearance** (mode, accent colour, text size, density), **Model** (which profile answers), **Account** (password), **Connections** for services that ask each person to sign in, **Server** facts, and for admins the **Extensions** the app loaded, with a Reload button.
+**Appearance** (mode, accent colour, text size, density), **Model** (which profile answers), **Account** (password), **Connectors** (a link to the Connectors page), **Server** facts, and for admins the **Extensions** the app loaded, with a Reload button.
 
 ![The Settings page](../assets/webui/webui-settings.png)
 
@@ -189,7 +189,7 @@ The [trailer at the top](#the-web-app) covers every page. These are the details 
 | ![Sign in with the accounts declared in `users`](../assets/webui/login.png) **Sign in.** Accounts come from [`users`](#users-and-sign-in). | ![An empty conversation with the welcome message and suggestion buttons](../assets/webui/empty-suggestions.png) **Suggestions.** An empty conversation can offer [`suggestions`](#branding-and-theming) that send with one click. |
 | ![A streamed reply with a numbered list and bold text](../assets/webui/markdown-list.png) **Streaming.** Replies render Markdown as they arrive. | ![The planner profile chosen in the picker, and the reply naming its model](../assets/webui/model-picker.png) **Model picker.** The pick is sent with each message, in the same conversation. |
 | ![A tool call shown as an open block above the reply](../assets/webui/tool-call.png) **Tools.** Each call shows its name and arguments. | ![The command menu opened by typing a slash](../assets/webui/commands-menu.png) **Commands.** Type `/` for the menu. |
-| ![A code block with its language and a Copy button](../assets/webui/code-block.png) **Code.** Each block shows its language and copies the code itself. | ![The Connections panel with mail connected](../assets/webui/connections.png) **Connections.** Sign in to a service once; the agent then acts as you. |
+| ![A code block with its language and a Copy button](../assets/webui/code-block.png) **Code.** Each block shows its language and copies the code itself. | ![The Connectors page](../assets/webui/connectors.png) **Connectors.** Connect GitHub, Notion and more once; the agent then acts as you. |
 | ![The context panel listing what fills the model's window](../assets/webui/context-panel.png) **Context.** The ring fills as the conversation grows; click it for the breakdown. | ![The Settings menu open](../assets/webui/settings-menu.png) **Settings.** One gear holds the conversation actions and the quick settings. |
 | ![The Appearance panel with mode, accent colors, text size and density](../assets/webui/appearance.png) **Appearance.** Mode, accent, text size and density, kept in this browser. | ![The page in the dark theme with the accent from the gateway entry](../assets/webui/dark-theme.png) **Theme.** Light or dark, remembered, with your `theme` accent. |
 
@@ -599,9 +599,7 @@ The Memory page also has **Conversation memory**: the messages the agent's memor
 
 ## Connections
 
-When an `mcpServers` entry has [`oauth`](connect.md), the **Settings** page has a **Connections** section and the Settings gear a **Connections** item (`/info`'s `capabilities.connections` says whether). It opens a panel with a row for each service: its name, its address, *Connected* or *Not connected*, and a *Connect* or *Disconnect* button. *Connect* opens the provider's sign in in a new tab (a link is also shown, in case the browser blocks the tab) and the panel checks again every two seconds until it works. The page never sees a token.
-
-![The Connections panel with mail connected](../assets/webui/connections.png)
+When an `mcpServers` entry has [`oauth`](connect.md), the [Connectors](#connectors) page has an **In Agent.yaml** tab (it shows only then; `/info`'s `capabilities.connections` says whether). It lists each service with its name, its address, *Connected* or *Not connected*, and a *Connect* or *Disconnect* button. *Connect* opens the provider's sign in in a new tab (a link is also shown, in case the browser blocks the tab) and the page checks again every two seconds until it works. The page never sees a token.
 
 
 ## What is not here yet

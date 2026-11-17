@@ -150,7 +150,7 @@ class {
 				println( "Open this address and sign in to #arguments.name#:" )
 				println( started.authorizationUrl )
 				if ( !( arguments.options.noOpen ?: false ) ) {
-					openBrowser( started.authorizationUrl )
+					new "models.connect.BrowserLauncher@bxagents"().open( started.authorizationUrl )
 				}
 				println( "Waiting up to #seconds# seconds for the browser to come back to #redirectUri# ..." )
 				query = toStruct( listener.await( seconds ) )
@@ -175,21 +175,6 @@ class {
 			if ( isObject( listener ) ) {
 				listener.close()
 			}
-		}
-	}
-
-	/**
-	 * Opens the address in the person's browser when the system knows how; the address is printed either way.
-	 *
-	 * @address The address
-	 */
-	private void function openBrowser( required string address ) {
-		try {
-			var os = lCase( createObject( "java", "java.lang.System" ).getProperty( "os.name" ) )
-			var command = os contains "mac" ? [ "open", arguments.address ] : ( os contains "win" ? [ "cmd", "/c", "start", "", arguments.address ] : [ "xdg-open", arguments.address ] )
-			createObject( "java", "java.lang.ProcessBuilder" ).init( command ).start()
-		} catch ( any e ) {
-			// no browser to open: the address was printed
 		}
 	}
 

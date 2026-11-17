@@ -1,6 +1,6 @@
 # Plan: the connector catalog
 
-Status: approved plan. No code in this pull request. Implementation waits for the update in flight to merge first.
+Status: implemented in this pull request. The progress notes at the end say what was done and what is deferred.
 
 ## What and why
 

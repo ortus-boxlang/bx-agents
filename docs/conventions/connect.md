@@ -32,8 +32,6 @@ mcpServers:
 The sign in above is real, against a small fake mail service ([`tools/demo/fake-oauth-mcp.bxs`](https://github.com/ortus-boxlang/bx-agents/tree/development/tools/demo)); the agent's first answer is scripted.
 
 
-![The Connections panel with mail connected](../assets/webui/connections.png)
-
 ## What you write
 
 | Key under `oauth` | Meaning |
@@ -52,7 +50,7 @@ Each way asks the same questions of the same place, so they never disagree about
 
 | Where | How |
 |---|---|
-| Web page | **Connections** in the settings menu: a row per service with *Connect* or *Disconnect*. The sign in opens in a new tab; the page notices when it worked |
+| Web page | The **Connectors** page, **In Agent.yaml** tab: a row per service with *Connect* or *Disconnect*. The sign in opens in a new tab; the page notices when it worked |
 | Terminal chat | `/connect` lists the services, `/connect mail` prints an address and waits for the browser in the background, `/connect mail remove` forgets it |
 | Command line | `bxAgents connect` lists, `bxAgents connect mail` signs in, `bxAgents connect mail --remove` forgets. See [`connect`](../cli-reference.md#connect) |
 | Chat platforms | `/connect mail` sends an address that works once, for ten minutes. Open it in a browser and sign in |

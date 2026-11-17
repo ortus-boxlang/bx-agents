@@ -12,7 +12,7 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 
 | Connector | Connects with | Risk | What it does |
 |---|---|---|---|
-| [Atlassian (Jira and Confluence)](#atlassian) | sign in or token | medium | Jira work items, Confluence pages, Bitbucket |
+| [Atlassian (Jira and Confluence)](#atlassian-jira-and-confluence) | sign in or token | medium | Jira work items, Confluence pages, Bitbucket |
 | [Cloudflare](#cloudflare) | sign in or token | high | The Cloudflare API: DNS, Workers, rules and more |
 | [Git](#git) | a local program (an admin) | medium | Read, search and change local Git repositories |
 | [GitHub](#github) | token | high | Repositories, issues, pull requests, Actions and code search |

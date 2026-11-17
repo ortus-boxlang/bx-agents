@@ -87,7 +87,7 @@ class {
 	 */
 	private void function waitForBrowser( required any connections, required any io, required string id, required string address, required numeric timeout, required boolean noOpen ) {
 		if ( !arguments.noOpen ) {
-			openBrowser( arguments.address )
+			new "models.connect.BrowserLauncher@bxagents"().open( arguments.address )
 		}
 		arguments.io.text( "Waiting for the browser to come back to this terminal (up to #arguments.timeout# seconds)..." )
 		var waited = 0
@@ -106,19 +106,6 @@ class {
 			waited += 1
 		}
 		arguments.io.warn( "Nobody came back in time. Try again." )
-	}
-
-	/**
-	 * @address The address
-	 */
-	private void function openBrowser( required string address ) {
-		try {
-			var os = lCase( createObject( "java", "java.lang.System" ).getProperty( "os.name" ) )
-			var command = os contains "mac" ? [ "open", arguments.address ] : ( os contains "win" ? [ "cmd", "/c", "start", "", arguments.address ] : [ "xdg-open", arguments.address ] )
-			createObject( "java", "java.lang.ProcessBuilder" ).init( command ).start()
-		} catch ( any e ) {
-			// no browser to open: the address is printed
-		}
 	}
 
 	/**

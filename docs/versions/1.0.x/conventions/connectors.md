@@ -29,7 +29,7 @@ A **connector** is a ready-made connection to a service that has an MCP server. 
 | available | Offered, not connected by you |
 | connected | Connected, its tools are on |
 | needs attention | Connected, but the token failed or expired. Connect again |
-| needs program | A local program the connector runs (such as `uvx` for Git) is not installed |
+| needs a program | A local program the connector runs (such as `uvx` for Git) is not installed |
 
 ## Limit them in Agent.yaml
 
@@ -37,7 +37,6 @@ A **connector** is a ready-made connection to a service that has an MCP server. 
 # Agent.yaml
 connectors:                  # leave the key out to offer every connector
   only: [ github, notion ]   # just these
-  exclude: [ stripe ]        # everything except these
   override:
     github:
       timeout: 30000
@@ -46,7 +45,16 @@ connectors:                  # leave the key out to offer every connector
   toolWarning: 100           # warn a person above this many tools
 ```
 
-`connectors: none` turns the catalog off. The order of evaluation is `only`, then `exclude`, then `override`. `override` accepts `timeout`, `options`, `scopes` and `tools`. `toolWarning` is a whole number from 10 to 2000 (100 by default). Everything is checked when the project is built, and `bxAgents inspect` shows what each agent offers.
+Or offer everything except some:
+
+```yaml
+connectors:
+  exclude: [ stripe ]
+```
+
+`exclude` names connectors that `only` would offer, so using both for different connectors is an error at build.
+
+`connectors: none` turns the catalog off. The order of evaluation is `only`, then `exclude`, then `override`. `override` accepts `timeout` (milliseconds, 1000 to 600000), `options` (the values a connector asks for), `scopes` (only for connectors with a sign in) and `tools` (the most a person may switch on: a ceiling, not a default). `toolWarning` is a whole number from 10 to 2000 (100 by default). Everything is checked when the project is built, and `bxAgents inspect` shows what each agent offers.
 
 ## Connecting
 
@@ -68,7 +76,7 @@ bxAgents connect github tools off delete_file    # also: tools on NAME, tools of
 bxAgents connect github options repository=/path/to/repo   # connectors with options
 ```
 
-In chat, `--token-env` is honored only on the terminal (`tui`) transport. Pasting a token into a chat is discouraged but is the person's choice. Programs the agent runs on its own machine (Git) can be connected only by an admin.
+In chat, `--token-env` is honored only on the terminal (`tui`) transport. A token connected on the web belongs to that web account, not to the same person's chat identity on a platform. Programs the agent runs on its own machine (Git) are connected by an admin when the agent is served.
 
 ## Tools and the tool count
 

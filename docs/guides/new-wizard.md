@@ -84,7 +84,7 @@ The wizard never asks you to type a secret that it stores.
 
 ## MCP servers
 
-All servers in the picker are remote (HTTP) servers that the bundled bx-ai can connect to, listed with how risky they are. Each starts with its credential read from the environment when the app starts:
+The wizard offers the seven [connectors](../conventions/connectors.md) and asks which to leave out. The ones you keep are offered to every person, who connects their own account; nothing is written for them in `Agent.yaml` unless you leave some out. `--mcp` (and `add mcp`) still writes a server of your own into `mcpServers`, with its credential read from the environment when the app starts:
 
 ```yaml
 mcpServers:
@@ -98,11 +98,11 @@ mcpServers:
 | GitHub | `GITHUB_PERSONAL_ACCESS_TOKEN` | High: can open and merge pull requests, push files, trigger Actions |
 | Stripe | `STRIPE_AGENT_API_KEY` | High: moves money. Use a sandbox account first |
 | Notion | `NOTION_MCP_TOKEN` | Medium: edits and deletes pages. Tokens need a Business or Enterprise plan |
-| Atlassian | `ATLASSIAN_API_TOKEN` | Medium. Unverified: the header an API token goes in is not documented |
+| Atlassian | `ATLASSIAN_API_TOKEN` | Medium: creates and updates work items and pages. Needs an admin to allow API tokens first |
 | Cloudflare | `CLOUDFLARE_API_TOKEN` | High: DNS, Workers, billable resources, depending on the token |
 | Supabase | `SUPABASE_ACCESS_TOKEN` | High: runs SQL. The address starts read-only |
 
-Picking a high-risk server shows what it can do before you continue. **Git** runs as a program on your machine (`uvx mcp-server-git`), so it needs [uv](https://docs.astral.sh/uv/) installed where the agent runs, and it works in the folder you start the agent from. The wizard writes it as a `command` entry; see [programs as MCP servers](../conventions/mcp.md#servers-that-run-as-a-program).
+A high-risk connector shows what it can do before a person connects it. **Git** runs as a program on your machine (`uvx mcp-server-git`), so it needs [uv](https://docs.astral.sh/uv/) installed where the agent runs, and it works in the folder you start the agent from. The wizard writes it as a `command` entry; see [programs as MCP servers](../conventions/mcp.md#servers-that-run-as-a-program).
 
 ## Connectors
 

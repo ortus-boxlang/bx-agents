@@ -2,6 +2,11 @@
 	// Two kinds are kept apart on purpose. The catalog connectors (GitHub, Stripe, ...) ship with BX Agents and come from
 	// GET /connectors. The services a developer wrote into Agent.yaml (mcpServers with oauth) come from GET /connect and
 	// have their own tab. The page never sees a token after sending it: a token field is emptied before the request goes.
+	/** The address if it is a web address (http or https), else an empty string: a server's sign in link is never run as script */
+	function webAddress( address ) {
+		return /^https?:\/\//i.test( String( address || "" ) ) ? address : "";
+	}
+
 	var CONNECTOR_STATES = {
 		available: { word: "Available", chip: "", icon: "plug" },
 		connected: { word: "Connected", chip: "ok", icon: "check-circle" },
@@ -275,13 +280,13 @@
 					apiPost( "/connectors/connect", asked ).then( function ( res ) {
 						if ( !res.ok ) { submit.disabled = false; return failedText( res, "Could not connect." ).then( fail ); }
 						return res.json().then( function ( answer ) {
-							if ( answer.authorizationUrl ) {
+							if ( webAddress( answer.authorizationUrl ) ) {
 								// a link as well as a new tab: a browser may refuse a tab that a script opens after a request
 								waiting.hidden = false;
 								waiting.textContent = "";
-								waiting.appendChild( h( "a", { href: answer.authorizationUrl, target: "_blank", rel: "noopener", text: "Open the sign in for " + row.name } ) );
+								waiting.appendChild( h( "a", { href: webAddress( answer.authorizationUrl ), target: "_blank", rel: "noopener", text: "Open the sign in for " + row.name } ) );
 								waiting.appendChild( document.createTextNode( ". Come back here when you are done." ) );
-								window.open( answer.authorizationUrl, "_blank", "noopener" );
+								window.open( webAddress( answer.authorizationUrl ), "_blank", "noopener" );
 								watchUntil( function () {
 									return ( data.connectors || [] ).some( function ( r ) { return r.id === row.id && r.state === "connected"; } );
 								}, function () { dlg.close(); say( "Connected to " + row.name + "." ); }, function () { submit.disabled = false; fail( "Nobody came back in time. Try again." ); } );
@@ -399,12 +404,12 @@
 				say( "" );
 				apiPost( "/connect", { name: name } ).then( function ( res ) {
 					return res.json().then( function ( answer ) {
-						if ( !res.ok || !answer.authorizationUrl ) { say( ( answer && ( answer.reason || answer.error ) ) || "Could not start the sign in." ); return; }
+						if ( !res.ok || !webAddress( answer.authorizationUrl ) ) { say( ( answer && ( answer.reason || answer.error ) ) || "Could not start the sign in." ); return; }
 						status.hidden = false;
 						status.textContent = "";
-						status.appendChild( h( "a", { href: answer.authorizationUrl, target: "_blank", rel: "noopener", text: "Open the sign in for " + name } ) );
+						status.appendChild( h( "a", { href: webAddress( answer.authorizationUrl ), target: "_blank", rel: "noopener", text: "Open the sign in for " + name } ) );
 						status.appendChild( document.createTextNode( ". Come back here when you are done." ) );
-						window.open( answer.authorizationUrl, "_blank", "noopener" );
+						window.open( webAddress( answer.authorizationUrl ), "_blank", "noopener" );
 						watchUntil( function () {
 							return ( servers || [] ).some( function ( s ) { return s.name === name && s.connected; } );
 						}, function () { say( "Connected to " + name + "." ); }, function () { say( "Nobody came back in time. Try again." ); } );

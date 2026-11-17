@@ -18,7 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **API routes** `GET /connectors`, `POST /connectors/connect`, `/connectors/disconnect`, `/connectors/options` and `GET`, `POST /connectors/tools`.
 - **`runAs( person )` in a schedule** runs the agent as a known person, so a scheduled run uses that person's connectors. An unknown name throws `BxAgents.UnknownPerson`.
 - **Wizard: `--connectors`** (`all`, `none`, `only:a,b`, `exclude:a,b`) and a "Leave out any connectors?" question. Every connector is offered unless you leave it out.
-- **Per-person sign in to MCP servers** (`oauth:` on an `mcpServers` entry) with `bxAgents connect`, `/connect` and the Connections panel, on bx-ai 3.8.
+- **Per-person sign in to MCP servers** (`oauth: on an `mcpServers` entry) with `bxAgents connect`, `/connect` and the Connectors page (the **In Agent.yaml** tab), on bx-ai 3.8. The old Connections dialog in the Settings menu is gone.
+- **`bxAgents connectors list|show|check`** reads the catalog and checks its files (also run in CI). `inspect` has a connectors section, `add mcp` and the wizard read the catalog, and `doctor` and the shell completions know about the `connectors` verb and the programs a connector needs.
+- **API:** 81 routes (five new, under `/connectors`). Settings has a link to the Connectors page. The web app has thirteen pages and the CLI 29 verbs.
 
 ### Changed
 

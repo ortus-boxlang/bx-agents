@@ -70,7 +70,7 @@ A task can run the agent as a person, so it uses that person's [connectors](conn
 task( "pr-digest" ).cron( "0 8 * * MON" ).call( () => runAs( "ada" ).run( "summarize my open pull requests" ) )
 ```
 
-`runAs( person )` accepts the local user, an account of the web app, or someone who has talked to the agent. A name the agent does not know throws `BxAgents.UnknownPerson`, so a typo never runs as nobody.
+`runAs( person, name = "" )` runs the agent called `name` (the default agent when empty) and accepts the local user, an account of the web app, or someone who has talked to the agent. A name the agent does not know throws `BxAgents.UnknownPerson`, so a typo never runs as nobody. A person who never connected a connector simply has no tools from it: the run does not fall back to anyone else's.
 
 ## Cron
 
