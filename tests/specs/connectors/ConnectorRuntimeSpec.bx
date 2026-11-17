@@ -174,12 +174,77 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "offers no connector tool when it cannot read who has connected, and still offers the agent's own", function() {
-				var broken = { list : person => { throw( type = "Spec.Broken", message = "no database" ); }, ids : () => [ "github" ] };
+				var broken = { connectedMap : person => { throw( type = "Spec.Broken", message = "no database" ); }, ids : () => [ "github" ] };
 				var failing = new bxagents.models.connectors.ConnectorToolMiddleware( broken, tools );
 				var packet = { tools : schemas( [ "github__search_repositories", "answer_question" ] ) };
 				failing.beforeLLMCall( { chatRequest : requestFor( "ada" ), dataPacket : packet } );
 
 				expect( packet.tools.map( t => t.function.name ) ).toBe( [ "answer_question" ] );
+			} );
+
+			it( "stops a program that is switched off, starts it again with new values, and leaves it alone when nothing changed", function() {
+				settings.set( "*", "git", "enabled", { on : true, by : "ada", at : "now" } );
+				var log = [];
+				var count = { n : 0 };
+				var program = () => {
+					count.n++;
+					var number = count.n;
+					return {
+						listTools : () => { return { isSuccess : () => true, getData : () => { return { tools : [ { name : "git_status", description : "Status", annotations : {} } ] }; } }; },
+						send : ( tool, args = {}, context = {} ) => { return { isSuccess : () => true, getStatusCode : () => 200, text : "ran on process " & number }; },
+						close : () => { log.append( "closed " & number ); }
+					};
+				};
+				var owner = new bxagents.models.connectors.ConnectorRuntime( agent, service, clients, { settings : settings, vault : vault, programClient : ( entry, command ) => program() } );
+				owner.attach( "git", "ada" );
+				expect( count.n ).toBe( 1 );
+
+				// nothing changed: no restart
+				expect( owner.sync( "git" ) ).toBeFalse();
+				expect( count.n ).toBe( 1 );
+
+				// an admin narrows an option: the old process is closed and a new one started
+				settings.set( "*", "git", "options", { repository : "/srv/api" } );
+				expect( owner.sync( "git" ) ).toBeTrue();
+				expect( log ).toBe( [ "closed 1" ] );
+				expect( count.n ).toBe( 2 );
+				expect( owner.sync( "git" ) ).toBeFalse();
+
+				// switched off: the process is closed and the agent's tools answer that it is off
+				settings.remove( "*", "git", "enabled" );
+				expect( owner.sync( "git" ) ).toBeTrue();
+				expect( log ).toBe( [ "closed 1", "closed 2" ] );
+				expect( owner.sync( "git" ) ).toBeFalse();
+
+				// switched on again: a fresh process, from the same registration
+				settings.set( "*", "git", "enabled", { on : true, by : "ada", at : "now" } );
+				expect( owner.sync( "git" ) ).toBeTrue();
+				expect( count.n ).toBe( 3 );
+				expect( added ).toBe( [ "git" ] );
+			} );
+
+			it( "reads the settings the same number of times however many tools the request holds", function() {
+				vault.set( "GITHUB_PERSONAL_ACCESS_TOKEN", "tok-ada", { scope : "user", owner : "ada" } );
+				var reads = { n : 0 };
+				var counting = { get : ( owner, connector, key ) => { reads.n++; return settings.get( owner, connector, key ); }, set : ( owner, connector, key, value ) => settings.set( owner, connector, key, value ) };
+				var policy = ConnectorSettings::resolve( {} );
+				var lean = new bxagents.models.connectors.ConnectorService( policy, counting, { vault : vault, programExists : p => true } );
+				var leanTools = new bxagents.models.connectors.ConnectorTools( lean, counting, clients, { cacheSeconds : 0 } );
+				var leanMiddleware = new bxagents.models.connectors.ConnectorToolMiddleware( lean, leanTools );
+				var readsFor = ( count ) => {
+					reads.n = 0;
+					var names = [];
+					for ( var i = 1; i <= count; i++ ) {
+						names.append( "github__tool_" & i );
+					}
+					var packet = { tools : schemas( names ) };
+					leanMiddleware.beforeLLMCall( { chatRequest : requestFor( "ada" ), dataPacket : packet } );
+					expect( packet.tools ).toHaveLength( count );
+					return reads.n;
+				};
+
+				expect( readsFor( 40 ) ).toBe( readsFor( 2 ) );
+				expect( readsFor( 40 ) ).toBeLTE( 12 );
 			} );
 
 			it( "refuses a connector tool at call time when the person has not connected it, turned it off or the admin did, even though the model named it", function() {
@@ -198,7 +263,7 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "runs no connector tool when it cannot read who has connected", function() {
-				var broken = { list : person => { throw( type = "Spec.Broken", message = "no database" ); }, ids : () => [ "github" ] };
+				var broken = { connectedMap : person => { throw( type = "Spec.Broken", message = "no database" ); }, ids : () => [ "github" ] };
 				var failing = new bxagents.models.connectors.ConnectorToolMiddleware( broken, tools );
 
 				expect( failing.beforeToolCall( { chatRequest : requestFor( "ada" ), toolName : "github__search_repositories", toolArgs : {} } ).isRejected() ).toBeTrue();

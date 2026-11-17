@@ -73,6 +73,32 @@ class {
 	}
 
 	/**
+	 * Which connectors a person has connected, and nothing else: the cheap question the tool middleware asks before every call to
+	 * the model and every tool call. It does not build the rows (options, status, descriptions): one read of the person's own
+	 * secrets, one read of the sign ins, and for a program the switch an admin set.
+	 *
+	 * @person The person
+	 *
+	 * @return { connector id : true when they have it connected (a refused token still counts: it is the state that says so) }
+	 */
+	struct function connectedMap( required string person ) {
+		var who = arguments.person
+		var secretNames = isObject( variables.vault ) ? variables.vault.list( who, { scope : "user" } ).map( secret => secret.name ) : []
+		var out = {}
+		for ( var item in variables.policy.available ) {
+			var on = false
+			if ( item.transport == "stdio" ) {
+				on = variables.programExists( item.requires.program ) && ( variables.settings.get( "*", item.id, "enabled" ).on ?: false )
+			} else {
+				var tokenMethod = item.auth.filter( m => m.type == "bearer" )
+				on = ( item.auth.some( m => m.type == "oauth" ) && variables.signedIn( item.id, who ) ) || ( tokenMethod.len() && secretNames.contains( tokenMethod[ 1 ].envVar ) )
+			}
+			out[ item.id ] = on ? true : false
+		}
+		return out
+	}
+
+	/**
 	 * @id A connector id
 	 *
 	 * @return The connector as offered (the catalog entry with the admin's overrides), or an empty struct. It has the address and

@@ -55,6 +55,8 @@ class {
 			if ( done.connected ) {
 				variables.stack.runtime.attach( id, variables.caller.id() )
 			}
+			// a program that was started before is stopped, started again or left as it is, to match what was just set
+			variables.stack.runtime.sync( id )
 			return Outcome::done( clean( done ) )
 		} catch ( any e ) {
 			return refusal( e )
@@ -68,7 +70,9 @@ class {
 	 */
 	any function disconnect( required string id ) {
 		try {
-			return Outcome::done( clean( variables.actions.disconnect( arguments.id, variables.caller.id(), { admin : variables.caller.isAdmin() } ) ) )
+			var done = variables.actions.disconnect( arguments.id, variables.caller.id(), { admin : variables.caller.isAdmin() } )
+			variables.stack.runtime.sync( arguments.id )
+			return Outcome::done( clean( done ) )
 		} catch ( any e ) {
 			return refusal( e )
 		}
@@ -82,7 +86,9 @@ class {
 	 */
 	any function options( required string id, required struct options ) {
 		try {
-			return Outcome::done( clean( variables.actions.setOptions( arguments.id, variables.caller.id(), arguments.options, { admin : variables.caller.isAdmin() } ) ) )
+			var done = variables.actions.setOptions( arguments.id, variables.caller.id(), arguments.options, { admin : variables.caller.isAdmin() } )
+			variables.stack.runtime.sync( arguments.id )
+			return Outcome::done( clean( done ) )
 		} catch ( any e ) {
 			return refusal( e )
 		}

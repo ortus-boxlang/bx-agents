@@ -111,16 +111,41 @@ class {
 	 * @return An empty string when it may go on, else the sentence that says why not
 	 */
 	string function gate( required string id, required string person, required string tool ) {
+		return refusalOf( rulesOf( arguments.id, arguments.person ), arguments.tool )
+	}
+
+	/**
+	 * What decides whether a person may use the tools of one connector: read once, so a request that checks every tool does not
+	 * read the same settings again for each of them.
+	 *
+	 * @id The connector
+	 * @person The person
+	 *
+	 * @return { known, name, allowed : the admin's list ([] = every tool), off : the tools the person turned off }
+	 */
+	struct function rulesOf( required string id, required string person ) {
 		var entry = variables.service.entryOf( arguments.id )
 		if ( !entry.count() ) {
+			return { known : false, name : "", allowed : [], off : [] }
+		}
+		return { known : true, name : entry.name, allowed : entry.tools, off : variables.settings.get( arguments.person, arguments.id, "tools" ).off ?: [] }
+	}
+
+	/**
+	 * @rules What rulesOf() answered
+	 * @tool The tool's name on the server
+	 *
+	 * @return An empty string when it may go on, else the sentence that says why not
+	 */
+	string function refusalOf( required struct rules, required string tool ) {
+		if ( !arguments.rules.known ) {
 			return ""
 		}
-		if ( entry.tools.len() && !entry.tools.findNoCase( arguments.tool ) ) {
-			return "#arguments.tool# is turned off for #entry.name# by this agent's admin."
+		if ( arguments.rules.allowed.len() && !arguments.rules.allowed.findNoCase( arguments.tool ) ) {
+			return "#arguments.tool# is turned off for #arguments.rules.name# by this agent's admin."
 		}
-		var off = variables.settings.get( arguments.person, arguments.id, "tools" ).off ?: []
-		if ( off.findNoCase( arguments.tool ) ) {
-			return "You turned #arguments.tool# off for #entry.name#. Turn it on in Connectors to use it."
+		if ( arguments.rules.off.findNoCase( arguments.tool ) ) {
+			return "You turned #arguments.tool# off for #arguments.rules.name#. Turn it on in Connectors to use it."
 		}
 		return ""
 	}

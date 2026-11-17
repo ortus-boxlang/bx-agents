@@ -76,7 +76,7 @@ bxAgents connect github tools off delete_file    # also: tools on NAME, tools of
 bxAgents connect github options repository=/path/to/repo   # connectors with options
 ```
 
-In chat, `--token-env` is honored only on the terminal (`tui`) transport. A token connected on the web belongs to that web account, not to the same person's chat identity on a platform. Programs the agent runs on its own machine (Git) are connected by an admin when the agent is served.
+In chat, `--token-env` is honored only on the terminal (`tui`) transport. A token connected on the web belongs to that web account, not to the same person's chat identity on a platform. Programs the agent runs on its own machine (Git) are connected by an admin when the agent is served. Switching it off stops the process, and changing an option restarts it with the new value, at once.
 
 ## Tools and the tool count
 

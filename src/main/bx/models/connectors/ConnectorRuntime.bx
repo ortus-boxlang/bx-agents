@@ -123,21 +123,65 @@ class {
 	 * @return True when the agent now has the program's tools
 	 */
 	private boolean function attachProgram( required struct entry ) {
-		var values = isObject( variables.settings ) ? variables.settings.get( "*", arguments.entry.id, "options" ) : {}
-		var started = ConnectorEndpoint::command( arguments.entry, values )
+		var id = arguments.entry.id
+		var entry = arguments.entry
+		var proxy = new "models.connectors.ProgramClient@bxagents"( () => startProgram( entry ), "program:" & id )
 		var before = variables.agent.listMCPServers().len()
-		var client = variables.programClient( arguments.entry, started )
-		variables.agent.withMCPServer( client, { prefix : arguments.entry.id } )
+		proxy.start( optionsOf( id ) )
+		variables.agent.withMCPServer( proxy, { prefix : id } )
 		if ( variables.agent.listMCPServers().len() > before ) {
-			variables.programClients[ arguments.entry.id ] = client
+			variables.programClients[ id ] = proxy
 			return true
 		}
-		try {
-			client.close()
-		} catch ( any e ) {
-			// it never started
+		proxy.stop()
+		return false
+	}
+
+	/**
+	 * Makes a program connector match what an admin has set: stopped when it is switched off, restarted with the new values
+	 * when its options changed. Call it after anything that changes a program's switch or options. A connector that is not a
+	 * program, or was never started, is left alone.
+	 *
+	 * @id The connector
+	 *
+	 * @return True when a process was started or stopped by this call
+	 */
+	boolean function sync( required string id ) {
+		var entry = variables.service.entryOf( arguments.id )
+		if ( !entry.count() || entry.transport != "stdio" || !variables.programClients.keyExists( arguments.id ) || !isObject( variables.settings ) ) {
+			return false
+		}
+		var proxy = variables.programClients[ arguments.id ]
+		var on = variables.settings.get( "*", arguments.id, "enabled" ).on ?: false
+		if ( !on ) {
+			var wasRunning = proxy.running()
+			proxy.stop()
+			return wasRunning
+		}
+		if ( !proxy.running() || proxy.startedWith() != optionsOf( arguments.id ) ) {
+			proxy.start( optionsOf( arguments.id ) )
+			return true
 		}
 		return false
+	}
+
+	/**
+	 * @entry The connector
+	 *
+	 * @return A started client of the program, with the values an admin has set now
+	 */
+	private any function startProgram( required struct entry ) {
+		var started = ConnectorEndpoint::command( arguments.entry, variables.settings.get( "*", arguments.entry.id, "options" ) )
+		return variables.programClient( arguments.entry, started )
+	}
+
+	/**
+	 * @id The connector
+	 *
+	 * @return A text that changes when the admin's option values change
+	 */
+	private string function optionsOf( required string id ) {
+		return isObject( variables.settings ) ? hash( jsonSerialize( variables.settings.get( "*", arguments.id, "options" ) ), "SHA-256" ) : ""
 	}
 
 	/**

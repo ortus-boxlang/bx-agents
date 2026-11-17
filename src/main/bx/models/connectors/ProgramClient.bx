@@ -1,0 +1,205 @@
+/**
+ * [BoxLang]
+ *
+ * Copyright [2023] [Ortus Solutions, Corp]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ */
+
+/**
+ * The client of a local program connector (Git), as the agent holds it.
+ *
+ * The agent registers an MCP client once, and its tools stay bound to that object for the life of the agent: there is no way
+ * to take one out or put another in. A program has to be stopped when an admin switches it off, and started again with new
+ * values when an admin changes an option. So the agent is given this stand-in, and the real client (the running process) is
+ * swapped behind it: `restart()` stops the old process and starts one with the new values, `stop()` ends it and leaves
+ * the stand-in answering that the program is off.
+ */
+class implements="bxModules.bxai.models.mcp.IMCPClient" {
+
+	/**
+	 * @factory A function that starts the program and gives its client: () => IMCPClient
+	 * @label What getBaseURL() answers
+	 */
+	function init( required function factory, string label = "program" ) {
+		variables.factory = arguments.factory
+		variables.label = arguments.label
+		variables.inner = nullValue()
+		variables.fingerprint = ""
+		return this
+	}
+
+	/**
+	 * Starts the program.
+	 *
+	 * @fingerprint A text that changes when the values the program was started with change
+	 *
+	 * @return This client
+	 */
+	function start( string fingerprint = "" ) {
+		stop()
+		variables.inner = variables.factory()
+		variables.fingerprint = arguments.fingerprint
+		return this
+	}
+
+	/**
+	 * Stops the running process, if there is one. The client keeps answering, with a message that the program is off.
+	 *
+	 * @return This client
+	 */
+	function stop() {
+		if ( !isNull( variables.inner ) ) {
+			try {
+				variables.inner.close()
+			} catch ( any e ) {
+				// already gone
+			}
+			variables.inner = nullValue()
+		}
+		return this
+	}
+
+	/** @return True when a process is running behind this client */
+	boolean function running() {
+		return !isNull( variables.inner )
+	}
+
+	/** @return The text the running process was started with, to compare with the current values */
+	string function startedWith() {
+		return variables.fingerprint
+	}
+
+	/** @return The label of the program */
+	string function getBaseURL() {
+		return variables.label
+	}
+
+	/**
+	 * @ms The timeout
+	 *
+	 * @return This client
+	 */
+	function withTimeout( required numeric ms ) {
+		if ( !isNull( variables.inner ) ) {
+			variables.inner.withTimeout( arguments.ms )
+		}
+		return this
+	}
+
+	/**
+	 * Not used: a callback belongs to the running client, and that is swapped.
+	 *
+	 * @callback A function
+	 *
+	 * @return This client
+	 */
+	function onSuccess( required function callback ) {
+		return this
+	}
+
+	/**
+	 * Not used: a callback belongs to the running client, and that is swapped.
+	 *
+	 * @callback A function
+	 *
+	 * @return This client
+	 */
+	function onError( required function callback ) {
+		return this
+	}
+
+	/**
+	 * @cursor A paging cursor
+	 *
+	 * @return An MCPResponse
+	 */
+	function listTools( string cursor = "" ) {
+		return isNull( variables.inner ) ? off() : variables.inner.listTools( arguments.cursor )
+	}
+
+	/** @return An MCPResponse */
+	function listResources() {
+		return isNull( variables.inner ) ? off() : variables.inner.listResources()
+	}
+
+	/** @return An MCPResponse */
+	function listPrompts() {
+		return isNull( variables.inner ) ? off() : variables.inner.listPrompts()
+	}
+
+	/** @return An MCPResponse */
+	function getCapabilities() {
+		return isNull( variables.inner ) ? off() : variables.inner.getCapabilities()
+	}
+
+	/**
+	 * @tool The tool
+	 * @args Its arguments
+	 * @context The context of the call
+	 *
+	 * @return An MCPResponse
+	 */
+	function send( required string tool, struct args = {}, struct context = {} ) {
+		return isNull( variables.inner ) ? off() : variables.inner.send( arguments.tool, arguments.args, arguments.context )
+	}
+
+	/**
+	 * @uri The resource
+	 *
+	 * @return An MCPResponse
+	 */
+	function readResource( required string uri ) {
+		return isNull( variables.inner ) ? off() : variables.inner.readResource( arguments.uri )
+	}
+
+	/**
+	 * @name The prompt
+	 * @args Its arguments
+	 *
+	 * @return An MCPResponse
+	 */
+	function getPrompt( required string name, struct args = {} ) {
+		return isNull( variables.inner ) ? off() : variables.inner.getPrompt( arguments.name, arguments.args )
+	}
+
+	/** @return The counters of the running process, or an empty struct */
+	function getStats() {
+		return isNull( variables.inner ) ? {} : variables.inner.getStats()
+	}
+
+	/** @return A short form of the counters */
+	function getSummary() {
+		return isNull( variables.inner ) ? {} : variables.inner.getSummary()
+	}
+
+	/** @return This client */
+	function resetStats() {
+		if ( !isNull( variables.inner ) ) {
+			variables.inner.resetStats()
+		}
+		return this
+	}
+
+	/**
+	 * Stops the process.
+	 */
+	function close() {
+		stop()
+	}
+
+	/**
+	 * @return An MCPResponse that says the program is off
+	 */
+	private any function off() {
+		return new bxModules.bxai.models.mcp.MCPResponse( success = false, data = {}, error = "#variables.label# is switched off. An admin can switch it on in the Connectors page." )
+	}
+
+}

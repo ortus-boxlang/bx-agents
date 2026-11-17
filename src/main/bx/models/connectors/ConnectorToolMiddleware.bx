@@ -41,9 +41,7 @@ class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 		var who = toString( arguments.context.chatRequest.getUserId() ?: "" )
 		var open = {}
 		try {
-			for ( var row in variables.service.list( who ) ) {
-				open[ row.id ] = [ "connected", "needs_attention" ].contains( row.state )
-			}
+			open = variables.service.connectedMap( who )
 		} catch ( any e ) {
 			// when what a person has connected cannot be read, none of the connector tools are offered
 			open = {}
@@ -51,7 +49,9 @@ class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 				open[ id ] = false
 			}
 		}
-		packet.tools = packet.tools.map( schema => keepAllowed( schema, who, open ) ).filter( schema => !isNull( schema ) )
+		// the rules of a connector are read once for this request, not once per tool
+		var rules = {}
+		packet.tools = packet.tools.map( schema => keepAllowed( schema, who, open, rules ) ).filter( schema => !isNull( schema ) )
 		return AiMiddlewareResult.continue()
 	}
 
@@ -75,10 +75,7 @@ class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 			if ( !known ) {
 				return AiMiddlewareResult.continue()
 			}
-			var open = {}
-			for ( var row in variables.service.list( who ) ) {
-				open[ row.id ] = [ "connected", "needs_attention" ].contains( row.state )
-			}
+			var open = variables.service.connectedMap( who )
 			if ( !( open[ id ] ?: false ) ) {
 				return AiMiddlewareResult.reject( "#id# is not connected for this person. Ask them to connect it." )
 			}
@@ -97,16 +94,17 @@ class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 	 *
 	 * @return The tool, with the ones a person cannot use taken out of a group of declarations, or nothing when the tool itself is not theirs
 	 */
-	private any function keepAllowed( required any schema, required string who, required struct open ) {
+	private any function keepAllowed( required any schema, required string who, required struct open, required struct rules ) {
 		var schema = arguments.schema
 		if ( isStruct( schema ) && isArray( schema.functionDeclarations ?: "" ) ) {
 			var who = arguments.who
 			var open = arguments.open
-			schema.functionDeclarations = schema.functionDeclarations.filter( d => allowed( d.name ?: "", who, open ) )
+			var rules = arguments.rules
+			schema.functionDeclarations = schema.functionDeclarations.filter( d => allowed( d.name ?: "", who, open, rules ) )
 			return schema.functionDeclarations.len() ? schema : nullValue()
 		}
 		var name = isStruct( schema ) ? ( schema.function.name ?: schema.name ?: "" ) : ""
-		return allowed( name, arguments.who, arguments.open ) ? schema : nullValue()
+		return allowed( name, arguments.who, arguments.open, arguments.rules ) ? schema : nullValue()
 	}
 
 	/**
@@ -116,7 +114,7 @@ class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 	 *
 	 * @return True when the model may be offered it
 	 */
-	private boolean function allowed( required string name, required string who, required struct open ) {
+	private boolean function allowed( required string name, required string who, required struct open, required struct rules ) {
 		var at = find( "__", arguments.name )
 		if ( at < 2 ) {
 			return true
@@ -128,7 +126,10 @@ class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 		if ( !arguments.open[ id ] ) {
 			return false
 		}
-		return variables.connectorTools.gate( id, arguments.who, mid( arguments.name, at + 2, len( arguments.name ) ) ) == ""
+		if ( !arguments.rules.keyExists( id ) ) {
+			arguments.rules[ id ] = variables.connectorTools.rulesOf( id, arguments.who )
+		}
+		return variables.connectorTools.refusalOf( arguments.rules[ id ], mid( arguments.name, at + 2, len( arguments.name ) ) ) == ""
 	}
 
 }
