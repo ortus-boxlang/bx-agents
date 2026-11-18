@@ -1,0 +1,36 @@
+<!--- Table Component
+    A table that scrolls sideways on a phone, with a caption for a screen reader and its rows drawn by Alpine.
+
+    Usage:
+        #view( view = "_components/ui/table", module = "bxagentsui", args = {
+            caption : "Backups",
+            columns : [ "File", "Size", "Made" ],
+            rows    : "backups",
+            rowView : "data/_backup-row"
+        } )#
+
+    Args:
+        caption : string - what the table holds (required)
+        columns : array  - the column headings (required)
+        rows    : string - the component's array to draw a row for (Alpine; written by the developer, never data)
+        item    : string - the name of one row inside rowView (default: "row")
+        rowView : string - the view with the <td>s of one row, in this module (required)
+--->
+<bx:param name="args.caption" default=""/>
+<bx:param name="args.columns" default="#[]#"/>
+<bx:param name="args.rows" default="rows"/>
+<bx:param name="args.item" default="row"/>
+<bx:param name="args.rowView" default=""/>
+<bx:output>
+<div class="tbl-wrap">
+	<table>
+		<caption class="visually-hidden">#encodeForHTML( args.caption )#</caption>
+		<thead><tr><bx:loop array="#args.columns#" item="column"><th scope="col">#encodeForHTML( column )#</th></bx:loop></tr></thead>
+		<tbody>
+			<template x-for="#args.item# in #args.rows#">
+				<tr>#view( view = args.rowView, module = "bxagentsui" )#</tr>
+			</template>
+		</tbody>
+	</table>
+</div>
+</bx:output>

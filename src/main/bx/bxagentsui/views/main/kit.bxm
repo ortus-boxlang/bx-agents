@@ -1,0 +1,75 @@
+<!--- The kit: every partial and magic of the web app, with the arguments it takes. A dev build only (/chat/next/_kit). --->
+<bx:output>
+<div class="pg" x-data="kitPage" id="kit">
+	#view( view = "_components/ui/page-head", module = "bxagentsui", args = { title : "Kit", note : "Every partial and magic of the web app, to look at and to test against." } )#
+
+	<section class="card" id="kit-tabs">
+		<h2 class="card-title">tabs</h2>
+		#view( view = "_components/ui/tabs", module = "bxagentsui", args = { label : "Example", model : "tab", tabs : [ { id : "one", label : "One", icon : "list" }, { id : "two", label : "Two" } ] } )#
+		<p class="pg-note">Open tab: <b x-text="tab" id="kit-tab"></b></p>
+	</section>
+
+	<section class="card" id="kit-search">
+		<h2 class="card-title">search</h2>
+		#view( view = "_components/ui/search", module = "bxagentsui", args = { label : "Search the kit", model : "query" } )#
+		<p class="pg-note">Query: <b x-text="query" id="kit-query"></b></p>
+	</section>
+
+	<section class="card" id="kit-chips">
+		<h2 class="card-title">chip</h2>
+		<div class="pg-actions">
+			#view( view = "_components/ui/chip", module = "bxagentsui", args = { text : "Available", icon : "plug" } )#
+			#view( view = "_components/ui/chip", module = "bxagentsui", args = { text : "Connected", kind : "ok", icon : "check-circle" } )#
+			#view( view = "_components/ui/chip", module = "bxagentsui", args = { text : "Needs a program", kind : "warn", icon : "warning" } )#
+			#view( view = "_components/ui/chip", module = "bxagentsui", args = { text : "Needs attention", kind : "bad", icon : "warning-circle" } )#
+		</div>
+	</section>
+
+	#view( view = "_components/ui/card", module = "bxagentsui", args = { title : "card", contentView : "main/_kit-content", contentArgs : { text : "A card holds another view, as cbGenesis composes partials." } } )#
+
+	<section class="card" id="kit-field">
+		<h2 class="card-title">field and switch</h2>
+		<div x-data="{ form : { name : '', kind : 'a' } }">
+			#view( view = "_components/ui/field", module = "bxagentsui", args = { id : "kit-name", label : "Name", model : "form.name", help : "A help line under the control." } )#
+			#view( view = "_components/ui/field", module = "bxagentsui", args = { id : "kit-kind", label : "Kind", type : "select", model : "form.kind", options : [ { value : "a", label : "A" }, { value : "b", label : "B" } ] } )#
+		</div>
+		#view( view = "_components/ui/switch", module = "bxagentsui", args = { label : "Switched on", model : "on" } )#
+		<p class="pg-note">Switch: <b x-text="on ? 'on' : 'off'" id="kit-switch"></b></p>
+	</section>
+
+	<section class="card" id="kit-dialogs">
+		<h2 class="card-title">modal, drawer and $confirm</h2>
+		<div class="pg-actions">
+			<button type="button" class="btn" id="kit-open-modal" @click="modal = true">Open the modal</button>
+			<button type="button" class="btn" id="kit-open-drawer" @click="drawer = true">Open the drawer</button>
+			<button type="button" class="btn danger" id="kit-ask" @click="ask()">Ask with $confirm</button>
+		</div>
+		<p class="pg-note">Answer: <b x-text="answer" id="kit-answer"></b></p>
+		#view( view = "_components/ui/modal", module = "bxagentsui", args = { title : "A modal", open : "modal", icon : "info", contentView : "main/_kit-content", contentArgs : { text : "Escape or Close shuts it, and focus goes back." } } )#
+		#view( view = "_components/ui/drawer", module = "bxagentsui", args = { title : "A drawer", open : "drawer", contentView : "main/_kit-content", contentArgs : { text : "A drawer for a longer task beside the page." } } )#
+	</section>
+
+	<section class="card" id="kit-toasts">
+		<h2 class="card-title">$toast</h2>
+		<div class="pg-actions">
+			<button type="button" class="btn" id="kit-toast-ok" @click="$toast.success( 'Saved.' )">Success</button>
+			<button type="button" class="btn" id="kit-toast-error" @click="$toast.error( 'Could not save.' )">Error</button>
+		</div>
+	</section>
+
+	<section class="card" id="kit-md">
+		<h2 class="card-title">$md and $fmt</h2>
+		<div class="markdown" id="kit-markdown" x-html="$md( markdown )"></div>
+		<p class="pg-note" id="kit-fmt" x-text="$fmt.bytesText( 3500000 ) + ' / ' + $fmt.countLabel( 3, 'tool' ) + ' / ' + $fmt.stampText( '2026-11-18T09:30:00' )"></p>
+	</section>
+
+	<section class="card" id="kit-table">
+		<h2 class="card-title">table</h2>
+		<div x-data="{ rows : [ { name : 'chat.db', size : 2048 }, { name : 'files.zip', size : 5242880 } ] }">
+			#view( view = "_components/ui/table", module = "bxagentsui", args = { caption : "Files", columns : [ "Name", "Size" ], rows : "rows", rowView : "main/_kit-row" } )#
+		</div>
+	</section>
+
+	#view( view = "_components/ui/empty", module = "bxagentsui", args = { icon : "squares-four", title : "empty", text : "What a list shows with nothing in it." } )#
+</div>
+</bx:output>

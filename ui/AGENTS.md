@@ -33,7 +33,40 @@ A built agent copies the module to `modules/bxagentsui` and writes `config/bxage
 - **Every colour is a token** in `abstracts/_tokens.scss`, so the dark theme and the gateway's theme block work.
 - **A change needs a test:** a browser test in `ui/tests/e2e` for what a person sees, a TestBox spec for BoxLang code.
 
+## The building blocks
+
+Use these before writing markup or logic of your own; `/chat/next/_kit` (a dev build) shows each one working.
+
+| Partial (`views/_components/ui/`) | What it is | Main args |
+|---|---|---|
+| `page-head` | A page's title, a line under it, actions | `title`, `note`, `actions` |
+| `tabs` | A row of tabs bound to a component variable | `label`, `model`, `tabs: [ { id, label, icon, count } ]` |
+| `search` | A search box with a debounce | `label`, `model`, `debounce` |
+| `chip` | A state or a count | `text`, `kind` (ok, warn, bad), `icon` |
+| `card` | A box holding another view | `title`, `contentView`, `contentArgs` |
+| `field` | Label, control, help line, error line | `id`, `label`, `type`, `model`, `help`, `error`, `options` |
+| `switch` | An on and off toggle (a real checkbox) | `label`, `model`, `disabled` |
+| `modal` | A native `<dialog>` holding another view | `title`, `open`, `contentView`, `contentArgs`, `icon` |
+| `drawer` | A side panel `<dialog>` holding another view | `title`, `open`, `contentView`, `contentArgs` |
+| `table` | A table that scrolls on a phone, rows from Alpine | `caption`, `columns`, `rows`, `rowView` |
+| `empty` | What a list shows when it has nothing | `icon`, `title`, `text` |
+| `icon` | One icon of the set | `name` |
+| `toasts`, `confirm` | In the layout once: the message region and the question dialog | none |
+
+The app partials (`views/_components/app/`) are `includes`, `sprite`, `sidebar` and `topbar`.
+
+| Magic and store | What it does |
+|---|---|
+| `$api.get( path )`, `$api.post( path, body )` | `{ ok, status, data, error }`, never throws |
+| `$sse( path, { body, onEvent, signal } )` | A stream of the agent API (`/stream`, `/events`, `/resume`) |
+| `$confirm( { title, body, danger } )` | `Promise<boolean>`; never `window.confirm` |
+| `$toast.success( text )`, `$toast.error( text )` | A short message |
+| `$md( text )` | Markdown as safe HTML: the only input `x-html` takes |
+| `$fmt.stampText`, `dayText`, `bytesText`, `countLabel` | Dates, sizes and counts, the same everywhere |
+| `$store.session` | `can( capability )`, `capabilities`, `ready` |
+| `$store.theme`, `$store.nav` | Light or dark; the folded menu and the phone drawer |
+
 ## Commands (from `ui/`)
 
 `npm run dev` (agent, model and Vite), `npm run stack` (agent and model only), `npm run build`, `npm run lint`,
-`npm run e2e`. A change to a handler, a model or `ModuleConfig.bx` needs the stack restarted; views, Sass and JS do not.
+`npm test` (unit), `npm run e2e` (browser). A change to a handler, a model or `ModuleConfig.bx` needs the stack restarted; views, Sass and JS do not.

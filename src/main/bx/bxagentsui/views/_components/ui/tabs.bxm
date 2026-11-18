@@ -1,0 +1,29 @@
+<!--- Tabs Component
+    A row of tabs over a page's content. Each tab is a button bound to an Alpine variable of the page's component.
+
+    Usage:
+        #view( view = "_components/ui/tabs", module = "bxagentsui", args = {
+            label : "Connectors",
+            model : "tab",
+            tabs  : [ { id : "all", label : "All", icon : "puzzle-piece" }, { id : "connected", label : "Connected" } ]
+        } )#
+
+    Args:
+        label : string - what the row is, for a screen reader (required)
+        model : string - the page component's variable that holds the open tab's id (Alpine; written by the developer, never data)
+        tabs  : array  - [ { id, label, icon?, count? } ] where count is an Alpine expression for a number after the label
+--->
+<bx:param name="args.label" default=""/>
+<bx:param name="args.model" default="tab"/>
+<bx:param name="args.tabs" default="#[]#"/>
+<bx:output>
+<nav class="pg-tabs" aria-label="#encodeForHTML( args.label )#">
+	<bx:loop array="#args.tabs#" item="tab">
+		<a href="##" role="tab" data-tab="#encodeForHTML( tab.id )#" @click.prevent="#args.model# = $el.dataset.tab" :aria-current="#args.model# === $el.dataset.tab ? 'page' : null" :aria-selected="( #args.model# === $el.dataset.tab ).toString()">
+			<bx:if len( tab.icon ?: "" )>#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : tab.icon } )#</bx:if>
+			#encodeForHTML( tab.label )#
+			<bx:if len( tab.count ?: "" )><span class="tab-count" x-text="#tab.count#"></span></bx:if>
+		</a>
+	</bx:loop>
+</nav>
+</bx:output>
