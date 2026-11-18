@@ -1,0 +1,23 @@
+<!--- The folders of the data home and the volumes. Inside dataPage. --->
+<bx:output>
+<p class="pg-note" x-show="loading">Loading...</p>
+<p class="pg-error" role="alert" x-show="failed" x-text="failed" x-cloak></p>
+<div x-show="!loading && !failed" x-cloak>
+	<p class="pg-note">Data home: <code x-text="home"></code><template x-if="database"><span> Database: <code x-text="database"></code></span></template></p>
+	#view( view = "_components/ui/table", module = "bxagentsui", args = {
+		caption : "Folders of the data home",
+		columns : [ "Folder", "Size", "Files" ],
+		rows    : "items",
+		item    : "item",
+		rowView : "data/_folder-row"
+	} )#
+	<template x-if="volumes.length">
+		<div>
+			<h3>Volumes</h3>
+			<template x-for="volume in volumes" :key="volume.name">
+				<p class="pg-note"><strong x-text="volume.name"></strong> (<span x-text="volume.mode === 'rw' ? 'read and write' : 'read only'"></span>): <code x-text="volume.path"></code></p>
+			</template>
+		</div>
+	</template>
+</div>
+</bx:output>

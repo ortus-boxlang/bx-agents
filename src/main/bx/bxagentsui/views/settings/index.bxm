@@ -1,0 +1,32 @@
+<!--- Settings: appearance, model, account, extensions and server. State and actions: settingsPage
+      (resources/assets/js/components/settings/SettingsPage.js), with the theme and appearance stores. --->
+<bx:output>
+<div class="pg" x-data="settingsPage">
+	#view( view = "_components/ui/page-head", module = "bxagentsui", args = { title : "Settings", note : "How the page looks, which model answers, and what this server runs." } )#
+	#view( view = "_components/ui/card", module = "bxagentsui", args = { title : "Appearance", contentView : "settings/_appearance" } )#
+	<section class="card" x-show="profiles.length" x-cloak aria-labelledby="setModelTitle">
+		<h2 class="card-title" id="setModelTitle">Model</h2>
+		<p class="pg-note">Which model answers your next messages. The choice is remembered in this browser.</p>
+		<label>Model
+			<select x-model="profile" @change="pickProfile()" aria-label="Model for your next messages">
+				<option value="">Default model</option>
+				<template x-for="p in profiles" :key="p.name">
+					<option :value="p.name" x-text="profileLabel( p )" :title="p.description || ( p.provider + ( p.model ? '/' + p.model : '' ) )" :selected="p.name === profile"></option>
+				</template>
+			</select>
+		</label>
+	</section>
+	#view( view = "_components/ui/card", module = "bxagentsui", args = { title : "Account", contentView : "settings/_account" } )#
+	<section class="card" x-show="extensionsShown" x-cloak aria-labelledby="setExtTitle">
+		#view( view = "settings/_extensions", module = "bxagentsui" )#
+	</section>
+	<section class="card" x-show="facts.length" x-cloak aria-labelledby="setServerTitle">
+		<h2 class="card-title" id="setServerTitle">Server</h2>
+		<dl class="facts">
+			<template x-for="fact in facts" :key="fact.label">
+				<div class="contents"><dt class="pg-note" x-text="fact.label"></dt><dd x-text="fact.value"></dd></div>
+			</template>
+		</dl>
+	</section>
+</div>
+</bx:output>

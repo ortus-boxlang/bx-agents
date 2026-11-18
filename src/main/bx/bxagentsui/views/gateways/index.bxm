@@ -1,0 +1,22 @@
+<!--- Gateways (admin): the chat services the agent talks through. State and actions: gatewaysPage
+      (resources/assets/js/components/admin/GatewaysPage.js). --->
+<bx:output>
+<div class="pg" x-data="gatewaysPage">
+	#view( view = "_components/ui/page-head", module = "bxagentsui", args = {
+		title   : "Gateways",
+		note    : "The chat services the agent talks through, and whether each is connected.",
+		actions : '<button type="button" class="btn" @click="load()">' & view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "arrow-clockwise" } ) & ' Refresh</button>'
+	} )#
+	<p class="pg-note" x-show="loading">Loading...</p>
+	<p class="pg-error" role="alert" x-show="failed" x-text="failed" x-cloak></p>
+	<div x-show="!loading && !failed && !gateways.length" x-cloak>
+		#view( view = "_components/ui/empty", module = "bxagentsui", args = { icon : "plugs-connected", title : "No gateways are set up", text : "Add one with bxAgents add gateway." } )#
+	</div>
+	<ul class="plain-list" aria-label="Gateways">
+		<template x-for="gateway in gateways" :key="gateway.name">
+			<li class="card">#view( view = "gateways/_gateway", module = "bxagentsui" )#</li>
+		</template>
+	</ul>
+	<p class="pg-note">Reconnect starts the gateway again, for example after you set a missing credential in the environment.</p>
+</div>
+</bx:output>

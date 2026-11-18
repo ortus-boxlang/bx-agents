@@ -26,20 +26,10 @@ class extends="BaseHandler" {
 	}
 
 	/**
-	 * Any other page of the menu, by its id. A page that only an admin may open answers 403 to anybody else.
+	 * A page of the menu that has not moved to this app yet, by its id.
 	 */
 	function page( event, rc, prc ) {
-		prc.page = variables.menu.find( rc.page ?: "" )
-		if ( !prc.page.count() ) {
-			event.renderData( type = "plain", data = "Not found", statusCode = 404 )
-			return
-		}
-		if ( prc.page.group == "admin" && prc.ui.signIn && !prc.user.admin ) {
-			event.setHTTPHeader( statusCode = 403, statusText = "Forbidden" )
-			event.setView( view = "main/forbidden", module = "bxagentsui" )
-			return
-		}
-		event.setView( view = "main/page", module = "bxagentsui" )
+		showPage( event, prc, rc.page ?: "", "main/page" )
 	}
 
 }

@@ -1,0 +1,40 @@
+<!--- The appearance choices: mode, accent, text size, density. Kept in this browser by the theme and appearance stores.
+      Inside settingsPage. --->
+<bx:output>
+<p class="pg-note">Mode, accent colour, text size and density. They are kept in this browser; the project's own theme stays the default.</p>
+<div class="appearance-ui in-page">
+	<h3>Mode</h3>
+	<div class="seg" role="group" aria-label="Mode">
+		<button type="button" @click="$store.theme.set( 'system' )" :aria-pressed="( $store.theme.mode === '' ).toString()">System</button>
+		<button type="button" @click="$store.theme.set( 'light' )" :aria-pressed="( $store.theme.mode === 'light' ).toString()">Light</button>
+		<button type="button" @click="$store.theme.set( 'dark' )" :aria-pressed="( $store.theme.mode === 'dark' ).toString()">Dark</button>
+	</div>
+	<h3>Accent color</h3>
+	<div class="swatches">
+		<button type="button" class="default-sw" @click="pickAccent( '' )" aria-label="Default accent" title="Default" :aria-pressed="( !$store.appearance.accent ).toString()">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "arrow-counter-clockwise" } )#</button>
+		<template x-for="preset in $store.appearance.presets" :key="preset[ 1 ]">
+			<button type="button" @click="pickAccent( preset[ 1 ] )" :style="{ '--sw': preset[ 1 ] }" :aria-label="preset[ 0 ]" :title="preset[ 0 ]" :aria-pressed="( $store.appearance.accent === preset[ 1 ] ).toString()">
+				<svg class="i" aria-hidden="true" x-show="$store.appearance.accent === preset[ 1 ]"><use href="##i-check"/></svg>
+			</button>
+		</template>
+	</div>
+	<div class="hex">
+		<span class="contrast">Hex</span>
+		<input x-model="hex" @change="takeHex()" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Accent color as hex" placeholder="##3b5bdb" :aria-invalid="hexInvalid.toString()">
+		<span class="contrast" :class="{ low: contrastLow }" aria-live="polite" x-text="contrastText"></span>
+	</div>
+	<h3>Text size</h3>
+	<div class="seg" role="group" aria-label="Text size">
+		<template x-for="size in [ [ 'small', 'Small' ], [ 'medium', 'Medium' ], [ 'large', 'Large' ] ]" :key="size[ 0 ]">
+			<button type="button" @click="$store.appearance.set( { size: size[ 0 ] } )" :aria-pressed="( $store.appearance.size === size[ 0 ] ).toString()" x-text="size[ 1 ]"></button>
+		</template>
+	</div>
+	<h3>Density</h3>
+	<div class="seg" role="group" aria-label="Density">
+		<template x-for="density in [ [ 'comfortable', 'Comfortable' ], [ 'compact', 'Compact' ] ]" :key="density[ 0 ]">
+			<button type="button" @click="$store.appearance.set( { density: density[ 0 ] } )" :aria-pressed="( $store.appearance.density === density[ 0 ] ).toString()" x-text="density[ 1 ]"></button>
+		</template>
+	</div>
+	<div class="ap-actions"><button type="button" @click="reset()">Reset to defaults</button></div>
+</div>
+</bx:output>

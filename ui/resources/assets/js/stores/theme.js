@@ -1,14 +1,16 @@
 /**
- * Light or dark, kept in this browser under the same key the old page used, so a choice carries over.
- * The layout sets the attribute before the CSS loads (no flash); this keeps it in step afterwards.
+ * Light, dark or the system's. Kept in this browser under the key and the plain format the current page uses
+ * ("dark", "light", or nothing), so a choice carries over both ways while both apps run. The layout sets the attribute
+ * before the CSS loads (no flash); this keeps it in step afterwards and tells the server, as the current page does.
  *
- * @param {import("alpinejs").Alpine} Alpine Alpine, for $persist
+ * @param {object} api The API client (utils/api.js), to save the choice as a preference
  * @returns {object} The store
  */
-export function theme( Alpine ) {
+export function theme( api ) {
+	const KEY = "bxagents_webui_theme";
 	return {
 		/** @type {string} "light", "dark" or "" (follow the system) */
-		mode: Alpine.$persist( "" ).as( "bxagents_webui_theme" ),
+		mode: "",
 
 		/** @returns {boolean} True when the page is dark now */
 		get dark() {
@@ -18,15 +20,39 @@ export function theme( Alpine ) {
 			return !!( window.matchMedia && window.matchMedia( "(prefers-color-scheme: dark)" ).matches );
 		},
 
-		/** Applies the mode to the page. */
+		/** Reads the stored mode and applies it. */
 		init() {
+			let stored = "";
+			try {
+				stored = localStorage.getItem( KEY ) || "";
+			} catch ( e ) {
+				stored = "";
+			}
+			this.mode = stored === "dark" || stored === "light" ? stored : "";
 			this.apply();
 		},
 
 		/** Switches between light and dark. */
 		toggle() {
-			this.mode = this.dark ? "light" : "dark";
+			this.set( this.dark ? "light" : "dark" );
+		},
+
+		/**
+		 * @param {string} mode "light", "dark" or "system"
+		 */
+		set( mode ) {
+			this.mode = mode === "dark" || mode === "light" ? mode : "";
+			try {
+				if ( this.mode ) {
+					localStorage.setItem( KEY, this.mode );
+				} else {
+					localStorage.removeItem( KEY );
+				}
+			} catch ( e ) {
+				// the choice still holds for this visit
+			}
 			this.apply();
+			api.post( "/preferences/set", { key: "theme", value: this.mode || "system" } );
 		},
 
 		/** Writes the mode on the root element, where the tokens read it. */
