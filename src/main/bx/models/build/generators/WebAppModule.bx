@@ -46,17 +46,11 @@ class {
 		var target = Strings::normalizePath( arguments.appDir ) & "/modules/bxagentsui"
 		var source = sourceDir()
 		var link = ( createObject( "java", "java.lang.System" ).getenv( "BXAGENTS_UI_LINK" ) ?: "" ) == "true"
-		var files = createObject( "java", "java.nio.file.Files" )
-		var paths = createObject( "java", "java.nio.file.Paths" )
-		var targetPath = paths.get( target, [] )
-		if ( files.isSymbolicLink( targetPath ) ) {
-			files.delete( targetPath )
-		} else if ( directoryExists( target ) ) {
-			directoryDelete( target, true )
-		}
+		removeInstalled( target, arguments.appDir )
 		directoryCreate( getDirectoryFromPath( target ), true, true )
+		var files = createObject( "java", "java.nio.file.Files" )
 		if ( link ) {
-			files.createSymbolicLink( targetPath, paths.get( source, [] ), [] )
+			files.createSymbolicLink( pathOf( target ), pathOf( source ), [] )
 		} else {
 			directoryCopy( source, target, true )
 			// a dev server note never ships
@@ -86,7 +80,42 @@ class {
 			"includesUrl" : "/modules/bxagentsui/includes"
 		}
 		// read by the module's ModuleConfig when ColdBox registers it (a JSON file: data, never code)
+		directoryCreate( Strings::normalizePath( arguments.appDir ) & "/config", true, true )
 		fileWrite( Strings::normalizePath( arguments.appDir ) & "/config/bxagentsui.json", jsonSerialize( settings ) )
+	}
+
+	/**
+	 * Removes what an earlier build installed: a link is removed as a link (never followed, so the module's source is never
+	 * touched), a copy is deleted, and only ever inside the generated app.
+	 *
+	 * @target <app>/modules/bxagentsui
+	 * @appDir The generated app
+	 */
+	private void function removeInstalled( required string target, required string appDir ) {
+		var files = createObject( "java", "java.nio.file.Files" )
+		var path = pathOf( arguments.target )
+		if ( files.isSymbolicLink( path ) ) {
+			files.delete( path )
+			return
+		}
+		if ( !directoryExists( arguments.target ) ) {
+			return
+		}
+		var app = createObject( "java", "java.io.File" ).init( arguments.appDir ).getCanonicalPath()
+		var real = createObject( "java", "java.io.File" ).init( arguments.target ).getCanonicalPath()
+		if ( !real.startsWith( app & createObject( "java", "java.io.File" ).separator ) ) {
+			throw( type = "BxAgents.UnsafeDelete", message = "Refusing to delete [#real#]: it is outside the generated app [#app#]." )
+		}
+		directoryDelete( arguments.target, true )
+	}
+
+	/**
+	 * @file A path
+	 *
+	 * @return It as a java.nio.file.Path
+	 */
+	private any function pathOf( required string file ) {
+		return createObject( "java", "java.io.File" ).init( arguments.file ).toPath()
 	}
 
 }
