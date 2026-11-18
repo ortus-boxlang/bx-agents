@@ -1,0 +1,47 @@
+/**
+ * The pages of the web app, in menu order: what the left menu shows and what the router serves. `capability` is the
+ * capability of GET /agent a page needs ("" for everybody, "a|b" for either, "~a" for "unless a is false").
+ */
+@singleton
+class {
+
+	static {
+		PAGES = [
+			{ id : "chat", title : "Chat", icon : "chat-circle-text", group : "main", capability : "" },
+			{ id : "conversations", title : "Conversations", icon : "chats-circle", group : "main", capability : "~conversations" },
+			{ id : "routines", title : "Routines", icon : "clock-clockwise", group : "main", capability : "routines" },
+			{ id : "registry", title : "Registry", icon : "stack", group : "main", capability : "" },
+			{ id : "connectors", title : "Connectors", icon : "puzzle-piece", group : "main", capability : "connectors|connections" },
+			{ id : "memory", title : "Memory", icon : "brain", group : "main", capability : "notes" },
+			{ id : "vault", title : "Vault", icon : "lock-key", group : "main", capability : "vault" },
+			{ id : "settings", title : "Settings", icon : "gear", group : "main", capability : "" },
+			{ id : "agent", title : "Agent", icon : "robot", group : "admin", capability : "admin" },
+			{ id : "gateways", title : "Gateways", icon : "plugs-connected", group : "admin", capability : "gateways" },
+			{ id : "logs", title : "Logs", icon : "file-text", group : "admin", capability : "logs" },
+			{ id : "access", title : "Access", icon : "key", group : "admin", capability : "tokens|admin" },
+			{ id : "data", title : "Data and backups", icon : "database", group : "admin", capability : "admin" }
+		]
+		GROUPS = [ { id : "main", title : "Main" }, { id : "admin", title : "Admin" } ]
+	}
+
+	/**
+	 * @return [ { id, title, pages : [ page ] } ] the groups of the menu, each with its pages
+	 */
+	array function groups() {
+		return static.GROUPS.map( group => {
+			return { id : group.id, title : group.title, pages : static.PAGES.filter( p => p.group == group.id ) }
+		} )
+	}
+
+	/**
+	 * @id A page id
+	 *
+	 * @return The page, or an empty struct when there is none
+	 */
+	struct function find( required string id ) {
+		var wanted = arguments.id
+		var found = static.PAGES.filter( p => p.id == wanted )
+		return found.len() ? found[ 1 ] : {}
+	}
+
+}

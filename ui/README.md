@@ -17,12 +17,25 @@ cd ui && npm install
 ## Run it
 
 ```bash
-npm run stack      # builds dev/agent and serves it at http://127.0.0.1:8780/chat (ada or bob, password demo-pass)
+npm run dev        # the agent, its model and the Vite dev server: edit, save, see it
+npm run stack      # the agent and its model only, with the committed build of the scripts and styles
 ```
+
+The agent is at http://127.0.0.1:8780/chat (ada or bob, password demo-pass). The new web app, a ColdBox module, is at
+http://127.0.0.1:8780/chat/next while the pages move to it. Its source is `src/main/bx/bxagentsui` (handlers, views,
+partials) and `resources/assets` here (Sass and Alpine); `AGENTS.md` has the conventions. In `npm run dev` a view, a
+Sass or a JS change shows on save; a handler or model change needs a restart.
 
 `ada` is an admin, `bob` a member. Ask "what time is it" for a tool call, "give me a list" for Markdown, anything else
 for a plain answer. The agent keeps its data in `.stack/home`: delete it to start fresh. `UI_AGENT_PORT` and
 `UI_LLM_PORT` move the ports (8780 and 8080).
+
+## Build and lint
+
+```bash
+npm run build      # writes src/main/bx/bxagentsui/includes/build, which is committed
+npm run lint
+```
 
 ## Test it
 

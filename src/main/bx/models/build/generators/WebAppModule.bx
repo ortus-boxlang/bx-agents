@@ -1,0 +1,122 @@
+import bxModules.bxagents.models.util.Strings;
+import bxModules.bxagents.models.util.TreeDelete;
+
+/**
+ * Puts the web app module (src/main/bx/bxagentsui: handlers, router, layouts, views and the Vite build) into a generated
+ * app: copied to <app>/modules/bxagentsui, its icon set beside it, and its settings in config/bxagentsui.json from the web
+ * UI gateway's configure(). The module reads that file when ColdBox registers it: its entry point (basePath) mounts it.
+ *
+ * With BXAGENTS_UI_LINK=true (what ui/scripts/stack.mjs sets) the module is linked instead of copied, so a change to a
+ * view or a handler shows on the next request, without a build. BXAGENTS_UI_SOURCE names the folder to link (the
+ * repository's src/main/bx/bxagentsui), since the running bxagents module may be a packaged copy.
+ */
+class {
+
+	static {
+		// where the module is mounted, under the gateway's path, while the pages move to it from the current page
+		MOUNT = "/next"
+	}
+
+	/**
+	 * @return Where the module's source is: next to this generator in the bxagents module
+	 */
+	string function sourceDir() {
+		var named = createObject( "java", "java.lang.System" ).getenv( "BXAGENTS_UI_SOURCE" ) ?: ""
+		return len( named ) ? named : expandPath( getDirectoryFromPath( getCurrentTemplatePath() ) & "../../../bxagentsui" )
+	}
+
+	/**
+	 * @entry The web UI gateway entry ({ config, projectRoot })
+	 *
+	 * @return The path the module answers at, for the router and the settings
+	 */
+	string function mountPath( required struct entry ) {
+		return Strings::normalizePath( arguments.entry.config.path ?: "" ) & static.MOUNT
+	}
+
+	/**
+	 * Copies (or links) the module, its icons, and writes its settings.
+	 *
+	 * @entry The web UI gateway entry
+	 * @appDir The generated app
+	 * @apiBase Where the agent API is served
+	 * @themeCss The gateway's theme as CSS custom properties
+	 * @customCss The project's own theme.css
+	 */
+	void function install( required struct entry, required string appDir, required string apiBase, string themeCss = "", string customCss = "" ) {
+		var target = Strings::normalizePath( arguments.appDir ) & "/modules/bxagentsui"
+		var source = sourceDir()
+		var link = ( createObject( "java", "java.lang.System" ).getenv( "BXAGENTS_UI_LINK" ) ?: "" ) == "true"
+		removeInstalled( target, arguments.appDir )
+		directoryCreate( getDirectoryFromPath( target ), true, true )
+		var files = createObject( "java", "java.nio.file.Files" )
+		if ( link ) {
+			files.createSymbolicLink( pathOf( target ), pathOf( source ), [] )
+		} else {
+			directoryCopy( source, target, true )
+			// a dev server note never ships
+			if ( fileExists( target & "/includes/hot" ) ) {
+				fileDelete( target & "/includes/hot" )
+			}
+		}
+		fileCopy( getDirectoryFromPath( getCurrentTemplatePath() ) & "webui/vendor/icons.svg", target & "/includes/icons.svg" )
+
+		var config = arguments.entry.config
+		var path = Strings::normalizePath( config.path ?: "" )
+		var signIn = ( config.users ?: [] ).len() > 0
+		var settings = {
+			"basePath"    : mountPath( arguments.entry ),
+			"apiBase"     : arguments.apiBase,
+			"title"       : len( config.title ?: "" ) ? config.title : "BX Agents Chat",
+			"subtitle"    : config.subtitle ?: "",
+			"icon"        : config.icon ?: "",
+			"welcome"     : config.welcome ?: "",
+			"placeholder" : len( config.placeholder ?: "" ) ? config.placeholder : "Message...",
+			"footer"      : config.footer ?: "",
+			"signIn"      : signIn,
+			"loginUrl"    : signIn ? path & "/login.html" : "",
+			"logoutUrl"   : signIn ? path & "/logout" : "",
+			"themeCss"    : arguments.themeCss,
+			"customCss"   : arguments.customCss,
+			"includesUrl" : "/modules/bxagentsui/includes"
+		}
+		// read by the module's ModuleConfig when ColdBox registers it (a JSON file: data, never code)
+		directoryCreate( Strings::normalizePath( arguments.appDir ) & "/config", true, true )
+		fileWrite( Strings::normalizePath( arguments.appDir ) & "/config/bxagentsui.json", jsonSerialize( settings ) )
+	}
+
+	/**
+	 * Removes what an earlier build installed: a link is removed as a link (never followed, so the module's source is never
+	 * touched), a copy is deleted, and only ever inside the generated app.
+	 *
+	 * @target <app>/modules/bxagentsui
+	 * @appDir The generated app
+	 */
+	private void function removeInstalled( required string target, required string appDir ) {
+		var files = createObject( "java", "java.nio.file.Files" )
+		var path = pathOf( arguments.target )
+		if ( files.isSymbolicLink( path ) ) {
+			files.delete( path )
+			return
+		}
+		if ( !directoryExists( arguments.target ) ) {
+			return
+		}
+		var app = createObject( "java", "java.io.File" ).init( arguments.appDir ).getCanonicalPath()
+		var real = createObject( "java", "java.io.File" ).init( arguments.target ).getCanonicalPath()
+		if ( !real.startsWith( app & createObject( "java", "java.io.File" ).separator ) ) {
+			throw( type = "BxAgents.UnsafeDelete", message = "Refusing to delete [#real#]: it is outside the generated app [#app#]." )
+		}
+		TreeDelete::tree( arguments.target )
+	}
+
+	/**
+	 * @file A path
+	 *
+	 * @return It as a java.nio.file.Path
+	 */
+	private any function pathOf( required string file ) {
+		return createObject( "java", "java.io.File" ).init( arguments.file ).toPath()
+	}
+
+}

@@ -1,0 +1,58 @@
+/**
+ * WebAppModule: the web app module put into a generated app, and its settings, without ever touching anything outside it.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "WebAppModule", function() {
+
+			beforeEach( function() {
+				variables.appDir = createTempDirectory( prefix = "bxagents-webapp-" )
+				variables.entry = { config : { path : "/chat", title : "Acme", users : [ { username : "ada" } ], welcome : "Hi" }, projectRoot : appDir }
+			} )
+
+			afterEach( function() {
+				var files = createObject( "java", "java.nio.file.Files" )
+				var link = createObject( "java", "java.io.File" ).init( appDir & "/modules/bxagentsui" ).toPath()
+				if ( files.isSymbolicLink( link ) ) {
+					files.delete( link )
+				}
+				directoryDelete( appDir, true )
+			} )
+
+			it( "copies the module with its icons and writes its settings, mounted under the gateway's path", function() {
+				new bxagents.models.build.generators.WebAppModule().install( entry, appDir, "/__bxagents", ":root { --accent: red; }" )
+
+				expect( fileExists( appDir & "/modules/bxagentsui/ModuleConfig.bx" ) ).toBeTrue()
+				expect( fileExists( appDir & "/modules/bxagentsui/includes/icons.svg" ) ).toBeTrue()
+				var settings = jsonDeserialize( fileRead( appDir & "/config/bxagentsui.json" ) )
+				expect( settings.basePath ).toBe( "/chat/next" )
+				expect( settings.apiBase ).toBe( "/__bxagents" )
+				expect( settings.title ).toBe( "Acme" )
+				expect( settings.signIn ).toBeTrue()
+				expect( settings.loginUrl ).toBe( "/chat/login.html" )
+				expect( settings.themeCss ).toInclude( "--accent" )
+			} );
+
+			it( "removes a link left by a dev build as a link, and never deletes what it points at", function() {
+				var source = createTempDirectory( prefix = "bxagents-webapp-src-" )
+				fileWrite( source & "/keep.txt", "must survive" )
+				directoryCreate( appDir & "/modules", true, true )
+				var files = createObject( "java", "java.nio.file.Files" )
+				files.createSymbolicLink(
+					createObject( "java", "java.io.File" ).init( appDir & "/modules/bxagentsui" ).toPath(),
+					createObject( "java", "java.io.File" ).init( source ).toPath(),
+					[]
+				)
+
+				new bxagents.models.build.generators.WebAppModule().install( entry, appDir, "/__bxagents" )
+
+				expect( fileExists( source & "/keep.txt" ) ).toBeTrue()
+				expect( fileExists( appDir & "/modules/bxagentsui/ModuleConfig.bx" ) ).toBeTrue()
+				directoryDelete( source, true )
+			} );
+
+		} );
+	}
+
+}

@@ -1,0 +1,32 @@
+/**
+ * The pages of the web app. Each page is a view, its data comes from the agent API (/__bxagents) through its Alpine
+ * component, so these actions only pick the view and the title.
+ */
+class extends="BaseHandler" {
+
+	/**
+	 * The chat.
+	 */
+	function index( event, rc, prc ) {
+		prc.page = variables.menu.find( "chat" )
+		event.setView( view = "main/index", module = "bxagentsui" )
+	}
+
+	/**
+	 * Any other page of the menu, by its id. A page that only an admin may open answers 403 to anybody else.
+	 */
+	function page( event, rc, prc ) {
+		prc.page = variables.menu.find( rc.page ?: "" )
+		if ( !prc.page.count() ) {
+			event.renderData( type = "plain", data = "Not found", statusCode = 404 )
+			return
+		}
+		if ( prc.page.group == "admin" && prc.ui.signIn && !prc.user.admin ) {
+			event.setHTTPHeader( statusCode = 403, statusText = "Forbidden" )
+			event.setView( view = "main/forbidden", module = "bxagentsui" )
+			return
+		}
+		event.setView( view = "main/page", module = "bxagentsui" )
+	}
+
+}

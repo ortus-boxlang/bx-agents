@@ -53,6 +53,10 @@ class {
 			renderUiBundle( entry, arguments.appDir, new "models.extensions.ExtensionSettings@bxagents"().disableList( isStruct( arguments.config.extensions ?: "" ) ? arguments.config.extensions : {} ), apiBase )
 		}
 
+		// The web app as a ColdBox module (src/main/bx/bxagentsui), mounted next to the current page while the pages move
+		// to it. See plans/ui-migration.md.
+		new "models.build.generators.WebAppModule@bxagents"().install( entries[ 1 ], arguments.appDir, apiBase, renderThemeTokens( entries[ 1 ].config.theme ?: {} ), readCustomCss( entries[ 1 ] ) )
+
 		// Accounts decide whether a sign-in is wired in, so they are resolved first. The page itself calls the agent API
 		// (see api.ApiPath); this generator only writes the shell, the sign-in pieces and the account store.
 		var users = collectWebUiUsers( entries )
@@ -834,6 +838,8 @@ class {
 			// been bitten by more than once.
 			var basePath   = renderLiteral( base )
 			var loginPath  = renderLiteral( base & "/login" )
+			// the form itself: <path>/login is only its POST target, and a GET there has no page to show
+			var formPath   = renderLiteral( base & "/login.html" )
 			var logoutPath = renderLiteral( base & "/logout" )
 			var agentApi   = renderLiteral( arguments.apiBase )
 
@@ -847,7 +853,7 @@ class {
 			lines.append( "			}" )
 			lines.append( "			if ( !auth.isLoggedIn() ) {" )
 			lines.append( "				event.setHTTPHeader( statusCode = 302, statusText = 'Found' )" )
-			lines.append( "				event.setHTTPHeader( name = 'Location', value = #loginPath# )" )
+			lines.append( "				event.setHTTPHeader( name = 'Location', value = #formPath# )" )
 			// See ChatAuth.bx's own redirectTo() for why both calls are needed:
 			// noExecution() alone does not stop ColdBox's own view rendering.
 			lines.append( "				event.noExecution()" )

@@ -39,6 +39,13 @@ function newestJar( prefix ) {
 }
 
 const boxlangJar = process.env.BOXLANG_JAR || newestJar( "boxlang" );
+
+// includes/hot sends the page to the Vite dev server; one left by a dev server that did not stop cleanly would make the
+// page load nothing. npm run dev (dev.mjs) says the dev server is running.
+const hotFile = path.join( repo, "src/main/bx/bxagentsui/includes/hot" );
+if ( !process.env.UI_VITE_DEV && fs.existsSync( hotFile ) ) {
+	fs.rmSync( hotFile );
+}
 const classPath = [ boxlangJar, path.join( repo, "build/classes/java/main" ) ].join( path.delimiter );
 
 // serve looks for boxlang-miniserver on the PATH; give it one that runs the jar when it is not installed
@@ -52,9 +59,12 @@ if ( !onPath ) {
 
 const env = {
 	...process.env,
-	PATH: binDir + path.delimiter + ( process.env.PATH || "" ),
-	BXAGENTS_HOME: path.join( stackDir, "home" ),
-	BXAGENTS_PUBLIC_URL: "http://127.0.0.1:" + agentPort
+	PATH               : binDir + path.delimiter + ( process.env.PATH || "" ),
+	BXAGENTS_HOME      : path.join( stackDir, "home" ),
+	BXAGENTS_PUBLIC_URL: "http://127.0.0.1:" + agentPort,
+	// the web app module is linked into the built agent, not copied: a change to a view or a handler shows on reload
+	BXAGENTS_UI_LINK   : process.env.BXAGENTS_UI_LINK || "true",
+	BXAGENTS_UI_SOURCE : path.join( repo, "src/main/bx/bxagentsui" )
 };
 
 /**

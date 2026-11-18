@@ -1,0 +1,23 @@
+/**
+ * Data a page hands to its scripts inside a <script type="application/json"> block. A browser does not decode HTML
+ * entities there, so the JSON is written as is, with <, > and & as JSON escapes: no value can close the block or open
+ * another tag, and JSON.parse reads it back unchanged.
+ */
+@singleton
+class {
+
+	/**
+	 * @data Anything jsonSerialize() takes
+	 *
+	 * @return The JSON, safe inside a <script type="application/json"> block
+	 */
+	string function json( required any data ) {
+		// a JSON escape is a backslash, u and four hex digits: built from char( 92 ) so nothing here reads it as the character
+		var escape = char( 92 ) & "u00"
+		return jsonSerialize( arguments.data )
+			.replace( "<", escape & "3c", "all" )
+			.replace( ">", escape & "3e", "all" )
+			.replace( "&", escape & "26", "all" )
+	}
+
+}
