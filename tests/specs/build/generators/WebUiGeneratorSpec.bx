@@ -705,13 +705,79 @@ class extends="testbox.system.BaseSpec" {
 					generator.generate( discovery, appDir );
 
 					var html = fileRead( appDir & "/chat/index.html" );
-					for ( var id in [ "routines", "registry", "memory", "vault", "settings", "gateways", "logs", "access" ] ) {
+					for ( var id in [ "routines", "registry", "connectors", "memory", "vault", "settings", "gateways", "logs", "access" ] ) {
 						expect( html ).toInclude( "id: ""#id#""," );
 					}
 					expect( html ).toInclude( "group: ""admin""" );
 					// an admin page is not offered to a member: it needs a capability the server only grants an admin
 					expect( html ).toInclude( "cap: function ( caps ) { return !!caps.gateways; }" );
 					expect( html ).toInclude( "cap: function ( caps ) { return !!caps.logs; }" );
+				} );
+
+				it( "has a Connectors page that keeps the catalog connectors apart from the services written in Agent.yaml", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "id: ""connectors""," );
+					expect( html ).toInclude( "cap: function ( caps ) { return !!( caps.connectors || caps.connections ); }" );
+					// the catalog connectors and the Agent.yaml services come from different routes and have their own tabs
+					expect( html ).toInclude( "apiGet( ""/connectors"" )" );
+					expect( html ).toInclude( "apiGet( ""/connect"" )" );
+					expect( html ).toInclude( "In Agent.yaml" );
+					expect( html ).toInclude( "Needs attention" );
+				} );
+
+				it( "connects a connector from a dialog that asks for the risk, clears the token before it sends it and never keeps it", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "apiPost( ""/connectors/connect"", asked )" );
+					expect( html ).toInclude( "apiPost( ""/connectors/disconnect""" );
+					expect( html ).toInclude( "tokenInput.value = """";" );
+					expect( html ).toInclude( "I have read this and want to connect" );
+					// a person is told to tick the risk box before anything is sent
+					expect( html ).toInclude( "Tick the box to say you have read this." );
+				} );
+
+				it( "has a tools drawer that lists a connector's tools by name with a switch each", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "/connectors/tools?id=" );
+					expect( html ).toInclude( "Turned off by your admin" );
+					expect( html ).toInclude( "toLowerCase() < b.name.toLowerCase()" );
+					expect( html ).toInclude( "{ all: true }" );
+					expect( html ).toInclude( "{ readonly: true }" );
+				} );
+
+				it( "replaces the old Connections dialog with the Connectors page: Settings links to it and the Registry marks connector tools", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).notToInclude( "connectPanel" );
+					expect( html ).notToInclude( "connectBtn" );
+					expect( html ).toInclude( "shellGo( ""connectors"" )" );
+					expect( html ).toInclude( "From a connector" );
+					// the services written in Agent.yaml still sign in, from their own tab
+					expect( html ).toInclude( "/connect/remove" );
+				} );
+
+				it( "offers a member no switch for a local program, which only an admin turns on or off", function() {
+					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+					var appDir = newAppDir();
+					generator.generate( discovery, appDir );
+
+					var html = fileRead( appDir & "/chat/index.html" );
+					expect( html ).toInclude( "program && !capabilities.admin" );
+					expect( html ).toInclude( "An admin switches it on for everyone who uses this agent." );
 				} );
 
 				it( "says gateways, not chat apps, and keeps every item of the Settings menu", function() {

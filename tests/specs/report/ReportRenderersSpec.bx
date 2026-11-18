@@ -31,6 +31,24 @@ class extends="testbox.system.BaseSpec" {
 
 			describe( "the terminal view", function() {
 
+				it( "draws the connectors section: how many are offered, which are left out, and each one's way in and risk", function() {
+					var text = new bxagents.models.report.ReportTextRenderer().render( reportFor( "with-connectors" ), [ "connectors" ] );
+
+					expect( text ).toInclude( "3 connectors offered, 4 left out." );
+					expect( text ).toInclude( "left out: atlassian, cloudflare, git, stripe" );
+					expect( text ).toInclude( "Nothing is attached until a person connects one." );
+					expect( text ).toInclude( "supabase" );
+					expect( text ).toInclude( "overridden" );
+				} );
+
+				it( "draws the connectors section in markdown", function() {
+					var text = new bxagents.models.report.ReportMarkdownRenderer().render( reportFor( "with-connectors" ), [ "connectors" ] );
+
+					expect( text ).toInclude( "3 connectors offered, 4 left out" );
+					expect( text ).toInclude( "- `supabase`: sign in, token, high risk, overridden" );
+					expect( text ).toInclude( "- `github`: token, high risk" );
+				} );
+
 				it( "draws the header, the tree and the sections that have something in them", function() {
 					var text = new bxagents.models.report.ReportTextRenderer().render( reportFor( "full-project" ) );
 

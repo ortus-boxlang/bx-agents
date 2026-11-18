@@ -1,0 +1,161 @@
+/**
+ * A fake MCP server that takes a plain bearer token, for specs that need to see which token and which session
+ * each call used. Nothing here is a real service. Nothing is kept after it stops.
+ *
+ *   initialize   starts a session: answers with a new Mcp-Session-Id and remembers which token opened it
+ *   tools/list   one tool, `whoami`
+ *   tools/call   answers `token=<the token>;session=<the session id>;opened-by=<the token that opened that session>`
+ *
+ * A call with no bearer token is answered 401. `requests()` is the log of every call it took.
+ */
+class implements="java:com.sun.net.httpserver.HttpHandler" {
+
+	/**
+	 * @port The port to listen on, 0 for any free one
+	 */
+	function init( numeric port = 0 ) {
+		variables.wantedPort = arguments.port
+		variables.httpServer = ""
+		variables.boundPort = 0
+		variables.sessions = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
+		variables.log = createObject( "java", "java.util.concurrent.CopyOnWriteArrayList" ).init()
+		variables.refused = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).newKeySet()
+		variables.tools = [ { "name" : "whoami", "description" : "Says which token and session the call used", "inputSchema" : { "type" : "object", "properties" : {} } } ]
+		return this
+	}
+
+	/**
+	 * Starts listening on 127.0.0.1.
+	 *
+	 * @return This
+	 */
+	function start() {
+		var address = createObject( "java", "java.net.InetSocketAddress" ).init( createObject( "java", "java.net.InetAddress" ).getByName( "127.0.0.1" ), variables.wantedPort )
+		variables.httpServer = createObject( "java", "com.sun.net.httpserver.HttpServer" ).create( address, 0 )
+		variables.httpServer.createContext( "/", this )
+		// a real server takes calls at the same time; the default executor would run them one after another on one thread
+		variables.httpServer.setExecutor( createObject( "java", "java.util.concurrent.Executors" ).newCachedThreadPool() )
+		variables.httpServer.start()
+		variables.boundPort = variables.httpServer.getAddress().getPort()
+		return this
+	}
+
+	/**
+	 * Stops listening.
+	 */
+	void function stop() {
+		if ( isObject( variables.httpServer ) ) {
+			variables.httpServer.stop( 0 )
+			variables.httpServer = ""
+		}
+	}
+
+	/**
+	 * Replaces the tools it lists (the default is one tool, `whoami`).
+	 *
+	 * @tools [ { name, description, annotations } ]
+	 *
+	 * @return This
+	 */
+	function withTools( required array tools ) {
+		variables.tools = arguments.tools.map( t => {
+			var made = { "name" : t.name, "description" : t.description ?: "", "inputSchema" : { "type" : "object", "properties" : {} } };
+			if ( t.keyExists( "annotations" ) ) {
+				made[ "annotations" ] = t.annotations;
+			}
+			return made;
+		} );
+		return this;
+	}
+
+	/**
+	 * From now on this token is answered 401, as a server does with one that was revoked.
+	 *
+	 * @token The token to refuse
+	 */
+	void function refuse( required string token ) {
+		variables.refused.add( arguments.token )
+	}
+
+	/**
+	 * @return The address of the MCP server
+	 */
+	string function mcpUrl() {
+		return "http://127.0.0.1:" & variables.boundPort & "/mcp"
+	}
+
+	/**
+	 * @return [ { method, token, session, uri } ] every call it took, in order
+	 */
+	array function requests() {
+		return variables.log.toArray().map( entry => duplicate( entry ) )
+	}
+
+	/**
+	 * @return How many sessions were started
+	 */
+	numeric function sessionsStarted() {
+		return variables.sessions.size()
+	}
+
+	/**
+	 * Answers one request.
+	 *
+	 * @exchange The exchange
+	 */
+	void function handle( required any exchange ) {
+		try {
+			var auth = arguments.exchange.getRequestHeaders().getFirst( "Authorization" ) ?: ""
+			var token = left( auth, 7 ) == "Bearer " ? mid( auth, 8, len( auth ) ) : ""
+			if ( !len( token ) || variables.refused.contains( token ) ) {
+				return reply( arguments.exchange, 401, { "error" : "unauthorized" } )
+			}
+			var session = arguments.exchange.getRequestHeaders().getFirst( "Mcp-Session-Id" ) ?: ""
+			var message = jsonDeserialize( createObject( "java", "java.lang.String" ).init( arguments.exchange.getRequestBody().readAllBytes(), "UTF-8" ) )
+			var method = message.method ?: ""
+			variables.log.add( { method : method, token : token, session : session, uri : arguments.exchange.getRequestURI().toString() } )
+			if ( left( method, 14 ) == "notifications/" ) {
+				arguments.exchange.sendResponseHeaders( 202, -1 )
+				return
+			}
+			var result = {}
+			var headers = {}
+			switch ( method ) {
+				case "initialize":
+					var opened = "sess-" & createUUID()
+					variables.sessions.put( opened, token )
+					headers[ "Mcp-Session-Id" ] = opened
+					result = { "protocolVersion" : "2025-06-18", "capabilities" : { "tools" : {} }, "serverInfo" : { "name" : "fake-bearer", "version" : "1.0" } }
+					break
+				case "tools/list":
+					result = { "tools" : variables.tools }
+					break
+				case "tools/call":
+					var openedBy = variables.sessions.containsKey( session ) ? variables.sessions.get( session ) : "none"
+					result = { "content" : [ { "type" : "text", "text" : "token=#token#;session=#session#;opened-by=#openedBy#;tool=#message.params.name ?: ''#" } ] }
+					break
+			}
+			reply( arguments.exchange, 200, { "jsonrpc" : "2.0", "id" : message.id ?: nullValue(), "result" : result }, headers )
+		} catch ( any e ) {
+			reply( arguments.exchange, 500, { "error" : e.message } )
+		}
+	}
+
+	/**
+	 * @exchange The exchange
+	 * @status The HTTP status
+	 * @body A struct, sent as JSON
+	 * @headers More headers
+	 */
+	private void function reply( required any exchange, required numeric status, required struct body, struct headers = {} ) {
+		var bytes = jsonSerialize( arguments.body ).getBytes( "UTF-8" )
+		arguments.exchange.getResponseHeaders().set( "Content-Type", "application/json" )
+		for ( var name in arguments.headers ) {
+			arguments.exchange.getResponseHeaders().set( name, arguments.headers[ name ] )
+		}
+		arguments.exchange.sendResponseHeaders( arguments.status, bytes.len() )
+		arguments.exchange.getResponseBody().write( bytes )
+		arguments.exchange.close()
+	}
+
+}

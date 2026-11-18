@@ -1,0 +1,30 @@
+/**
+ * Opens an address in the person's browser. Only a web address (http or https) is opened, so a sign in address that came
+ * from a server can never start anything else, and on Windows the address is handed to the shell's URL handler, which does
+ * not split it at an ampersand the way `start` does.
+ */
+class {
+
+	/**
+	 * @address The address to open
+	 *
+	 * @return True when a browser was asked to open it; false when it is not a web address or there is no browser
+	 */
+	boolean function open( required string address ) {
+		if ( !reFindNoCase( "^https?://[^\s]+$", arguments.address ) ) {
+			return false
+		}
+		try {
+			var os = lCase( createObject( "java", "java.lang.System" ).getProperty( "os.name" ) )
+			var command = os contains "mac"
+				? [ "open", arguments.address ]
+				: ( os contains "win" ? [ "rundll32", "url.dll,FileProtocolHandler", arguments.address ] : [ "xdg-open", arguments.address ] )
+			createObject( "java", "java.lang.ProcessBuilder" ).init( command ).start()
+			return true
+		} catch ( any e ) {
+			// no browser to open: the caller prints the address
+			return false
+		}
+	}
+
+}

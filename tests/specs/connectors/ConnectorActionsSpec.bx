@@ -1,0 +1,335 @@
+import bxagents.models.connectors.ConnectorSettings;
+
+/**
+ * Connect, disconnect and change the options of a connector: the confirmation, a token tried before it is stored, a sign
+ * in started, a local program that only an admin switches on a served agent, and that no message ever carries a token.
+ * Tokens go to a fake server that says which token each call used.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * @id A connector id
+	 *
+	 * @return The connector as offered, with its address pointed at the fake server
+	 */
+	private struct function offered( required string id ) {
+		var wanted = arguments.id;
+		var entry = ConnectorSettings::resolve( {} ).available.filter( c => c.id == wanted )[ 1 ];
+		if ( entry.transport == "http" ) {
+			entry.url = variables.fake.mcpUrl();
+		}
+		return entry;
+	}
+
+	/**
+	 * @entries The connectors to offer
+	 * @deps More dependencies
+	 * @served True when the agent is served
+	 *
+	 * @return { service, actions }
+	 */
+	private struct function build( required array entries, struct deps = {}, boolean served = false ) {
+		var policy = { mode : "all", available : arguments.entries, excluded : [], shadowed : [] };
+		var all = { vault : variables.vault, signedIn : ( id, person ) => false, programExists : program => true };
+		all.append( arguments.deps );
+		var service = new bxagents.models.connectors.ConnectorService( policy, variables.settings, all );
+		var actions = new bxagents.models.connectors.ConnectorActions( service, variables.settings, {
+			vault : variables.vault, clients : variables.clients, oauth : arguments.deps.oauth ?: "", served : arguments.served
+		} );
+		return { service : service, actions : actions };
+	}
+
+	/**
+	 * @name The secret
+	 * @person The person
+	 *
+	 * @return The value, or an empty string when they have none of their own
+	 */
+	private string function tokenOf( required string name, required string person ) {
+		try {
+			return variables.vault.resolve( arguments.name, { user : arguments.person, host : "127.0.0.1", via : "spec" } );
+		} catch ( any e ) {
+			return "";
+		}
+	}
+
+	/**
+	 * The specs.
+	 */
+	function run() {
+		describe( "ConnectorActions", function() {
+
+			beforeEach( function() {
+				variables.fake = new tests.support.FakeBearerMcp().start();
+				variables.dir = getTempDirectory() & "bxa-cactions-" & createUUID();
+				directoryCreate( dir, true );
+				variables.file = dir & "/chat.db";
+				variables.chat = bxagents.models.store.ChatStore::forFile( file );
+				variables.settings = new bxagents.models.connectors.ConnectorSettingsStore( chat );
+				variables.vault = new bxagents.models.vault.VaultWiring().service( file );
+				variables.clients = new bxagents.models.connectors.ConnectorClients( ( id, person ) => tokenOf( "GITHUB_PERSONAL_ACCESS_TOKEN", person ) );
+			} );
+
+			afterEach( function() {
+				clients.close();
+				fake.stop();
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "asks for confirmation of a connector that can change something, and does nothing until it has it", function() {
+				var made = build( [ offered( "github" ) ] );
+
+				try {
+					made.actions.connect( "github", "ada", { method : "token", token : "tok-ada" } );
+					fail( "it connected without a confirmation" );
+				} catch ( any e ) {
+					expect( e.type ).toBe( "BxAgents.ConfirmationRequired" );
+					expect( e.message ).toInclude( "high risk" );
+					expect( e.message ).toInclude( "pull requests" );
+					expect( e.message ).notToInclude( "tok-ada" );
+				}
+				expect( fake.requests() ).toBeEmpty();
+				expect( tokenOf( "GITHUB_PERSONAL_ACCESS_TOKEN", "ada" ) ).toBe( "" );
+			} );
+
+			it( "tries a token, seals it under the person with the connector's host, and answers without it", function() {
+				var made = build( [ offered( "github" ) ] );
+
+				var result = made.actions.connect( "github", "slack:U01ADA", { method : "token", token : "tok-ada", confirm : true } );
+
+				expect( result.connected ).toBeTrue();
+				expect( result.row.state ).toBe( "connected" );
+				expect( result.row.connectedWith ).toBe( "token" );
+				expect( fake.requests().map( r => r.token ).toSet().toArray() ).toBe( [ "tok-ada" ] );
+				expect( tokenOf( "GITHUB_PERSONAL_ACCESS_TOKEN", "slack:U01ADA" ) ).toBe( "tok-ada" );
+				var stored = vault.list( "slack:U01ADA", { scope : "user" } )[ 1 ];
+				expect( stored.name ).toBe( "GITHUB_PERSONAL_ACCESS_TOKEN" );
+				expect( stored.hosts ).toBe( [ "127.0.0.1" ] );
+				expect( jsonSerialize( result ) ).notToInclude( "tok-ada" );
+				// someone else is not connected by it
+				expect( made.service.get( "github", "slack:U01GRACE" ).state ).toBe( "available" );
+			} );
+
+			it( "stores nothing when the server refuses the token, and says so without the token", function() {
+				fake.refuse( "tok-bad" );
+				var made = build( [ offered( "github" ) ] );
+
+				try {
+					made.actions.connect( "github", "ada", { method : "token", token : "tok-bad", confirm : true } );
+					fail( "it accepted a refused token" );
+				} catch ( any e ) {
+					expect( e.type ).toBe( "BxAgents.TokenRefused" );
+					expect( e.message ).toInclude( "refused this token" );
+					expect( e.message ).toInclude( "Nothing was saved" );
+					expect( e.message ).notToInclude( "tok-bad" );
+				}
+				expect( vault.list( "ada", { scope : "user" } ) ).toBeEmpty();
+				expect( made.service.get( "github", "ada" ).state ).toBe( "available" );
+			} );
+
+			it( "stores nothing when the server cannot be reached, and says that it could not check", function() {
+				var made = build( [ offered( "github" ) ] );
+				fake.stop();
+
+				try {
+					made.actions.connect( "github", "ada", { method : "token", token : "tok-ada", confirm : true } );
+					fail( "it accepted a token it could not check" );
+				} catch ( any e ) {
+					expect( e.type ).toBe( "BxAgents.CouldNotReach" );
+					expect( e.message ).toInclude( "Could not reach 127.0.0.1" );
+					expect( e.message ).notToInclude( "tok-ada" );
+				}
+				expect( vault.list( "ada", { scope : "user" } ) ).toBeEmpty();
+			} );
+
+			it( "refuses an empty token or one with spaces, before asking any server", function() {
+				var made = build( [ offered( "github" ) ] );
+
+				for ( var token in [ "", "   ", "two words", "line" & char( 10 ) & "break" ] ) {
+					try {
+						made.actions.connect( "github", "ada", { method : "token", token : token, confirm : true } );
+						fail( "it accepted [#token#]" );
+					} catch ( any e ) {
+						expect( e.type ).toBe( "BxAgents.BadConnectRequest" );
+					}
+				}
+				expect( fake.requests() ).toBeEmpty();
+			} );
+
+			it( "names the connectors it offers for an unknown one, and the ways in for one it cannot use", function() {
+				var made = build( [ offered( "github" ) ] );
+
+				expect( () => made.actions.connect( "nope", "ada", { method : "token", token : "x" } ) ).toThrow( "BxAgents.UnknownConnector" );
+				try {
+					made.actions.connect( "github", "ada", { method : "oauth", confirm : true } );
+					fail( "github has no sign in" );
+				} catch ( any e ) {
+					expect( e.type ).toBe( "BxAgents.BadConnectRequest" );
+					expect( e.message ).toInclude( "can be connected with: token" );
+				}
+			} );
+
+			it( "replaces the token and starts a new session when a person connects again with a new one", function() {
+				var made = build( [ offered( "github" ) ] );
+				made.actions.connect( "github", "ada", { method : "token", token : "tok-1", confirm : true } );
+				var first = clients.forPerson( made.service.entryOf( "github" ), "ada" );
+				expect( clients.size() ).toBe( 1 );
+
+				made.actions.connect( "github", "ada", { method : "token", token : "tok-2", confirm : true } );
+
+				expect( tokenOf( "GITHUB_PERSONAL_ACCESS_TOKEN", "ada" ) ).toBe( "tok-2" );
+				expect( vault.list( "ada", { scope : "user" } ) ).toHaveLength( 1 );
+				// the client made with the old token is gone, so the next call makes one with the new
+				expect( clients.size() ).toBe( 0 );
+			} );
+
+			it( "disconnects: forgets the token, the client and a note that it was refused, and keeps the person's tool switches", function() {
+				var made = build( [ offered( "github" ) ] );
+				made.actions.connect( "github", "ada", { method : "token", token : "tok-ada", confirm : true } );
+				settings.set( "ada", "github", "tools", { off : [ "delete_file" ] } );
+				made.actions.markRefused( "github", "ada" );
+				clients.forPerson( made.service.entryOf( "github" ), "ada" );
+
+				var result = made.actions.disconnect( "github", "ada" );
+
+				expect( result.connected ).toBeFalse();
+				expect( result.row.state ).toBe( "available" );
+				expect( vault.list( "ada", { scope : "user" } ) ).toBeEmpty();
+				expect( settings.get( "ada", "github", "status" ) ).toBeEmpty();
+				expect( settings.get( "ada", "github", "tools" ).off ).toBe( [ "delete_file" ] );
+				expect( clients.size() ).toBe( 0 );
+				expect( () => made.actions.disconnect( "github", "ada" ) ).toThrow( "BxAgents.NotConnected" );
+			} );
+
+			it( "marks a refused token so the row asks for attention, and a new good token clears it", function() {
+				var made = build( [ offered( "github" ) ] );
+				made.actions.connect( "github", "ada", { method : "token", token : "tok-ada", confirm : true } );
+
+				made.actions.markRefused( "github", "ada", "GitHub refused this token on 2026-11-16." );
+				var row = made.service.get( "github", "ada" );
+
+				expect( row.state ).toBe( "needs_attention" );
+				expect( row.reason ).toBe( "GitHub refused this token on 2026-11-16." );
+				made.actions.connect( "github", "ada", { method : "token", token : "tok-new", confirm : true } );
+				expect( made.service.get( "github", "ada" ).state ).toBe( "connected" );
+			} );
+
+			it( "keeps a person's option values, uses them to reach the server, and checks them against the connector's options", function() {
+				var supabase = offered( "supabase" );
+				var made = build( [ supabase ] );
+
+				made.actions.connect( "supabase", "ada", { method : "token", token : "tok-ada", confirm : true, options : { project_ref : "abc123" } } );
+
+				expect( fake.requests()[ 1 ].uri ).toInclude( "project_ref=abc123" );
+				expect( fake.requests()[ 1 ].uri ).toInclude( "read_only=true" );
+				var values = made.service.get( "supabase", "ada" ).options.reduce( ( all, o ) => { all[ o.key ] = o.value; return all; }, {} );
+				expect( values.project_ref ).toBe( "abc123" );
+				expect( () => made.actions.connect( "supabase", "ada", { method : "token", token : "tok-ada", confirm : true, options : { nope : "x" } } ) ).toThrow( "BxAgents.BadConnectRequest" );
+				expect( () => made.actions.connect( "supabase", "ada", { method : "token", token : "tok-ada", confirm : true, options : { read_only : "maybe" } } ) ).toThrow( "BxAgents.BadConnectRequest" );
+				expect( () => made.actions.connect( "supabase", "ada", { method : "token", token : "tok-ada", confirm : true, options : { project_ref : "a" & char( 10 ) & "b" } } ) ).toThrow( "BxAgents.BadConnectRequest" );
+			} );
+
+			it( "changes the options of a connected token connector and drops the client made with the old ones", function() {
+				var made = build( [ offered( "supabase" ) ] );
+				made.actions.connect( "supabase", "ada", { method : "token", token : "tok-ada", confirm : true } );
+				clients.forPerson( made.service.entryOf( "supabase" ), "ada" );
+
+				var result = made.actions.setOptions( "supabase", "ada", { project_ref : "other" } );
+
+				expect( result.row.options.filter( o => o.key == "project_ref" )[ 1 ].value ).toBe( "other" );
+				expect( clients.size() ).toBe( 0 );
+				expect( () => made.actions.setOptions( "supabase", "ada", { nope : 1 } ) ).toThrow( "BxAgents.BadConnectRequest" );
+			} );
+
+			it( "starts a sign in and hands back the address to open, and refuses options of a person's own for it", function() {
+				var started = [];
+				var oauth = {
+					start      : ( id, person ) => { started.append( id & ":" & person ); return { authorizationUrl : "https://auth.example.com/authorize?state=s1", state : "s1" }; },
+					disconnect : ( id, person ) => { started.append( "off:" & id & ":" & person ); }
+				};
+				var notion = offered( "notion" );
+				var made = build( [ notion ], { oauth : oauth, signedIn : ( id, person ) => false } );
+
+				var result = made.actions.connect( "notion", "slack:U01ADA", { method : "oauth", confirm : true } );
+
+				expect( result.connected ).toBeFalse();
+				expect( result.authorizationUrl ).toBe( "https://auth.example.com/authorize?state=s1" );
+				expect( started ).toBe( [ "notion:slack:U01ADA" ] );
+				expect( () => made.actions.connect( "notion", "ada", { method : "oauth", confirm : true, options : { x : 1 } } ) ).toThrow( "BxAgents.BadConnectRequest" );
+			} );
+
+			it( "disconnects a sign in through the sign in side", function() {
+				var calls = [];
+				var oauth = { start : ( id, person ) => ( {} ), disconnect : ( id, person ) => { calls.append( id & ":" & person ); } };
+				var made = build( [ offered( "notion" ) ], { oauth : oauth, signedIn : ( id, person ) => true } );
+
+				var result = made.actions.disconnect( "notion", "ada" );
+
+				expect( calls ).toBe( [ "notion:ada" ] );
+				expect( result.connected ).toBeFalse();
+			} );
+
+			it( "refuses options of a person's own for a connector that has only a sign in", function() {
+				var supabase = offered( "supabase" );
+				supabase.auth = supabase.auth.filter( m => m.type == "oauth" );
+				var made = build( [ supabase ] );
+
+				try {
+					made.actions.setOptions( "supabase", "ada", { project_ref : "abc" } );
+					fail( "it accepted options for a shared sign in" );
+				} catch ( any e ) {
+					expect( e.type ).toBe( "BxAgents.BadConnectRequest" );
+					expect( e.message ).toInclude( "which everyone shares" );
+				}
+			} );
+
+			it( "lets anyone switch a local program on when the agent is not served, as in the terminal", function() {
+				var made = build( [ offered( "git" ) ], {}, false );
+
+				var result = made.actions.connect( "git", "local", { method : "program", confirm : true } );
+
+				expect( result.connected ).toBeTrue();
+				expect( result.row.state ).toBe( "connected" );
+				expect( settings.get( "*", "git", "enabled" ).by ).toBe( "local" );
+			} );
+
+			it( "lets only an admin switch a local program on or off when the agent is served", function() {
+				var made = build( [ offered( "git" ) ], {}, true );
+
+				try {
+					made.actions.connect( "git", "slack:U01ADA", { method : "program", confirm : true } );
+					fail( "a person who is not an admin switched it on" );
+				} catch ( any e ) {
+					expect( e.type ).toBe( "BxAgents.Forbidden" );
+					expect( e.message ).toInclude( "Only an admin can switch on Git" );
+				}
+				expect( made.service.get( "git", "grace" ).state ).toBe( "available" );
+
+				made.actions.connect( "git", "ada", { method : "program", confirm : true, admin : true } );
+				expect( made.service.get( "git", "grace" ).state ).toBe( "connected" );
+				expect( () => made.actions.disconnect( "git", "grace", {} ) ).toThrow( "BxAgents.Forbidden" );
+				made.actions.disconnect( "git", "ada", { admin : true } );
+				expect( made.service.get( "git", "grace" ).state ).toBe( "available" );
+			} );
+
+			it( "keeps a local program's options for the agent, not for a person, and refuses a program that is not on the PATH", function() {
+				var made = build( [ offered( "git" ) ], { programExists : program => false }, false );
+
+				try {
+					made.actions.connect( "git", "local", { method : "program", confirm : true } );
+					fail( "it switched on a program that is not there" );
+				} catch ( any e ) {
+					expect( e.type ).toBe( "BxAgents.ProgramMissing" );
+					expect( e.message ).toInclude( "uvx" );
+				}
+				var found = build( [ offered( "git" ) ], {}, false );
+				found.actions.connect( "git", "local", { method : "program", confirm : true, options : { repository : "/srv/app" } } );
+				expect( settings.get( "*", "git", "options" ).repository ).toBe( "/srv/app" );
+				expect( settings.get( "local", "git", "options" ) ).toBeEmpty();
+			} );
+		} );
+	}
+
+}

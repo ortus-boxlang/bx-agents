@@ -12,7 +12,8 @@
  *   search      web search provider id (when `with` has search)
  *   files       { tools : "read" | "all" | [ names ], folders : [ "tmp", "cwd", "/abs" ] }
  *   memory      "cache" | "file"
- *   mcp         MCP server ids
+ *   mcp         MCP server ids (servers with one fixed account, named with --mcp)
+ *   connectors  { mode : all | none | only | exclude, ids } which catalog connectors the agent offers (every person connects with their own token)
  *   channels    "web", "api" and channel ids (telegram, slack, ...)
  *   web         { auth : "open" | "key" | "users", users : [ { username, passwordHash, displayName } ] }
  *   guard       "off" | "flag" | "block"   (prompt-injection guard)
@@ -52,6 +53,7 @@ class {
 			files       : { tools : "read", folders : [] },
 			memory      : "cache",
 			mcp         : [],
+			connectors  : { mode : "all", ids : [] },
 			channels    : [],
 			web         : { auth : "open", users : [] },
 			guard       : "off",
@@ -146,6 +148,8 @@ class {
 			}
 		}
 
+		plan.connectors = connectorsFromFlag( o )
+
 		plan.channels = list( o, "channels" )
 		for ( var id in plan.channels ) {
 			if ( !static.EXPOSURES.contains( id ) && !variables.catalog.channel( id ).count() ) {
@@ -228,6 +232,11 @@ class {
 		}
 		if ( p.mcp.len() ) {
 			parts.append( "--mcp=#p.mcp.toList()#" )
+		}
+		if ( p.connectors.mode == "none" ) {
+			parts.append( "--connectors=none" )
+		} else if ( p.connectors.mode != "all" ) {
+			parts.append( "--connectors=#p.connectors.mode#:#p.connectors.ids.toList()#" )
 		}
 		if ( p.channels.len() ) {
 			parts.append( "--channels=#p.channels.toList()#" )
@@ -338,6 +347,14 @@ class {
 			features.mcpServers = mcpServers
 		}
 
+		if ( p.connectors.mode == "none" ) {
+			features.connectors = "none"
+		} else if ( p.connectors.mode == "only" ) {
+			features.connectors = { only : p.connectors.ids }
+		} else if ( p.connectors.mode == "exclude" ) {
+			features.connectors = { exclude : p.connectors.ids }
+		}
+
 		var gateways = []
 		for ( var id in p.channels ) {
 			if ( static.EXPOSURES.contains( id ) ) {
@@ -418,6 +435,9 @@ class {
 		}
 		if ( p.mcp.len() ) {
 			rows.append( { label : "MCP servers", value : p.mcp.map( id => variables.catalog.mcpServer( id ).name ).toList( ", " ) } )
+		}
+		if ( p.connectors.mode != "all" ) {
+			rows.append( { label : "Connectors", value : connectorsText( p.connectors ) } )
 		}
 		if ( p.channels.len() ) {
 			rows.append( { label : "Channels", value : p.channels.map( id => channelLabel( id ) ).toList( ", " ) } )
@@ -603,6 +623,55 @@ class {
 			fail( problems[ 1 ].findNoCase( "tui.prompt" ) ? "prompt" : "widgets", "is not valid: " & problems[ 1 ].reReplace( "^new: ", "" ) )
 		}
 		return look
+	}
+
+	/**
+	 * @plan A connectors choice: { mode, ids }
+	 *
+	 * @return What it says in words
+	 */
+	string function connectorsText( required struct plan ) {
+		var names = arguments.plan.ids.map( id => variables.catalog.mcpServer( id ).name ?: id ).toList( ", " )
+		switch ( arguments.plan.mode ) {
+			case "none":
+				return "none offered"
+			case "only":
+				return "only " & names
+			case "exclude":
+				return "all except " & names
+		}
+		return "all offered"
+	}
+
+	/**
+	 * `--connectors` is `all` (the default), `none`, `only:a,b` or `exclude:a,b`, with ids from the connector catalog.
+	 *
+	 * @o The options
+	 *
+	 * @return { mode, ids }
+	 */
+	private struct function connectorsFromFlag( required struct o ) {
+		var raw = trim( toString( arguments.o.connectors ?: "" ) )
+		if ( !len( raw ) || raw == "all" ) {
+			return { mode : "all", ids : [] }
+		}
+		if ( raw == "none" ) {
+			return { mode : "none", ids : [] }
+		}
+		var mode = listFirst( raw, ":" )
+		if ( ![ "only", "exclude" ].contains( mode ) || !find( ":", raw ) ) {
+			fail( "connectors", "[#raw#] is not valid. Use all, none, only:a,b or exclude:a,b" )
+		}
+		var ids = listToArray( listRest( raw, ":" ), "," ).map( item => trim( item ) ).filter( item => len( item ) )
+		if ( !ids.len() ) {
+			fail( "connectors", "[#raw#] names no connector. Use: #variables.catalog.mcpServers().map( s => s.id ).toList( ', ' )#" )
+		}
+		for ( var id in ids ) {
+			if ( !variables.catalog.mcpServer( id ).count() ) {
+				fail( "connectors", "[#id#] is not a connector. Use: #variables.catalog.mcpServers().map( s => s.id ).toList( ', ' )#" )
+			}
+		}
+		return { mode : mode, ids : ids }
 	}
 
 	private array function list( required struct o, required string key ) {

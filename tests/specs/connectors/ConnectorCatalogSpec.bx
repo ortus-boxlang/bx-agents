@@ -1,0 +1,397 @@
+/**
+ * The connector catalog: the files that ship, the view the wizard reads, and every rule `check()`
+ * enforces on a pull request (a contributor's mistake must be named, never silently skipped).
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * The specs: the catalog that ships, the wizard's view of it, and every rule the check enforces.
+	 */
+	function run() {
+		describe( "the connector catalog that ships", function() {
+
+			beforeEach( function() {
+				variables.catalog = new bxagents.models.connectors.ConnectorCatalog();
+			} );
+
+			it( "has the seven connectors the wizard offered, and every file passes the checks", function() {
+				var result = catalog.check();
+
+				expect( result.errors ).toBeEmpty();
+				expect( result.ok ).toBeTrue();
+				expect( result.ids ).toBe( [ "atlassian", "cloudflare", "git", "github", "notion", "stripe", "supabase" ] );
+			} );
+
+			it( "gets one connector by id, and an empty struct for an unknown one", function() {
+				expect( catalog.get( "github" ).name ).toBe( "GitHub" );
+				expect( catalog.get( "github" ).transport ).toBe( "http" );
+				expect( catalog.get( "nope" ) ).toBeEmpty();
+			} );
+
+			it( "says how a person gets in: web connectors can sign in or paste a token, the local program needs neither", function() {
+				for ( var entry in catalog.all() ) {
+					var types = entry.auth.map( m => m.type );
+					if ( entry.transport == "http" ) {
+						expect( types ).toInclude( "bearer" );
+					} else {
+						expect( types ).toBe( [ "none" ] );
+					}
+				}
+				expect( catalog.get( "atlassian" ).auth.map( m => m.type ) ).toBe( [ "oauth", "bearer" ] );
+				expect( catalog.get( "github" ).auth.map( m => m.type ) ).toBe( [ "bearer" ] );
+			} );
+
+			it( "keeps the date a connector was verified as text, and every option complete", function() {
+				var supabase = catalog.get( "supabase" );
+
+				expect( supabase.verifiedOn ).toBe( "2026-11-14" );
+				var readOnly = supabase.options.filter( o => o.key == "read_only" )[ 1 ];
+				expect( readOnly.type ).toBe( "boolean" );
+				expect( readOnly.default ).toBeTrue();
+				expect( readOnly.name ).toBe( "read_only" );
+				expect( readOnly.onlyWith ).toBe( "" );
+			} );
+
+			it( "limits an option to the auth method it works with", function() {
+				var account = catalog.get( "stripe" ).options[ 1 ];
+
+				expect( account.name ).toBe( "Stripe-Account" );
+				expect( account.target ).toBe( "header" );
+				expect( account.onlyWith ).toBe( "bearer" );
+			} );
+
+			it( "puts no token, key or password in any file", function() {
+				var dir = catalog.folder();
+				for ( var path in directoryList( dir, false, "path", "*.yaml" ) ) {
+					var text = fileRead( path );
+					expect( text ).notToMatch( "(ghp_|github_pat_|sk_live_|rk_live_|AKIA[0-9A-Z]{16}|BEGIN .*PRIVATE KEY)" );
+				}
+			} );
+		} );
+
+		describe( "the wizard's view of the catalog", function() {
+
+			beforeEach( function() {
+				variables.catalog = new bxagents.models.connectors.ConnectorCatalog();
+				variables.view = catalog.wizardEntries().reduce( ( all, entry ) => { all[ entry.id ] = entry; return all; }, {} );
+			} );
+
+			it( "offers a web connector by address and its token route, as the old private list did", function() {
+				expect( view.github.url ).toBe( "https://api.githubcopilot.com/mcp/" );
+				expect( view.github.auth ).toBe( { type : "bearer", envVar : "GITHUB_PERSONAL_ACCESS_TOKEN", help : view.github.auth.help } );
+				expect( view.github.risk ).toBe( "high" );
+				expect( view.github.verified ).toBeTrue();
+				expect( view.stripe.auth.envVar ).toBe( "STRIPE_AGENT_API_KEY" );
+				expect( view.notion.auth.envVar ).toBe( "NOTION_MCP_TOKEN" );
+				expect( view.atlassian.auth.envVar ).toBe( "ATLASSIAN_API_TOKEN" );
+				expect( view.cloudflare.auth.envVar ).toBe( "CLOUDFLARE_API_TOKEN" );
+			} );
+
+			it( "adds the default of a query option to the address, so Supabase starts read only", function() {
+				expect( view.supabase.url ).toBe( "https://mcp.supabase.com/mcp?read_only=true" );
+			} );
+
+			it( "does not add a header option, an empty option or a false one to the address", function() {
+				expect( view.github.url ).notToInclude( "?" );
+			} );
+
+			it( "offers the local program by command, with the program it needs", function() {
+				expect( view.git.command ).toBe( [ "uvx", "mcp-server-git==2026.11.11" ] );
+				expect( view.git.requires.program ).toBe( "uvx" );
+				expect( view.git.auth ).toBe( { type : "none" } );
+				expect( view.git.keyExists( "url" ) ).toBeFalse();
+			} );
+		} );
+
+		describe( "checking a folder of connector files", function() {
+
+			beforeEach( function() {
+				variables.dir = getTempDirectory() & "bxa-catalog-" & createUUID();
+				directoryCreate( dir, true );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "accepts a complete web connector and a complete program connector", function() {
+				put( "demo.yaml", web() );
+				put( "tool.yaml", program() );
+
+				var result = new bxagents.models.connectors.ConnectorCatalog( dir ).check();
+
+				expect( result.errors ).toBeEmpty();
+				expect( result.ids ).toBe( [ "demo", "tool" ] );
+			} );
+
+			it( "names a folder that does not exist", function() {
+				var result = new bxagents.models.connectors.ConnectorCatalog( dir & "/missing" ).check();
+
+				expect( result.ok ).toBeFalse();
+				expect( result.errors[ 1 ].message ).toMatch( "does not exist" );
+			} );
+
+			it( "explains YAML that does not parse, with the colon and space hint", function() {
+				put( "demo.yaml", web().replace( "summary: A demo connector", "summary: A demo: with a colon" ) );
+
+				var problems = errors();
+
+				expect( problems ).toHaveLength( 1 );
+				expect( problems[ 1 ].file ).toBe( "demo.yaml" );
+				expect( problems[ 1 ].message ).toMatch( "not valid YAML" );
+				expect( problems[ 1 ].message ).toMatch( "colon followed by a space" );
+			} );
+
+			it( "explains a key that appears twice", function() {
+				put( "demo.yaml", web() & "name: Again" & char( 10 ) );
+
+				var problems = errors();
+
+				expect( problems ).toHaveLength( 1 );
+				expect( problems[ 1 ].message ).toMatch( "not valid YAML" );
+				expect( problems[ 1 ].message ).toMatch( "key must not appear twice" );
+			} );
+
+			it( "refuses a file that is a list instead of a mapping", function() {
+				put( "demo.yaml", "- one" & char( 10 ) & "- two" & char( 10 ) );
+
+				expect( errors()[ 1 ].message ).toMatch( "must be a mapping" );
+			} );
+
+			it( "names every missing required field", function() {
+				put( "demo.yaml", web().replace( "risk: low" & char( 10 ), "" ).replace( "riskNote: Reads things." & char( 10 ), "" ) );
+
+				var fields = errors().map( e => e.field );
+
+				expect( fields ).toInclude( "risk" );
+				expect( fields ).toInclude( "riskNote" );
+			} );
+
+			it( "names a field that is not part of a connector, so a typo is caught", function() {
+				put( "demo.yaml", web() & "sumary: oops" & char( 10 ) );
+
+				var problems = errors();
+
+				expect( problems[ 1 ].field ).toBe( "sumary" );
+				expect( problems[ 1 ].message ).toMatch( "not a field of a connector" );
+			} );
+
+			it( "requires the id to match the file name", function() {
+				put( "other.yaml", web() );
+
+				expect( errors().map( e => e.message ).toList( " " ) ).toMatch( "must match the file name" );
+			} );
+
+			it( "refuses an id that is not lowercase letters, digits and dashes", function() {
+				put( "Demo.yaml", web().replace( "id: demo", "id: Demo" ) );
+
+				expect( errors().map( e => e.field ).toList() ).toInclude( "id" );
+			} );
+
+			it( "refuses two files with the same id", function() {
+				put( "demo.yaml", web() );
+				put( "demo2.yaml", web() );
+
+				expect( errors().map( e => e.message ).toList( " " ) ).toMatch( "already used by demo.yaml" );
+			} );
+
+			it( "refuses a web address that is not https", function() {
+				put( "demo.yaml", web().replace( "https://example.com/mcp", "http://example.com/mcp" ) );
+
+				var problems = errors();
+
+				expect( problems[ 1 ].field ).toBe( "url" );
+				expect( problems[ 1 ].message ).toMatch( "https address" );
+			} );
+
+			it( "refuses a query string or a user name in the address, where options belong", function() {
+				put( "demo.yaml", web().replace( "https://example.com/mcp", "https://example.com/mcp?read_only=true" ) );
+				put( "demo2.yaml", web().replace( "id: demo", "id: demo2" ).replace( "https://example.com/mcp", "https://me:pw@example.com/mcp" ) );
+
+				var problems = errors().filter( e => e.field == "url" );
+
+				expect( problems ).toHaveLength( 2 );
+			} );
+
+			it( "refuses a program connector without a command or the program it needs", function() {
+				put( "tool.yaml", program().replace( "command: [ run-tool, serve ]", "command: []" ).replace( "  program: run-tool" & char( 10 ) & "  help: Install it.", "  help: Install it." ) );
+
+				var fields = errors().map( e => e.field );
+
+				expect( fields ).toInclude( "command" );
+				expect( fields ).toInclude( "requires" );
+			} );
+
+			it( "refuses a sign in or token on a program, and no way in on a web connector", function() {
+				put( "tool.yaml", program().replace( "- type: none", "- type: bearer" & char( 10 ) & "    envVar: TOOL_KEY" ) );
+				put( "demo.yaml", web().replace( "- type: bearer", "- type: none" ).replace( "    envVar: DEMO_TOKEN" & char( 10 ), "" ) );
+
+				var messages = errors().map( e => e.message ).toList( " " );
+
+				expect( messages ).toMatch( "stdio connector has no sign in or token" );
+				expect( messages ).toMatch( "web connector must say how a person gets in" );
+			} );
+
+			it( "requires a bearer method to name an environment variable", function() {
+				put( "demo.yaml", web().replace( "envVar: DEMO_TOKEN", "envVar: not a name" ) );
+
+				var problems = errors();
+
+				expect( problems[ 1 ].field ).toBe( "auth.envVar" );
+				expect( problems[ 1 ].message ).toMatch( "never goes in this file" );
+			} );
+
+			it( "requires every auth method to say verified, and why when it is not", function() {
+				put( "demo.yaml", web().replace( "    verified: true" & char( 10 ), "" ) );
+				put( "demo2.yaml", web().replace( "id: demo", "id: demo2" ).replace( "verified: true", "verified: false" ) );
+
+				var fields = errors().map( e => e.field );
+
+				expect( fields ).toInclude( "auth.verified" );
+				expect( fields ).toInclude( "auth.unverifiedNote" );
+			} );
+
+			it( "accepts an unverified method that says why", function() {
+				put( "demo.yaml", web().replace( "verified: true", "verified: false" & char( 10 ) & "    unverifiedNote: The header is not documented." ) );
+
+				expect( errors() ).toBeEmpty();
+			} );
+
+			it( "refuses a risk outside low, medium and high", function() {
+				put( "demo.yaml", web().replace( "risk: low", "risk: scary" ) );
+
+				expect( errors()[ 1 ].message ).toMatch( "must be one of: low, medium, high" );
+			} );
+
+			it( "refuses a docs link that is not https and a date that is not a date", function() {
+				put( "demo.yaml", web().replace( "https://example.com/docs", "ftp://example.com/docs" ).replace( "verifiedOn: 2026-11-14", "verifiedOn: last week" ) );
+
+				var fields = errors().map( e => e.field );
+
+				expect( fields ).toInclude( "docs" );
+				expect( fields ).toInclude( "verifiedOn" );
+			} );
+
+			it( "checks an option: its target for the kind of connector, its name, its type and what it works with", function() {
+				var options = [
+					"  - key: Bad Key" & char( 10 ) & "    label: x" & char( 10 ) & "    type: text" & char( 10 ) & "    target: query" & char( 10 ),
+					"  - key: a" & char( 10 ) & "    label: x" & char( 10 ) & "    type: number" & char( 10 ) & "    target: query" & char( 10 ),
+					"  - key: b" & char( 10 ) & "    label: x" & char( 10 ) & "    type: text" & char( 10 ) & "    target: arg" & char( 10 ),
+					"  - key: c" & char( 10 ) & "    label: x" & char( 10 ) & "    type: text" & char( 10 ) & "    target: header" & char( 10 ) & "    name: Bad Header" & char( 10 ),
+					"  - key: d" & char( 10 ) & "    label: x" & char( 10 ) & "    type: text" & char( 10 ) & "    target: query" & char( 10 ) & "    onlyWith: oauth" & char( 10 )
+				];
+				put( "demo.yaml", web() & "options:" & char( 10 ) & options.toList( "" ) );
+
+				var fields = errors().map( e => e.field );
+
+				expect( fields ).toInclude( "options.key" );
+				expect( fields ).toInclude( "options.a.type" );
+				expect( fields ).toInclude( "options.b.target" );
+				expect( fields ).toInclude( "options.c.name" );
+				expect( fields ).toInclude( "options.d.onlyWith" );
+			} );
+
+			it( "refuses a secret anywhere in a file and never repeats it", function() {
+				var token = "ghp_" & repeatString( "a1B2", 8 );
+				put( "demo.yaml", web().replace( "help: A token.", "help: Use " & token & " here." ) );
+				put( "demo2.yaml", web().replace( "id: demo", "id: demo2" ).replace( "help: A token.", "help: key sk_live_" & repeatString( "Zx9", 6 ) ) );
+
+				var problems = errors();
+
+				expect( problems.map( e => e.message ).toList( " " ) ).toMatch( "looks like a GitHub token" );
+				expect( problems.map( e => e.message ).toList( " " ) ).toMatch( "looks like a Stripe key" );
+				for ( var problem in problems ) {
+					expect( problem.message ).notToInclude( token );
+					expect( problem.message ).notToInclude( "sk_live_" );
+				}
+			} );
+
+			it( "leaves a file that fails out of the catalog, and keeps the ones that pass", function() {
+				put( "demo.yaml", web() );
+				put( "bad.yaml", web().replace( "id: demo", "id: bad" ).replace( "risk: low", "risk: scary" ) );
+
+				var catalog = new bxagents.models.connectors.ConnectorCatalog( dir );
+
+				expect( catalog.ids() ).toBe( [ "demo" ] );
+				expect( catalog.check().ok ).toBeFalse();
+			} );
+
+			it( "leaves a connector that can only sign a person in out of the wizard's view", function() {
+				put( "demo.yaml", web().replace( "- type: bearer", "- type: oauth" ).replace( "    envVar: DEMO_TOKEN" & char( 10 ), "" ).replace( "    help: A token." & char( 10 ), "" ) );
+
+				var catalog = new bxagents.models.connectors.ConnectorCatalog( dir );
+
+				expect( catalog.check().errors ).toBeEmpty();
+				expect( catalog.ids() ).toBe( [ "demo" ] );
+				expect( catalog.wizardEntries() ).toBeEmpty();
+			} );
+		} );
+	}
+
+	/**
+	 * @name The file name
+	 * @text What goes in it
+	 */
+	private void function put( required string name, required string text ) {
+		fileWrite( variables.dir & "/" & arguments.name, arguments.text );
+	}
+
+	/**
+	 * @return What `check()` finds wrong in the folder
+	 */
+	private array function errors() {
+		return new bxagents.models.connectors.ConnectorCatalog( variables.dir ).check().errors;
+	}
+
+	/**
+	 * @return A complete web connector file
+	 */
+	private string function web() {
+		return [
+			"id: demo",
+			"name: Demo",
+			"icon: puzzle-piece",
+			"summary: A demo connector",
+			"transport: http",
+			"url: https://example.com/mcp",
+			"auth:",
+			"  - type: bearer",
+			"    envVar: DEMO_TOKEN",
+			"    help: A token.",
+			"    verified: true",
+			"risk: low",
+			"riskNote: Reads things.",
+			"docs: https://example.com/docs",
+			"verifiedOn: 2026-11-14",
+			""
+		].toList( char( 10 ) );
+	}
+
+	/**
+	 * @return A complete program connector file
+	 */
+	private string function program() {
+		return [
+			"id: tool",
+			"name: Tool",
+			"icon: terminal",
+			"summary: A local tool",
+			"transport: stdio",
+			"command: [ run-tool, serve ]",
+			"requires:",
+			"  program: run-tool",
+			"  help: Install it.",
+			"auth:",
+			"  - type: none",
+			"    verified: true",
+			"risk: medium",
+			"riskNote: Runs a program.",
+			"docs: https://example.com/tool",
+			"verifiedOn: 2026-11-14",
+			""
+		].toList( char( 10 ) );
+	}
+
+}

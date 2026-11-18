@@ -7,53 +7,47 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 
 	/** @return What the slash menu says the command does */
 	string function hint() {
-		return "sign in to the MCP servers that ask each person to: /connect, /connect NAME, /connect NAME remove"
+		return "connect services for the agent to use as you: /connect, /connect NAME, /connect NAME off, /connect NAME tools"
 	}
 
 	/**
-	 * `/connect` lists the servers and whether the person is connected. `/connect NAME` starts a sign in and shows the
-	 * address to open. `/connect NAME remove` forgets it. No token is ever shown.
+	 * `/connect` lists the connectors and your state. `/connect NAME` connects one: the risk, its options, then your token
+	 * in a hidden box (a token is never typed in the command). `/connect NAME off` disconnects, `/connect NAME tools`
+	 * lists the tools by name and `tools off NAME`, `tools on NAME`, `tools off all`, `tools readonly` change what is on.
+	 * The services written in Agent.yaml (mcpServers with oauth) are listed too and connected by name. No token is ever shown.
 	 *
 	 * @context The CommandContext
 	 * @args What was typed after the name
 	 */
 	any function run( required any context, required string args ) {
 		var reply = arguments.context.reply()
-		var kept = arguments.context.chat().connections()
-		if ( !kept.available() ) {
-			return reply.warn( kept.why() )
-		}
 		var words = listToArray( trim( arguments.args ), " " )
-		try {
-			if ( !words.len() ) {
-				var rows = kept.list()
-				for ( var row in rows ) {
-					reply.text( "#row.name#  #row.connected ? 'connected' : 'not connected'#  #row.url#" )
-					if ( len( row.result ?: "" ) ) {
-						reply.text( "  " & row.result )
-					}
-				}
-				var missing = rows.filter( row => !row.connected )
-				if ( missing.len() ) {
-					reply.text( "Type /connect #missing[ 1 ].name# to sign in." )
-				}
-				return reply
-			}
-			if ( words.len() > 1 && lCase( words[ 2 ] ) == "remove" ) {
-				var removed = kept.remove( words[ 1 ] )
-				return removed.ok ? reply.text( "Disconnected from #words[ 1 ]#." ) : reply.warn( removed.reason )
-			}
-			var started = kept.start( words[ 1 ] )
-			if ( !started.ok ) {
-				return reply.warn( started.reason )
-			}
-			reply.text( "Open this address and sign in to #words[ 1 ]#:" )
-			reply.text( started.authorizationUrl )
-			if ( arguments.context.transport() == "gateway" ) {
-				reply.text( "This link is for you alone and works once, for ten minutes: do not share it. When you have signed in, send /connect to see that it worked." )
+		var flags = {}
+		var plain = []
+		for ( var word in words ) {
+			if ( lCase( word ) == "--confirm" ) {
+				flags.confirm = true
+			} else if ( lCase( left( word, 12 ) ) == "--token-env=" && arguments.context.transport() == "tui" ) {
+				// only at a terminal: from a chat platform or a web page it would read the server's environment for a stranger
+				flags.tokenEnv = mid( word, 13, len( word ) )
 			} else {
-				reply.text( started.waits ? "This terminal is waiting for the browser to come back. Type /connect to see that it worked." : "The server finishes the sign in when you come back. Type /connect to see that it worked." )
+				plain.append( word )
 			}
+		}
+		try {
+			// a chat that does not know about connectors (an older server) has none to show
+			var source = ""
+			try {
+				source = arguments.context.chat().connectors( arguments.context.isAdmin() )
+			} catch ( any noConnectors ) {
+				source = new "models.connectors.NoConnectorSource@bxagents"()
+			}
+			var console = new "models.connectors.ConnectorsConsole@bxagents"(
+				source,
+				new "models.connectors.ChatConsoleIo@bxagents"( arguments.context, reply ),
+				arguments.context.chat().connections()
+			)
+			console.run( plain, flags )
 		} catch ( any e ) {
 			reply.warn( "Connect: " & e.message )
 		}

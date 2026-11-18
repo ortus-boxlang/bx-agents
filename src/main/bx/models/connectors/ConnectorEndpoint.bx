@@ -1,0 +1,136 @@
+/**
+ * Where a connector is reached for one person: the address and headers its options make.
+ *
+ * An option's `target` says where its value goes: a `query` value is added to the address, a `header` value is sent as a
+ * header, a `path` value is added as a path segment. A boolean that is true is sent as `true`; false, or an empty text, is
+ * left out. An option with `onlyWith` applies only to that way in (Stripe's connected account is for a token only).
+ */
+class {
+
+	/**
+	 * @entry The connector as offered (ConnectorService.entryOf)
+	 * @values The option values to use: { key : value }. A key left out gets the option's default
+	 * @authType The way in the person uses: bearer or oauth
+	 *
+	 * @return { id, url, headers, timeout } where timeout is left out when the admin set none
+	 */
+	static struct function of( required struct entry, struct values = {}, string authType = "bearer" ) {
+		var query = []
+		var segments = []
+		var headers = {}
+		for ( var option in arguments.entry.options ) {
+			if ( len( option.onlyWith ) && option.onlyWith != arguments.authType ) {
+				continue
+			}
+			var raw = arguments.values.keyExists( option.key ) ? arguments.values[ option.key ] : option.default
+			var text = option.type == "boolean" ? ( isBoolean( raw ) && raw ? "true" : "" ) : toString( raw )
+			if ( !len( text ) ) {
+				continue
+			}
+			if ( option.target == "query" ) {
+				query.append( option.name & "=" & urlEncodedFormat( text ).replace( "+", "%20", "all" ) )
+			} else if ( option.target == "header" ) {
+				headers[ option.name ] = text
+			} else if ( option.target == "path" ) {
+				segments.append( urlEncodedFormat( text ).replace( "+", "%20", "all" ) )
+			}
+		}
+		var out = {
+			id      : arguments.entry.id,
+			url     : arguments.entry.url & ( segments.len() ? "/" & segments.toList( "/" ) : "" ) & ( query.len() ? "?" & query.toList( "&" ) : "" ),
+			headers : headers
+		}
+		if ( ( arguments.entry.timeout ?: 0 ) > 0 ) {
+			out.timeout = arguments.entry.timeout
+		}
+		return out
+	}
+
+	/**
+	 * The environment a local program connector is started with. A program does not inherit the agent's environment: that
+	 * holds the vault key and the model provider keys, and a program (which a person's prompt can steer) has no use for them.
+	 * It gets what any program needs to run (the search path, home and temp folders, locale, certificates and proxies, and the
+	 * settings of uv and the XDG folders), then what the connector's `env` options set.
+	 *
+	 * @host The environment of the agent's process: { NAME : value }
+	 * @extra What the connector's options set, which wins
+	 *
+	 * @return { NAME : value }
+	 */
+	static struct function programEnvironment( required struct host, struct extra = {} ) {
+		var exact = [
+			"PATH", "HOME", "USER", "USERNAME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "SYSTEMROOT", "TEMP", "TMP", "TMPDIR",
+			"LANG", "LC_ALL", "LC_CTYPE", "TERM", "SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE",
+			"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY"
+		]
+		var out = {}
+		for ( var name in arguments.host.keyArray() ) {
+			var upper = name.ucase()
+			if ( exact.contains( upper ) || upper.startsWith( "UV_" ) || upper.startsWith( "XDG_" ) ) {
+				out[ name ] = arguments.host[ name ]
+			}
+		}
+		out.append( arguments.extra, true )
+		return out
+	}
+
+	/**
+	 * How a local program connector is started: its command, with the options that are arguments added, and its environment.
+	 * An `arg` option adds its name and its value (a boolean that is true adds the name alone); an `env` option sets a variable.
+	 * Nothing is joined into a shell string: the command is a list, so a value cannot become another command.
+	 *
+	 * @entry The connector as offered
+	 * @values The option values: { key : value }. A key left out gets the option's default
+	 *
+	 * @return { command : [ program, args... ], env : { NAME : value } }
+	 */
+	static struct function command( required struct entry, struct values = {} ) {
+		var parts = duplicate( arguments.entry.command )
+		var env = {}
+		for ( var option in arguments.entry.options ) {
+			var raw = arguments.values.keyExists( option.key ) ? arguments.values[ option.key ] : option.default
+			var text = option.type == "boolean" ? ( isBoolean( raw ) && raw ? "true" : "" ) : toString( raw )
+			if ( !len( text ) ) {
+				continue
+			}
+			if ( option.target == "arg" ) {
+				parts.append( option.name )
+				if ( option.type != "boolean" ) {
+					parts.append( text )
+				}
+			} else if ( option.target == "env" ) {
+				env[ option.name ] = text
+			}
+		}
+		return { command : parts, env : env }
+	}
+
+	/**
+	 * The `mcpServers` entries the sign in side works with, one for each offered connector that has a sign in. A sign in
+	 * client is shared by everyone, so its address uses the admin's option values, never a person's.
+	 *
+	 * @available The offered connectors (ConnectorSettings::resolve().available)
+	 *
+	 * @return [ { name, prefix, url, oauth, headers, timeout } ]
+	 */
+	static array function oauthEntries( required array available ) {
+		var out = []
+		for ( var entry in arguments.available ) {
+			var method = entry.auth.filter( m => m.type == "oauth" )
+			if ( entry.transport != "http" || !method.len() ) {
+				continue
+			}
+			var where = ConnectorEndpoint::of( entry, {}, "oauth" )
+			var made = { name : entry.id, prefix : entry.id, url : where.url, oauth : method[ 1 ].scopes.len() ? { scopes : method[ 1 ].scopes } : true }
+			if ( where.headers.count() ) {
+				made.headers = where.headers
+			}
+			if ( where.keyExists( "timeout" ) ) {
+				made.timeout = where.timeout
+			}
+			out.append( made )
+		}
+		return out
+	}
+
+}

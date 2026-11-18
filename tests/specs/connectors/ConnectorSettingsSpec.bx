@@ -1,0 +1,181 @@
+import bxagents.models.connectors.ConnectorSettings;
+
+/**
+ * The `connectors:` key: which connectors an agent offers (all by default, only some, all but some, none), what an admin
+ * overrides, and the sentence for each mistake.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * @config A config struct
+	 *
+	 * @return What is wrong with its connectors key
+	 */
+	private array function problemsOf( required struct config ) {
+		return ConnectorSettings::problems( arguments.config );
+	}
+
+	/**
+	 * @config A config struct
+	 *
+	 * @return The ids it offers
+	 */
+	private array function idsOf( required struct config ) {
+		return ConnectorSettings::resolve( arguments.config ).available.map( c => c.id );
+	}
+
+	/**
+	 * The specs.
+	 */
+	function run() {
+		describe( "ConnectorSettings", function() {
+
+			it( "offers every connector of the catalog when the key is left out", function() {
+				var result = ConnectorSettings::resolve( {} );
+
+				expect( problemsOf( {} ) ).toBeEmpty();
+				expect( result.mode ).toBe( "all" );
+				expect( result.available.map( c => c.id ) ).toBe( [ "atlassian", "cloudflare", "git", "github", "notion", "stripe", "supabase" ] );
+				expect( result.excluded ).toBeEmpty();
+			} );
+
+			it( "offers none when the key is the word none, in any case", function() {
+				expect( problemsOf( { connectors : "none" } ) ).toBeEmpty();
+				expect( problemsOf( { connectors : "None" } ) ).toBeEmpty();
+				expect( idsOf( { connectors : "none" } ) ).toBeEmpty();
+				expect( ConnectorSettings::resolve( { connectors : "none" } ).mode ).toBe( "none" );
+			} );
+
+			it( "refuses any other word, a list or a number", function() {
+				expect( problemsOf( { connectors : "all" } )[ 1 ] ).toInclude( "must be the word none or a mapping" );
+				expect( problemsOf( { connectors : [ "github" ] } )[ 1 ] ).toInclude( "must be the word none or a mapping" );
+			} );
+
+			it( "offers only the ones listed in only", function() {
+				var config = { connectors : { only : [ "notion", "github" ] } };
+
+				expect( problemsOf( config ) ).toBeEmpty();
+				expect( idsOf( config ) ).toBe( [ "github", "notion" ] );
+				expect( ConnectorSettings::resolve( config ).mode ).toBe( "only" );
+			} );
+
+			it( "offers all but the ones in exclude", function() {
+				var config = { connectors : { exclude : [ "stripe", "git" ] } };
+				var result = ConnectorSettings::resolve( config );
+
+				expect( problemsOf( config ) ).toBeEmpty();
+				expect( result.available.map( c => c.id ) ).toBe( [ "atlassian", "cloudflare", "github", "notion", "supabase" ] );
+				expect( result.excluded ).toBe( [ "git", "stripe" ] );
+				expect( result.mode ).toBe( "exclude" );
+			} );
+
+			it( "evaluates only first, then exclude, then override", function() {
+				var config = { connectors : { only : [ "github", "notion", "supabase" ], exclude : [ "notion" ], override : { github : { timeout : 20000 } } } };
+				var offered = ConnectorSettings::resolve( config ).available;
+
+				expect( problemsOf( config ) ).toBeEmpty();
+				expect( offered.map( c => c.id ) ).toBe( [ "github", "supabase" ] );
+				expect( offered[ 1 ].timeout ).toBe( 20000 );
+				expect( offered[ 1 ].overridden ).toBeTrue();
+				expect( offered[ 2 ].overridden ).toBeFalse();
+			} );
+
+			it( "changes an option's value, the sign in scopes and the allowed tools, and leaves the catalog alone", function() {
+				var config = { connectors : { override : {
+					supabase : { options : { read_only : false, project_ref : "abc123" } },
+					atlassian : { scopes : [ "read:jira:agent-interface" ] },
+					notion : { tools : [ "search", "fetch" ] }
+				} } };
+				var offered = ConnectorSettings::resolve( config ).available.reduce( ( all, c ) => { all[ c.id ] = c; return all; }, {} );
+
+				expect( problemsOf( config ) ).toBeEmpty();
+				expect( offered.supabase.options.filter( o => o.key == "read_only" )[ 1 ].default ).toBeFalse();
+				expect( offered.supabase.options.filter( o => o.key == "project_ref" )[ 1 ].default ).toBe( "abc123" );
+				expect( offered.atlassian.auth.filter( m => m.type == "oauth" )[ 1 ].scopes ).toBe( [ "read:jira:agent-interface" ] );
+				expect( offered.notion.tools ).toBe( [ "search", "fetch" ] );
+				// a connector nobody overrode keeps what the catalog says
+				expect( offered.github.tools ).toBeEmpty();
+				expect( offered.github.timeout ).toBe( 0 );
+				// and the catalog itself is not changed by it
+				var fresh = new bxagents.models.connectors.ConnectorCatalog().get( "supabase" );
+				expect( fresh.options.filter( o => o.key == "read_only" )[ 1 ].default ).toBeTrue();
+			} );
+
+			it( "names an unknown connector with the closest id, and lists the ids", function() {
+				var text = problemsOf( { connectors : { only : [ "gitub" ], exclude : [ "nothing-like-it" ] } } ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "connectors.only names [gitub], which is not in the catalog. Did you mean [github]?" );
+				expect( text ).toInclude( "connectors.exclude names [nothing-like-it], which is not in the catalog." );
+				expect( text ).notToInclude( "nothing-like-it], which is not in the catalog. Did you mean" );
+				expect( text ).toInclude( "The ids are: atlassian, cloudflare, git, github, notion, stripe, supabase" );
+			} );
+
+			it( "refuses an empty only, a key that is not a list and an unknown key", function() {
+				expect( problemsOf( { connectors : { only : [] } } )[ 1 ] ).toInclude( "connectors.only is empty" );
+				expect( problemsOf( { connectors : { only : "github" } } )[ 1 ] ).toInclude( "connectors.only must be a list" );
+				expect( problemsOf( { connectors : { omly : [ "github" ] } } )[ 1 ] ).toInclude( "unknown key [omly]" );
+			} );
+
+			it( "refuses an exclude of a connector that only already leaves out", function() {
+				var text = problemsOf( { connectors : { only : [ "github" ], exclude : [ "stripe" ] } } ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "connectors.exclude names [stripe], which connectors.only does not offer" );
+			} );
+
+			it( "refuses an override of a connector the agent does not offer", function() {
+				var text = problemsOf( { connectors : { exclude : [ "stripe" ], override : { stripe : { timeout : 5000 } } } } ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "connectors.override names [stripe], which this agent does not offer" );
+			} );
+
+			it( "refuses an override setting it does not know, and says a token is never set there", function() {
+				var text = problemsOf( { connectors : { override : { github : { token : "x" } } } } ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "unknown setting [token]" );
+				expect( text ).toInclude( "each person connects their own" );
+			} );
+
+			it( "checks the timeout, the scopes, the tools and each option against the catalog", function() {
+				var text = problemsOf( { connectors : { override : {
+					github : { timeout : 5, tools : "all", options : { readonly : "maybe", nope : 1 } },
+					stripe : { scopes : [ "x" ] },
+					supabase : { options : { project_ref : [ 1 ] } },
+					notion : { scopes : "read" }
+				} } } ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "connectors.override.github.timeout must be a whole number of milliseconds" );
+				expect( text ).toInclude( "connectors.override.github.tools must be a list" );
+				expect( text ).toInclude( "connectors.override.github.options.readonly must be true or false" );
+				expect( text ).toInclude( "connectors.override.github.options names [nope], which [github] does not have. Its options are: toolsets, readonly" );
+				expect( text ).toInclude( "connectors.override.supabase.options.project_ref must be text" );
+				expect( text ).toInclude( "connectors.override.notion.scopes must be a list" );
+			} );
+
+			it( "says that scopes do not apply to a connector with only a token", function() {
+				var text = problemsOf( { connectors : { override : { github : { scopes : [ "repo" ] } } } } ).toList( char( 10 ) );
+
+				expect( text ).toInclude( "connectors.override.github.scopes does not apply: [github] has no sign in, only a token" );
+			} );
+
+			it( "carries the tool warning limit, 100 unless the key sets one, and refuses one that is not a sensible number", function() {
+				expect( ConnectorSettings::resolve( {} ).toolWarning ).toBe( 100 );
+				expect( ConnectorSettings::resolve( { connectors : { toolWarning : 60 } } ).toolWarning ).toBe( 60 );
+				expect( problemsOf( { connectors : { toolWarning : 60 } } ) ).toBeEmpty();
+				for ( var bad in [ 5, 5000, "many", 12.5 ] ) {
+					expect( problemsOf( { connectors : { toolWarning : bad } } )[ 1 ] ).toInclude( "connectors.toolWarning must be a whole number from 10 to 2000" );
+				}
+			} );
+
+			it( "lets an mcpServers entry with a connector's name replace that connector", function() {
+				var config = { mcpServers : [ { name : "github", url : "https://example.com/mcp" }, "https://other.example.com/mcp" ] };
+				var result = ConnectorSettings::resolve( config );
+
+				expect( result.shadowed ).toBe( [ "github" ] );
+				expect( result.available.map( c => c.id ) ).notToInclude( "github" );
+				expect( result.excluded ).notToInclude( "github" );
+				expect( problemsOf( config ) ).toBeEmpty();
+			} );
+		} );
+	}
+
+}

@@ -1,0 +1,92 @@
+/**
+ * What a chat command gives the connectors console to write to and ask through: the command's Reply for the lines and
+ * its CommandContext for the questions. Questions are put only in the terminal chat; on the web page and the chat
+ * platforms they get no answer, and the console says what to do instead.
+ */
+class {
+
+	/**
+	 * @context The CommandContext
+	 * @reply The Reply the command returns
+	 */
+	function init( required any context, required any reply ) {
+		variables.context = arguments.context
+		variables.reply = arguments.reply
+		return this
+	}
+
+	/**
+	 * @line A plain line
+	 */
+	void function text( required string line ) {
+		variables.reply.text( arguments.line )
+	}
+
+	/**
+	 * @line A line that went well
+	 */
+	void function ok( required string line ) {
+		variables.reply.ok( arguments.line )
+	}
+
+	/**
+	 * @line A line that says something did not work
+	 */
+	void function warn( required string line ) {
+		variables.reply.warn( arguments.line )
+	}
+
+	/**
+	 * @return True when the person is on a chat platform, where a sign in link is a secret between them and the bot
+	 */
+	boolean function isGateway() {
+		return variables.context.transport() == "gateway"
+	}
+
+	/**
+	 * @return True when a question can be put to the person
+	 */
+	boolean function canAsk() {
+		return variables.context.canAsk()
+	}
+
+	/**
+	 * @question What to ask
+	 * @options { help, default }
+	 *
+	 * @return The text, or null
+	 */
+	any function ask( required string question, struct options = {} ) {
+		return variables.context.ask( arguments.question, arguments.options )
+	}
+
+	/**
+	 * @question What to ask
+	 * @help A line of help
+	 *
+	 * @return The text typed in a hidden box, or null
+	 */
+	any function askSecret( required string question, string help = "" ) {
+		return variables.context.askSecret( arguments.question, arguments.help )
+	}
+
+	/**
+	 * @question What to ask
+	 *
+	 * @return True only for yes
+	 */
+	boolean function confirm( required string question ) {
+		return variables.context.confirm( arguments.question )
+	}
+
+	/**
+	 * @question What to ask
+	 * @choices Structs with value and label
+	 *
+	 * @return The value picked, or null
+	 */
+	any function choose( required string question, required array choices ) {
+		return variables.context.choose( arguments.question, arguments.choices )
+	}
+
+}

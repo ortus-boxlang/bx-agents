@@ -1,0 +1,128 @@
+/**
+ * What `bxAgents connect` gives the connectors console to write to and ask through: lines go to the terminal at once (so a
+ * question comes after the risk it is about), questions go through the wizard's prompter (a hidden box for a token). It
+ * remembers whether anything went wrong, for the exit code.
+ */
+class {
+
+	/**
+	 * @prompter A prompter (models.wizard.prompters): text(), confirm(), select()
+	 * @canAsk False when the input is a pipe or a script and nobody can be asked
+	 * @out A function ( line ) that writes a line; the terminal by default
+	 */
+	function init( required any prompter, boolean canAsk = true, any out = "" ) {
+		variables.prompter = arguments.prompter
+		variables.asking = arguments.canAsk
+		variables.out = isClosure( arguments.out ) ? arguments.out : ( line => println( line ) )
+		variables.failed = false
+		variables.lines = []
+		return this
+	}
+
+	/**
+	 * @return True when something was said that went wrong
+	 */
+	boolean function failed() {
+		return variables.failed
+	}
+
+	/**
+	 * @return Every line written, for a test
+	 */
+	array function written() {
+		return variables.lines
+	}
+
+	/**
+	 * @line A plain line
+	 */
+	void function text( required string line ) {
+		say( arguments.line )
+	}
+
+	/**
+	 * @line A line that went well
+	 */
+	void function ok( required string line ) {
+		say( arguments.line )
+	}
+
+	/**
+	 * @line A line that says something did not work
+	 */
+	void function warn( required string line ) {
+		variables.failed = true
+		say( arguments.line )
+	}
+
+	/**
+	 * @return False: a person at a command line is not on a chat platform
+	 */
+	boolean function isGateway() {
+		return false
+	}
+
+	/**
+	 * @return True when a question can be put to the person
+	 */
+	boolean function canAsk() {
+		return variables.asking
+	}
+
+	/**
+	 * @question What to ask
+	 * @options { help, default }
+	 *
+	 * @return The text, or null when nobody can be asked
+	 */
+	any function ask( required string question, struct options = {} ) {
+		if ( !variables.asking ) {
+			return nullValue()
+		}
+		return variables.prompter.text( arguments.question, arguments.options.help ?: "", arguments.options.default ?: "", false, "" )
+	}
+
+	/**
+	 * @question What to ask
+	 * @help A line of help
+	 *
+	 * @return The text typed in a hidden box, or null when nobody can be asked
+	 */
+	any function askSecret( required string question, string help = "" ) {
+		if ( !variables.asking ) {
+			return nullValue()
+		}
+		return variables.prompter.text( arguments.question, arguments.help, "", true, "" )
+	}
+
+	/**
+	 * @question What to ask
+	 *
+	 * @return True only for yes
+	 */
+	boolean function confirm( required string question ) {
+		return variables.asking && variables.prompter.confirm( arguments.question, "", false )
+	}
+
+	/**
+	 * @question What to ask
+	 * @choices Structs with value and label
+	 *
+	 * @return The value picked, or null when nobody can be asked
+	 */
+	any function choose( required string question, required array choices ) {
+		if ( !variables.asking ) {
+			return nullValue()
+		}
+		return variables.prompter.select( arguments.question, arguments.choices )
+	}
+
+	/**
+	 * @line What to write
+	 */
+	private void function say( required string line ) {
+		variables.lines.append( arguments.line )
+		variables.out( arguments.line )
+	}
+
+}

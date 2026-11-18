@@ -12,7 +12,8 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'build' = 'Build a project into a generated app'
 		'chat' = 'Interactive REPL chat with a built agent'
 		'clean' = 'Remove a project''s .build/ and dist/ output'
-		'connect' = 'Sign in to the MCP servers of a project that ask each person to sign in: connect [name]'
+		'connect' = 'Connect the connectors and sign in to the MCP servers of a project: connect [id]...'
+		'connectors' = 'The catalog of known connectors that ships with BX Agents: connectors [list|show...'
 		'data' = 'Where the agent keeps everything: the data home, the size of each part and the volumes it...'
 		'deploy' = 'Deploy to a target'
 		'doctor' = 'Diagnose the environment and project - runtime, modules, env vars'
@@ -127,9 +128,15 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'port'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 			@{ Name = 'timeout'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'token-env'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'user'; Value = $true; Choices = @(); Dir = $false }
 		)
 		'connect:positional' = 'dir'
+		'connectors' = @(
+			@{ Name = 'dir'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'json'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+		)
 		'data' = @(
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 		)
@@ -194,6 +201,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'app'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'channels'; Value = $true; Choices = @('web', 'api', 'telegram', 'slack', 'discord', 'whatsapp-cloud', 'teams', 'twilio', 'github', 'email', 'signal'); Dir = $false }
 			@{ Name = 'class'; Value = $false; Choices = @(); Dir = $false }
+			@{ Name = 'connectors'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'deploy'; Value = $true; Choices = @('docker', 'digitalocean', 'ssh', 'sftp', 'ftp', 'local'); Dir = $false }
 			@{ Name = 'description'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'destination'; Value = $true; Choices = @(); Dir = $true }
@@ -203,7 +211,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'guard'; Value = $true; Choices = @('off', 'flag', 'block'); Dir = $false }
 			@{ Name = 'host'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'max-tokens'; Value = $true; Choices = @(); Dir = $false }
-			@{ Name = 'mcp'; Value = $true; Choices = @('github', 'stripe', 'notion', 'atlassian', 'cloudflare', 'supabase', 'git'); Dir = $false }
+			@{ Name = 'mcp'; Value = $true; Choices = @('atlassian', 'cloudflare', 'git', 'github', 'notion', 'stripe', 'supabase'); Dir = $false }
 			@{ Name = 'memory'; Value = $true; Choices = @('cache', 'file'); Dir = $false }
 			@{ Name = 'model'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }

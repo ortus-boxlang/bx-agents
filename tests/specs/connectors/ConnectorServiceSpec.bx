@@ -1,0 +1,194 @@
+import bxagents.models.connectors.ConnectorSettings;
+
+/**
+ * Where one person stands with each connector the agent offers: the states, the values of their options and their tool
+ * switches, and that a row never carries a secret.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * @config The agent's config, for the connectors key
+	 * @deps More dependencies of the service
+	 *
+	 * @return A ConnectorService over the shared database of this spec
+	 */
+	private any function serviceFor( struct config = {}, struct deps = {} ) {
+		var all = { vault : variables.vault, signedIn : ( id, person ) => false, programExists : program => false };
+		all.append( arguments.deps );
+		return new bxagents.models.connectors.ConnectorService( ConnectorSettings::resolve( arguments.config ), variables.settings, all );
+	}
+
+	/**
+	 * @rows A list of rows
+	 * @id A connector id
+	 *
+	 * @return The row of that connector
+	 */
+	private struct function rowOf( required array rows, required string id ) {
+		var wanted = arguments.id;
+		return arguments.rows.filter( r => r.id == wanted )[ 1 ];
+	}
+
+	/**
+	 * The specs.
+	 */
+	function run() {
+		describe( "ConnectorService", function() {
+
+			beforeEach( function() {
+				variables.dir = getTempDirectory() & "bxa-cservice-" & createUUID();
+				directoryCreate( dir, true );
+				variables.file = dir & "/chat.db";
+				variables.chat = bxagents.models.store.ChatStore::forFile( file );
+				variables.settings = new bxagents.models.connectors.ConnectorSettingsStore( chat );
+				variables.vault = new bxagents.models.vault.VaultWiring().service( file );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "lists every connector the agent offers, all available to a person who has connected none", function() {
+				var rows = serviceFor().list( "slack:U01ADA" );
+
+				expect( rows.map( r => r.id ) ).toBe( [ "atlassian", "cloudflare", "git", "github", "notion", "stripe", "supabase" ] );
+				for ( var row in rows.filter( r => r.id != "git" ) ) {
+					expect( row.state ).toBe( "available" );
+					expect( row.connectedWith ).toBe( "" );
+				}
+			} );
+
+			it( "lists only what only, exclude and none leave", function() {
+				expect( serviceFor( { connectors : { only : [ "github", "notion" ] } } ).ids() ).toBe( [ "github", "notion" ] );
+				expect( serviceFor( { connectors : { exclude : [ "stripe" ] } } ).offers( "stripe" ) ).toBeFalse();
+				expect( serviceFor( { connectors : "none" } ).list( "ada" ) ).toBeEmpty();
+				expect( serviceFor().policy() ).toBe( { mode : "all", excluded : [], shadowed : [], count : 7, toolWarning : 100 } );
+				expect( serviceFor( { connectors : { exclude : [ "stripe", "git" ] } } ).policy().excluded ).toBe( [ "git", "stripe" ] );
+			} );
+
+			it( "says what a connector is: its risk, its ways in and the name of its token, never an address with a query", function() {
+				var row = rowOf( serviceFor().list( "ada" ), "github" );
+
+				expect( row.name ).toBe( "GitHub" );
+				expect( row.risk ).toBe( "high" );
+				expect( row.riskNote ).toInclude( "pull requests" );
+				expect( row.ways ).toBe( [ "bearer" ] );
+				expect( row.tokenName ).toBe( "GITHUB_PERSONAL_ACCESS_TOKEN" );
+				expect( row.host ).toBe( "api.githubcopilot.com" );
+				expect( rowOf( serviceFor().list( "ada" ), "notion" ).ways ).toBe( [ "oauth", "bearer" ] );
+			} );
+
+			it( "is connected for a person who has a token of their own, and for nobody else", function() {
+				vault.add( "GITHUB_PERSONAL_ACCESS_TOKEN", "ghp_ada", { scope : "user", owner : "slack:U01ADA", hosts : [ "api.githubcopilot.com" ] } );
+				var service = serviceFor();
+
+				var ada = rowOf( service.list( "slack:U01ADA" ), "github" );
+				var grace = rowOf( service.list( "slack:U01GRACE" ), "github" );
+
+				expect( ada.state ).toBe( "connected" );
+				expect( ada.connectedWith ).toBe( "token" );
+				expect( grace.state ).toBe( "available" );
+			} );
+
+			it( "does not count the developer's own agent scope token as a person's connection", function() {
+				vault.add( "GITHUB_PERSONAL_ACCESS_TOKEN", "ghp_shared", { scope : "agent" } );
+
+				expect( rowOf( serviceFor().list( "slack:U01GRACE" ), "github" ).state ).toBe( "available" );
+			} );
+
+			it( "is connected through a sign in when the OAuth side says the person signed in", function() {
+				var service = serviceFor( {}, { signedIn : ( id, person ) => id == "notion" && person == "ada" } );
+
+				var ada = rowOf( service.list( "ada" ), "notion" );
+
+				expect( ada.state ).toBe( "connected" );
+				expect( ada.connectedWith ).toBe( "oauth" );
+				expect( rowOf( service.list( "grace" ), "notion" ).state ).toBe( "available" );
+				expect( rowOf( service.list( "ada" ), "stripe" ).state ).toBe( "available" );
+			} );
+
+			it( "asks for attention when a person's token was refused, and only for them", function() {
+				vault.add( "GITHUB_PERSONAL_ACCESS_TOKEN", "ghp_ada", { scope : "user", owner : "ada" } );
+				vault.add( "GITHUB_PERSONAL_ACCESS_TOKEN", "ghp_grace", { scope : "user", owner : "grace" } );
+				settings.set( "ada", "github", "status", { state : "needs_attention", reason : "GitHub refused this token", at : "2026-11-16T09:00Z" } );
+				var service = serviceFor();
+
+				var ada = rowOf( service.list( "ada" ), "github" );
+
+				expect( ada.state ).toBe( "needs_attention" );
+				expect( ada.reason ).toBe( "GitHub refused this token" );
+				expect( rowOf( service.list( "grace" ), "github" ).state ).toBe( "connected" );
+			} );
+
+			it( "says a local program needs its program when it is not on the PATH, and is available when it is", function() {
+				var missing = rowOf( serviceFor().list( "ada" ), "git" );
+				var found = rowOf( serviceFor( {}, { programExists : program => program == "uvx" } ).list( "ada" ), "git" );
+
+				expect( missing.state ).toBe( "needs_program" );
+				expect( missing.programFound ).toBeFalse();
+				expect( missing.program ).toBe( "uvx" );
+				expect( found.state ).toBe( "available" );
+				expect( found.programFound ).toBeTrue();
+			} );
+
+			it( "is connected for everyone once the agent switched a local program on", function() {
+				settings.set( "*", "git", "enabled", { on : true, by : "slack:U01ADA" } );
+				var service = serviceFor( {}, { programExists : program => true } );
+
+				expect( rowOf( service.list( "grace" ), "git" ).state ).toBe( "connected" );
+				expect( rowOf( service.list( "grace" ), "git" ).connectedWith ).toBe( "program" );
+			} );
+
+			it( "shows the value of each option for the person: what they saved, else the default", function() {
+				settings.set( "ada", "supabase", "options", { project_ref : "abcd1234" } );
+				var service = serviceFor();
+
+				var ada = rowOf( service.list( "ada" ), "supabase" ).options.reduce( ( all, o ) => { all[ o.key ] = o.value; return all; }, {} );
+				var grace = rowOf( service.list( "grace" ), "supabase" ).options.reduce( ( all, o ) => { all[ o.key ] = o.value; return all; }, {} );
+
+				expect( ada.project_ref ).toBe( "abcd1234" );
+				expect( ada.read_only ).toBeTrue();
+				expect( grace.project_ref ).toBe( "" );
+			} );
+
+			it( "carries what an admin overrode: the default of an option, the timeout and the allowed tools", function() {
+				var service = serviceFor( { connectors : { override : { supabase : { timeout : 30000, options : { read_only : false }, tools : [ "list_tables" ] } } } } );
+
+				var row = rowOf( service.list( "ada" ), "supabase" );
+
+				expect( row.overridden ).toBeTrue();
+				expect( row.timeout ).toBe( 30000 );
+				expect( row.tools.allowed ).toBe( [ "list_tables" ] );
+				expect( row.options.filter( o => o.key == "read_only" )[ 1 ].value ).toBeFalse();
+				expect( rowOf( service.list( "ada" ), "github" ).overridden ).toBeFalse();
+			} );
+
+			it( "shows the tools a person switched off", function() {
+				settings.set( "ada", "github", "tools", { off : [ "delete_file", "push_files" ] } );
+				var service = serviceFor();
+
+				expect( rowOf( service.list( "ada" ), "github" ).tools.off ).toBe( [ "delete_file", "push_files" ] );
+				expect( rowOf( service.list( "grace" ), "github" ).tools.off ).toBeEmpty();
+			} );
+
+			it( "gets one row, and an empty struct for a connector the agent does not offer", function() {
+				var service = serviceFor( { connectors : { only : [ "github" ] } } );
+
+				expect( service.get( "github", "ada" ).id ).toBe( "github" );
+				expect( service.get( "stripe", "ada" ) ).toBeEmpty();
+			} );
+
+			it( "never carries a token, in any row of any state", function() {
+				vault.add( "GITHUB_PERSONAL_ACCESS_TOKEN", "ghp_SECRETSECRETSECRET1234", { scope : "user", owner : "ada" } );
+				settings.set( "ada", "github", "status", { state : "needs_attention", reason : "refused" } );
+				var text = jsonSerialize( serviceFor().list( "ada" ) );
+
+				expect( text ).notToInclude( "SECRETSECRET" );
+				expect( text ).notToInclude( "ghp_" );
+			} );
+		} );
+	}
+
+}

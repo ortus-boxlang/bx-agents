@@ -16,7 +16,7 @@
 
 <p>&nbsp;</p>
 
-**BxAgents** is a conventions-based framework for building AI agents your team can ship, powered by [BoxLang AI](https://ai.boxlang.io). It is built for BoxLang and ColdBox developers, and for any team that wants agents as ordinary code it can read. Skip the glue code for tools, memory, web apps, Slack bots, routines and schedulers: describe an agent with a handful of files and folders - `Agent.yaml`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/` it actually needs - and BxAgents assembles a full MVC application from it **at build time** (a twelve-page web app, an API with OpenAPI, gateways, routines and scheduled jobs included), ready to serve, chat with, or package as a portable `.bxa`.
+**BxAgents** is a conventions-based framework for building AI agents your team can ship, powered by [BoxLang AI](https://ai.boxlang.io). It is built for BoxLang and ColdBox developers, and for any team that wants agents as ordinary code it can read. Skip the glue code for tools, memory, web apps, Slack bots, routines and schedulers: describe an agent with a handful of files and folders - `Agent.yaml`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/` it actually needs - and BxAgents assembles a full MVC application from it **at build time** (a thirteen-page web app, an API with OpenAPI, gateways, routines and scheduled jobs included), ready to serve, chat with, or package as a portable `.bxa`.
 
 ## What you can build
 
@@ -54,7 +54,7 @@ bxAgents chat       # a full-screen terminal chat; or: bxAgents serve --port=808
 
 ## See it
 
-The web app a `gateways/` entry with `exposes: "webui"` builds: a left menu with twelve pages (Chat, Conversations, Routines, Registry, Memory, Vault and Settings for everyone; Agent, Gateways, Logs, Access and Data and backups for admins), light and dark, and a phone layout. See the [page-by-page guide](docs/conventions/web-ui.md#the-pages).
+The web app a `gateways/` entry with `exposes: "webui"` builds: a left menu with thirteen pages (Chat, Conversations, Routines, Registry, Connectors, Memory, Vault and Settings for everyone; Agent, Gateways, Logs, Access and Data and backups for admins), light and dark, and a phone layout. See the [page-by-page guide](docs/conventions/web-ui.md#the-pages).
 
 ![The generated web app: the left menu, a conversation with a tool call, and the model picker and context ring in the header](docs/assets/webui/webui-chat.png)
 

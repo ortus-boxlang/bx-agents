@@ -40,6 +40,22 @@ class extends="testbox.system.BaseSpec" {
 				expect( service.reloadExtensions( ada ).code() ).toBe( "forbidden" );
 			} );
 
+			it( "shows the connectors under what goes out: how many are offered, and which a person has connected", function() {
+				var withConnectors = new bxagents.models.api.AdminData(
+					lead, nullValue(), store, nullValue(), false,
+					{ policy : { mode : "exclude", count : 6, excluded : [ "stripe" ] }, names : { github : "GitHub" }, attached : [ "github" ] }
+				);
+				var outgoing = withConnectors.composition().data().outgoing.filter( o => o.kind == "connectors" || o.kind == "connector" );
+
+				expect( outgoing.map( o => o.name ) ).toBe( [ "Connectors", "GitHub" ] );
+				expect( outgoing[ 1 ].detail ).toInclude( "6 of 7 offered" );
+				expect( outgoing[ 1 ].detail ).toInclude( "left out: stripe" );
+			} );
+
+			it( "shows no connector line when the agent offers none", function() {
+				expect( service.composition( admin ).data().outgoing.filter( o => o.kind == "connectors" ) ).toBeEmpty();
+			} );
+
 			it( "describes the composition in one call: what comes in, the parts, the tree, what goes out", function() {
 				var made = service.composition( admin ).data();
 

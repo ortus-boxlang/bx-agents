@@ -23,8 +23,10 @@ class {
 	 * @store A ChatStore, or null
 	 * @gateways A GatewayInfo, or null
 	 * @routinesOn True when routines are on
+	 * @connectors What the connectors look like now: { policy : { mode, count, excluded }, names : { id : name }, attached : [ ids ] }, or nothing when the agent offers none
 	 */
-	function init( required any agent, any appData, any store, any gateways, boolean routinesOn = false ) {
+	function init( required any agent, any appData, any store, any gateways, boolean routinesOn = false, struct connectors = {} ) {
+		variables.connectors = arguments.connectors
 		variables.agent = arguments.agent
 		variables.appData = arguments.appData ?: nullValue()
 		variables.store = arguments.store ?: nullValue()
@@ -80,6 +82,14 @@ class {
 		}
 		for ( var gateway in listed ) {
 			outgoing.append( { kind : "gateway", name : gateway.name ?: "", detail : "replies and routine answers" } )
+		}
+		if ( variables.connectors.count() ) {
+			var policy = variables.connectors.policy
+			var left = ( policy.excluded ?: [] ).len()
+			outgoing.append( { kind : "connectors", name : "Connectors", detail : "#policy.count# of #policy.count + left# offered" & ( left ? ", left out: #policy.excluded.toList( ', ' )#" : "" ) & ". Each person connects with their own token or sign in." } )
+			for ( var id in variables.connectors.attached ) {
+				outgoing.append( { kind : "connector", name : variables.connectors.names[ id ] ?: id, detail : "connected by at least one person, so the agent has its tools" } )
+			}
 		}
 
 		return Outcome::done( {

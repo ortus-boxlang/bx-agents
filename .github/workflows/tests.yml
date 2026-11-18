@@ -115,6 +115,14 @@ jobs:
           # this is done in order to build the module structure before testing
           ./gradlew shadowJar test --stacktrace --console=plain
 
+      # A catalog pull request names its mistake here, before the suite does: the file, the field and what is wrong.
+      # The same check also runs as a spec (ConnectorCatalogSpec), so it gates the merge either way.
+      - name: Check the connector catalog
+        run: |
+          jar="$(find src/test/resources/libs -maxdepth 1 -name 'boxlang-[0-9]*.jar' | head -n 1)"
+          java -cp "${jar}:build/classes/java/main" \
+            ortus.boxlang.runtime.BoxRunner --bx-config boxlang.json module:bxagents connectors check
+
       - name: Run TestBox Suite
         run: ./gradlew testBx --stacktrace --console=plain
 

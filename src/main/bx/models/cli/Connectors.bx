@@ -1,0 +1,168 @@
+/**
+ * `connectors` CLI verb: the catalog of known connectors that ships with BX Agents, and the check a catalog pull
+ * request has to pass. It reads files and prints; it never connects to anything.
+ *
+ *   bxAgents connectors                 list every connector
+ *   bxAgents connectors show <id>       one connector in full
+ *   bxAgents connectors check [--dir=DIR]   check the files, exit 1 when one is wrong
+ *
+ * Add `--json` to list or show for a script.
+ */
+class {
+
+	static {
+		SUBCOMMANDS = [ "list", "show", "check" ]
+	}
+
+	/**
+	 * @options {
+	 *   _positionals ([ subcommand, id ]),
+	 *   dir (check: a folder of connector files instead of the shipped catalog),
+	 *   json (list, show, check: JSON)
+	 * }
+	 *
+	 * @return { exitCode, message }
+	 */
+	struct function run( struct options = {} ) {
+		var args = arguments.options._positionals ?: []
+		var command = args.len() ? args[ 1 ] : "list"
+		if ( !static.SUBCOMMANDS.contains( command ) ) {
+			throw( type = "BxAgents.UnknownConnectorsCommand", message = "Say what to do: bxAgents connectors [#static.SUBCOMMANDS.toList( '|' )#]" )
+		}
+		var catalog = new "models.connectors.ConnectorCatalog@bxagents"( trim( arguments.options.dir ?: "" ) )
+		var asJson = arguments.options.json ?: false
+
+		switch ( command ) {
+			case "show":
+				return doShow( catalog, args.slice( 2 ), asJson )
+			case "check":
+				return doCheck( catalog, asJson )
+			default:
+				return doList( catalog, asJson )
+		}
+	}
+
+	/**
+	 * @catalog The ConnectorCatalog
+	 * @asJson Print JSON
+	 *
+	 * @return { exitCode, message }
+	 */
+	private struct function doList( required any catalog, required boolean asJson ) {
+		var entries = arguments.catalog.all()
+		if ( arguments.asJson ) {
+			return { exitCode : 0, message : jsonSerialize( entries ) }
+		}
+		var lines = [ "ID           NAME                              HOW IN              RISK    VERIFIED" ]
+		for ( var entry in entries ) {
+			lines.append(
+				pad( entry.id, 13 ) & pad( entry.name, 34 ) & pad( ways( entry ), 20 ) & pad( entry.risk, 8 ) & entry.verifiedOn
+			)
+		}
+		lines.append( "" )
+		lines.append( "#entries.len()# connectors. Nothing is active until a person connects one. bxAgents connectors show <id> says more." )
+		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+	}
+
+	/**
+	 * @catalog The ConnectorCatalog
+	 * @words What came after `show`
+	 * @asJson Print JSON
+	 *
+	 * @return { exitCode, message }
+	 */
+	private struct function doShow( required any catalog, required array words, required boolean asJson ) {
+		if ( arguments.words.len() != 1 ) {
+			throw( type = "BxAgents.MissingConnector", message = "Say which one: bxAgents connectors show <id>. The ids are: #arguments.catalog.ids().toList( ', ' )#" )
+		}
+		var entry = arguments.catalog.get( arguments.words[ 1 ] )
+		if ( !entry.count() ) {
+			throw( type = "BxAgents.UnknownConnector", message = "There is no connector [#arguments.words[ 1 ]#]. The ids are: #arguments.catalog.ids().toList( ', ' )#" )
+		}
+		if ( arguments.asJson ) {
+			return { exitCode : 0, message : jsonSerialize( entry ) }
+		}
+		var lines = [
+			"#entry.name# (#entry.id#)",
+			entry.summary,
+			"",
+			entry.transport == "http" ? "Address:  #entry.url#" : "Command:  #entry.command.toList( ' ' )#  (needs #entry.requires.program# on the PATH)",
+			"Risk:     #entry.risk#. #entry.riskNote#",
+			"Docs:     #entry.docs#",
+			"Checked:  #entry.verifiedOn#",
+			"",
+			"How a person gets in:"
+		]
+		for ( var method in entry.auth ) {
+			lines.append( "  " & describeMethod( method ) )
+		}
+		if ( entry.options.len() ) {
+			lines.append( "" )
+			lines.append( "Options:" )
+			for ( var option in entry.options ) {
+				lines.append( "  #option.key# (#option.type#, sent as #option.target# #option.name#" & ( len( toString( option.default ) ) && option.default != false ? ", default #option.default#" : "" ) & ")  #option.help#" )
+			}
+		}
+		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+	}
+
+	/**
+	 * @catalog The ConnectorCatalog
+	 * @asJson Print JSON
+	 *
+	 * @return { exitCode : 0 when every file passes, 1 otherwise, message }
+	 */
+	private struct function doCheck( required any catalog, required boolean asJson ) {
+		var result = arguments.catalog.check()
+		if ( arguments.asJson ) {
+			return { exitCode : result.ok ? 0 : 1, message : jsonSerialize( result ) }
+		}
+		if ( result.ok ) {
+			return { exitCode : 0, message : "#result.count# connectors checked, no problems. (#arguments.catalog.folder()#)" }
+		}
+		var lines = []
+		for ( var problem in result.errors ) {
+			lines.append( ( len( problem.file ) ? problem.file : "catalog" ) & ( len( problem.field ) ? " [#problem.field#]" : "" ) & ": " & problem.message )
+		}
+		lines.append( "" )
+		lines.append( "#result.errors.len()# problem#result.errors.len() == 1 ? '' : 's'# found. #result.count# of the files pass." )
+		return { exitCode : 1, message : lines.toList( char( 10 ) ) }
+	}
+
+	/**
+	 * @entry One connector
+	 *
+	 * @return Its ways in, in words
+	 */
+	private string function ways( required struct entry ) {
+		return arguments.entry.auth.map( method => method.type == "oauth" ? "sign in" : ( method.type == "bearer" ? "token" : "no sign in" ) ).toList( ", " )
+	}
+
+	/**
+	 * @method One auth method of a connector
+	 *
+	 * @return One line that says what it is
+	 */
+	private string function describeMethod( required struct method ) {
+		switch ( arguments.method.type ) {
+			case "oauth":
+				return "Sign in" & ( arguments.method.scopes.len() ? " (asks for #arguments.method.scopes.toList( ', ' )#)" : "" ) & ". Each person signs in once and the agent acts as them."
+			case "bearer":
+				return "A token in #arguments.method.envVar#. " & arguments.method.help
+			default:
+				return "None. It runs on the machine the agent runs on."
+		}
+	}
+
+	/**
+	 * @text The text
+	 * @width How wide the column is
+	 *
+	 * @return The text padded with spaces, or cut so a long one never pushes the columns
+	 */
+	private string function pad( required string text, required numeric width ) {
+		var cut = len( arguments.text ) > arguments.width - 1 ? left( arguments.text, arguments.width - 2 ) & "." : arguments.text
+		return cut & repeatString( " ", arguments.width - len( cut ) )
+	}
+
+}

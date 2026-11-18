@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Connectors: seven ready-made connections** (GitHub, Stripe, Notion, Atlassian, Cloudflare, Supabase and Git), offered by every agent by default and connected by each person with their own token or sign in. Nothing is contacted until a person connects. Tokens are sealed in the vault, locked to the host of the service, and never shown to the model. Two people never share a token or a session. See [connectors](docs/conventions/connectors.md) and the generated [catalog](docs/conventions/connector-catalog.md).
+- **`connectors:` key in `Agent.yaml`**: `only`, `exclude`, `override` (`timeout`, `options`, `scopes`, `tools`), `toolWarning`, or `connectors: none`. Checked at build time and shown by `bxAgents inspect`.
+- **A Connectors page in the web app** with tabs for All, Connected, Needs attention and In Agent.yaml, connect and disconnect dialogs with a risk confirmation, and a drawer to turn single tools on or off (listed alphabetically, with a warning above `toolWarning`).
+- **`/connect` in the terminal chat and `bxAgents connect`** share one console: list, connect (token in a hidden box, `--token-env`, `--stdin`, `--confirm`), disconnect, `tools on|off|readonly`, `options key=value`. `/connect` also works on chat gateways, where a token is never typed and the reply points to the web page.
+- **Safer connectors:** a connector uses only the person's own token and never an agent-wide secret of the same name, so nobody reaches a service they did not connect. A developer's `mcpServers` entry with a connector's name replaces it at run time as well as at build. A connector tool that is switched off, over the admin's ceiling or not connected is refused at call time, not only hidden from the model. Switching a local program off stops its process and changing its options restarts it, at once. Checking what a person may use before each model call no longer reads the settings once per tool. A service that refuses a token during a call marks the connector as needing attention. A local program (Git) starts with a clean environment, without the vault key or provider keys, and the Git server is pinned to a checked version.
+- **API routes** `GET /connectors`, `POST /connectors/connect`, `/connectors/disconnect`, `/connectors/options` and `GET`, `POST /connectors/tools`.
+- **Wizard: `--connectors`** (`all`, `none`, `only:a,b`, `exclude:a,b`) and a "Leave out any connectors?" question. Every connector is offered unless you leave it out.
+- **Per-person sign in to MCP servers** (`oauth: on an `mcpServers` entry) with `bxAgents connect`, `/connect` and the Connectors page (the **In Agent.yaml** tab), on bx-ai 3.8. The old Connections dialog in the Settings menu is gone.
+- **`bxAgents connectors list|show|check`** reads the catalog and checks its files (also run in CI). `inspect` has a connectors section, `add mcp` and the wizard read the catalog, and `doctor` and the shell completions know about the `connectors` verb and the programs a connector needs.
+- **API:** 81 routes (five new, under `/connectors`). Settings has a link to the Connectors page. The web app has thirteen pages and the CLI 29 verbs.
+
+### Changed
+
+- BoxLang 1.19.0 is the runtime used for development and CI.
+- Signing in to a served agent needs the bx-ai fix for web requests (the argument `form` is reserved in web requests, bx-ai issue 334). Tokens connected by hand do not depend on it.
+
 ### Fixed
 
 - A project's own `skills/` were built into the app but never listed: `GET /skills`, the Registry page and `/skills` answered an empty list, and the agent could not load them. bx-ai reads its skills folder once when the runtime starts, before an app's settings are applied, so the app's `skills/` was never read. The generated agent factory now adds the app's `skills/` folder (the project's skills, origin `project`, and the installed ones, origin `installed`) to bx-ai's global skills before any agent is built, ahead of the extensions' skills and the ones the agent saved in its data home. Works for `serve`, `chat` and a packaged app. New specs cover listing from a folder and from a built app, a symbolic-linked skill, and saved skills keeping their origin.

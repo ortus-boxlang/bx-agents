@@ -1,0 +1,98 @@
+/**
+ * The connector_settings table: what a person set for a connector, apart from the web page's preferences.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * The specs.
+	 */
+	function run() {
+		describe( "ConnectorSettingsStore", function() {
+
+			beforeEach( function() {
+				variables.file = getTempDirectory() & "bxa-cs-" & createUUID() & "/chat.db";
+				directoryCreate( getDirectoryFromPath( file ), true );
+				variables.chat = bxagents.models.store.ChatStore::forFile( file );
+				variables.settings = new bxagents.models.connectors.ConnectorSettingsStore( chat );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( getDirectoryFromPath( file ) ) ) {
+					directoryDelete( getDirectoryFromPath( file ), true );
+				}
+			} );
+
+			it( "has its own table, apart from the web page's preferences", function() {
+				var tables = chat.rows( "SELECT name FROM sqlite_master WHERE type = 'table'" ).map( r => r.name );
+				var columns = chat.rows( "PRAGMA table_info( connector_settings )" ).map( r => r.name );
+
+				expect( tables ).toInclude( "connector_settings" );
+				expect( tables ).toInclude( "preferences" );
+				expect( columns ).toBe( [ "owner", "connector", "settingKey", "value", "updatedAt" ] );
+			} );
+
+			it( "returns an empty struct for a setting nobody saved", function() {
+				expect( settings.get( "slack:U01ADA", "github", "tools" ) ).toBeEmpty();
+			} );
+
+			it( "saves a value as JSON and reads it back", function() {
+				settings.set( "slack:U01ADA", "github", "tools", { off : [ "delete_file", "push_files" ] } );
+
+				expect( settings.get( "slack:U01ADA", "github", "tools" ).off ).toBe( [ "delete_file", "push_files" ] );
+				var raw = chat.rows( "SELECT value FROM connector_settings" )[ 1 ].value;
+				expect( raw ).toInclude( '"off":["delete_file","push_files"]' );
+			} );
+
+			it( "replaces the value of the same setting instead of adding a row", function() {
+				settings.set( "ada", "supabase", "options", { project_ref : "one" } );
+				settings.set( "ada", "supabase", "options", { project_ref : "two", read_only : true } );
+
+				expect( settings.get( "ada", "supabase", "options" ) ).toBe( { project_ref : "two", read_only : true } );
+				expect( chat.rows( "SELECT COUNT(*) AS n FROM connector_settings" )[ 1 ].n ).toBe( 1 );
+			} );
+
+			it( "keeps one person's settings apart from another's and from another connector's", function() {
+				settings.set( "ada", "github", "tools", { off : [ "a" ] } );
+				settings.set( "grace", "github", "tools", { off : [ "b" ] } );
+				settings.set( "ada", "notion", "tools", { off : [ "c" ] } );
+
+				expect( settings.get( "ada", "github", "tools" ).off ).toBe( [ "a" ] );
+				expect( settings.get( "grace", "github", "tools" ).off ).toBe( [ "b" ] );
+				expect( settings.get( "ada", "notion", "tools" ).off ).toBe( [ "c" ] );
+				expect( settings.get( "linus", "github", "tools" ) ).toBeEmpty();
+			} );
+
+			it( "keeps what belongs to the agent under the owner *", function() {
+				settings.set( "*", "git", "enabled", { on : true, by : "slack:U01ADA" } );
+
+				expect( settings.get( "*", "git", "enabled" ).on ).toBeTrue();
+				expect( settings.get( "slack:U01ADA", "git", "enabled" ) ).toBeEmpty();
+				expect( bxagents.models.connectors.ConnectorSettingsStore::AGENT_OWNER ?: "*" ).toBe( "*" );
+			} );
+
+			it( "removes one setting, or everything a person set for a connector", function() {
+				settings.set( "ada", "github", "tools", { off : [ "a" ] } );
+				settings.set( "ada", "github", "options", { x : 1 } );
+				settings.set( "ada", "notion", "tools", { off : [ "c" ] } );
+
+				expect( settings.remove( "ada", "github", "tools" ) ).toBeTrue();
+				expect( settings.remove( "ada", "github", "tools" ) ).toBeFalse();
+				expect( settings.removeAll( "ada", "github" ) ).toBe( 1 );
+				expect( settings.get( "ada", "notion", "tools" ).off ).toBe( [ "c" ] );
+			} );
+
+			it( "refuses a setting key it does not hold", function() {
+				expect( () => settings.set( "ada", "github", "token", { value : "x" } ) ).toThrow( "BxAgents.UnknownSetting" );
+				expect( () => settings.get( "ada", "github", "bogus" ) ).toThrow( "BxAgents.UnknownSetting" );
+			} );
+
+			it( "is not touched by the web page's preferences", function() {
+				chat.exec( "INSERT INTO preferences ( userId, prefKey, prefValue ) VALUES ( 'ada', 'connector.github.status', '{}' )" );
+
+				expect( settings.get( "ada", "github", "status" ) ).toBeEmpty();
+				expect( chat.rows( "SELECT COUNT(*) AS n FROM connector_settings" )[ 1 ].n ).toBe( 0 );
+			} );
+		} );
+	}
+
+}

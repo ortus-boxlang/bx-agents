@@ -332,6 +332,47 @@ class {
 	}
 
 	/**
+	 * The connectors of this agent, for the chat commands: what this person has connected, how to connect and which tools
+	 * are on. A sign in at a terminal is finished by a short lived listener on 127.0.0.1; a served agent uses its own address.
+	 *
+	 * @admin Whether the person is an admin (a local program is for admins on a served agent)
+	 *
+	 * @return A LocalConnectorSource, or a NoConnectorSource when the agent offers no connector
+	 */
+	any function connectors( boolean admin = true ) {
+		try {
+			var stack = new "models.connectors.ConnectorWiring@bxagents"().stackOf( variables.agent, {} )
+			if ( !stack.service.ids().len() ) {
+				return new "models.connectors.NoConnectorSource@bxagents"()
+			}
+			var asker = new "models.api.Caller@bxagents"( id = variables.userId, scope = arguments.admin ? "admin" : "chat", source = "terminal" )
+			var signIn = served() ? "" : loopbackSignIn( stack )
+			return new "models.connectors.LocalConnectorSource@bxagents"( stack, asker, served(), signIn )
+		} catch ( any e ) {
+			return new "models.connectors.NoConnectorSource@bxagents"()
+		}
+	}
+
+	/**
+	 * @return True when this conversation is on a server that talks to more than one person
+	 */
+	boolean function served() {
+		return false
+	}
+
+	/**
+	 * @stack The parts of ConnectorWiring
+	 *
+	 * @return A LoopbackSignIn over the sign in connectors, so a terminal can finish a sign in without a public address
+	 */
+	private any function loopbackSignIn( required struct stack ) {
+		var entries = bxModules.bxagents.models.connectors.ConnectorEndpoint::oauthEntries( arguments.stack.policy.available ?: [] )
+		return new "models.connectors.LoopbackSignIn@bxagents"(
+			new "models.cli.chat.LocalConnections@bxagents"( entries, new "models.vault.VaultWiring@bxagents"(), variables.userId, { agent : variables.agent } )
+		)
+	}
+
+	/**
 	 * Starts a new conversation: the agent keeps its memory per thread.
 	 */
 	void function newThread() {

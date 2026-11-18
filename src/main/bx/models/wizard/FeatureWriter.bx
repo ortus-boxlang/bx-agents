@@ -19,6 +19,7 @@
  *   tools            [ "now@bxai", ... ]
  *   toolOptions      { bxai : { allowedPaths : [ "tmp", "cwd" ] } }
  *   mcpServers       [ { name, url, token : "${env.X}" } or { name, command : [ program, args... ] } ]
+ *   connectors       "none" | { only : [ ids ] } | { exclude : [ ids ] }
  *   memory           "cache" | "file"
  *   checkpointer     { type : "file" }
  *   security         { enabled : true, input : { action : "flag" } }
@@ -75,6 +76,16 @@ class {
 			lines.append( "## MCP servers: web servers (url) and programs started on this machine (command). Credentials are read from the environment when the app starts." )
 			lines.append( "mcpServers:" )
 			lines.append( variables.yaml.lines( f.mcpServers, 2, [ "name", "url", "command", "token", "headers", "env", "timeout" ] ), true )
+		}
+		if ( f.keyExists( "connectors" ) ) {
+			lines.append( "" )
+			lines.append( "## Connectors: services every person connects with their own token or sign in. Nothing is connected until they do." )
+			if ( isSimpleValue( f.connectors ) ) {
+				lines.append( "connectors: " & variables.yaml.scalar( f.connectors ) )
+			} else {
+				lines.append( "connectors:" )
+				lines.append( variables.yaml.lines( f.connectors, 2 ), true )
+			}
 		}
 		if ( f.keyExists( "memory" ) ) {
 			lines.append( "" )

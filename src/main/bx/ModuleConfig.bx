@@ -63,7 +63,7 @@ class {
 	this.dependencies = [];
 
 	static {
-		subcommandVerbs = [ "token", "users", "notes", "vault", "sessions", "models", "add", "skills", "extensions", "restore", "routines" ]
+		subcommandVerbs = [ "token", "users", "notes", "vault", "sessions", "models", "add", "skills", "extensions", "restore", "routines", "connectors" ]
 
 		verbs = {
 			"new"     : "models.cli.New",
@@ -82,6 +82,7 @@ class {
 			"notes"   : "models.cli.Notes",
 			"vault"   : "models.cli.Vault",
 			"connect" : "models.cli.Connect",
+			"connectors" : "models.cli.Connectors",
 			"sessions": "models.cli.Sessions",
 			"routines": "models.cli.Routines",
 			"stats"   : "models.cli.Stats",
@@ -111,7 +112,8 @@ class {
 			"token"   : "Issue, list and revoke access tokens for a deployed agent (create --name, list, revoke --name)",
 			"users"   : "The sign-in accounts of the web page and who is an admin (list, admin --name, member --name)",
 			"notes"   : "Read and manage the notes of an agent (list, add, edit, remove, clear, stats, export, import)",
-			"connect" : "Sign in to the MCP servers of a project that ask each person to sign in: connect [name] ([--remove], [--port=N], [--no-open], [--user=NAME], [--timeout=SECONDS], [--json])",
+			"connect" : "Connect the connectors and sign in to the MCP servers of a project: connect [id] [tools|off|options] ([--confirm], [--token-env=NAME], [--stdin], [--remove], [--port=N], [--no-open], [--user=NAME], [--timeout=SECONDS], [--json])",
+			"connectors" : "The catalog of known connectors that ships with BX Agents: connectors [list|show <id>|check] ([--dir=DIR], [--json]). It only reads files; nothing connects",
 			"vault"   : "The secrets an agent uses at run time, sealed in the chat database (list, add, edit, remove, status, audit, key). A value is typed hidden or piped with --stdin, never a flag",
 			"stats"   : "What the model calls used: tokens by model, provider, day or user, once Agent.yaml says usage: true ([--days=N], [--by=model|provider|day|user], [--user=NAME], [--json], [--enable])",
 			"sessions": "List, rename, fork, delete, clear, export and import the conversations in the chat database (list, rename, fork, delete, clear, export, import)",
@@ -134,7 +136,7 @@ class {
 		valueOptions = {
 			"new"     : [
 					"model", "temperature", "max-tokens", "timeout", "name", "description", "template", "repo", "forgebox",
-					"with", "search", "files", "files-dir", "memory", "mcp", "channels", "web-auth", "guard", "prompt", "widgets", "widgets-bottom",
+					"with", "search", "files", "files-dir", "memory", "mcp", "connectors", "channels", "web-auth", "guard", "prompt", "widgets", "widgets-bottom",
 					"deploy", "registry", "app", "region", "host", "user", "remote-path", "destination"
 				],
 			"build"   : [ "environment", "generatorVersion" ],
@@ -153,7 +155,8 @@ class {
 			"users"   : [ "name" ],
 			"notes"   : [ "scope", "user", "text", "id", "file" ],
 			"vault"   : [ "name", "scope", "user", "description", "hosts", "limit" ],
-			"connect" : [ "port", "user", "timeout" ],
+			"connect" : [ "port", "user", "timeout", "token-env" ],
+			"connectors" : [ "dir" ],
 			"sessions": [ "session", "name", "user", "file", "agent", "q" ],
 			"routines": [ "name", "schedule", "prompt", "destination", "chat", "older-than" ],
 			"stats"   : [ "days", "by", "user" ],

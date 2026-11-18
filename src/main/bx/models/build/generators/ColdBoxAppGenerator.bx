@@ -23,6 +23,8 @@
 import bxModules.bxagents.models.util.Strings;
 import bxModules.bxagents.models.wizard.WizardCatalog;
 import bxModules.bxagents.models.routines.RoutineSettings;
+import bxModules.bxagents.models.connectors.ConnectorSettings;
+import bxModules.bxagents.models.util.EntryConfigReader;
 
 class {
 
@@ -998,7 +1000,45 @@ class {
 			statements.append( 'new "models.connect.ConnectionWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( signInServers )# )' )
 		}
 
+		if ( arguments.accessorPath.isEmpty() ) {
+			// connectors (the catalog): the tool filter, and the ones somebody had connected before a restart
+			// only the `connectors:` key and the names of mcpServers are written in: the catalog is read where the app runs
+			var connectorKey = arguments.resolvedConfig.keyExists( "connectors" ) ? { "connectors" : arguments.resolvedConfig.connectors } : {}
+			// the names of the developer's own mcpServers, and only the names: an entry of the same name replaces the connector, at run time too
+			var ownServers = ( arguments.resolvedConfig.mcpServers ?: [] ).filter( entry => isStruct( entry ) && len( entry.name ?: "" ) ).map( entry => { "name" : toString( entry.name ) } )
+			if ( ownServers.len() ) {
+				connectorKey[ "mcpServers" ] = ownServers
+			}
+			var webPath = webUiPathOf( arguments.discovery )
+			if ( ConnectorSettings::resolve( connectorKey ).available.len() ) {
+				// where the web app is served, so a chat platform can be told where to connect a token
+				if ( len( webPath ) ) {
+					connectorKey[ "webPath" ] = webPath
+				}
+				statements.append( 'new "models.connectors.ConnectorWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( connectorKey )# )' )
+			}
+		}
+
 		return { statements : statements, nodes : nodes }
+	}
+
+	/**
+	 * @discovery The raw discovery struct
+	 *
+	 * @return The path the web UI is served at (the first `gateways/*` entry with `exposes: "webui"`), or an empty string
+	 */
+	private string function webUiPathOf( required struct discovery ) {
+		for ( var gw in ( arguments.discovery.gateways ?: [] ) ) {
+			try {
+				var config = EntryConfigReader::read( gw.path )
+				if ( !isNull( config ) && ( config.exposes ?: "" ) == "webui" ) {
+					return len( config.path ?: "" ) ? config.path : "/"
+				}
+			} catch ( any e ) {
+				// an entry that cannot be read is reported by the validator, not here
+			}
+		}
+		return ""
 	}
 
 	/**

@@ -1,0 +1,192 @@
+/**
+ * An MCP client that is a router: one object an agent registers once with `withMCPServer()`, which sends every
+ * call to the MCP client of the person who asked.
+ *
+ * bx-ai builds one tool per remote tool and gives each the client, and a tool call tells the client who is asking
+ * (`context.chatRequest.getUserId()`). So the tools are made once, from this object, and a call finds that person's
+ * own client in the registry: their token, their MCP session, nobody else's. A person with no connection gets an
+ * error that says so and no request leaves the machine for them.
+ *
+ * Listing the tools has no person, so it uses the person who connected last, as the OAuth sign in does.
+ */
+class implements="bxModules.bxai.models.mcp.IMCPClient" {
+
+	/**
+	 * @registry The ConnectorClients that holds the per person clients
+	 * @connector { id, url, prefix, timeout, headers } the connector this routes for
+	 */
+	function init( required any registry, required struct connector ) {
+		variables.registry = arguments.registry
+		variables.connector = arguments.connector
+		return this
+	}
+
+	/** @return The address of the MCP server */
+	string function getBaseURL() {
+		return variables.connector.url
+	}
+
+	/**
+	 * @ms The timeout of the clients made from now on
+	 *
+	 * @return This router
+	 */
+	function withTimeout( required numeric ms ) {
+		variables.connector.timeout = arguments.ms
+		return this
+	}
+
+	/**
+	 * Not used by the router: a callback belongs to a client, and the clients are made per person.
+	 *
+	 * @callback A function
+	 *
+	 * @return This router
+	 */
+	function onSuccess( required function callback ) {
+		return this
+	}
+
+	/**
+	 * Not used by the router: a callback belongs to a client, and the clients are made per person.
+	 *
+	 * @callback A function
+	 *
+	 * @return This router
+	 */
+	function onError( required function callback ) {
+		return this
+	}
+
+	/**
+	 * The tools of the server, as the person who connected last sees them. No one connected: no tools, and no call.
+	 *
+	 * @cursor A paging cursor
+	 *
+	 * @return An MCPResponse
+	 */
+	function listTools( string cursor = "" ) {
+		var target = discoveryClient()
+		return isNull( target ) ? response( true, { "tools" : [] } ) : target.listTools( arguments.cursor )
+	}
+
+	/** @return An MCPResponse with the resources, from the discovery person */
+	function listResources() {
+		var target = discoveryClient()
+		return isNull( target ) ? response( true, { "resources" : [] } ) : target.listResources()
+	}
+
+	/** @return An MCPResponse with the prompts, from the discovery person */
+	function listPrompts() {
+		var target = discoveryClient()
+		return isNull( target ) ? response( true, { "prompts" : [] } ) : target.listPrompts()
+	}
+
+	/** @return An MCPResponse with the capabilities, from the discovery person */
+	function getCapabilities() {
+		var target = discoveryClient()
+		return isNull( target ) ? response( true, {} ) : target.getCapabilities()
+	}
+
+	/**
+	 * Call a tool as the person the context names.
+	 *
+	 * @tool The name of the tool on the server
+	 * @args Its arguments
+	 * @context { chatRequest } the call, which says who is asking
+	 *
+	 * @return An MCPResponse
+	 */
+	function send( required string tool, struct args = {}, struct context = {} ) {
+		var person = personOf( arguments.context )
+		if ( !len( person ) ) {
+			return response( false, {}, "No one is behind this call, so there are no #variables.connector.id# credentials to use." )
+		}
+		var target = variables.registry.forPerson( variables.registry.endpointOf( variables.connector, person ), person )
+		if ( isNull( target ) ) {
+			return response( false, {}, "#variables.connector.id# is not connected for this person. Ask them to connect it." )
+		}
+		var why = variables.registry.gateFor( variables.connector.id, person, arguments.tool )
+		if ( len( why ) ) {
+			return response( false, {}, why )
+		}
+		var answer = target.send( arguments.tool, arguments.args, arguments.context )
+		if ( !answer.isSuccess() && [ 401, 403 ].contains( answer.getStatusCode() ) ) {
+			variables.registry.refused( variables.connector.id, person )
+		}
+		return answer
+	}
+
+	/**
+	 * @uri The resource
+	 *
+	 * @return An MCPResponse, read as the discovery person
+	 */
+	function readResource( required string uri ) {
+		var target = discoveryClient()
+		return isNull( target ) ? response( false, {}, "No one has connected #variables.connector.id# yet." ) : target.readResource( arguments.uri )
+	}
+
+	/**
+	 * @name The prompt
+	 * @args Its arguments
+	 *
+	 * @return An MCPResponse, read as the discovery person
+	 */
+	function getPrompt( required string name, struct args = {} ) {
+		var target = discoveryClient()
+		return isNull( target ) ? response( false, {}, "No one has connected #variables.connector.id# yet." ) : target.getPrompt( arguments.name, arguments.args )
+	}
+
+	/** @return The counters of every client of this connector, added up */
+	function getStats() {
+		return variables.registry.statsOf( variables.connector.id )
+	}
+
+	/** @return A short form of the counters */
+	function getSummary() {
+		return variables.registry.statsOf( variables.connector.id )
+	}
+
+	/** @return This router */
+	function resetStats() {
+		return this
+	}
+
+	/**
+	 * Closes every client this router made.
+	 */
+	function close() {
+		variables.registry.dropConnector( variables.connector.id )
+	}
+
+	/**
+	 * @context The context of a call
+	 *
+	 * @return The person who asked, or an empty string
+	 */
+	private string function personOf( required struct context ) {
+		var asked = arguments.context.chatRequest ?: ""
+		return isObject( asked ) ? toString( asked.getUserId() ?: "" ) : ""
+	}
+
+	/**
+	 * @return The client of the person who connected last, or nothing when no one has
+	 */
+	private any function discoveryClient() {
+		var person = variables.registry.lastConnected( variables.connector.id )
+		return len( person ) ? variables.registry.forPerson( variables.registry.endpointOf( variables.connector, person ), person ) : nullValue()
+	}
+
+	/**
+	 * @success Whether it worked
+	 * @data What came back
+	 * @error What went wrong
+	 *
+	 * @return An MCPResponse
+	 */
+	private any function response( required boolean success, any data = {}, string error = "" ) {
+		return new bxModules.bxai.models.mcp.MCPResponse( success = arguments.success, data = arguments.data, error = arguments.error )
+	}
+
+}

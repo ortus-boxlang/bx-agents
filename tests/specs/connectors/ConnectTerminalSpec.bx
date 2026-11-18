@@ -1,0 +1,114 @@
+/**
+ * `bxAgents connect` for the connectors of a project, without starting the agent: the list, the risk question, the
+ * refusals. A token is never an argument.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * @words What was typed after `connect`
+	 * @options More options of the verb
+	 *
+	 * @return { out : [ lines ], exitCode }
+	 */
+	private struct function connectVerb( array words = [], struct options = {} ) {
+		var lines = [];
+		var answers = variables.answers;
+		var prompter = {
+			confirm : ( question, help, default ) => { return answers.keyExists( "confirm" ) ? answers.confirm : false; },
+			text : ( question, help, default, secret, required ) => { return answers.keyExists( "text" ) ? answers.text : ""; },
+			select : ( question, choices ) => { return choices[ 1 ].value; },
+			close : () => {}
+		};
+		var all = { projectRoot : project, _positionals : arguments.words, prompter : prompter, out : line => lines.append( line ) };
+		all.append( arguments.options );
+		all._positional = arguments.words.len() ? arguments.words[ 1 ] : "";
+		var done = new bxagents.models.cli.Connect().run( all );
+		return { out : lines, exitCode : done.exitCode, message : done.message };
+	}
+
+	/**
+	 * The specs.
+	 */
+	function run() {
+		describe( "cli.Connect with connectors", function() {
+
+			beforeEach( function() {
+				variables.project = createTempDirectory( prefix = "bxagents-connectterm-" );
+				directoryCopy( expandPath( "/fixtures/with-connectors" ), project, true );
+				variables.answers = {};
+				variables.savedHome = createObject( "java", "java.lang.System" ).getProperty( "BXAGENTS_HOME" ) ?: "";
+				createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_HOME", replace( project, "\", "/", "all" ) & "/data" );
+			} );
+
+			afterEach( function() {
+				if ( len( savedHome ) ) {
+					createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_HOME", savedHome );
+				} else {
+					createObject( "java", "java.lang.System" ).clearProperty( "BXAGENTS_HOME" );
+				}
+				if ( directoryExists( project ) ) {
+					directoryDelete( project, true );
+				}
+			} );
+
+			it( "lists the connectors a project offers, with the state of each for the person", function() {
+				var done = connectVerb();
+
+				expect( done.exitCode ).toBe( 0 );
+				expect( done.out.toList( " " ) ).toInclude( "github  available" );
+				expect( done.out.toList( " " ) ).toInclude( "Type connect " );
+			} );
+
+			it( "lists as JSON for a script, with no token anywhere", function() {
+				var done = connectVerb( [], { json : true } );
+				var parsed = jsonDeserialize( done.message );
+
+				expect( done.exitCode ).toBe( 0 );
+				expect( parsed.connectors.map( c => c.id ) ).toInclude( "github" );
+				expect( parsed.connectors.every( c => c.state == "available" ) ).toBeTrue();
+			} );
+
+			it( "does not connect a connector that can change things when the person does not say yes", function() {
+				var done = connectVerb( [ "github" ] );
+
+				expect( done.exitCode ).toBe( 1 );
+				expect( done.out.toList( " " ) ).toInclude( "high risk" );
+				expect( done.out.toList( " " ) ).toInclude( "Not connected" );
+			} );
+
+			it( "says a token is read from a pipe or a named variable and refuses an empty one", function() {
+				var done = connectVerb( [ "github" ], { confirm : true, tokenEnv : "BXAGENTS_SPEC_NO_SUCH_TOKEN" } );
+
+				expect( done.exitCode ).toBe( 1 );
+				expect( done.out.toList( " " ) ).toInclude( "BXAGENTS_SPEC_NO_SUCH_TOKEN" );
+			} );
+
+			it( "names the connectors there are when the name is wrong", function() {
+				var done = connectVerb( [ "nope" ] );
+
+				expect( done.exitCode ).toBe( 1 );
+				expect( done.out.toList( " " ) ).toInclude( "nope" );
+			} );
+
+			it( "says to ask the running agent for the tools of a connector that is not connected", function() {
+				var done = connectVerb( [ "github", "tools" ] );
+
+				expect( done.exitCode ).toBe( 1 );
+			} );
+
+			it( "offers nothing for a project that turned connectors off and has no sign in service", function() {
+				var off = createTempDirectory( prefix = "bxagents-connectoff-" );
+				directoryCopy( expandPath( "/fixtures/with-mcp-credentials" ), off, true );
+				fileWrite( off & "/Agent.yaml", fileRead( off & "/Agent.yaml" ) & char( 10 ) & "connectors: none" & char( 10 ) );
+
+				var done = new bxagents.models.cli.Connect().run( { projectRoot : off } );
+
+				expect( done.exitCode ).toBe( 1 );
+				expect( done.message ).toInclude( "nothing to connect to" );
+				directoryDelete( off, true );
+			} );
+
+		} );
+	}
+
+}

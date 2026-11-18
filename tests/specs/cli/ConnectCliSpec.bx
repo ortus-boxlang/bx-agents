@@ -25,6 +25,8 @@ class extends="testbox.system.BaseSpec" {
 			beforeEach( function() {
 				variables.project = createTempDirectory( prefix = "bxagents-connectcli-" );
 				directoryCopy( expandPath( "/fixtures/with-mcp-oauth" ), project, true );
+				// these specs are about the services written in Agent.yaml: the catalog connectors have their own spec (ConnectTerminalSpec)
+				fileWrite( project & "/Agent.yaml", fileRead( project & "/Agent.yaml" ) & char( 10 ) & "connectors: none" & char( 10 ) );
 				// the agent has a name, so without this its data home is the shared ~/.bxagents/<name> and each test sees the last one's vault
 				variables.savedHome = createObject( "java", "java.lang.System" ).getProperty( "BXAGENTS_HOME" ) ?: "";
 				createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_HOME", replace( project, "\", "/", "all" ) & "/data" );
@@ -165,6 +167,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "says there is nothing to connect to in a project with no oauth server", function() {
 				var plain = createTempDirectory( prefix = "bxagents-connectplain-" );
 				directoryCopy( expandPath( "/fixtures/with-mcp-credentials" ), plain, true );
+				fileWrite( plain & "/Agent.yaml", fileRead( plain & "/Agent.yaml" ) & char( 10 ) & "connectors: none" & char( 10 ) );
 
 				var out = new bxagents.models.cli.Connect().run( { projectRoot : plain } );
 

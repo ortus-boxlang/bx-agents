@@ -33,6 +33,7 @@
  */
 import bxModules.bxagents.models.util.EntryConfigReader;
 import bxModules.bxagents.models.util.SourceMask;
+import bxModules.bxagents.models.connectors.ConnectorSettings;
 
 class {
 
@@ -57,7 +58,7 @@ class {
 	 * @return The section names
 	 */
 	array function sectionNames() {
-		return [ "agents", "tools", "skills", "mcp", "gateways", "schedule", "ai", "interceptors", "modules", "deploy", "env", "checks", "build" ]
+		return [ "agents", "tools", "skills", "mcp", "connectors", "gateways", "schedule", "ai", "interceptors", "modules", "deploy", "env", "checks", "build" ]
 	}
 
 	/**
@@ -141,6 +142,7 @@ class {
 			ai           : ai,
 			gateways     : gateways,
 			mcpHosted    : mcpHosted,
+			connectors   : connectorsInfo( config ),
 			interceptors : interceptors,
 			schedule     : scheduleInfo( root, discovery ),
 			modules      : discovery.modules.map( function( entry ) { return { name : entry.name } } ),
@@ -375,6 +377,34 @@ class {
 			} )
 		}
 		return found.len() ? found : [ { name : arguments.entry.name, description : "", file : rel } ]
+	}
+
+	/**
+	 * The connectors the agent offers: all of the catalog by default, narrowed by its `connectors` key.
+	 *
+	 * @config The root agent's resolved config
+	 *
+	 * @return { mode, available : [ { id, name, ways, risk, overridden } ], excluded, shadowed }; empty when the key has a mistake (the checks section says what)
+	 */
+	private struct function connectorsInfo( required struct config ) {
+		if ( ConnectorSettings::problems( arguments.config ).len() ) {
+			return { mode : "", available : [], excluded : [], shadowed : [] }
+		}
+		var resolved = ConnectorSettings::resolve( arguments.config )
+		return {
+			mode      : resolved.mode,
+			available : resolved.available.map( c => {
+				return {
+					id         : c.id,
+					name       : c.name,
+					ways       : c.auth.map( m => m.type == "oauth" ? "sign in" : ( m.type == "bearer" ? "token" : "no sign in" ) ).toList( ", " ),
+					risk       : c.risk,
+					overridden : c.overridden
+				}
+			} ),
+			excluded  : resolved.excluded,
+			shadowed  : resolved.shadowed
+		}
 	}
 
 	/**

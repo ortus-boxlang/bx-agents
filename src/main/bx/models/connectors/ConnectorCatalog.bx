@@ -1,0 +1,542 @@
+/**
+ * The connector catalog: plain data, one YAML file per connector under `catalog/connectors/`,
+ * describing the remote MCP servers (and local programs) an agent can use.
+ *
+ * Nothing in it is active. A person has to connect a connector before the agent gets its tools,
+ * and BX Agents never connects to anything because of this file. It is read by the `new` wizard,
+ * the `add` verb and `bxAgents connectors`, and checked by `check()`, which the CI job runs on
+ * every pull request.
+ *
+ * Shape of one file (see plans/connector-catalog.md and docs/conventions/connectors.md):
+ *
+ *   id, name, icon, summary, transport (http | stdio), url (http) or command (stdio),
+ *   requires { program, help } (stdio), auth [ { type : oauth | bearer | none, ... } ],
+ *   options [ { key, label, help, type, target, name, default, onlyWith } ],
+ *   risk, riskNote, docs, verifiedOn
+ */
+class {
+
+	static {
+		TRANSPORTS = [ "http", "stdio" ]
+		AUTH_TYPES = [ "oauth", "bearer", "none" ]
+		RISKS = [ "low", "medium", "high" ]
+		OPTION_TYPES = [ "text", "boolean" ]
+		OPTION_TARGETS = [ "query", "header", "path", "arg", "env" ]
+		REQUIRED = [ "id", "name", "icon", "summary", "transport", "auth", "risk", "riskNote", "docs", "verifiedOn" ]
+		ALLOWED = [ "id", "name", "icon", "summary", "transport", "url", "command", "requires", "auth", "options", "risk", "riskNote", "docs", "verifiedOn" ]
+		AUTH_ALLOWED = [ "type", "scopes", "envVar", "help", "verified", "unverifiedNote" ]
+		OPTION_ALLOWED = [ "key", "label", "help", "type", "target", "name", "default", "onlyWith" ]
+
+		// What a secret looks like when somebody pastes one into a file. The message never repeats the value.
+		SECRET_PATTERNS = [
+			{ label : "a GitHub token", regex : "\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}" },
+			{ label : "a Stripe key", regex : "\b(sk|rk|pk)_(live|test)_[A-Za-z0-9]{8,}" },
+			{ label : "an AWS access key", regex : "\bAKIA[0-9A-Z]{16}\b" },
+			{ label : "a private key", regex : "-----BEGIN [A-Z ]*PRIVATE KEY-----" },
+			{ label : "a JSON web token", regex : "\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}" },
+			{ label : "a bearer token", regex : "Bearer\s+[A-Za-z0-9._~+/=-]{24,}" }
+		]
+	}
+
+	/**
+	 * @folder The folder of connector files. Left out: the catalog that ships with the module
+	 */
+	function init( string folder = "" ) {
+		variables.folder = len( arguments.folder )
+			? arguments.folder
+			: getCanonicalPath( getDirectoryFromPath( getCurrentTemplatePath() ) & "../../catalog/connectors" )
+		variables.loaded = {}
+		return this
+	}
+
+	/**
+	 * @return The folder this catalog reads
+	 */
+	string function folder() {
+		return variables.folder
+	}
+
+	/**
+	 * @return Every connector that passes the checks, by id. A file that fails is left out; `check()` says why
+	 */
+	array function all() {
+		return load().entries
+	}
+
+	/**
+	 * @return The ids of every connector, in order
+	 */
+	array function ids() {
+		return all().map( entry => entry.id )
+	}
+
+	/**
+	 * @id A connector id such as github
+	 *
+	 * @return The connector, or an empty struct for an id the catalog does not list
+	 */
+	struct function get( required string id ) {
+		var match = all().filter( entry => entry.id == id )
+		return match.len() ? match[ 1 ] : {}
+	}
+
+	/**
+	 * Check every file in the folder.
+	 *
+	 * @return { ok, count, ids, errors : [ { file, field, message } ] }
+	 */
+	struct function check() {
+		var result = load()
+		return {
+			ok     : !result.errors.len(),
+			count  : result.entries.len(),
+			ids    : result.entries.map( entry => entry.id ),
+			errors : result.errors
+		}
+	}
+
+	/**
+	 * The catalog as the `new` wizard and `add mcp` read it: the shape of the old private list, so what they write
+	 * is the same. A web connector is offered with its token route (the wizard writes a token placeholder);
+	 * one that can only sign a person in is left out until the wizard writes `connectors:` itself.
+	 *
+	 * @return [ { id, name, summary, transport, url | command, requires, auth { type, envVar, help }, risk, riskNote, docs, verified, unverifiedNote } ]
+	 */
+	array function wizardEntries() {
+		var out = []
+		for ( var entry in all() ) {
+			var view = wizardEntry( entry )
+			if ( view.count() ) {
+				out.append( view )
+			}
+		}
+		return out
+	}
+
+	/**
+	 * @entry One connector, as returned by get()
+	 *
+	 * @return Its wizard view, or an empty struct when the wizard cannot offer it
+	 */
+	struct function wizardEntry( required struct entry ) {
+		var view = {
+			id        : entry.id,
+			name      : entry.name,
+			summary   : entry.summary,
+			transport : entry.transport,
+			risk      : entry.risk,
+			riskNote  : entry.riskNote,
+			docs      : entry.docs
+		}
+		if ( entry.transport == "stdio" ) {
+			view.command = duplicate( entry.command )
+			view.requires = duplicate( entry.requires ?: {} )
+			view.auth = { type : "none" }
+			view.verified = entry.auth[ 1 ].verified
+			view.unverifiedNote = entry.auth[ 1 ].unverifiedNote ?: ""
+			return view
+		}
+		var tokens = entry.auth.filter( method => method.type == "bearer" )
+		if ( !tokens.len() ) {
+			return {}
+		}
+		view.url = withDefaultQuery( entry )
+		view.auth = { type : "bearer", envVar : tokens[ 1 ].envVar, help : tokens[ 1 ].help ?: "" }
+		view.verified = tokens[ 1 ].verified
+		view.unverifiedNote = tokens[ 1 ].unverifiedNote ?: ""
+		return view
+	}
+
+	// --------------------------------------------------------------------------
+	// Loading
+	// --------------------------------------------------------------------------
+
+	/**
+	 * Read and check every file once, and keep the answer.
+	 *
+	 * @return { entries, errors }
+	 */
+	private struct function load() {
+		if ( variables.loaded.isEmpty() ) {
+			var entries = []
+			var errors = []
+			var seen = {}
+			if ( directoryExists( variables.folder ) ) {
+				var files = directoryList( variables.folder, false, "path", "*.yaml", "name asc" )
+				for ( var path in files ) {
+					var fileName = getFileFromPath( path )
+					var problems = []
+					var entry = readFile( path, fileName, problems )
+					if ( isStruct( entry ) && entry.count() ) {
+						checkEntry( entry, fileName, problems )
+						var id = toString( entry.id ?: "" )
+						if ( len( id ) && seen.keyExists( id ) ) {
+							problems.append( { file : fileName, field : "id", message : "The id [#id#] is already used by #seen[ id ]#." } )
+						}
+						if ( len( id ) && !seen.keyExists( id ) ) {
+							seen[ id ] = fileName
+						}
+						if ( !problems.len() ) {
+							entries.append( normalize( entry ) )
+						}
+					}
+					errors.append( problems, true )
+				}
+			} else {
+				errors.append( { file : "", field : "", message : "The catalog folder [#variables.folder#] does not exist." } )
+			}
+			variables.loaded = { entries : entries, errors : errors }
+		}
+		return variables.loaded
+	}
+
+	/**
+	 * @path The file
+	 * @fileName Its name, for messages
+	 * @problems Filled with what is wrong
+	 *
+	 * @return The parsed file, or an empty struct when it is not YAML or not a mapping
+	 */
+	private struct function readFile( required string path, required string fileName, required array problems ) {
+		var parsed = ""
+		try {
+			parsed = yamlDeserialize( fileRead( arguments.path ) )
+		} catch ( any e ) {
+			arguments.problems.append( {
+				file    : arguments.fileName,
+				field   : "",
+				message : "This is not valid YAML: #listFirst( e.message, char( 10 ) )#. Values that contain a colon followed by a space need quotes, and a key must not appear twice."
+			} )
+			return {}
+		}
+		if ( !isStruct( parsed ) ) {
+			arguments.problems.append( { file : arguments.fileName, field : "", message : "The file must be a mapping of fields, not a list or a single value." } )
+			return {}
+		}
+		return parsed
+	}
+
+	/**
+	 * Fill in what a file may leave out, so every reader sees the same shape.
+	 *
+	 * @entry A parsed file that passed the checks
+	 *
+	 * @return A copy with the date as text and every option complete
+	 */
+	private struct function normalize( required struct entry ) {
+		var out = duplicate( arguments.entry )
+		out.verifiedOn = isDate( out.verifiedOn ) ? dateFormat( out.verifiedOn, "yyyy-MM-dd" ) : toString( out.verifiedOn )
+		out.options = ( out.options ?: [] ).map( option => {
+			var full = duplicate( option )
+			full.name = full.name ?: full.key
+			full.help = full.help ?: ""
+			full.default = full.keyExists( "default" ) ? full.default : ( full.type == "boolean" ? false : "" )
+			full.onlyWith = full.onlyWith ?: ""
+			return full
+		} )
+		out.auth = out.auth.map( method => {
+			var full = duplicate( method )
+			full.scopes = full.scopes ?: []
+			full.help = full.help ?: ""
+			return full
+		} )
+		return out
+	}
+
+	/**
+	 * @entry A connector
+	 *
+	 * @return Its address with the query defaults of its options added, for the old wizard view
+	 */
+	private string function withDefaultQuery( required struct entry ) {
+		var pairs = []
+		for ( var option in arguments.entry.options ) {
+			var value = option.default
+			var isOn = isBoolean( value ) && value && option.type == "boolean"
+			if ( option.target == "query" && ( isOn || ( option.type == "text" && len( toString( value ) ) ) ) ) {
+				pairs.append( option.name & "=" & ( option.type == "boolean" ? "true" : urlEncodedFormat( toString( value ) ).replace( "+", "%20", "all" ) ) )
+			}
+		}
+		return arguments.entry.url & ( pairs.len() ? "?" & pairs.toList( "&" ) : "" )
+	}
+
+	// --------------------------------------------------------------------------
+	// Checks
+	// --------------------------------------------------------------------------
+
+	/**
+	 * @entry One parsed file
+	 * @fileName Its name
+	 * @problems Filled with what is wrong
+	 */
+	private void function checkEntry( required struct entry, required string fileName, required array problems ) {
+		var file = arguments.fileName
+
+		for ( var key in entry.keyArray() ) {
+			if ( !static.ALLOWED.findNoCase( key ) ) {
+				problems.append( problem( file, key, "[#key#] is not a field of a connector. Fields are: #static.ALLOWED.toList( ', ' )#." ) )
+			}
+		}
+		var missing = false
+		for ( var key in static.REQUIRED ) {
+			if ( !entry.keyExists( key ) || ( isSimpleValue( entry[ key ] ) && !len( trim( toString( entry[ key ] ) ) ) ) ) {
+				problems.append( problem( file, key, "[#key#] is required." ) )
+				missing = true
+			}
+		}
+		if ( missing ) {
+			// the rest assumes the required fields are there
+			scanForSecrets( entry, file, "", problems )
+			return
+		}
+
+		var id = toString( entry.id )
+		if ( !reFind( "^[a-z][a-z0-9-]*$", id ) ) {
+			problems.append( problem( file, "id", "The id [#id#] must be lowercase letters, digits and dashes, starting with a letter." ) )
+		}
+		if ( id != reReplace( file, "\.yaml$", "" ) ) {
+			problems.append( problem( file, "id", "The id [#id#] must match the file name, #id#.yaml." ) )
+		}
+		if ( !reFind( "^[a-z0-9][a-z0-9-]*$", reReplace( file, "\.yaml$", "" ) ) ) {
+			problems.append( problem( file, "id", "The file name must be lowercase letters, digits and dashes." ) )
+		}
+		checkText( entry, "name", file, problems )
+		checkText( entry, "summary", file, problems )
+		checkText( entry, "riskNote", file, problems )
+		checkText( entry, "icon", file, problems )
+		if ( !reFind( "^[a-z][a-z0-9-]*$", toString( entry.icon ) ) ) {
+			problems.append( problem( file, "icon", "The icon must be the name of a Phosphor icon, such as git-branch." ) )
+		}
+		if ( !static.RISKS.findNoCase( toString( entry.risk ) ) ) {
+			problems.append( problem( file, "risk", "The risk [#entry.risk#] must be one of: #static.RISKS.toList( ', ' )#." ) )
+		}
+		if ( !reFind( "^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[^\s?##]*)?$", toString( entry.docs ) ) ) {
+			problems.append( problem( file, "docs", "The docs link must be an https address." ) )
+		}
+		var checkedOn = isDate( entry.verifiedOn ) ? dateFormat( entry.verifiedOn, "yyyy-MM-dd" ) : toString( entry.verifiedOn )
+		if ( !reFind( "^\d{4}-\d{2}-\d{2}$", checkedOn ) ) {
+			problems.append( problem( file, "verifiedOn", "verifiedOn must be a date, such as 2026-11-14." ) )
+		}
+
+		if ( !static.TRANSPORTS.findNoCase( toString( entry.transport ) ) ) {
+			problems.append( problem( file, "transport", "The transport [#entry.transport#] must be one of: #static.TRANSPORTS.toList( ', ' )#." ) )
+		} else if ( entry.transport == "http" ) {
+			checkWeb( entry, file, problems )
+		} else {
+			checkProgram( entry, file, problems )
+		}
+		checkAuth( entry, file, problems )
+		checkOptions( entry, file, problems )
+		scanForSecrets( entry, file, "", problems )
+	}
+
+	/**
+	 * @entry One parsed file
+	 * @fileName Its name
+	 * @problems Filled with what is wrong
+	 */
+	private void function checkWeb( required struct entry, required string fileName, required array problems ) {
+		var address = toString( arguments.entry.url ?: "" )
+		if ( !len( address ) ) {
+			arguments.problems.append( problem( arguments.fileName, "url", "A web connector needs a url." ) )
+		} else if ( !reFind( "^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[^\s?##]*)?$", address ) ) {
+			arguments.problems.append( problem( arguments.fileName, "url", "The url must be an https address with no user name, query or fragment. Values that change the address are options." ) )
+		}
+		if ( arguments.entry.keyExists( "command" ) || arguments.entry.keyExists( "requires" ) ) {
+			arguments.problems.append( problem( arguments.fileName, "command", "command and requires belong to a stdio connector, not a web one." ) )
+		}
+	}
+
+	/**
+	 * @entry One parsed file
+	 * @fileName Its name
+	 * @problems Filled with what is wrong
+	 */
+	private void function checkProgram( required struct entry, required string fileName, required array problems ) {
+		var command = arguments.entry.command ?: []
+		if ( !isArray( command ) || !command.len() || command.some( part => !isSimpleValue( part ) || !len( toString( part ) ) ) ) {
+			arguments.problems.append( problem( arguments.fileName, "command", "A stdio connector needs a command: a list with the program first, then its arguments." ) )
+		}
+		if ( !isStruct( arguments.entry.requires ?: "" ) || !len( toString( arguments.entry.requires.program ?: "" ) ) ) {
+			arguments.problems.append( problem( arguments.fileName, "requires", "A stdio connector needs requires.program, the program that must be on the PATH." ) )
+		}
+		if ( arguments.entry.keyExists( "url" ) ) {
+			arguments.problems.append( problem( arguments.fileName, "url", "url belongs to a web connector, not a stdio one." ) )
+		}
+	}
+
+	/**
+	 * @entry One parsed file
+	 * @fileName Its name
+	 * @problems Filled with what is wrong
+	 */
+	private void function checkAuth( required struct entry, required string fileName, required array problems ) {
+		var methods = arguments.entry.auth
+		var file = arguments.fileName
+		if ( !isArray( methods ) || !methods.len() ) {
+			arguments.problems.append( problem( file, "auth", "auth must be a list with at least one method." ) )
+			return
+		}
+		var seenTypes = []
+		for ( var method in methods ) {
+			if ( !isStruct( method ) ) {
+				arguments.problems.append( problem( file, "auth", "Every auth method must be a mapping with a type." ) )
+				continue
+			}
+			for ( var key in method.keyArray() ) {
+				if ( !static.AUTH_ALLOWED.findNoCase( key ) ) {
+					arguments.problems.append( problem( file, "auth.#key#", "[#key#] is not a field of an auth method. Fields are: #static.AUTH_ALLOWED.toList( ', ' )#." ) )
+				}
+			}
+			var type = toString( method.type ?: "" )
+			if ( !static.AUTH_TYPES.findNoCase( type ) ) {
+				arguments.problems.append( problem( file, "auth.type", "The auth type [#type#] must be one of: #static.AUTH_TYPES.toList( ', ' )#." ) )
+				continue
+			}
+			if ( seenTypes.findNoCase( type ) ) {
+				arguments.problems.append( problem( file, "auth.type", "The auth type [#type#] is listed twice." ) )
+			}
+			seenTypes.append( type )
+			if ( arguments.entry.transport == "stdio" && type != "none" ) {
+				arguments.problems.append( problem( file, "auth.type", "A stdio connector has no sign in or token: its auth is a single method of type none." ) )
+			}
+			if ( arguments.entry.transport == "http" && type == "none" ) {
+				arguments.problems.append( problem( file, "auth.type", "A web connector must say how a person gets in: oauth, bearer or both." ) )
+			}
+			if ( type == "bearer" && !reFind( "^[A-Z][A-Z0-9_]*$", toString( method.envVar ?: "" ) ) ) {
+				arguments.problems.append( problem( file, "auth.envVar", "A bearer method needs envVar, the name of an environment variable such as GITHUB_PERSONAL_ACCESS_TOKEN. The token itself never goes in this file." ) )
+			}
+			if ( type != "bearer" && method.keyExists( "envVar" ) ) {
+				arguments.problems.append( problem( file, "auth.envVar", "envVar belongs to a bearer method." ) )
+			}
+			if ( method.keyExists( "scopes" ) && ( type != "oauth" || !isArray( method.scopes ) || method.scopes.some( scope => !isSimpleValue( scope ) || !len( toString( scope ) ) ) ) ) {
+				arguments.problems.append( problem( file, "auth.scopes", "scopes is a list of scope names, and only an oauth method has one." ) )
+			}
+			if ( !method.keyExists( "verified" ) || !isBoolean( method.verified ) ) {
+				arguments.problems.append( problem( file, "auth.verified", "Every auth method says verified: true or false." ) )
+			} else if ( !method.verified && !len( toString( method.unverifiedNote ?: "" ) ) ) {
+				arguments.problems.append( problem( file, "auth.unverifiedNote", "A method that is not verified must say why in unverifiedNote." ) )
+			}
+		}
+	}
+
+	/**
+	 * @entry One parsed file
+	 * @fileName Its name
+	 * @problems Filled with what is wrong
+	 */
+	private void function checkOptions( required struct entry, required string fileName, required array problems ) {
+		if ( !arguments.entry.keyExists( "options" ) ) {
+			return
+		}
+		var file = arguments.fileName
+		if ( !isArray( arguments.entry.options ) ) {
+			arguments.problems.append( problem( file, "options", "options must be a list." ) )
+			return
+		}
+		var authTypes = isArray( arguments.entry.auth ) ? arguments.entry.auth.filter( method => isStruct( method ) ).map( method => toString( method.type ?: "" ) ) : []
+		var keys = []
+		var wanted = arguments.entry.transport == "stdio" ? [ "arg", "env" ] : [ "query", "header", "path" ]
+		for ( var option in arguments.entry.options ) {
+			if ( !isStruct( option ) ) {
+				arguments.problems.append( problem( file, "options", "Every option must be a mapping." ) )
+				continue
+			}
+			for ( var key in option.keyArray() ) {
+				if ( !static.OPTION_ALLOWED.findNoCase( key ) ) {
+					arguments.problems.append( problem( file, "options.#key#", "[#key#] is not a field of an option. Fields are: #static.OPTION_ALLOWED.toList( ', ' )#." ) )
+				}
+			}
+			var name = toString( option.key ?: "" )
+			if ( !reFind( "^[a-z][A-Za-z0-9_]*$", name ) ) {
+				arguments.problems.append( problem( file, "options.key", "An option key must be letters, digits and underscores, starting with a lowercase letter." ) )
+				continue
+			}
+			if ( keys.findNoCase( name ) ) {
+				arguments.problems.append( problem( file, "options.#name#", "The option key [#name#] is listed twice." ) )
+			}
+			keys.append( name )
+			if ( !len( toString( option.label ?: "" ) ) ) {
+				arguments.problems.append( problem( file, "options.#name#.label", "Option [#name#] needs a label." ) )
+			}
+			if ( !static.OPTION_TYPES.findNoCase( toString( option.type ?: "" ) ) ) {
+				arguments.problems.append( problem( file, "options.#name#.type", "The type of option [#name#] must be one of: #static.OPTION_TYPES.toList( ', ' )#." ) )
+			}
+			var target = toString( option.target ?: "" )
+			if ( !wanted.findNoCase( target ) ) {
+				arguments.problems.append( problem( file, "options.#name#.target", "The target of option [#name#] must be one of: #wanted.toList( ', ' )# for a #arguments.entry.transport# connector." ) )
+			} else {
+				var sent = toString( option.name ?: name )
+				var shape = { query : "^[A-Za-z_][A-Za-z0-9_.-]*$", header : "^[A-Za-z][A-Za-z0-9-]*$", path : "^[A-Za-z0-9_-]+$", arg : "^--?[a-z][a-z0-9-]*$", env : "^[A-Z][A-Z0-9_]*$" }
+				if ( !reFind( shape[ target ], sent ) ) {
+					arguments.problems.append( problem( file, "options.#name#.name", "The name [#sent#] is not a valid #target# name." ) )
+				}
+			}
+			if ( option.keyExists( "default" ) && !isSimpleValue( option.default ) ) {
+				arguments.problems.append( problem( file, "options.#name#.default", "The default of option [#name#] must be text or true or false." ) )
+			}
+			if ( option.keyExists( "onlyWith" ) && !authTypes.findNoCase( toString( option.onlyWith ) ) ) {
+				arguments.problems.append( problem( file, "options.#name#.onlyWith", "onlyWith [#option.onlyWith#] must be one of the auth types this connector lists." ) )
+			}
+		}
+	}
+
+	/**
+	 * @entry The entry
+	 * @field The field
+	 * @fileName Its file
+	 * @problems Filled with what is wrong
+	 */
+	private void function checkText( required struct entry, required string field, required string fileName, required array problems ) {
+		var value = arguments.entry[ arguments.field ]
+		if ( !isSimpleValue( value ) || !len( trim( toString( value ) ) ) ) {
+			arguments.problems.append( problem( arguments.fileName, arguments.field, "[#arguments.field#] must be text." ) )
+		} else if ( reFind( "[\r\n]", toString( value ) ) ) {
+			arguments.problems.append( problem( arguments.fileName, arguments.field, "[#arguments.field#] must be one line." ) )
+		}
+	}
+
+	/**
+	 * Look through every text value for something that looks like a secret.
+	 *
+	 * @value A value from the file: a struct, a list or text
+	 * @fileName Its file
+	 * @path Where in the file this value is, for the message
+	 * @problems Filled with what is wrong
+	 */
+	private void function scanForSecrets( required any value, required string fileName, required string path, required array problems ) {
+		if ( isStruct( arguments.value ) ) {
+			for ( var key in arguments.value.keyArray() ) {
+				scanForSecrets( arguments.value[ key ], arguments.fileName, len( arguments.path ) ? arguments.path & "." & key : key, arguments.problems )
+			}
+		} else if ( isArray( arguments.value ) ) {
+			var at = 0
+			for ( var item in arguments.value ) {
+				at++
+				scanForSecrets( item, arguments.fileName, arguments.path & "[" & at & "]", arguments.problems )
+			}
+		} else if ( isSimpleValue( arguments.value ) && !isBoolean( arguments.value ) && !isNumeric( arguments.value ) ) {
+			var text = toString( arguments.value )
+			for ( var pattern in static.SECRET_PATTERNS ) {
+				if ( reFind( pattern.regex, text ) ) {
+					arguments.problems.append( problem( arguments.fileName, arguments.path, "This looks like #pattern.label#. A secret never goes in a catalog file: name the environment variable instead." ) )
+				}
+			}
+			if ( reFindNoCase( "[?&](token|key|secret|password|apikey|api_key|access_token)=", text ) ) {
+				arguments.problems.append( problem( arguments.fileName, arguments.path, "A credential in a query string. Credentials are never part of a catalog file." ) )
+			}
+		}
+	}
+
+	/**
+	 * @file The file
+	 * @field The field the problem is in
+	 * @message What is wrong
+	 *
+	 * @return One problem
+	 */
+	private struct function problem( required string file, required string field, required string message ) {
+		return { file : arguments.file, field : arguments.field, message : arguments.message }
+	}
+
+}

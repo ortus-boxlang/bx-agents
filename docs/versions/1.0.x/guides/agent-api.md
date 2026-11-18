@@ -130,7 +130,7 @@ The same list, create and revoke are in the **Tokens** panel of the [web page](.
 
 Every path is under `/__bxagents` (or your `agentApi.path`). The table was written from the one list in `ApiContract.bx` that the build makes the routes and the OpenAPI document from; the document a running server hands out at `GET /openapi` is the authority, and it also has the request and answer shapes. **Admin** routes answer `403` to a caller who is not an admin; **Open** routes need no token even on a closed API.
 
-There are 76 routes (83 verb and path pairs); the token routes are there only with `manageTokens: true`.
+There are 81 routes (89 verb and path pairs); the token routes are there only with `manageTokens: true`.
 
 ### Turns
 
@@ -256,6 +256,19 @@ There are 76 routes (83 verb and path pairs); the token routes are there only wi
 | `POST /connect/remove` | Caller | Forgets the caller's sign in to one server. |
 | `POST /connect` | Caller | Starts a sign in for the caller and answers with the address to send them to. |
 | `GET /connect` | Caller | The servers that ask people to sign in, and which the caller has connected. |
+
+### Connectors
+
+The [built-in connectors](../conventions/connectors.md). Every route answers for the caller only and never returns a token.
+
+| Route | Who | Does |
+|---|---|---|
+| `GET /connectors` | Caller | The connectors the agent offers, the state of each for the caller, and how many tools the caller has on. |
+| `POST /connectors/connect` | Caller | Connects one: a token (checked with the service, then sealed in the vault), a sign in (answers with the address to send them to) or a local program (an admin, when served). Medium and high risk connectors need `confirm`. |
+| `POST /connectors/disconnect` | Caller | Disconnects one. The caller's tool switches and options are kept. |
+| `POST /connectors/options` | Caller | Changes the caller's option values for one connector. |
+| `GET /connectors/tools` | Caller | The tools a connected connector brings and which the caller has on. |
+| `POST /connectors/tools` | Caller | Switches tools: one, all of them, or only the ones that read. |
 
 ### Notes
 

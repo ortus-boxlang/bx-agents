@@ -1,0 +1,251 @@
+import bxModules.bxagents.models.connectors.ConnectorEndpoint;
+
+/**
+ * The tools of the connectors a person has connected, and the person's switches for them.
+ *
+ * A connector can bring many tools. The person turns off the ones the agent should not use for them (a switch per tool,
+ * all on, all off, or read only for a server that says which tools only read). The admin can set a ceiling in
+ * `connectors.override.<id>.tools`: a tool outside it is turned off for everyone and a person cannot turn it on. A switch is
+ * the person's own: it never changes what another person can use.
+ *
+ * A switched off tool is refused when it is called (`gate()`, used by the router) and is not offered to the model
+ * (ConnectorToolMiddleware). The tool names here are the names on the server, without the connector's prefix.
+ */
+class {
+
+	/**
+	 * @service The ConnectorService
+	 * @settings The ConnectorSettingsStore
+	 * @clients The ConnectorClients
+	 * @deps { lister : ( id, person ) => [ { name, description, annotations } ] for a way in other than a token, ownTools : () => how many tools the agent has of its own, cacheSeconds }
+	 */
+	function init( required any service, required any settings, required any clients, struct deps = {} ) {
+		variables.service = arguments.service
+		variables.settings = arguments.settings
+		variables.clients = arguments.clients
+		variables.lister = arguments.deps.lister ?: ""
+		variables.ownTools = arguments.deps.ownTools ?: ( () => 0 )
+		variables.cacheMs = ( arguments.deps.cacheSeconds ?: 60 ) * 1000
+		variables.listed = {}
+		return this
+	}
+
+	/**
+	 * @id The connector
+	 * @person The person
+	 *
+	 * @return One struct per tool the connector brings, by name: { name, description, readOnly : true | false | null, destructive : true | false | null, locked : turned off by the admin, on }
+	 *
+	 * @throws BxAgents.NotConnected when the person has not connected it
+	 */
+	array function tools( required string id, required string person ) {
+		var row = connectedRow( arguments.id, arguments.person )
+		var entry = variables.service.entryOf( arguments.id )
+		var off = row.tools.off
+		var ceiling = entry.tools
+		return rawTools( entry, row, arguments.person ).map( found => {
+			var hints = isStruct( found.annotations ?: "" ) ? found.annotations : {}
+			var locked = ceiling.len() > 0 && !ceiling.findNoCase( found.name )
+			return {
+				name        : found.name,
+				description : found.description ?: "",
+				readOnly    : hints.keyExists( "readOnlyHint" ) ? hints.readOnlyHint : nullValue(),
+				destructive : hints.keyExists( "destructiveHint" ) ? hints.destructiveHint : nullValue(),
+				locked      : locked,
+				on          : !locked && !off.findNoCase( found.name )
+			}
+		} ).sort( ( a, b ) => compareNoCase( a.name, b.name ) )
+	}
+
+	/**
+	 * Changes the person's switches.
+	 *
+	 * @id The connector
+	 * @person The person
+	 * @change { tool, on } for one tool, { all : true | false } for every tool, or { readonly : true } to keep only the tools the server says only read
+	 *
+	 * @return The tools as tools() gives them after the change
+	 *
+	 * @throws BxAgents.BadConnectRequest for a tool the connector does not have, or a read only change the server cannot support
+	 * @throws BxAgents.Forbidden for a tool the admin turned off
+	 */
+	array function set( required string id, required string person, required struct change ) {
+		var current = tools( arguments.id, arguments.person )
+		var names = current.map( t => t.name )
+		var off = variables.settings.get( arguments.person, arguments.id, "tools" ).off ?: []
+
+		if ( arguments.change.keyExists( "tool" ) ) {
+			var name = toString( arguments.change.tool )
+			var match = current.filter( t => t.name == name )
+			if ( !match.len() ) {
+				throw( type = "BxAgents.BadConnectRequest", message = "[#name#] is not a tool of #variables.service.get( arguments.id, arguments.person ).name#." )
+			}
+			if ( ( arguments.change.on ?: true ) == true && match[ 1 ].locked ) {
+				throw( type = "BxAgents.Forbidden", message = "[#name#] is turned off by this agent's admin, so it cannot be turned on." )
+			}
+			off = off.filter( n => n != name )
+			if ( ( arguments.change.on ?: true ) != true ) {
+				off.append( name )
+			}
+		} else if ( arguments.change.keyExists( "all" ) ) {
+			off = arguments.change.all == true ? [] : names
+		} else if ( arguments.change.keyExists( "readonly" ) && arguments.change.readonly == true ) {
+			if ( !current.some( t => !isNull( t.readOnly ) ) ) {
+				throw( type = "BxAgents.BadConnectRequest", message = "#variables.service.get( arguments.id, arguments.person ).name# does not say which of its tools only read, so there is no read only setting. Turn tools off one by one." )
+			}
+			off = current.filter( t => isNull( t.readOnly ) || t.readOnly != true ).map( t => t.name )
+		} else {
+			throw( type = "BxAgents.BadConnectRequest", message = "Say what to change: tool and on, or all, or readonly." )
+		}
+		variables.settings.set( arguments.person, arguments.id, "tools", { off : off.filter( n => names.findNoCase( n ) ) } )
+		return tools( arguments.id, arguments.person )
+	}
+
+	/**
+	 * Whether a person may call a tool. What the router asks before every call.
+	 *
+	 * @id The connector
+	 * @person The person
+	 * @tool The tool's name on the server
+	 *
+	 * @return An empty string when it may go on, else the sentence that says why not
+	 */
+	string function gate( required string id, required string person, required string tool ) {
+		return refusalOf( rulesOf( arguments.id, arguments.person ), arguments.tool )
+	}
+
+	/**
+	 * What decides whether a person may use the tools of one connector: read once, so a request that checks every tool does not
+	 * read the same settings again for each of them.
+	 *
+	 * @id The connector
+	 * @person The person
+	 *
+	 * @return { known, name, allowed : the admin's list ([] = every tool), off : the tools the person turned off }
+	 */
+	struct function rulesOf( required string id, required string person ) {
+		var entry = variables.service.entryOf( arguments.id )
+		if ( !entry.count() ) {
+			return { known : false, name : "", allowed : [], off : [] }
+		}
+		return { known : true, name : entry.name, allowed : entry.tools, off : variables.settings.get( arguments.person, arguments.id, "tools" ).off ?: [] }
+	}
+
+	/**
+	 * @rules What rulesOf() answered
+	 * @tool The tool's name on the server
+	 *
+	 * @return An empty string when it may go on, else the sentence that says why not
+	 */
+	string function refusalOf( required struct rules, required string tool ) {
+		if ( !arguments.rules.known ) {
+			return ""
+		}
+		if ( arguments.rules.allowed.len() && !arguments.rules.allowed.findNoCase( arguments.tool ) ) {
+			return "#arguments.tool# is turned off for #arguments.rules.name# by this agent's admin."
+		}
+		if ( arguments.rules.off.findNoCase( arguments.tool ) ) {
+			return "You turned #arguments.tool# off for #arguments.rules.name#. Turn it on in Connectors to use it."
+		}
+		return ""
+	}
+
+	/**
+	 * Where a connector is reached for one person, with the values of their options. What the registry of clients asks.
+	 *
+	 * @id The connector
+	 * @person The person
+	 *
+	 * @return { id, url, headers, timeout }
+	 */
+	struct function endpointFor( required string id, required string person ) {
+		var entry = variables.service.entryOf( arguments.id )
+		var values = variables.service.get( arguments.id, arguments.person ).options.reduce( ( all, option ) => { all[ option.key ] = option.value; return all; }, {} )
+		return ConnectorEndpoint::of( entry, values, "bearer" )
+	}
+
+	/**
+	 * How many tools a person has on across the connectors they have connected, and whether that is more than the model
+	 * can choose among well.
+	 *
+	 * @person The person
+	 *
+	 * @return { toolsOn : connector tools plus the agent's own, toolWarning, over, byConnector : { id : count }, unavailable : [ ids whose tools could not be listed ] }
+	 */
+	struct function summary( required string person ) {
+		var by = {}
+		var unavailable = []
+		var total = 0
+		for ( var row in variables.service.list( arguments.person ) ) {
+			if ( ![ "connected", "needs_attention" ].contains( row.state ) ) {
+				continue
+			}
+			try {
+				var on = tools( row.id, arguments.person ).filter( t => t.on ).len()
+				by[ row.id ] = on
+				total += on
+			} catch ( any e ) {
+				unavailable.append( row.id )
+			}
+		}
+		total += variables.ownTools()
+		var limit = variables.service.policy().toolWarning
+		return { toolsOn : total, toolWarning : limit, over : total > limit, byConnector : by, unavailable : unavailable }
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @id The connector
+	 * @person The person
+	 *
+	 * @return The connector's row
+	 *
+	 * @throws BxAgents.UnknownConnector, BxAgents.NotConnected
+	 */
+	private struct function connectedRow( required string id, required string person ) {
+		var row = variables.service.get( arguments.id, arguments.person )
+		if ( !row.count() ) {
+			throw( type = "BxAgents.UnknownConnector", message = "This agent does not offer a connector called [#arguments.id#]." )
+		}
+		if ( ![ "connected", "needs_attention" ].contains( row.state ) ) {
+			throw( type = "BxAgents.NotConnected", message = "Connect #row.name# first: its tools are listed for the people who have." )
+		}
+		return row
+	}
+
+	/**
+	 * The tools the server lists for this person, kept for a short while so a page that asks again does not ask the server again.
+	 *
+	 * @entry The connector as offered
+	 * @row The person's row
+	 * @person The person
+	 *
+	 * @return [ { name, description, annotations } ]
+	 */
+	private array function rawTools( required struct entry, required struct row, required string person ) {
+		var key = arguments.entry.id & "|" & arguments.person
+		var held = variables.listed[ key ] ?: nullValue()
+		if ( !isNull( held ) && getTickCount() - held.at < variables.cacheMs ) {
+			return held.tools
+		}
+		var found = []
+		if ( arguments.row.connectedWith == "token" ) {
+			var client = variables.clients.forPerson( endpointFor( arguments.entry.id, arguments.person ), arguments.person )
+			if ( isNull( client ) ) {
+				throw( type = "BxAgents.NotConnected", message = "#arguments.entry.name# is not connected for this person." )
+			}
+			var answer = client.listTools()
+			if ( !answer.isSuccess() ) {
+				throw( type = "BxAgents.CouldNotReach", message = "Could not list the tools of #arguments.entry.name#: #answer.getError()#" )
+			}
+			var data = answer.getData()
+			found = isArray( data ) ? data : ( data.tools ?: [] )
+		} else if ( !isSimpleValue( variables.lister ) ) {
+			found = variables.lister( arguments.entry.id, arguments.person )
+		}
+		variables.listed[ key ] = { at : getTickCount(), tools : found }
+		return found
+	}
+
+}

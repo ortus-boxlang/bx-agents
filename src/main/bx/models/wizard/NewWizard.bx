@@ -290,7 +290,15 @@ class {
 		return true
 	}
 
+	/**
+	 * The connectors: every one is offered to every person, who connects with their own token or sign in, so the question is
+	 * which to leave out. Nothing picked leaves them all in (the default, nothing is written); everything picked offers none.
+	 * `--mcp` still names servers with one fixed account, and `--connectors` says it all at once.
+	 */
 	function stage_mcp() {
+		if ( variables.flags.keyExists( "connectors" ) ) {
+			return showGiven( "mcp", "Connectors", variables.plan.connectors.mode == "all" ? "all offered" : variables.planner.connectorsText( variables.plan.connectors ) )
+		}
 		if ( variables.flags.keyExists( "mcp" ) ) {
 			return showGiven( "mcp", "MCP servers", variables.plan.mcp.len() ? variables.plan.mcp.toList( ", " ) : "none" )
 		}
@@ -300,25 +308,21 @@ class {
 			value    : entry.id,
 			label    : entry.name,
 			hint     : "#entry.risk# risk. #entry.summary#",
-			selected : variables.plan.mcp.contains( entry.id )
+			selected : variables.plan.connectors.mode == "exclude" && variables.plan.connectors.ids.contains( entry.id )
 		} ) )
-		var pending = variables.catalog.unavailableMcpServers().map( entry => entry.name ).toList( ", " )
-		var picked = variables.prompter.multiSelect(
-			"Connect any MCP servers?",
+		var left = variables.prompter.multiSelect(
+			"Leave out any connectors?",
 			choices,
-			"Tools from other services. Credentials go in .env.#len( pending ) ? ' Not offered yet: ' & pending & '.' : ''#"
+			"Every connector is offered to every person, who connects with their own token or sign in. Nothing is connected until they do. Pick the ones to leave out."
 		)
-		var risky = picked.filter( id => variables.catalog.mcpServer( id ).risk == "high" )
-		if ( risky.len() ) {
-			var lines = []
-			for ( var id in risky ) {
-				var entry = variables.catalog.mcpServer( id )
-				lines.append( "#entry.name#: #entry.riskNote#" )
-			}
-			variables.prompter.note( "These servers can change things", lines )
+		if ( !left.len() ) {
+			variables.plan.connectors = { mode : "all", ids : [] }
+		} else if ( left.len() == servers.len() ) {
+			variables.plan.connectors = { mode : "none", ids : [] }
+		} else {
+			variables.plan.connectors = { mode : "exclude", ids : left }
 		}
-		variables.plan.mcp = picked
-		variables.prompter.record( "mcp", "MCP servers", picked.len() ? picked.map( id => variables.catalog.mcpServer( id ).name ).toList( ", " ) : "none" )
+		variables.prompter.record( "mcp", "Connectors", variables.plan.connectors.mode == "all" ? "all offered" : variables.planner.connectorsText( variables.plan.connectors ) )
 		return true
 	}
 

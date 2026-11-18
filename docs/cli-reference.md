@@ -127,6 +127,9 @@ The secrets the agent uses, sealed in the chat database: list, add, edit, remove
 ::: card title="connect" icon="phosphor-duotone:plugs-connected" href="#connect"
 Sign in to the MCP servers that ask each person to sign in.
 :::
+::: card title="connectors" icon="phosphor-duotone:puzzle-piece" href="#connectors"
+The catalog of known connectors that ships with BX Agents: list them, show one, check the files.
+:::
 ::: card title="routines" icon="phosphor-duotone:clock-countdown" href="#routines"
 The scheduled routines: list, add, edit, pause, run, reports and clean-up.
 :::
@@ -177,7 +180,7 @@ bxAgents new my-agent --repo=owner/repo-name
 bxAgents new my-agent --forgebox=some-package-slug
 ```
 
-- With no `--model`, no `--repo` and no `--forgebox`, at a terminal, `new` runs the [wizard](guides/new-wizard.md). `--no-wizard` or `--yes` turns it off, `--wizard` turns it on even with a `--model`, and `--no-tui` asks the same questions as numbered lines. A `--model` on its own never starts it, since scripts have always had to pass one. The wizard's flags (`--with`, `--search`, `--files`, `--files-dir`, `--temperature`, `--max-tokens`, `--timeout`, `--memory`, `--mcp`, `--channels`, `--web-auth`, `--guard`, `--prompt`, `--widgets`, `--widgets-bottom`, `--deploy` and the deploy details) are listed in the [wizard guide](guides/new-wizard.md#without-the-wizard); a bad value names the flag and what it accepts. They need `Agent.yaml`, so they cannot be combined with `--class`.
+- With no `--model`, no `--repo` and no `--forgebox`, at a terminal, `new` runs the [wizard](guides/new-wizard.md). `--no-wizard` or `--yes` turns it off, `--wizard` turns it on even with a `--model`, and `--no-tui` asks the same questions as numbered lines. A `--model` on its own never starts it, since scripts have always had to pass one. The wizard's flags (`--with`, `--search`, `--files`, `--files-dir`, `--temperature`, `--max-tokens`, `--timeout`, `--memory`, `--mcp`, `--connectors`, `--channels`, `--web-auth`, `--guard`, `--prompt`, `--widgets`, `--widgets-bottom`, `--deploy` and the deploy details) are listed in the [wizard guide](guides/new-wizard.md#without-the-wizard); a bad value names the flag and what it accepts. They need `Agent.yaml`, so they cannot be combined with `--class`.
 - `--template`, `--repo`, and `--forgebox` name three different project SOURCES - exactly one applies. Combining any two of them is an error.
 - **`--template` mode** (the default when no source flag is passed at all - `minimal`):
   - `--model` is **required** when no questions are asked - a `provider/model` slug (see [the model slug](conventions/agent-bx.md#the-model-slug)).
@@ -890,21 +893,48 @@ bxAgents restore FILE [--home=DIR] [--force]
 
 ### `connect`
 
-Sign in to the services of a project that ask each person to sign in (an `mcpServers` entry with an `oauth` key). See [connect](conventions/connect.md).
+Connect the built-in [connectors](conventions/connectors.md) (GitHub, Stripe, Notion, Atlassian, Cloudflare, Supabase, Git) and sign in to the services of a project that ask each person to sign in (an `mcpServers` entry with an `oauth` key, see [connect](conventions/connect.md)).
 
 ```bash
 bxAgents connect
 bxAgents connect mail [--port=8765] [--no-open] [--timeout=300]
 bxAgents connect mail --remove
 bxAgents connect [--user=NAME] [--json]
+bxAgents connect github --token-env=GITHUB_TOKEN --confirm   # a script: no hidden box
+bxAgents connect github --stdin --confirm                     # token piped in
+bxAgents connect github tools off delete_file                 # also: tools on NAME, tools off all, tools readonly
+bxAgents connect github off                                   # disconnect
+bxAgents connect github options repository=/path/to/repo      # connectors that have options
 ```
 
 ![bxAgents connect mail: the address, the wait, then connected](assets/tui/connect-cli.png)
 
-- Without a name it lists the services and whether you are connected (`--json` for a script).
+- Without a name it lists the connectors and services and whether you are connected (`--json` for a script).
+- A connector that takes a token asks for it in a hidden box. Medium and high risk connectors show what they can do and need a yes, or `--confirm`. The token is checked with the service before it is sealed.
 - With a name it prints an address and opens your browser, waits for the redirect on `127.0.0.1` (a free port, or `--port`), and finishes the sign in. `--no-open` only prints. `--timeout` is the seconds to wait, 300 by default.
 - `--remove` forgets your sign in. `--user` is whose: `local` by default, the one user an open server has.
 - Tokens are sealed in the project's chat database. Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
+
+### `connectors`
+
+The catalog of known connectors that ships with BX Agents: the remote MCP servers and local programs an agent can use, written as one YAML file each. This verb only reads those files; it never connects to anything. Signing in to one is [`connect`](#connect).
+
+```bash
+bxAgents connectors
+bxAgents connectors show supabase
+bxAgents connectors check [--dir=DIR]
+```
+
+```
+ID           NAME                              HOW IN              RISK    VERIFIED
+github       GitHub                            token               high    2026-11-14
+notion       Notion                            sign in, token      medium  2026-11-14
+git          Git                               no sign in          medium  2026-11-14
+```
+
+- Without a word it lists every connector with how a person gets in (a sign in, a token or neither), its risk and the day it was checked. `--json` prints the full entries for a script.
+- `show <id>` prints one connector: its address or command, risk, each way in with the environment variable a token goes in, and its options.
+- `check` reads every file and names each mistake with its file and field. It exits `1` when one is wrong, so a script or CI can use it. `--dir` checks a folder of files instead of the shipped catalog, which is how a contributor checks a new file before a pull request.
 
 ### `logs`
 
@@ -1044,6 +1074,7 @@ The report has these sections, in this order. `--section` takes any of the names
 | `tools` | Per agent: each `@AITool` function in `tools/` with its description and file, then the module tools it lists (`now@bxai`) and which modules have `toolOptions`. |
 | `skills` | The skills each agent has. |
 | `mcp` | The MCP servers each agent uses (URLs are shown without a user name or query string, and with the environment variables they need) and the MCP servers the project hosts. |
+| `connectors` | The connectors the agent offers: all of the [catalog](#connectors) by default, narrowed by its `connectors` key, with how a person gets in, the risk, and what an admin overrode. Nothing is attached until a person connects one. |
 | `gateways` | Every `gateways/` entry: its kind (`agent`, `mcp`, `webui` with its auth mode, or a chat platform) and path. |
 | `schedule` | Each `schedules/*.bx` scheduler with its tasks: name, cron (or the frequency method), and the agent it runs (`default` for the root agent). |
 | `ai` | The default model, the other providers, the named [profiles](conventions/models.md) with where each key comes from, and the capability defaults. |

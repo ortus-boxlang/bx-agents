@@ -1,0 +1,430 @@
+/**
+ * What a person types about connectors, in the terminal chat (`/connect`) and at the command line (`bxAgents connect`).
+ * One place turns the words into calls and the answers into lines, so every mode reads the same.
+ *
+ *   connect                           every connector, with its state
+ *   connect github                    connect it: the risk, its options, then the token in a hidden box
+ *   connect git repository=/path      options can be given as key=value
+ *   connect github off                disconnect it (a local program: switch it off)
+ *   connect github tools              the tools, by name, with what is on
+ *   connect github tools off NAME     one tool off; `on NAME`, `off all`, `on all`, `readonly` too
+ *   connect github options key=value  change the option values of one connector
+ *
+ * A token is never an argument: it is typed in a hidden box, or read from an environment variable the person names
+ * (`--token-env=NAME`). The services written in Agent.yaml (mcpServers with oauth) are listed after the connectors and
+ * connected by name through `signIns`.
+ */
+class {
+
+	/**
+	 * @source A LocalConnectorSource or a RemoteConnectorSource
+	 * @io What the console writes to and asks through: text( line ), warn( line ), ok( line ), canAsk(), ask( question, options ), askSecret( question, help ), confirm( question ), choose( question, choices )
+	 * @signIns The services written in Agent.yaml: available(), list(), start( name ), remove( name ); or nothing
+	 * @hooks { afterSignIn : ( id, address ) => nothing }: what the terminal does once a sign in address has been shown, such as opening the browser and waiting for it to come back
+	 */
+	function init( required any source, required any io, any signIns = "", struct hooks = {} ) {
+		variables.source = arguments.source
+		variables.io = arguments.io
+		variables.signIns = arguments.signIns
+		variables.hooks = arguments.hooks
+		variables.seen = {}
+		return this
+	}
+
+	/**
+	 * @words What was typed after the name of the command, split into words
+	 * @flags { confirm : true when the person already said yes, tokenEnv : the name of an environment variable that holds the token, tokenText : a token read from a pipe }
+	 */
+	void function run( required array words, struct flags = {} ) {
+		var haveSignIns = !isSimpleValue( variables.signIns ) && variables.signIns.available()
+		if ( !variables.source.available() && !haveSignIns ) {
+			variables.io.warn( variables.source.why() )
+			return
+		}
+		if ( !arguments.words.len() ) {
+			showAll()
+			return
+		}
+		var id = lCase( arguments.words[ 1 ] )
+		var rest = arguments.words.slice( 2 )
+		var row = rowOf( id )
+		if ( !row.count() ) {
+			if ( haveSignIns && signInNames().containsNoCase( arguments.words[ 1 ] ) ) {
+				agentYaml( arguments.words[ 1 ], rest )
+				return
+			}
+			variables.io.warn( "No connector or service named [#arguments.words[ 1 ]#]. Type connect to see them." )
+			return
+		}
+		var verb = rest.len() ? lCase( rest[ 1 ] ) : ""
+		if ( [ "off", "remove", "disconnect" ].contains( verb ) ) {
+			disconnect( row )
+		} else if ( verb == "tools" ) {
+			tools( row, rest.slice( 2 ) )
+		} else if ( verb == "options" ) {
+			options( row, rest.slice( 2 ) )
+		} else {
+			connect( row, rest, arguments.flags )
+		}
+	}
+
+	// ---- the list ------------------------------------------------------------------
+
+	/**
+	 * Every connector with its state, then the services written in Agent.yaml.
+	 */
+	private void function showAll() {
+		var rows = []
+		if ( variables.source.available() ) {
+			var all = variables.source.list()
+			if ( !all.ok ) {
+				variables.io.warn( all.reason )
+			} else {
+				variables.seen = all
+				rows = all.connectors
+				for ( var row in rows ) {
+					variables.io.text( lineOf( row, all.summary ?: {} ) )
+				}
+				if ( ( all.summary ?: {} ).over ?: false ) {
+					variables.io.warn( "#all.summary.toolsOn# tools are on across everything. Models answer better with fewer than #all.summary.toolWarning#: turn some off with connect NAME tools." )
+				}
+			}
+		}
+		if ( !isSimpleValue( variables.signIns ) && variables.signIns.available() ) {
+			variables.io.text( "In Agent.yaml:" )
+			for ( var service in variables.signIns.list() ) {
+				variables.io.text( "  #service.name#  #service.connected ? 'connected' : 'not connected'#  #service.url#" )
+				if ( len( service.result ?: "" ) ) {
+					variables.io.text( "    " & service.result )
+				}
+			}
+		}
+		var open = rows.filter( r => r.state == "available" )
+		if ( open.len() ) {
+			variables.io.text( "Type connect #open[ 1 ].id# to connect one, connect #open[ 1 ].id# tools to choose its tools." )
+		}
+	}
+
+	/**
+	 * @row One connector
+	 * @summary The tool counts
+	 *
+	 * @return One line
+	 */
+	private string function lineOf( required struct row, required struct summary ) {
+		var words = { available : "available", connected : "connected", needs_attention : "needs attention", needs_program : "needs " & arguments.row.program }
+		var how = arguments.row.transport == "stdio" ? "local program" : ( arguments.row.ways ?: [] ).map( w => w == "bearer" ? "token" : "sign in" ).toList( " or " )
+		var on = ( arguments.summary.byConnector ?: {} )[ arguments.row.id ] ?: nullValue()
+		var line = "#arguments.row.id#  #words[ arguments.row.state ] ?: arguments.row.state#  #how#  #arguments.row.risk# risk"
+		if ( !isNull( on ) ) {
+			line &= "  #on# tools on"
+		}
+		if ( arguments.row.state == "needs_attention" && len( arguments.row.reason ?: "" ) ) {
+			line &= "  (#arguments.row.reason#)"
+		}
+		return line
+	}
+
+	/**
+	 * @id The id typed
+	 *
+	 * @return The connector's row, or an empty struct
+	 */
+	private struct function rowOf( required string id ) {
+		if ( !variables.source.available() ) {
+			return {}
+		}
+		var all = variables.source.list()
+		if ( !all.ok ) {
+			return {}
+		}
+		variables.seen = all
+		var wanted = arguments.id
+		var match = all.connectors.filter( r => r.id == wanted )
+		return match.len() ? match[ 1 ] : {}
+	}
+
+	/**
+	 * @return The names of the services written in Agent.yaml
+	 */
+	private array function signInNames() {
+		return variables.signIns.list().map( s => s.name )
+	}
+
+	// ---- connect and disconnect ------------------------------------------------------
+
+	/**
+	 * @row The connector
+	 * @words What followed its id: key=value options, perhaps a way (token, signin)
+	 * @flags See run()
+	 */
+	private void function connect( required struct row, required array words, required struct flags ) {
+		var row = arguments.row
+		var ways = row.transport == "stdio" ? [ "program" ] : ( row.ways ?: [] ).map( w => w == "bearer" ? "token" : w )
+		var method = ways[ 1 ]
+		var asked = { id : row.id }
+		var given = {}
+		for ( var word in arguments.words ) {
+			if ( find( "=", word ) ) {
+				given[ listFirst( word, "=" ) ] = listRest( word, "=" )
+			} else if ( [ "token", "oauth", "signin" ].contains( lCase( word ) ) ) {
+				method = lCase( word ) == "signin" ? "oauth" : lCase( word )
+			}
+		}
+		if ( variables.io.isGateway() && gatewayRefuses( row, ways ) ) {
+			return
+		}
+		if ( variables.io.isGateway() && ways.contains( "oauth" ) ) {
+			// a chat platform cannot show a hidden box: the sign in link is what it can give
+			method = "oauth"
+		}
+		if ( !ways.contains( method ) ) {
+			variables.io.warn( "#row.name# can be connected with: #ways.map( w => w == 'oauth' ? 'signin' : w ).toList( ', ' )#." )
+			return
+		}
+		if ( ways.len() > 1 && !arguments.words.some( w => [ "token", "oauth", "signin" ].contains( lCase( w ) ) ) && variables.io.canAsk() ) {
+			var picked = variables.io.choose( "How do you want to connect #row.name#?", ways.map( w => { value : w, label : w == "oauth" ? "Sign in with #row.name#" : "Paste a token" } ) )
+			if ( isNull( picked ) ) {
+				return
+			}
+			method = picked
+		}
+		if ( [ "medium", "high" ].contains( row.risk ) ) {
+			variables.io.text( "#row.risk# risk: #row.riskNote#" )
+			if ( !( arguments.flags.confirm ?: false ) && !variables.io.confirm( "Connect #row.name#?" ) ) {
+				variables.io.warn( variables.io.canAsk() ? "Not connected." : ( variables.io.isGateway() ? "Not connected yet. Send /connect #row.id# --confirm to say you have read this and get your sign in link." : "Not connected: #row.name# can change things. Add --confirm to say you have read this." ) )
+				return
+			}
+		}
+		var options = method == "oauth" ? {} : askOptions( row, method, given )
+		if ( method == "token" ) {
+			var token = tokenFor( row, arguments.flags )
+			if ( isNull( token ) ) {
+				return
+			}
+			asked.token = token
+		}
+		asked.method = method
+		asked.options = options
+		asked.confirm = true
+		var done = variables.source.connect( asked )
+		// the token has done its work; nothing here keeps it
+		asked.token = ""
+		if ( !done.ok ) {
+			variables.io.warn( done.reason )
+		} else if ( len( done.authorizationUrl ?: "" ) ) {
+			variables.io.text( "Open this address and sign in to #row.name#:" )
+			variables.io.text( done.authorizationUrl )
+			if ( isClosure( variables.hooks.afterSignIn ?: "" ) ) {
+				variables.hooks.afterSignIn( row.id, done.authorizationUrl )
+			} else if ( variables.io.isGateway() ) {
+				variables.io.text( "This link is for you alone and works once, for ten minutes: do not share it. When you have signed in, send /connect to see that it worked." )
+			} else {
+				variables.io.text( "When you have signed in, type connect to see that it worked." )
+			}
+		} else {
+			variables.io.ok( ( method == "program" ? "Switched on #row.name#." : "Connected to #row.name#." ) & " Type connect #row.id# tools to choose what the agent may use." )
+		}
+	}
+
+	/**
+	 * What a chat platform cannot do, said once: a token is never typed in a chat, and a local program is for an admin at the web app or the terminal.
+	 *
+	 * @row The connector
+	 * @ways How it can be connected: token, oauth or program
+	 *
+	 * @return True when it said so and the connect stops there
+	 */
+	private boolean function gatewayRefuses( required struct row, required array ways ) {
+		if ( arguments.ways.contains( "program" ) ) {
+			variables.io.text( "#arguments.row.name# is a program that runs on the machine the agent runs on, so an admin switches it on or off, in the web app or at the terminal." )
+			return true
+		}
+		if ( arguments.ways.contains( "oauth" ) ) {
+			return false
+		}
+		var address = variables.source.webApp()
+		variables.io.text( "#arguments.row.name# needs your own token. A token is never typed in a chat: the chat platform keeps the message and the model provider receives it." )
+		if ( len( address ) ) {
+			variables.io.text( "Connect it in the web app, on the Connectors page: #address#" )
+			variables.io.text( "A token connected there belongs to your web account, not to your identity in this chat." )
+		} else {
+			variables.io.text( "Connect it with `bxAgents connect #arguments.row.id#` at the terminal, or ask an admin to set the public address of this agent (BXAGENTS_PUBLIC_URL) so the web app can be linked here." )
+		}
+		variables.io.text( "If a token was pasted here by mistake, delete the message and make a new token." )
+		return true
+	}
+
+	/**
+	 * The option values of a connector: those given as key=value, and a question for each of the others when a person can answer.
+	 *
+	 * @row The connector
+	 * @method token or program
+	 * @given key=value options typed
+	 *
+	 * @return { key : value }
+	 */
+	private struct function askOptions( required struct row, required string method, required struct given ) {
+		var wanted = arguments.method == "token" ? "bearer" : arguments.method
+		var out = {}
+		for ( var option in ( arguments.row.options ?: [] ) ) {
+			if ( len( option.onlyWith ?: "" ) && option.onlyWith != wanted ) {
+				continue
+			}
+			if ( arguments.given.keyExists( option.key ) ) {
+				out[ option.key ] = option.type == "boolean" ? ( arguments.given[ option.key ] == "true" ) : arguments.given[ option.key ]
+			} else if ( variables.io.canAsk() ) {
+				if ( option.type == "boolean" ) {
+					out[ option.key ] = variables.io.confirm( "#option.label#? #option.help ?: ''#" )
+				} else {
+					var typed = variables.io.ask( option.label, { help : option.help ?: "", default : option.value ?: "" } )
+					out[ option.key ] = isNull( typed ) ? ( option.value ?: "" ) : typed
+				}
+			}
+		}
+		return out
+	}
+
+	/**
+	 * The token, from the environment variable the person named, a pipe, or a hidden box. Never from the line they typed.
+	 *
+	 * @row The connector
+	 * @flags See run()
+	 *
+	 * @return The token, or null with the reason already said
+	 */
+	private any function tokenFor( required struct row, required struct flags ) {
+		if ( len( arguments.flags.tokenText ?: "" ) ) {
+			return arguments.flags.tokenText
+		}
+		if ( len( arguments.flags.tokenEnv ?: "" ) ) {
+			var held = getSystemSetting( arguments.flags.tokenEnv, "" )
+			if ( !len( held ) ) {
+				variables.io.warn( "The environment variable [#arguments.flags.tokenEnv#] is empty or not set." )
+				return nullValue()
+			}
+			return held
+		}
+		if ( !variables.io.canAsk() ) {
+			variables.io.warn( "A token is never typed in a command. Use the terminal chat or `bxAgents connect #arguments.row.id#` (a hidden box, or --token-env=NAME), or the connectors page of the web UI." )
+			return nullValue()
+		}
+		var typed = variables.io.askSecret( "Token for #arguments.row.name#", "Checked with #arguments.row.host# first, sealed in the vault as yours, never shown again. Esc to cancel." )
+		if ( isNull( typed ) || !len( typed ) ) {
+			variables.io.warn( "Not connected." )
+			return nullValue()
+		}
+		return typed
+	}
+
+	/**
+	 * @row The connector
+	 */
+	private void function disconnect( required struct row ) {
+		if ( arguments.row.transport == "stdio" && variables.io.isGateway() ) {
+			variables.io.text( "#arguments.row.name# is a program shared by everyone who uses the agent, so an admin switches it off, in the web app or at the terminal." )
+			return
+		}
+		var done = variables.source.disconnect( arguments.row.id )
+		if ( done.ok ) {
+			variables.io.ok( ( arguments.row.transport == "stdio" ? "Switched off " : "Disconnected from " ) & arguments.row.name & "." )
+		} else {
+			variables.io.warn( done.reason )
+		}
+	}
+
+	// ---- tools and options ----------------------------------------------------------
+
+	/**
+	 * @row The connector
+	 * @words What followed `tools`: nothing to list, or on|off NAME|all, or readonly
+	 */
+	private void function tools( required struct row, required array words ) {
+		var verb = arguments.words.len() ? lCase( arguments.words[ 1 ] ) : ""
+		var change = {}
+		if ( verb == "readonly" ) {
+			change = { readonly : true }
+		} else if ( [ "on", "off" ].contains( verb ) ) {
+			if ( arguments.words.len() < 2 ) {
+				variables.io.warn( "Say which: connect #arguments.row.id# tools #verb# NAME, or #verb# all." )
+				return
+			}
+			change = lCase( arguments.words[ 2 ] ) == "all" ? { all : verb == "on" } : { tool : arguments.words[ 2 ], on : verb == "on" }
+		} else if ( len( verb ) ) {
+			variables.io.warn( "Usage: connect #arguments.row.id# tools, tools off NAME, tools on NAME, tools off all, tools on all, tools readonly" )
+			return
+		}
+		var done = len( verb ) ? variables.source.setTools( arguments.row.id, change ) : variables.source.tools( arguments.row.id )
+		if ( !done.ok ) {
+			variables.io.warn( done.reason )
+			return
+		}
+		var listed = done.tools.sort( ( a, b ) => compareNoCase( a.name, b.name ) )
+		for ( var tool in listed ) {
+			var mark = tool.locked ? "[locked]" : ( tool.on ? "[x]" : "[ ]" )
+			variables.io.text( "#mark# #tool.name##tool.readOnly === true ? '  (reads only)' : ''##tool.locked ? '  (turned off by your admin)' : ''#" )
+		}
+		var on = listed.filter( t => t.on ).len()
+		variables.io.text( "#on# of #listed.len()# on for you." )
+		if ( ( done.summary ?: {} ).over ?: false ) {
+			variables.io.warn( "#done.summary.toolsOn# tools are on across everything. Models answer better with fewer than #done.summary.toolWarning#." )
+		}
+	}
+
+	/**
+	 * @row The connector
+	 * @words key=value pairs
+	 */
+	private void function options( required struct row, required array words ) {
+		var given = {}
+		for ( var word in arguments.words ) {
+			if ( find( "=", word ) ) {
+				given[ listFirst( word, "=" ) ] = listRest( word, "=" )
+			}
+		}
+		if ( !given.count() ) {
+			for ( var option in ( arguments.row.options ?: [] ) ) {
+				variables.io.text( "#option.key#=#option.value ?: ''#  #option.label#" )
+			}
+			variables.io.text( "Change one with connect #arguments.row.id# options key=value." )
+			return
+		}
+		var done = variables.source.setOptions( arguments.row.id, given )
+		if ( done.ok ) {
+			variables.io.ok( "Saved the options of #arguments.row.name#." )
+		} else {
+			variables.io.warn( done.reason )
+		}
+	}
+
+	// ---- the services written in Agent.yaml ----------------------------------------------
+
+	/**
+	 * @name The service's name
+	 * @words What followed: remove to forget the sign in
+	 */
+	private void function agentYaml( required string name, required array words ) {
+		if ( arguments.words.len() && [ "off", "remove", "disconnect" ].contains( lCase( arguments.words[ 1 ] ) ) ) {
+			var removed = variables.signIns.remove( arguments.name )
+			if ( removed.ok ) {
+				variables.io.ok( "Disconnected from #arguments.name#." )
+			} else {
+				variables.io.warn( removed.reason )
+			}
+			return
+		}
+		var started = variables.signIns.start( arguments.name )
+		if ( !started.ok ) {
+			variables.io.warn( started.reason )
+			return
+		}
+		variables.io.text( "Open this address and sign in to #arguments.name#:" )
+		variables.io.text( started.authorizationUrl )
+		if ( variables.io.isGateway() ) {
+			variables.io.text( "This link is for you alone and works once, for ten minutes: do not share it. When you have signed in, send /connect to see that it worked." )
+		} else {
+			variables.io.text( started.waits ?: false ? "This terminal is waiting for the browser to come back. Type connect to see that it worked." : "The server finishes the sign in when you come back. Type connect to see that it worked." )
+		}
+	}
+
+}

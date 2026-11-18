@@ -1,0 +1,300 @@
+/**
+ * One MCP client per person per connector: two people never share a token or an MCP session. Every call goes
+ * through bx-ai's own MCPTool and a real AiChatRequest, against a fake server that says which token and session
+ * each call used.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * Makes the tool an agent would hold for the fake server's one tool, built on the router.
+	 *
+	 * @router The PerPersonMcpClient
+	 *
+	 * @return An MCPTool
+	 */
+	private any function toolFor( required any router ) {
+		return new bxModules.bxai.models.tools.MCPTool( arguments.router, { name : "whoami", description : "", inputSchema : {} }, "fake" )
+	}
+
+	/**
+	 * @userId The person
+	 *
+	 * @return A real AiChatRequest that runs as them
+	 */
+	private any function requestFor( required string userId ) {
+		return new bxModules.bxai.models.requests.AiChatRequest( new bxModules.bxai.models.runnables.AiMessage(), {}, { userId : arguments.userId } )
+	}
+
+	/**
+	 * Calls the tool as a person and reads what the fake server said.
+	 *
+	 * @tool The MCPTool
+	 * @userId The person
+	 *
+	 * @return { text, token, session, openedBy }
+	 */
+	private struct function ask( required any tool, required string userId ) {
+		var text = arguments.tool.invoke( {}, requestFor( arguments.userId ) )
+		var said = { text : text, token : "", session : "", openedBy : "" }
+		// a call that worked comes back as the JSON of the MCP result; an error is plain text
+		var line = left( text, 1 ) == "{" ? jsonDeserialize( text ).content[ 1 ].text : text
+		for ( var part in listToArray( line, ";" ) ) {
+			var field = listFirst( part, "=" )
+			var value = listRest( part, "=" )
+			if ( field == "token" ) { said.token = value }
+			if ( field == "session" ) { said.session = value }
+			if ( field == "opened-by" ) { said.openedBy = value }
+		}
+		return said
+	}
+
+	/**
+	 * Starts one call on a pool of its own. The calls of a turn do not run on the runtime's common pool, and a call
+	 * that waits for another one to finish its first handshake must not use up the threads that handshake needs.
+	 *
+	 * @pool A Java executor
+	 * @userId The person
+	 *
+	 * @return A CompletableFuture of the call's result
+	 */
+	private any function startAsk( required any pool, required string userId ) {
+		var who = arguments.userId;
+		return createObject( "java", "java.util.concurrent.CompletableFuture" ).supplyAsync( () => ask( variables.tool, who ), arguments.pool );
+	}
+
+	/**
+	 * Starts one call on the runtime's common pool.
+	 *
+	 * @userId The person
+	 *
+	 * @return A BoxFuture of the call's result
+	 */
+	private any function startShared( required string userId ) {
+		var who = arguments.userId;
+		return futureNew( () => ask( variables.tool, who ) );
+	}
+
+	/**
+	 * The specs: isolation, the person with no connection, a new token, dropping, evicting, and the agent registration.
+	 */
+	function run() {
+		describe( "ConnectorClients", function() {
+
+			beforeEach( function() {
+				variables.fake = new tests.support.FakeBearerMcp().start();
+				variables.tokens = { ada : "tok-ada", grace : "tok-grace" };
+				variables.registry = new bxagents.models.connectors.ConnectorClients( ( connectorId, personId ) => tokens[ personId ] ?: "" );
+				variables.connector = { id : "fake", url : fake.mcpUrl(), prefix : "fake" };
+				variables.router = registry.router( connector );
+				variables.tool = toolFor( router );
+			} );
+
+			afterEach( function() {
+				registry.close();
+				fake.stop();
+			} );
+
+			it( "gives each person their own token and their own MCP session", function() {
+				var calls = [];
+				for ( var round = 1; round <= 3; round++ ) {
+					calls.append( ask( tool, "ada" ) );
+					calls.append( ask( tool, "grace" ) );
+				}
+				var ada = calls.filter( c => c.token == "tok-ada" );
+				var grace = calls.filter( c => c.token == "tok-grace" );
+
+				expect( ada ).toHaveLength( 3 );
+				expect( grace ).toHaveLength( 3 );
+				// the session a call rides on was opened by the same person's token
+				expect( ada.every( c => c.openedBy == "tok-ada" ) ).toBeTrue();
+				expect( grace.every( c => c.openedBy == "tok-grace" ) ).toBeTrue();
+				// a person keeps one session, and the two people do not share it
+				expect( ada.map( c => c.session ).toSet().size() ).toBe( 1 );
+				expect( grace.map( c => c.session ).toSet().size() ).toBe( 1 );
+				expect( ada[ 1 ].session ).notToBe( grace[ 1 ].session );
+				expect( fake.sessionsStarted() ).toBe( 2 );
+				expect( registry.size() ).toBe( 2 );
+			} );
+
+			it( "keeps them apart when both call at the same time, even on their very first call", function() {
+				var pool = createObject( "java", "java.util.concurrent.Executors" ).newFixedThreadPool( 8 );
+				var seen = [];
+				try {
+					var jobs = [];
+					for ( var at = 1; at <= 24; at++ ) {
+						jobs.append( startAsk( pool, at % 2 ? "ada" : "grace" ) );
+					}
+					seen = jobs.map( job => job.get( 30, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS ) );
+				} finally {
+					pool.shutdownNow();
+				}
+
+				for ( var at = 1; at <= 24; at++ ) {
+					var expected = at % 2 ? "tok-ada" : "tok-grace";
+					expect( seen[ at ].token ).toBe( expected );
+					expect( seen[ at ].openedBy ).toBe( expected );
+				}
+				// one session each, shared by that person's calls only
+				expect( fake.sessionsStarted() ).toBe( 2 );
+				expect( registry.size() ).toBe( 2 );
+				// nothing the server took from one person carried the other's token
+				for ( var taken in fake.requests() ) {
+					expect( [ "tok-ada", "tok-grace" ] ).toInclude( taken.token );
+				}
+			} );
+
+			it( "keeps them apart on the runtime's common pool once Connect has made their clients", function() {
+				// Connect makes the client, so the handshake and the check of the token happen then, not in the middle of a turn
+				registry.forPerson( connector, "ada" );
+				registry.forPerson( connector, "grace" );
+
+				var jobs = [];
+				for ( var at = 1; at <= 12; at++ ) {
+					jobs.append( startShared( at % 2 ? "ada" : "grace" ) );
+				}
+				var seen = asyncAll( jobs ).get( 30, "seconds" );
+
+				for ( var at = 1; at <= 12; at++ ) {
+					expect( seen[ at ].token ).toBe( at % 2 ? "tok-ada" : "tok-grace" );
+				}
+				expect( fake.sessionsStarted() ).toBe( 2 );
+			} );
+
+			it( "tells a person who has not connected, and sends nothing for them", function() {
+				ask( tool, "ada" );
+				var before = fake.requests().len();
+
+				var said = ask( tool, "linus" );
+
+				expect( said.text ).toInclude( "fake is not connected for this person" );
+				expect( fake.requests() ).toHaveLength( before );
+				expect( registry.size() ).toBe( 1 );
+			} );
+
+			it( "refuses a call that has no person behind it", function() {
+				var text = tool.invoke( {}, new bxModules.bxai.models.requests.AiChatRequest( new bxModules.bxai.models.runnables.AiMessage(), {}, {} ) );
+
+				expect( text ).toInclude( "No one is behind this call" );
+				expect( fake.requests() ).toBeEmpty();
+			} );
+
+			it( "tells the person to connect again when a service refuses their token, at the first call and later", function() {
+				var told = [];
+				var watched = new bxagents.models.connectors.ConnectorClients(
+					( connectorId, personId ) => tokens[ personId ] ?: "", 1800, { onRefused : ( id, person, reason ) => { told.append( id & ":" & person & ":" & reason ); } }
+				);
+				var watchedTool = toolFor( watched.router( connector ) );
+
+				// a token that worked, then was revoked: the next call is refused, the client is forgotten and the person is told
+				expect( ask( watchedTool, "ada" ).token ).toBe( "tok-ada" );
+				fake.refuse( "tok-ada" );
+				ask( watchedTool, "ada" );
+				expect( told ).toHaveLength( 1 );
+				expect( told[ 1 ] ).toInclude( "fake:ada:" );
+				expect( watched.size() ).toBe( 0 );
+
+				// a token that is refused from the start
+				variables.tokens.mallory = "tok-revoked";
+				fake.refuse( "tok-revoked" );
+				ask( watchedTool, "mallory" );
+				expect( told ).toHaveLength( 2 );
+				expect( told[ 2 ] ).toInclude( "fake:mallory:" );
+				watched.close();
+			} );
+
+			it( "does not keep a client for a token the server refuses, and tells the person to connect again", function() {
+				variables.tokens.mallory = "tok-revoked";
+				fake.refuse( "tok-revoked" );
+
+				expect( registry.forPerson( connector, "mallory" ) ).toBeNull();
+				expect( registry.size() ).toBe( 0 );
+				expect( ask( tool, "mallory" ).text ).toInclude( "is not connected for this person" );
+				expect( registry.size() ).toBe( 0 );
+			} );
+
+			it( "makes a new client with a new session when a person connects again with a new token", function() {
+				var first = ask( tool, "ada" );
+				variables.tokens.ada = "tok-ada-2";
+
+				var second = ask( tool, "ada" );
+
+				expect( first.token ).toBe( "tok-ada" );
+				expect( second.token ).toBe( "tok-ada-2" );
+				expect( second.openedBy ).toBe( "tok-ada-2" );
+				expect( second.session ).notToBe( first.session );
+				expect( registry.size() ).toBe( 1 );
+			} );
+
+			it( "forgets a person's client when they disconnect, and their credential stops working at once", function() {
+				ask( tool, "ada" );
+				ask( tool, "grace" );
+				expect( registry.size() ).toBe( 2 );
+
+				variables.tokens.delete( "ada" );
+				var said = ask( tool, "ada" );
+
+				expect( said.text ).toInclude( "is not connected for this person" );
+				expect( registry.size() ).toBe( 1 );
+				// the other person is untouched
+				expect( ask( tool, "grace" ).token ).toBe( "tok-grace" );
+			} );
+
+			it( "drops one person's client on request and makes a fresh one with a new session", function() {
+				var first = ask( tool, "ada" );
+				registry.drop( "fake", "ada" );
+				expect( registry.size() ).toBe( 0 );
+
+				var second = ask( tool, "ada" );
+
+				expect( second.token ).toBe( "tok-ada" );
+				expect( second.session ).notToBe( first.session );
+			} );
+
+			it( "forgets the clients nobody has used for the idle time", function() {
+				var idle = new bxagents.models.connectors.ConnectorClients( ( connectorId, personId ) => tokens[ personId ] ?: "", 0 );
+				var idleTool = toolFor( idle.router( connector ) );
+				ask( idleTool, "ada" );
+				ask( idleTool, "grace" );
+				sleep( 25 );
+
+				expect( idle.evictIdle() ).toBe( 2 );
+				expect( idle.size() ).toBe( 0 );
+				idle.close();
+			} );
+
+			it( "lists no tools and sends nothing until someone has connected, then lists them as the last person to connect", function() {
+				var none = router.listTools();
+
+				expect( none.isSuccess() ).toBeTrue();
+				expect( none.getData().tools ).toBeEmpty();
+				expect( fake.requests() ).toBeEmpty();
+
+				ask( tool, "grace" );
+				var listed = router.listTools();
+
+				expect( listed.getData().tools.map( t => t.name ) ).toBe( [ "whoami" ] );
+				expect( registry.lastConnected( "fake" ) ).toBe( "grace" );
+			} );
+
+			it( "registers once with withMCPServer and the one registered tool serves both people", function() {
+				ask( tool, "ada" );
+				var model = aiModel( "mock" ).withMCPServer( router, { prefix : "fake" } );
+
+				var servers = model.listMCPServers();
+				expect( servers ).toHaveLength( 1 );
+				expect( servers[ 1 ].toolNames ).toBe( [ "fake__whoami" ] );
+
+				var registered = model.getTools().filter( t => t.getName() == "fake__whoami" )[ 1 ];
+				var viaAda = registered.invoke( {}, requestFor( "ada" ) );
+				var viaGrace = registered.invoke( {}, requestFor( "grace" ) );
+
+				expect( viaAda ).toInclude( "token=tok-ada;" );
+				expect( viaGrace ).toInclude( "token=tok-grace;" );
+				// the runnable did not build the router, so closing its servers leaves the registry's clients alone
+				model.closeMCPServers();
+				expect( registry.size() ).toBe( 2 );
+			} );
+		} );
+	}
+
+}

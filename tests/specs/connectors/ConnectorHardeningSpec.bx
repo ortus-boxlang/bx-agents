@@ -1,0 +1,175 @@
+import bxagents.models.connectors.ConnectorSettings;
+import bxagents.models.connectors.ConnectorEndpoint;
+
+/**
+ * What must never happen with a token: it appears in no answer, no stored setting, no audit line and no file; it goes only
+ * to the host it was sealed for; a connector's option cannot send it elsewhere or turn one value into two; and one person's
+ * connection never reaches another's.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	variables.TOKEN = "ghp_LEAKCHECK0123456789abcdefABCDEF";
+
+	/**
+	 * @name A tool name
+	 *
+	 * @return A tool for the fake server
+	 */
+	private struct function tool( required string name ) {
+		return { name : arguments.name, description : "the #arguments.name# tool" };
+	}
+
+	/**
+	 * @return Everything in the chat database that could hold a token, as one text: the connector settings, the vault's rows and audit, the sign in records
+	 */
+	private string function everythingStored() {
+		var found = [];
+		for ( var table in [ "connector_settings", "vault_secrets", "vault_audit", "oauth_records", "preferences", "notes" ] ) {
+			found.append( jsonSerialize( store.rows( "SELECT * FROM #table#" ) ) );
+		}
+		return found.toList( " " );
+	}
+
+	/**
+	 * The specs.
+	 */
+	function run() {
+		describe( "connector hardening", function() {
+
+			beforeEach( function() {
+				new bxagents.models.connectors.ConnectorWiring().reset();
+				variables.fake = new tests.support.FakeBearerMcp().start().withTools( [ tool( "search_repositories" ), tool( "delete_file" ) ] );
+				variables.dir = createTempDirectory( prefix = "bxagents-hardening-" );
+				variables.dbFile = dir & "/chat.db";
+				variables.store = bxagents.models.store.ChatStore::forFile( dbFile );
+				var policy = ConnectorSettings::resolve( {} );
+				for ( var entry in policy.available ) {
+					if ( entry.id == "github" ) {
+						entry.url = fake.mcpUrl();
+					}
+				}
+				variables.agent = new tests.specs.api.FakeAgent();
+				variables.service = new bxagents.models.api.AgentService( agent, store, nullValue(), { connectors : policy } );
+				variables.ada = new bxagents.models.api.Caller( id = "ada", source = "web" );
+				variables.bob = new bxagents.models.api.Caller( id = "bob", source = "web" );
+			} );
+
+			afterEach( function() {
+				new bxagents.models.connectors.ConnectorWiring().reset();
+				fake.stop();
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "keeps a token out of every answer, every stored row, the audit and the database file", function() {
+				var seen = [];
+				seen.append( service.connectors( ada ).connect( { id : "github", method : "token", token : TOKEN, confirm : true } ) );
+				seen.append( service.connectors( ada ).all() );
+				seen.append( service.connectors( ada ).tools( "github" ) );
+				seen.append( service.connectors( ada ).setTools( "github", { tool : "delete_file", on : false } ) );
+				seen.append( service.connectors( ada ).options( "github", { toolsets : "issues" } ) );
+				seen.append( service.vault( ada ).all() );
+				seen.append( service.connectors( ada ).disconnect( "github" ) );
+
+				expect( seen.every( o => o.succeeded() ) ).toBeTrue();
+				expect( jsonSerialize( seen.map( o => o.data() ) ) ).notToInclude( TOKEN );
+				expect( everythingStored() ).notToInclude( TOKEN );
+				// sealed: the file itself holds no readable token either
+				expect( fileRead( dbFile, "ISO-8859-1" ) ).notToInclude( TOKEN );
+			} );
+
+			it( "keeps a token out of what a refusal says", function() {
+				fake.refuse( TOKEN );
+				var refused = service.connectors( ada ).connect( { id : "github", method : "token", token : TOKEN, confirm : true } );
+
+				expect( refused.succeeded() ).toBeFalse();
+				expect( refused.reason() ).notToInclude( TOKEN );
+				expect( everythingStored() ).notToInclude( TOKEN );
+			} );
+
+			it( "seals the token for the connector's host only", function() {
+				service.connectors( ada ).connect( { id : "github", method : "token", token : TOKEN, confirm : true } );
+				var vault = new bxagents.models.vault.VaultWiring().serviceFor( store );
+				var secrets = vault.list( "ada" ).filter( s => s.scope == "user" );
+
+				expect( secrets ).toHaveLength( 1 );
+				expect( secrets[ 1 ].hosts ).toBe( [ "127.0.0.1" ] );
+				expect( () => vault.resolve( secrets[ 1 ].name, { user : "ada", host : "evil.example.com", via : "spec" } ) ).toThrow();
+				expect( vault.resolve( secrets[ 1 ].name, { user : "ada", host : "127.0.0.1", via : "spec" } ) ).toBe( TOKEN );
+			} );
+
+			it( "does not let another person use, see or remove a token", function() {
+				service.connectors( ada ).connect( { id : "github", method : "token", token : TOKEN, confirm : true } );
+				var vault = new bxagents.models.vault.VaultWiring().serviceFor( store );
+
+				expect( service.connectors( bob ).all().data().connectors.filter( c => c.id == "github" )[ 1 ].state ).toBe( "available" );
+				expect( service.connectors( bob ).tools( "github" ).succeeded() ).toBeFalse();
+				// there is nothing of bob's to disconnect, and ada's stays
+				expect( service.connectors( bob ).disconnect( "github" ).succeeded() ).toBeFalse();
+				expect( service.connectors( ada ).all().data().connectors.filter( c => c.id == "github" )[ 1 ].state ).toBe( "connected" );
+				expect( () => vault.resolve( vault.list( "ada" )[ 1 ].name, { user : "bob", host : "127.0.0.1", via : "spec" } ) ).toThrow();
+			} );
+
+			it( "never lends a person the agent's own secret of the same name, and a disconnect leaves them without access", function() {
+				var vault = new bxagents.models.vault.VaultWiring().serviceFor( store );
+				// the developer put a shared token in the agent's vault, under the name the connector uses
+				vault.set( "GITHUB_PERSONAL_ACCESS_TOKEN", "ghp_SHAREDagent0123456789abcdefABCDEF", { scope : "agent" } );
+
+				// a person who has not connected is not connected, and the shared token is never offered to them
+				expect( service.connectors( bob ).all().data().connectors.filter( c => c.id == "github" )[ 1 ].state ).toBe( "available" );
+				expect( () => vault.resolve( "GITHUB_PERSONAL_ACCESS_TOKEN", { user : "bob", host : "127.0.0.1", via : "spec", ownOnly : true } ) ).toThrow();
+				expect( service.connectors( bob ).tools( "github" ).succeeded() ).toBeFalse();
+				expect( fake.requests() ).toBeEmpty();
+
+				// the run time path: the registry that the tools use finds no token for bob, so no client and no request
+				var github = ConnectorSettings::resolve( {} ).available.filter( c => c.id == "github" )[ 1 ];
+				github.url = fake.mcpUrl();
+				var stack = new bxagents.models.connectors.ConnectorWiring().stackOf( agent, ConnectorSettings::resolve( {} ), { store : store, vault : vault } );
+				expect( stack.clients.forPerson( stack.clients.endpointOf( github, "bob" ), "bob" ) ).toBeNull();
+				expect( fake.requests() ).toBeEmpty();
+
+				// connecting uses the person's own token, and disconnecting takes the access away again
+				service.connectors( ada ).connect( { id : "github", method : "token", token : TOKEN, confirm : true } );
+				expect( vault.resolve( "GITHUB_PERSONAL_ACCESS_TOKEN", { user : "ada", host : "127.0.0.1", via : "spec", ownOnly : true } ) ).toBe( TOKEN );
+				service.connectors( ada ).disconnect( "github" );
+				expect( () => vault.resolve( "GITHUB_PERSONAL_ACCESS_TOKEN", { user : "ada", host : "127.0.0.1", via : "spec", ownOnly : true } ) ).toThrow();
+				expect( service.connectors( ada ).tools( "github" ).succeeded() ).toBeFalse();
+			} );
+
+			it( "refuses an option value with a control character or, for a program, a leading dash", function() {
+				var broken = service.connectors( ada ).options( "github", { toolsets : "issues" & char( 13 ) & char( 10 ) & "X-Evil: 1" } );
+
+				expect( broken.succeeded() ).toBeFalse();
+				expect( broken.code() ).toBe( "bad_request" );
+				expect( service.connectors( ada ).options( "github", { toolsets : "bell" & char( 7 ) } ).succeeded() ).toBeFalse();
+
+				var admin = new bxagents.models.api.Caller( id = "ops", scope = "admin", source = "api" );
+				var flag = service.connectors( admin ).options( "git", { repository : "--upload-pack=touch /tmp/x" } );
+				expect( flag.succeeded() ).toBeFalse();
+				expect( flag.reason() ).toInclude( "cannot start with a dash" );
+			} );
+
+			it( "encodes what an option puts in the address, so it cannot change the host or add a header", function() {
+				var entry = {
+					id : "demo", url : "https://api.example.com/mcp", timeout : 0,
+					options : [
+						{ key : "a", type : "text", target : "path", name : "", onlyWith : "", default : "" },
+						{ key : "b", type : "text", target : "query", name : "project", onlyWith : "", default : "" },
+						{ key : "c", type : "text", target : "header", name : "X-Project", onlyWith : "", default : "" }
+					]
+				};
+				var made = ConnectorEndpoint::of( entry, { a : "../@evil.example.com/x", b : "1&token=stolen##frag", c : "plain" } );
+
+				expect( made.url ).toInclude( "https://api.example.com/mcp/" );
+				expect( made.url ).notToInclude( "@evil" );
+				expect( made.url ).notToInclude( "&token=" );
+				expect( made.url ).notToInclude( "##frag" );
+				expect( reMatch( "^https://api\.example\.com/", made.url ) ).toHaveLength( 1 );
+				expect( made.headers ).toBe( { "X-Project" : "plain" } );
+			} );
+
+		} );
+	}
+
+}

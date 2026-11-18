@@ -1,0 +1,329 @@
+/**
+ * The `connectors:` key of an agent: which connectors of the catalog the agent offers, and what an admin has changed.
+ *
+ *   connectors:                        # leave it out: every connector in the catalog is offered
+ *     only: [ github, notion ]         # just these
+ *     exclude: [ stripe ]              # everything except these
+ *     override:                        # change what remains
+ *       github:
+ *         timeout: 30000
+ *         options: { readonly: true }
+ *         tools: [ search_repositories ]
+ *   connectors: none                   # the catalog is off
+ *
+ * `toolWarning` (a number, 100 by default) is how many tools a person may have on across connectors before the page says it is
+ * too many for the model to choose well.
+ *
+ * Offering a connector does not connect it: nothing is attached to the agent until a person connects, so an agent that
+ * offers every connector still contacts none of them. It is evaluated in this order: `only`, then `exclude`, then `override`.
+ *
+ * An `mcpServers` entry with the same name as a connector replaces that connector: the developer configured their own,
+ * so the catalog entry is not offered (and the build warns).
+ */
+class {
+
+	static {
+		KEYS = [ "only", "exclude", "override", "toolWarning" ]
+		OVERRIDE_KEYS = [ "timeout", "options", "scopes", "tools" ]
+	}
+
+	/**
+	 * What is wrong with the `connectors` key, as sentences for the person who wrote it.
+	 *
+	 * @config The resolved config struct of the agent
+	 * @catalog A ConnectorCatalog. Left out: the one that ships
+	 *
+	 * @return [ message ] empty when the key is fine or absent
+	 */
+	static array function problems( required struct config, any catalog = "" ) {
+		var found = []
+		if ( !arguments.config.keyExists( "connectors" ) ) {
+			return found
+		}
+		var raw = arguments.config.connectors
+		var cat = isObject( arguments.catalog ) ? arguments.catalog : new "models.connectors.ConnectorCatalog@bxagents"()
+		var ids = cat.ids()
+
+		if ( isSimpleValue( raw ) ) {
+			if ( trim( toString( raw ) ).lcase() != "none" ) {
+				found.append( "connectors must be the word none or a mapping with only, exclude and override, not [#raw#]. Leave the key out to offer every connector" )
+			}
+			return found
+		}
+		if ( !isStruct( raw ) ) {
+			found.append( "connectors must be the word none or a mapping with only, exclude and override" )
+			return found
+		}
+		for ( var key in raw.keyArray() ) {
+			if ( !static.KEYS.findNoCase( key ) ) {
+				found.append( "connectors has an unknown key [#key#]. The keys are: #static.KEYS.toList( ', ' )#" )
+			}
+		}
+
+		if ( raw.keyExists( "toolWarning" ) && ( !isNumeric( raw.toolWarning ) || raw.toolWarning < 10 || raw.toolWarning > 2000 || raw.toolWarning != int( raw.toolWarning ) ) ) {
+			found.append( "connectors.toolWarning must be a whole number from 10 to 2000" )
+		}
+		var offered = ids
+		if ( raw.keyExists( "only" ) ) {
+			var onlyList = listOf( raw.only, "connectors.only", ids, found )
+			if ( isArray( raw.only ) && !raw.only.len() ) {
+				found.append( "connectors.only is empty, which would offer no connector. Write connectors: none if that is what you mean" )
+			}
+			offered = ids.filter( id => onlyList.findNoCase( id ) )
+		}
+		if ( raw.keyExists( "exclude" ) ) {
+			var excludeList = listOf( raw.exclude, "connectors.exclude", ids, found )
+			for ( var id in excludeList ) {
+				if ( ids.findNoCase( id ) && !offered.findNoCase( id ) ) {
+					found.append( "connectors.exclude names [#id#], which connectors.only does not offer, so there is nothing to exclude" )
+				}
+			}
+			offered = offered.filter( id => !excludeList.findNoCase( id ) )
+		}
+		if ( raw.keyExists( "override" ) ) {
+			if ( !isStruct( raw.override ) ) {
+				found.append( "connectors.override must be a mapping of connector id to the settings to change" )
+			} else {
+				for ( var id in raw.override.keyArray() ) {
+					overrideProblems( id, raw.override[ id ], offered, ids, cat, found )
+				}
+			}
+		}
+		return found
+	}
+
+	/**
+	 * The connectors the agent offers, with the overrides applied.
+	 *
+	 * @config The resolved config struct of the agent
+	 * @catalog A ConnectorCatalog. Left out: the one that ships
+	 *
+	 * @return { mode : all | only | exclude | none, toolWarning, available : [ connector ], excluded : [ id ], shadowed : [ id ] }
+	 */
+	static struct function resolve( required struct config, any catalog = "" ) {
+		var cat = isObject( arguments.catalog ) ? arguments.catalog : new "models.connectors.ConnectorCatalog@bxagents"()
+		var raw = arguments.config.connectors ?: nullValue()
+		var mode = "all"
+		var offered = cat.ids()
+		var overrides = {}
+
+		if ( !isNull( raw ) && isSimpleValue( raw ) ) {
+			mode = "none"
+			offered = []
+		} else if ( !isNull( raw ) && isStruct( raw ) ) {
+			if ( raw.keyExists( "only" ) && isArray( raw.only ) ) {
+				mode = "only"
+				var onlyList = raw.only.map( id => toString( id ) )
+				offered = offered.filter( id => onlyList.findNoCase( id ) )
+			}
+			if ( raw.keyExists( "exclude" ) && isArray( raw.exclude ) ) {
+				mode = mode == "only" ? "only" : "exclude"
+				var excludeList = raw.exclude.map( id => toString( id ) )
+				offered = offered.filter( id => !excludeList.findNoCase( id ) )
+			}
+			if ( raw.keyExists( "override" ) && isStruct( raw.override ) ) {
+				overrides = raw.override
+			}
+		}
+
+		// a project's own mcpServers entry of the same name replaces the catalog entry
+		var ownNames = ( arguments.config.mcpServers ?: [] ).filter( entry => isStruct( entry ) && len( entry.name ?: "" ) ).map( entry => toString( entry.name ) )
+		var shadowed = offered.filter( id => ownNames.findNoCase( id ) )
+		offered = offered.filter( id => !ownNames.findNoCase( id ) )
+
+		var available = offered.map( id => effective( cat.get( id ), overrides.keyExists( id ) && isStruct( overrides[ id ] ) ? overrides[ id ] : {} ) )
+		var warnAt = isStruct( raw ?: "" ) && isNumeric( raw.toolWarning ?: "" ) ? int( raw.toolWarning ) : 100
+		return {
+			mode        : mode,
+			toolWarning : warnAt,
+			available   : available,
+			excluded    : cat.ids().filter( id => !offered.findNoCase( id ) && !shadowed.findNoCase( id ) ),
+			shadowed    : shadowed
+		}
+	}
+
+	/**
+	 * One catalog entry with an admin's overrides applied.
+	 *
+	 * @entry The entry from the catalog
+	 * @changes The override of that connector, or an empty struct
+	 *
+	 * @return The entry, plus timeout, scopes, tools and overridden
+	 */
+	private static struct function effective( required struct entry, required struct changes ) {
+		var out = duplicate( arguments.entry )
+		var chosen = isStruct( arguments.changes.options ?: "" ) ? arguments.changes.options : {}
+		out.options = out.options.map( option => {
+			if ( chosen.keyExists( option.key ) ) {
+				option.default = chosen[ option.key ]
+			}
+			return option
+		} )
+		out.timeout = arguments.changes.timeout ?: 0
+		out.tools = isArray( arguments.changes.tools ?: "" ) ? arguments.changes.tools.map( name => toString( name ) ) : []
+		var scopes = isArray( arguments.changes.scopes ?: "" ) ? arguments.changes.scopes.map( scope => toString( scope ) ) : []
+		if ( isArray( arguments.changes.scopes ?: "" ) ) {
+			out.auth = out.auth.map( method => {
+				if ( method.type == "oauth" ) {
+					method.scopes = scopes
+				}
+				return method
+			} )
+		}
+		out.overridden = arguments.changes.count() > 0
+		return out
+	}
+
+	/**
+	 * Reads a list of ids from the key, and says what is wrong with it.
+	 *
+	 * @value What was written
+	 * @label The name of the key, for the message
+	 * @ids Every id in the catalog
+	 * @found Filled with what is wrong
+	 *
+	 * @return The ids that are in the catalog
+	 */
+	private static array function listOf( required any value, required string label, required array ids, required array found ) {
+		if ( !isArray( arguments.value ) ) {
+			arguments.found.append( "#arguments.label# must be a list of connector ids, such as [ github, notion ]" )
+			return []
+		}
+		var good = []
+		for ( var item in arguments.value ) {
+			var id = isSimpleValue( item ) ? toString( item ) : ""
+			if ( !len( id ) ) {
+				arguments.found.append( "#arguments.label# must hold connector ids, written as text" )
+			} else if ( arguments.ids.findNoCase( id ) ) {
+				good.append( id )
+			} else {
+				arguments.found.append( unknownId( arguments.label, id, arguments.ids ) )
+			}
+		}
+		return good
+	}
+
+	/**
+	 * @label The key that names it
+	 * @id What was written
+	 * @ids Every id in the catalog
+	 *
+	 * @return A sentence that says the id is not known and what it may have meant
+	 */
+	private static string function unknownId( required string label, required string id, required array ids ) {
+		var near = closest( arguments.id, arguments.ids )
+		return "#arguments.label# names [#arguments.id#], which is not in the catalog." & ( len( near ) ? " Did you mean [#near#]?" : "" ) & " The ids are: #arguments.ids.toList( ', ' )#"
+	}
+
+	/**
+	 * @id The connector id in the override
+	 * @settings What was written under it
+	 * @offered The ids the agent still offers
+	 * @ids Every id in the catalog
+	 * @cat The ConnectorCatalog
+	 * @found Filled with what is wrong
+	 */
+	private static void function overrideProblems( required string id, required any settings, required array offered, required array ids, required any cat, required array found ) {
+		var label = "connectors.override.#arguments.id#"
+		if ( !arguments.ids.findNoCase( arguments.id ) ) {
+			arguments.found.append( unknownId( "connectors.override", arguments.id, arguments.ids ) )
+			return
+		}
+		if ( !arguments.offered.findNoCase( arguments.id ) ) {
+			arguments.found.append( "connectors.override names [#arguments.id#], which this agent does not offer (it is left out by only or exclude), so there is nothing to override" )
+			return
+		}
+		if ( !isStruct( arguments.settings ) ) {
+			arguments.found.append( "#label# must be a mapping of the settings to change: #static.OVERRIDE_KEYS.toList( ', ' )#" )
+			return
+		}
+		var entry = arguments.cat.get( arguments.id )
+		for ( var key in arguments.settings.keyArray() ) {
+			if ( !static.OVERRIDE_KEYS.findNoCase( key ) ) {
+				arguments.found.append( "#label# has an unknown setting [#key#]. The settings are: #static.OVERRIDE_KEYS.toList( ', ' )#. A token or a secret is never set here: each person connects their own" )
+			}
+		}
+		if ( arguments.settings.keyExists( "timeout" ) ) {
+			var wait = arguments.settings.timeout
+			if ( !isNumeric( wait ) || wait < 1000 || wait > 600000 || wait != int( wait ) ) {
+				arguments.found.append( "#label#.timeout must be a whole number of milliseconds from 1000 to 600000" )
+			}
+		}
+		if ( arguments.settings.keyExists( "scopes" ) ) {
+			var hasOAuth = entry.auth.some( method => method.type == "oauth" )
+			if ( !hasOAuth ) {
+				arguments.found.append( "#label#.scopes does not apply: [#arguments.id#] has no sign in, only a token" )
+			} else if ( !isArray( arguments.settings.scopes ) || arguments.settings.scopes.some( scope => !isSimpleValue( scope ) || !len( toString( scope ) ) ) ) {
+				arguments.found.append( "#label#.scopes must be a list of scope names" )
+			}
+		}
+		if ( arguments.settings.keyExists( "tools" ) && ( !isArray( arguments.settings.tools ) || arguments.settings.tools.some( name => !isSimpleValue( name ) || !len( toString( name ) ) ) ) ) {
+			arguments.found.append( "#label#.tools must be a list of tool names" )
+		}
+		if ( arguments.settings.keyExists( "options" ) ) {
+			if ( !isStruct( arguments.settings.options ) ) {
+				arguments.found.append( "#label#.options must be a mapping of option name to value" )
+			} else {
+				for ( var key in arguments.settings.options.keyArray() ) {
+					var match = entry.options.filter( option => option.key == key )
+					if ( !match.len() ) {
+						var keys = entry.options.map( option => option.key )
+						arguments.found.append( "#label#.options names [#key#], which [#arguments.id#] does not have." & ( keys.len() ? " Its options are: #keys.toList( ', ' )#" : " It has no options" ) )
+					} else if ( match[ 1 ].type == "boolean" && !isBoolean( arguments.settings.options[ key ] ) ) {
+						arguments.found.append( "#label#.options.#key# must be true or false" )
+					} else if ( match[ 1 ].type == "text" && !isSimpleValue( arguments.settings.options[ key ] ) ) {
+						arguments.found.append( "#label#.options.#key# must be text" )
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * @word What was written
+	 * @ids The ids it may have meant
+	 *
+	 * @return The id that is closest to the word, or an empty string when none is close enough to guess
+	 */
+	private static string function closest( required string word, required array ids ) {
+		var best = ""
+		var bestScore = 999
+		for ( var id in arguments.ids ) {
+			var score = distance( arguments.word.lcase(), id.lcase() )
+			if ( score < bestScore ) {
+				bestScore = score
+				best = id
+			}
+		}
+		return bestScore <= max( 2, int( len( arguments.word ) / 3 ) ) ? best : ""
+	}
+
+	/**
+	 * The edit distance between two words: how many letters must change, be added or be removed to turn one into the other.
+	 *
+	 * @a One word
+	 * @b The other
+	 *
+	 * @return The distance
+	 */
+	private static numeric function distance( required string a, required string b ) {
+		var rows = len( arguments.a ) + 1
+		var cols = len( arguments.b ) + 1
+		var grid = []
+		for ( var row = 1; row <= rows; row++ ) {
+			grid[ row ] = []
+			for ( var col = 1; col <= cols; col++ ) {
+				if ( row == 1 ) {
+					grid[ row ][ col ] = col - 1
+				} else if ( col == 1 ) {
+					grid[ row ][ col ] = row - 1
+				} else {
+					var same = mid( arguments.a, row - 1, 1 ) == mid( arguments.b, col - 1, 1 ) ? 0 : 1
+					grid[ row ][ col ] = min( min( grid[ row - 1 ][ col ] + 1, grid[ row ][ col - 1 ] + 1 ), grid[ row - 1 ][ col - 1 ] + same )
+				}
+			}
+		}
+		return grid[ rows ][ cols ]
+	}
+
+}

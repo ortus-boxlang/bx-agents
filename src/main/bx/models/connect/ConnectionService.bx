@@ -183,6 +183,26 @@ class {
 	}
 
 	/**
+	 * The tools one server brings, as it lists them (name, description, annotations). Whose tokens list them is the person
+	 * who signed in first, as for the agent.
+	 *
+	 * @name The server's name
+	 *
+	 * @return [ { name, description, annotations } ]
+	 *
+	 * @throws BxAgents.UnknownConnection when no server has that name
+	 * @throws BxAgents.CouldNotReach when the server did not answer
+	 */
+	array function tools( required string name ) {
+		var answer = clientFor( arguments.name ).listTools()
+		if ( !answer.isSuccess() ) {
+			throw( type = "BxAgents.CouldNotReach", message = "Could not list the tools of [#arguments.name#]: #answer.getError()#" )
+		}
+		var data = answer.getData()
+		return isArray( data ) ? data : ( data.tools ?: [] )
+	}
+
+	/**
 	 * Forgets a person's tokens for one server.
 	 *
 	 * @name    The server's name

@@ -30,6 +30,7 @@ class {
 			{ name : "tools", title : "Tools", draw : lines => drawTools( r, lines ) },
 			{ name : "skills", title : "Skills", draw : lines => drawSkills( r, lines ) },
 			{ name : "mcp", title : "MCP", draw : lines => drawMcp( r, lines ) },
+			{ name : "connectors", title : "Connectors", draw : lines => drawConnectors( r, lines ) },
 			{ name : "gateways", title : "Exposed through", draw : lines => drawGateways( r, lines ) },
 			{ name : "schedule", title : "Schedule", draw : lines => drawSchedule( r, lines ) },
 			{ name : "ai", title : "Models", draw : lines => drawAi( r, lines ) },
@@ -131,6 +132,31 @@ class {
 			if ( node.skills.len() ) {
 				arguments.out.append( "- **#node.name#**: #node.skills.map( s => '`' & s & '`' ).toList( ', ' )#" )
 			}
+		}
+	}
+
+	/**
+	 * @r The report
+	 * @out The lines of the section
+	 */
+	private void function drawConnectors( required struct r, required array out ) {
+		var found = arguments.r.connectors
+		if ( !len( found.mode ) ) {
+			return
+		}
+		if ( found.mode == "none" ) {
+			arguments.out.append( "Off: `connectors` is `none`, so no connector is offered." )
+			return
+		}
+		var left = found.excluded.len() ? ", #found.excluded.len()# left out (#found.excluded.map( e => '`' & e & '`' ).toList( ', ' )#)" : ""
+		arguments.out.append( "#found.available.len()# connector#found.available.len() == 1 ? '' : 's'# offered#left#. Nothing is attached until a person connects one." )
+		arguments.out.append( "" )
+		for ( var c in found.available ) {
+			arguments.out.append( "- `#c.id#`: #c.ways#, #c.risk# risk#c.overridden ? ', overridden' : ''#" )
+		}
+		if ( found.shadowed.len() ) {
+			arguments.out.append( "" )
+			arguments.out.append( "Replaced by the project's own `mcpServers` entry: #found.shadowed.map( e => '`' & e & '`' ).toList( ', ' )#." )
 		}
 	}
 

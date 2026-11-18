@@ -191,6 +191,20 @@ class {
 			ApiContract::route( "/connect", "connections", "Connections", {
 				get : { summary : "The servers that ask people to sign in, and which the caller has connected. Never a token", returns : "json" },
 				post : { summary : "Starts a sign in for the caller and answers with the address to send them to", body : { name : "string" }, returns : "json" } } ),
+			ApiContract::route( "/connectors/connect", "connectConnector", "Connectors", { post : {
+				summary : "Connects one connector for the caller: a token (checked with the server, then sealed in the vault, never returned), a sign in (answers with the address to send them to) or a local program (an admin, when served). Medium and high risk connectors need confirm",
+				body : { id : "string", method : "string", token : "string?", options : "object?", confirm : "boolean?" }, returns : "json" } } ),
+			ApiContract::route( "/connectors/disconnect", "disconnectConnector", "Connectors", { post : {
+				summary : "Disconnects one connector for the caller. Their tool switches and options are kept", body : { id : "string" }, returns : "json" } } ),
+			ApiContract::route( "/connectors/options", "connectorOptions", "Connectors", { post : {
+				summary : "Changes the caller's option values for one connector", body : { id : "string", options : "object" }, returns : "json" } } ),
+			ApiContract::route( "/connectors/tools", "connectorTools", "Connectors", {
+				get : { summary : "The tools a connected connector brings and which the caller has on", query : { id : "string" }, returns : "json" },
+				post : {
+					summary : "Switches the caller's tools of one connector: one tool, all of them or only the ones that read",
+					body : { id : "string", tool : "string?", on : "boolean?", all : "boolean?", readonly : "boolean?" }, returns : "json" } } ),
+			ApiContract::route( "/connectors", "connectors", "Connectors", { get : {
+				summary : "The connectors the agent offers, the state of each for the caller, and how many tools the caller has on. Never a token", returns : "json" } } ),
 			ApiContract::route( "/notes/clear", "clearNotes", "Notes", { post : {
 				summary : "Removes every note of one scope and says how many: the caller's own (user) or the agent's (agent, which takes an admin)",
 				body : { scope : "string" }, returns : "json" } } ),

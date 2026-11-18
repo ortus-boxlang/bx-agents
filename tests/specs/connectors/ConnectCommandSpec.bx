@@ -1,0 +1,75 @@
+import bxagents.models.connectors.ConnectorSettings;
+
+/**
+ * The chat's /connect over a real conversation: it lists the connectors of the agent, and a token is never typed in the
+ * command line (and never on a chat platform), whatever the person writes.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * @transport tui, web or gateway
+	 * @args What is typed after /connect
+	 *
+	 * @return The reply blocks as text
+	 */
+	private string function typed( required string transport, required string args ) {
+		var context = new bxagents.models.chat.commands.CommandContext( conversation, arguments.transport, true );
+		var cmd = new bxagents.models.chat.commands.builtin.Connect( new bxagents.models.chat.commands.CommandRegistry() );
+		return jsonSerialize( cmd.run( context, arguments.args ).blocks() );
+	}
+
+	/**
+	 * The specs.
+	 */
+	function run() {
+		describe( "/connect", function() {
+
+			beforeEach( function() {
+				new bxagents.models.connectors.ConnectorWiring().reset();
+				variables.dir = createTempDirectory( prefix = "bxagents-connectcmd-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.agent = new tests.specs.api.FakeAgent();
+				new bxagents.models.connectors.ConnectorWiring().stackOf( agent, ConnectorSettings::resolve( {} ), { store : store, programExists : p => true } );
+				variables.conversation = new bxagents.models.chat.AgentConversation( agent, "ada" );
+			} );
+
+			afterEach( function() {
+				new bxagents.models.connectors.ConnectorWiring().reset();
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "lists the connectors of the agent for the person", function() {
+				var out = typed( "tui", "" );
+
+				expect( out ).toInclude( "github  available  token  high risk" );
+				expect( out ).toInclude( "Type connect " );
+			} );
+
+			it( "does not take a token typed after the command, and says where one goes", function() {
+				var out = typed( "web", "github --confirm" );
+
+				expect( out ).toInclude( "never typed in a command" );
+			} );
+
+			it( "does not read the server's environment for a person on a chat platform", function() {
+				var out = typed( "gateway", "github --confirm --token-env=HOME" );
+
+				expect( out ).toInclude( "never typed in a chat" );
+				expect( out ).notToInclude( "Connected to GitHub" );
+			} );
+
+			it( "says there is nothing to connect to when the agent offers no connector", function() {
+				new bxagents.models.connectors.ConnectorWiring().reset();
+				var bare = new bxagents.models.chat.AgentConversation( new tests.specs.api.FakeAgent(), "ada" );
+				var context = new bxagents.models.chat.commands.CommandContext( bare, "tui", true );
+				var cmd = new bxagents.models.chat.commands.builtin.Connect( new bxagents.models.chat.commands.CommandRegistry() );
+
+				expect( jsonSerialize( cmd.run( context, "" ).blocks() ) ).toInclude( "No connector is offered" );
+			} );
+
+		} );
+	}
+
+}

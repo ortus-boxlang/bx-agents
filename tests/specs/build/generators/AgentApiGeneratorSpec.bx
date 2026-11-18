@@ -36,12 +36,32 @@ class extends="testbox.system.BaseSpec" {
 					expect( source ).toInclude( "function #action#( event, rc, prc )" );
 				}
 				// every action starts by checking the token (a preHandler cannot stop the action)
-				expect( source.reMatch( "if \( refused\( event \) \)" ) ).toHaveLength( 62 );
+				expect( source.reMatch( "if \( refused\( event \) \)" ) ).toHaveLength( 67 );
 				expect( source ).notToInclude( "function preHandler(" );
 				// the work is the service's: the handler holds no copy of the turn, picture or conversation logic
 				expect( source ).toInclude( "models.api.AgentService@bxagents" );
 				expect( source ).notToInclude( "MessageBuilder@bxagents" );
 				expect( source ).notToInclude( "BoxRegisterInterceptor" );
+			} );
+
+			it( "stamps the connectors a person can connect to into the handler, and hands them to the service", function() {
+				var dir = newAppDir();
+				var source = fileRead( generator.generate( dir, {}, [], {
+					connectors : { mode : "only", available : [ { id : "notion", name : "Notion", risk : "medium" } ], excluded : [], shadowed : [] }
+				} ).path );
+
+				expect( source ).notToInclude( "__CONNECTORS__" );
+				expect( source ).toInclude( "connectors : jsonDeserialize(" );
+				expect( source ).toInclude( '""id"":""notion""' );
+			} );
+
+			it( "stamps an empty list when the agent offers no connector", function() {
+				var source = fileRead( generator.generate( newAppDir(), {} ).path );
+
+				expect( source ).notToInclude( "__CONNECTORS__" );
+				expect( source ).toInclude( 'connectors : jsonDeserialize( "{' );
+				expect( source ).toInclude( '""available"":[]' );
+				expect( source ).toInclude( '""mode"":""none""' );
 			} );
 
 			it( "stamps the agent's name, data home and volumes in, for the volume list and the data report", function() {

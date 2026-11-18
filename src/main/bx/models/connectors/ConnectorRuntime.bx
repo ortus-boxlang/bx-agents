@@ -1,0 +1,272 @@
+import bxModules.bxagents.models.connectors.ConnectorEndpoint;
+
+/**
+ * Attaches a connector to the running agent, once, when somebody connects it, and again after a restart for the ones that
+ * somebody had connected. Nothing is attached at start otherwise, so an agent that offers every connector contacts none of
+ * them.
+ *
+ * - a token connector gets the router (PerPersonMcpClient): one object, registered once, that sends every call to the client
+ *   of whoever is asking. Its tools are named `<id>__<tool>`;
+ * - a local program is started once, as the agent's own process, and shared. Its tools are named the same way;
+ * - a connector with a sign in is attached by the sign in side (`ConnectionService.refresh()`), which this asks.
+ *
+ * The agent gets the tools without a restart. Attaching twice does nothing.
+ */
+class {
+
+	/**
+	 * @agent The AiAgent (anything with withMCPServer() and listMCPServers())
+	 * @service The ConnectorService
+	 * @clients The ConnectorClients
+	 * @deps { settings : the ConnectorSettingsStore, vault : a VaultService, oauthRefresh : () => how many servers the sign in side added, oauthTools : ( id ) => the tool definitions of a sign in connector, programClient : ( entry, started ) => an MCP client for a local program }
+	 */
+	function init( required any agent, required any service, required any clients, struct deps = {} ) {
+		variables.agent = arguments.agent
+		variables.service = arguments.service
+		variables.clients = arguments.clients
+		variables.settings = arguments.deps.settings ?: ""
+		variables.vault = arguments.deps.vault ?: ""
+		variables.oauthRefresh = arguments.deps.oauthRefresh ?: ""
+		variables.oauthTools = arguments.deps.oauthTools ?: ""
+		variables.programClient = arguments.deps.programClient ?: ( ( entry, started ) => MCP( { command : started.command, env : ConnectorEndpoint::programEnvironment( hostEnvironment(), started.env ), inheritEnv : false } ) )
+		variables.programClients = {}
+		variables.done = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).newKeySet()
+		return this
+	}
+
+	/**
+	 * @return The ids of the connectors that are attached to the agent now
+	 */
+	array function attached() {
+		return variables.done.toArray().sort( "text" )
+	}
+
+	/**
+	 * Attaches a connector for the first time somebody has connected it.
+	 *
+	 * @id The connector
+	 * @person The person who connected it: their client lists the tools the agent gets
+	 *
+	 * @return True when it was attached by this call, false when it already was or could not be (a later connect tries again)
+	 */
+	boolean function attach( required string id, required string person ) {
+		if ( variables.done.contains( arguments.id ) ) {
+			return false
+		}
+		var entry = variables.service.entryOf( arguments.id )
+		var row = variables.service.get( arguments.id, arguments.person )
+		if ( !entry.count() || !len( row.connectedWith ?: "" ) ) {
+			return false
+		}
+		lock name = "bxagents-connector-attach-#arguments.id#" timeout = 60 type = "exclusive" {
+			if ( variables.done.contains( arguments.id ) ) {
+				return false
+			}
+			var added = false
+			if ( row.connectedWith == "token" ) {
+				added = attachToken( entry, arguments.person )
+			} else if ( row.connectedWith == "program" ) {
+				added = attachProgram( entry )
+			} else if ( !isSimpleValue( variables.oauthRefresh ) ) {
+				variables.oauthRefresh()
+				added = true
+			}
+			if ( added ) {
+				variables.done.add( arguments.id )
+			}
+			return added
+		}
+	}
+
+	/**
+	 * After a restart: attaches the connectors somebody had connected, using the person who connected last for the tool list.
+	 *
+	 * @return How many were attached
+	 */
+	numeric function restore() {
+		var count = 0
+		for ( var entry in variables.service.ids().map( id => variables.service.entryOf( id ) ) ) {
+			var person = lastConnector( entry )
+			if ( len( person ) && attach( entry.id, person ) ) {
+				count += 1
+			}
+		}
+		return count
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @entry The connector as offered
+	 * @person The person
+	 *
+	 * @return True when the agent now has the connector's tools
+	 */
+	private boolean function attachToken( required struct entry, required string person ) {
+		var base = { id : arguments.entry.id, url : arguments.entry.url }
+		// the client first, so the router has somebody to list the tools as
+		var made = variables.clients.forPerson( variables.clients.endpointOf( base, arguments.person ), arguments.person )
+		if ( isNull( made ) ) {
+			return false
+		}
+		var before = variables.agent.listMCPServers().len()
+		variables.agent.withMCPServer( variables.clients.router( base ), { prefix : arguments.entry.id } )
+		return variables.agent.listMCPServers().len() > before
+	}
+
+	/**
+	 * The program is started once, as the agent's own process, and its client is kept: the agent uses it for the calls and
+	 * the tools list reads the same client, so what the page shows is what the agent has.
+	 *
+	 * @entry The connector as offered
+	 *
+	 * @return True when the agent now has the program's tools
+	 */
+	private boolean function attachProgram( required struct entry ) {
+		var id = arguments.entry.id
+		var entry = arguments.entry
+		var proxy = new "models.connectors.ProgramClient@bxagents"( () => startProgram( entry ), "program:" & id )
+		var before = variables.agent.listMCPServers().len()
+		proxy.start( optionsOf( id ) )
+		variables.agent.withMCPServer( proxy, { prefix : id } )
+		if ( variables.agent.listMCPServers().len() > before ) {
+			variables.programClients[ id ] = proxy
+			return true
+		}
+		proxy.stop()
+		return false
+	}
+
+	/**
+	 * Makes a program connector match what an admin has set: stopped when it is switched off, restarted with the new values
+	 * when its options changed. Call it after anything that changes a program's switch or options. A connector that is not a
+	 * program, or was never started, is left alone.
+	 *
+	 * @id The connector
+	 *
+	 * @return True when a process was started or stopped by this call
+	 */
+	boolean function sync( required string id ) {
+		var entry = variables.service.entryOf( arguments.id )
+		if ( !entry.count() || entry.transport != "stdio" || !variables.programClients.keyExists( arguments.id ) || !isObject( variables.settings ) ) {
+			return false
+		}
+		var proxy = variables.programClients[ arguments.id ]
+		var on = variables.settings.get( "*", arguments.id, "enabled" ).on ?: false
+		if ( !on ) {
+			var wasRunning = proxy.running()
+			proxy.stop()
+			return wasRunning
+		}
+		if ( !proxy.running() || proxy.startedWith() != optionsOf( arguments.id ) ) {
+			proxy.start( optionsOf( arguments.id ) )
+			return true
+		}
+		return false
+	}
+
+	/**
+	 * @entry The connector
+	 *
+	 * @return A started client of the program, with the values an admin has set now
+	 */
+	private any function startProgram( required struct entry ) {
+		var started = ConnectorEndpoint::command( arguments.entry, variables.settings.get( "*", arguments.entry.id, "options" ) )
+		return variables.programClient( arguments.entry, started )
+	}
+
+	/**
+	 * @id The connector
+	 *
+	 * @return A text that changes when the admin's option values change
+	 */
+	private string function optionsOf( required string id ) {
+		return isObject( variables.settings ) ? hash( jsonSerialize( variables.settings.get( "*", arguments.id, "options" ) ), "SHA-256" ) : ""
+	}
+
+	/**
+	 * The tools a connector brings, as the server lists them (name, description, annotations), for the connectors that are
+	 * not reached with one person's token: a local program, and a sign in.
+	 *
+	 * @id The connector
+	 *
+	 * @return [ { name, description, annotations } ]
+	 *
+	 * @throws BxAgents.NotConnected when it is not attached
+	 */
+	array function toolsOf( required string id ) {
+		if ( variables.programClients.keyExists( arguments.id ) ) {
+			return listed( variables.programClients[ arguments.id ].listTools(), arguments.id )
+		}
+		// a local program is listed by the client that started it; only a sign in connector is listed through the sign in side
+		if ( !isSimpleValue( variables.oauthTools ) && variables.service.entryOf( arguments.id ).transport == "http" ) {
+			return variables.oauthTools( arguments.id )
+		}
+		throw( type = "BxAgents.NotConnected", message = "The tools of [#arguments.id#] are listed by the running agent, where the program is started. Open the chat or the connectors page of the web UI." )
+	}
+
+	/**
+	 * Closes what this started: the local programs.
+	 */
+	void function close() {
+		for ( var id in variables.programClients.keyArray() ) {
+			try {
+				variables.programClients[ id ].close()
+			} catch ( any e ) {
+				// already gone
+			}
+		}
+		variables.programClients = {}
+	}
+
+	/**
+	 * @answer What listTools() answered
+	 * @id The connector, for the message
+	 *
+	 * @return The tool definitions
+	 *
+	 * @throws BxAgents.CouldNotReach when the answer is not a success
+	 */
+	private array function listed( required any answer, required string id ) {
+		if ( !arguments.answer.isSuccess() ) {
+			throw( type = "BxAgents.CouldNotReach", message = "Could not list the tools of [#arguments.id#]: #arguments.answer.getError()#" )
+		}
+		var data = arguments.answer.getData()
+		return isArray( data ) ? data : ( data.tools ?: [] )
+	}
+
+	/**
+	 * @entry The connector as offered
+	 *
+	 * @return The person who connected it last, or an empty string when nobody has
+	 */
+	private string function lastConnector( required struct entry ) {
+		if ( arguments.entry.transport == "stdio" ) {
+			return isObject( variables.settings ) && ( variables.settings.get( "*", arguments.entry.id, "enabled" ).on ?: false ) ? ( variables.settings.get( "*", arguments.entry.id, "enabled" ).by ?: "" ) : ""
+		}
+		var methods = arguments.entry.auth.filter( m => m.type == "bearer" )
+		if ( !methods.len() || !isObject( variables.vault ) ) {
+			return ""
+		}
+		var secretName = methods[ 1 ].envVar
+		var mine = variables.vault.listAll().filter( s => s.scope == "user" && s.name == secretName )
+		if ( !mine.len() ) {
+			return ""
+		}
+		mine.sort( ( a, b ) => compare( toString( b.updatedAt ), toString( a.updatedAt ) ) )
+		return mine[ 1 ].owner
+	}
+
+	/**
+	 * @return The environment of the agent's own process, as { NAME : value }
+	 */
+	private struct function hostEnvironment() {
+		var out = {}
+		var env = createObject( "java", "java.lang.System" ).getenv()
+		for ( var name in env.keySet() ) {
+			out[ name ] = env.get( name )
+		}
+		return out
+	}
+
+}

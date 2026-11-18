@@ -1,0 +1,138 @@
+import bxModules.bxagents.models.api.Caller;
+import bxModules.bxagents.models.connectors.ConnectorEndpoint;
+import bxModules.bxagents.models.connectors.ConnectorSettings;
+
+/**
+ * `bxAgents connect` for the connectors of a project, without starting the agent: the same console as the chat's /connect
+ * over a stand-in agent. A connection is kept in the project's database and the agent picks it up when it starts. A sign in
+ * opens the browser, waits for it to come back on this terminal, and says whether it worked.
+ *
+ * The token is typed in a hidden box, piped in with --stdin, or read from the environment variable named by --token-env.
+ * It is never an argument.
+ */
+class {
+
+	/**
+	 * @options { projectRoot, _positionals, user, confirm, token-env (or tokenEnv), stdin, stdinText, timeout, json, noOpen; prompter and out replace the terminal for tests }
+	 * @config The project's resolved configuration
+	 * @subject The person
+	 * @wiring A VaultWiring pinned to the project's database
+	 * @yamlEntries The `mcpServers` entries that have an `oauth` key
+	 *
+	 * @return { exitCode, message }
+	 */
+	struct function run( required struct options, required struct config, required string subject, required any wiring, required array yamlEntries ) {
+		var policy = ConnectorSettings::resolve( arguments.config )
+		var words = ( arguments.options._positionals ?: [] ).map( w => toString( w ) )
+		var timeout = val( arguments.options.timeout ?: 300 )
+		var agent = new "models.connectors.NullAgent@bxagents"()
+		var wiringOfConnectors = new "models.connectors.ConnectorWiring@bxagents"()
+		var stack = wiringOfConnectors.stackOf( agent, policy, { store : arguments.wiring.storeFor(), vault : arguments.wiring.service() } )
+		try {
+			var cliStack = stack.copy()
+			cliStack.runtime = new "models.connectors.NoRuntime@bxagents"()
+			var connections = new "models.cli.chat.LocalConnections@bxagents"( ConnectorEndpoint::oauthEntries( policy.available ), arguments.wiring, arguments.subject, { seconds : timeout } )
+			var person = new Caller( id = arguments.subject, scope = "admin", source = "cli" )
+			var source = new "models.connectors.LocalConnectorSource@bxagents"( cliStack, person, false, new "models.connectors.LoopbackSignIn@bxagents"( connections ) )
+
+			if ( arguments.options.json ?: false ) {
+				var seen = source.list()
+				return { exitCode : seen.ok ? 0 : 1, message : jsonSerialize( seen.ok ? { user : arguments.subject, connectors : seen.connectors, summary : seen.summary, servers : yamlRows( arguments.yamlEntries, arguments.wiring, arguments.subject ) } : { error : seen.reason } ) }
+			}
+
+			var piped = arguments.options.stdin ?: false
+			var prompter = arguments.options.prompter ?: new "models.wizard.prompters.PrompterFactory@bxagents"().create( arguments.options, "connect" )
+			// a token from a pipe or a named variable is for a script: nothing else is asked, the options come as key=value
+			var tokenEnv = arguments.options[ "token-env" ] ?: arguments.options.tokenEnv ?: ""
+			var scripted = piped || len( tokenEnv ) > 0
+			var io = new "models.connectors.CliConsoleIo@bxagents"( prompter, !scripted, arguments.options.out ?: "" )
+			var signIns = arguments.yamlEntries.len() ? new "models.cli.chat.LocalConnections@bxagents"( arguments.yamlEntries, arguments.wiring, arguments.subject, {} ) : ""
+			var noOpen = arguments.options.noOpen ?: false
+			var hooks = { afterSignIn : ( id, address ) => waitForBrowser( connections, io, id, address, timeout, noOpen ) }
+			var console = new "models.connectors.ConnectorsConsole@bxagents"( source, io, signIns, hooks )
+
+			var flags = {}
+			if ( arguments.options.confirm ?: false ) {
+				flags.confirm = true
+			}
+			if ( len( tokenEnv ) ) {
+				flags.tokenEnv = tokenEnv
+			}
+			if ( piped ) {
+				flags.tokenText = readPipe( arguments.options )
+			} else if ( arguments.options.keyExists( "stdinText" ) ) {
+				flags.tokenText = trim( arguments.options.stdinText )
+			}
+			console.run( words, flags )
+			if ( !isSimpleValue( prompter ) ) {
+				prompter.close()
+			}
+			return { exitCode : io.failed() ? 1 : 0, message : "" }
+		} finally {
+			wiringOfConnectors.forget( agent )
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Opens the browser, then waits for the provider to send it back to this terminal and says how it went.
+	 *
+	 * @connections The LocalConnections that caught the redirect
+	 * @io The console's io
+	 * @id The connector
+	 * @address The sign in address
+	 * @timeout How long to wait, in seconds
+	 * @noOpen True to not open a browser
+	 */
+	private void function waitForBrowser( required any connections, required any io, required string id, required string address, required numeric timeout, required boolean noOpen ) {
+		if ( !arguments.noOpen ) {
+			new "models.connect.BrowserLauncher@bxagents"().open( arguments.address )
+		}
+		arguments.io.text( "Waiting for the browser to come back to this terminal (up to #arguments.timeout# seconds)..." )
+		var waited = 0
+		var wanted = arguments.id
+		while ( waited <= arguments.timeout ) {
+			var mine = arguments.connections.list().filter( r => r.name == wanted )
+			if ( mine.len() && len( mine[ 1 ].result ?: "" ) ) {
+				if ( left( mine[ 1 ].result, 13 ) == "Not connected" ) {
+					arguments.io.warn( mine[ 1 ].result )
+				} else {
+					arguments.io.ok( mine[ 1 ].result )
+				}
+				return
+			}
+			sleep( 1000 )
+			waited += 1
+		}
+		arguments.io.warn( "Nobody came back in time. Try again." )
+	}
+
+	/**
+	 * @options The options: stdinText for a test
+	 *
+	 * @return What was piped in, without the end of line
+	 */
+	private string function readPipe( required struct options ) {
+		if ( arguments.options.keyExists( "stdinText" ) ) {
+			return trim( arguments.options.stdinText )
+		}
+		var text = createObject( "java", "java.lang.String" ).init( createObject( "java", "java.lang.System" )[ "in" ].readAllBytes(), "UTF-8" )
+		return text.reReplace( "[\r\n]+$", "" )
+	}
+
+	/**
+	 * @entries The services written in Agent.yaml
+	 * @wiring A VaultWiring
+	 * @subject The person
+	 *
+	 * @return [ { name, url, connected, scope } ]
+	 */
+	private array function yamlRows( required array entries, required any wiring, required string subject ) {
+		if ( !arguments.entries.len() ) {
+			return []
+		}
+		return new "models.cli.chat.LocalConnections@bxagents"( arguments.entries, arguments.wiring, arguments.subject, {} ).list()
+	}
+
+}

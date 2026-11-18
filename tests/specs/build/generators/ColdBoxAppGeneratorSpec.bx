@@ -123,6 +123,42 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileRead( result.applicationBx ) ).toBe( fileRead( own ) );
 			} );
 
+			it( "writes the path of the web UI next to the connectors key, so a chat platform can say where to connect a token", function() {
+				var buildDir = newBuildDir();
+				var root = fixtures & "/gateways-webui";
+				var result = generator.generate(
+					projectRoot    = root,
+					buildDir       = buildDir,
+					resolvedConfig = resolver.resolve( projectRoot = root ),
+					discovery      = new bxagents.models.build.ProjectDiscoverer().discover( root )
+				);
+				var factory = fileRead( buildDir & "/agent/GeneratedAgentFactory.bx" );
+
+				expect( factory ).toInclude( "ConnectorWiring" );
+				expect( factory ).toInclude( "webPath" );
+				expect( factory ).toInclude( "/chat" );
+			} );
+
+			it( "writes only the names of the developer's own mcpServers next to the connectors key, so a connector of the same name stays out at run time", function() {
+				var buildDir = newBuildDir();
+				var root = fixtures & "/gateways-webui";
+				var config = resolver.resolve( projectRoot = root );
+				config.mcpServers = [ { name : "github", url : "https://example.test/mcp", token : "TOKEN-MUST-NOT-BE-WRITTEN" } ];
+				generator.generate(
+					projectRoot    = root,
+					buildDir       = buildDir,
+					resolvedConfig = config,
+					discovery      = new bxagents.models.build.ProjectDiscoverer().discover( root )
+				);
+				var factory = fileRead( buildDir & "/agent/GeneratedAgentFactory.bx" );
+				var attach = factory.listToArray( char( 10 ) ).filter( line => line.findNoCase( "ConnectorWiring" ) ).toList( char( 10 ) );
+
+				expect( attach ).toInclude( "mcpServers" );
+				expect( attach ).toInclude( "github" );
+				expect( attach ).notToInclude( "TOKEN-MUST-NOT-BE-WRITTEN" );
+				expect( attach ).notToInclude( "example.test" );
+			} );
+
 			it( "registers the schedulers through this.schedulers so they start and stop with the app", function() {
 				var buildDir = newBuildDir();
 				var result = generator.generate(
@@ -588,7 +624,8 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( '${env.GITHUB_PERSONAL_ACCESS_TOKEN}' );
 				expect( content ).toInclude( '${env.OTHER_API_KEY}' );
 				// the entry's label is for the file, not for bx-ai
-				expect( content ).notToInclude( '"github"' );
+				// (the connectors line names it on purpose, so a connector of that name stays out: that line is not the entry)
+				expect( content.listToArray( char( 10 ) ).filter( line => !line.findNoCase( "ConnectorWiring" ) ).toList( char( 10 ) ) ).notToInclude( '"github"' );
 			} );
 
 			it( "passes stdio mcpServers (command, env, prefix) and web controls through the resolver", function() {
@@ -603,7 +640,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'allowedHosts' );
 				expect( content ).toInclude( 'toolFilter' );
 				// the entry's label is for the file, not for bx-ai
-				expect( content ).notToInclude( '"name" : "git"' );
+				expect( content.listToArray( char( 10 ) ).filter( line => !line.findNoCase( "ConnectorWiring" ) ).toList( char( 10 ) ) ).notToInclude( '"name" : "git"' );
 			} );
 
 			it( "attaches the notes to an agent that declares them, and gives the app the shared database", function() {

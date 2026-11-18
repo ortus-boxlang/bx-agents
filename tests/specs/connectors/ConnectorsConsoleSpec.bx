@@ -1,0 +1,230 @@
+import bxagents.models.connectors.ConnectorSettings;
+
+/**
+ * What a person types about connectors, in every terminal: the list, connecting with a token in a hidden box, the risk
+ * confirm, switching tools, disconnecting. A token is never an argument and never appears in a line.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * @name A tool name
+	 * @readOnly Whether it only reads
+	 *
+	 * @return A tool for the fake server
+	 */
+	private struct function tool( required string name, required boolean readOnly ) {
+		return { name : arguments.name, description : "the #arguments.name# tool", annotations : { readOnlyHint : arguments.readOnly } };
+	}
+
+	/**
+	 * @answers What the person types, one reply per question
+	 * @asking False when nobody can be asked
+	 * @signIns The services written in Agent.yaml
+	 *
+	 * @return A console over the real connectors of one person
+	 */
+	private any function consoleFor( array answers = [], boolean asking = true, any signIns = "" ) {
+		variables.io = new tests.support.ScriptedIo( arguments.answers, arguments.asking );
+		var asker = new bxagents.models.api.Caller( id = "ada", scope = "admin", source = "terminal" );
+		var source = new bxagents.models.connectors.LocalConnectorSource( stack, asker, false );
+		return new bxagents.models.connectors.ConnectorsConsole( source, io, arguments.signIns );
+	}
+
+	/**
+	 * The specs.
+	 */
+	function run() {
+		describe( "ConnectorsConsole", function() {
+
+			beforeEach( function() {
+				new bxagents.models.connectors.ConnectorWiring().reset();
+				variables.fake = new tests.support.FakeBearerMcp().start().withTools( [ tool( "search_repositories", true ), tool( "delete_file", false ), tool( "create_issue", false ) ] );
+				variables.dir = createTempDirectory( prefix = "bxagents-console-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				var policy = ConnectorSettings::resolve( {} );
+				for ( var entry in policy.available ) {
+					if ( entry.id == "github" ) {
+						entry.url = fake.mcpUrl();
+					}
+				}
+				variables.agent = new tests.specs.api.FakeAgent();
+				variables.stack = new bxagents.models.connectors.ConnectorWiring().stackOf( agent, policy, { store : store, programExists : p => true } );
+			} );
+
+			afterEach( function() {
+				new bxagents.models.connectors.ConnectorWiring().reset();
+				fake.stop();
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "lists every connector with its state and says how to connect one", function() {
+				consoleFor().run( [] );
+
+				expect( io.everything() ).toInclude( "github  available  token  high risk" );
+				expect( io.everything() ).toInclude( "git  available  local program" );
+				expect( io.everything() ).toInclude( "Type connect " );
+			} );
+
+			it( "connects with a token typed in a hidden box, after the risk and a yes, and never prints the token", function() {
+				// the risk, then the two options of GitHub (toolsets, read only), then the token
+				consoleFor( [ { yes : true }, { text : "" }, { yes : false }, { secret : "tok-ada-private" } ] ).run( [ "github" ] );
+
+				expect( io.everything() ).toInclude( "high risk" );
+				expect( io.everything() ).toInclude( "Connected to GitHub." );
+				expect( io.everything() ).notToInclude( "tok-ada-private" );
+				expect( io.questions().filter( q => q contains "Token" ) ).toHaveLength( 1 );
+				expect( fake.requests().map( r => r.token ).toSet().toArray() ).toBe( [ "tok-ada-private" ] );
+				consoleFor().run( [] );
+				expect( io.everything() ).toInclude( "github  connected" );
+			} );
+
+			it( "connects nothing when the person does not say yes to the risk", function() {
+				consoleFor( [ { yes : false } ] ).run( [ "github" ] );
+
+				expect( io.written().filter( l => l.kind == "warn" ).len() ).toBeGTE( 1 );
+				expect( io.questions().filter( q => q contains "Token" ) ).toBeEmpty();
+				expect( fake.requests() ).toBeEmpty();
+			} );
+
+			it( "takes a token from a pipe or a named variable, never from the line typed", function() {
+				consoleFor( [], false ).run( [ "github" ], { confirm : true, tokenText : "tok-piped" } );
+
+				expect( io.everything() ).toInclude( "Connected to GitHub." );
+				expect( io.everything() ).notToInclude( "tok-piped" );
+			} );
+
+			it( "says a token is not typed in a command where nobody can be asked, and keeps nothing", function() {
+				consoleFor( [], false ).run( [ "github" ], { confirm : true } );
+
+				expect( io.everything() ).toInclude( "never typed in a command" );
+				expect( fake.requests() ).toBeEmpty();
+			} );
+
+			it( "lists the tools by name and switches one off, all off, and read only", function() {
+				consoleFor( [], false ).run( [ "github" ], { confirm : true, tokenText : "tok-ada" } );
+
+				consoleFor().run( [ "github", "tools" ] );
+				var listed = io.written().filter( l => left( l.text, 1 ) == "[" ).map( l => listToArray( l.text, " " )[ 2 ] );
+				expect( listed ).toBe( [ "create_issue", "delete_file", "search_repositories" ] );
+				expect( io.everything() ).toInclude( "3 of 3 on for you." );
+
+				consoleFor().run( [ "github", "tools", "off", "delete_file" ] );
+				expect( io.everything() ).toInclude( "[ ] delete_file" );
+				expect( io.everything() ).toInclude( "2 of 3 on for you." );
+
+				consoleFor().run( [ "github", "tools", "readonly" ] );
+				expect( io.everything() ).toInclude( "1 of 3 on for you." );
+
+				consoleFor().run( [ "github", "tools", "on", "all" ] );
+				expect( io.everything() ).toInclude( "3 of 3 on for you." );
+			} );
+
+			it( "disconnects", function() {
+				consoleFor( [], false ).run( [ "github" ], { confirm : true, tokenText : "tok-ada" } );
+				consoleFor().run( [ "github", "off" ] );
+
+				expect( io.everything() ).toInclude( "Disconnected from GitHub." );
+				consoleFor().run( [] );
+				expect( io.everything() ).toInclude( "github  available" );
+			} );
+
+			it( "says which names there are for one that does not exist", function() {
+				consoleFor().run( [ "nope" ] );
+
+				expect( io.written()[ 1 ].kind ).toBe( "warn" );
+				expect( io.everything() ).toInclude( "nope" );
+			} );
+
+			describe( "on a chat platform", function() {
+
+				/**
+				 * @address The web app address the source knows
+				 *
+				 * @return A console over a source with a token connector, a sign in connector and a program
+				 */
+				function gatewayConsole( string address = "" ) {
+					variables.io = new tests.support.ScriptedIo( [], false, true );
+					var rows = [
+						{ id : "github", name : "GitHub", transport : "http", ways : [ "bearer" ], risk : "high", riskNote : "It can change things.", host : "api.github.com", state : "available", program : "", options : [], reason : "" },
+						{ id : "atlassian", name : "Atlassian", transport : "http", ways : [ "oauth", "bearer" ], risk : "medium", riskNote : "It can change work items.", host : "mcp.atlassian.com", state : "available", program : "", options : [], reason : "" },
+						{ id : "git", name : "Git", transport : "stdio", ways : [ "none" ], risk : "medium", riskNote : "It can change repositories.", host : "", state : "connected", program : "uvx", options : [], reason : "" }
+					];
+					var sent = [];
+					variables.sent = sent;
+					var source = {
+						available : () => true,
+						why : () => "nothing",
+						webApp : () => address,
+						list : () => { return { ok : true, connectors : rows, summary : {} }; },
+						connect : asked => { sent.append( asked ); return { ok : true, connected : false, authorizationUrl : "https://auth.example.com/authorize?state=abc", row : {} }; },
+						disconnect : id => { sent.append( { disconnect : id } ); return { ok : true }; }
+					};
+					return new bxagents.models.connectors.ConnectorsConsole( source, io );
+				}
+
+				it( "sends a person who wants a token connector to the web app, and never asks for the token", function() {
+					gatewayConsole( "https://agent.example.com/chat" ).run( [ "github" ], { confirm : true } );
+
+					expect( io.everything() ).toInclude( "A token is never typed in a chat" );
+					expect( io.everything() ).toInclude( "https://agent.example.com/chat" );
+					expect( io.everything() ).toInclude( "belongs to your web account" );
+					expect( io.everything() ).toInclude( "delete the message" );
+					expect( io.questions() ).toBeEmpty();
+					expect( sent ).toBeEmpty();
+				} );
+
+				it( "says to ask an admin for the public address when the agent has none", function() {
+					gatewayConsole( "" ).run( [ "github" ] );
+
+					expect( io.everything() ).toInclude( "BXAGENTS_PUBLIC_URL" );
+					expect( io.everything() ).toInclude( "bxAgents connect github" );
+				} );
+
+				it( "gives a sign in link that is theirs alone, after they say they have read the risk", function() {
+					gatewayConsole( "https://agent.example.com/chat" ).run( [ "atlassian" ] );
+
+					expect( io.everything() ).toInclude( "Send /connect atlassian --confirm" );
+					expect( sent ).toBeEmpty();
+
+					gatewayConsole( "https://agent.example.com/chat" ).run( [ "atlassian" ], { confirm : true } );
+
+					expect( sent[ 1 ].method ).toBe( "oauth" );
+					expect( io.everything() ).toInclude( "https://auth.example.com/authorize?state=abc" );
+					expect( io.everything() ).toInclude( "for you alone" );
+					expect( io.everything() ).toInclude( "do not share it" );
+				} );
+
+				it( "leaves a local program to an admin at the web app or the terminal", function() {
+					gatewayConsole().run( [ "git" ], { confirm : true } );
+					expect( io.everything() ).toInclude( "an admin switches it on or off" );
+
+					gatewayConsole().run( [ "git", "off" ] );
+					expect( io.everything() ).toInclude( "an admin switches it off" );
+					expect( sent ).toBeEmpty();
+				} );
+
+			} );
+
+			it( "connects a service written in Agent.yaml by its name", function() {
+				var started = [];
+				var yaml = {
+					available : () => true,
+					list : () => [ { name : "mail", url : "https://mail.example.com/mcp", connected : false, scope : "" } ],
+					start : name => { started.append( name ); return { ok : true, authorizationUrl : "https://mail.example.com/authorize", waits : false }; },
+					remove : name => { return { ok : true }; }
+				};
+				consoleFor( [], true, yaml ).run( [ "mail" ] );
+
+				expect( started ).toBe( [ "mail" ] );
+				expect( io.everything() ).toInclude( "https://mail.example.com/authorize" );
+				consoleFor( [], true, yaml ).run( [] );
+				expect( io.everything() ).toInclude( "In Agent.yaml:" );
+				expect( io.everything() ).toInclude( "mail  not connected" );
+			} );
+
+		} );
+	}
+
+}

@@ -1,0 +1,65 @@
+/**
+ * The connectors of a server, for a terminal chat that talks to it: the same routes the web page uses, and the same plain
+ * answers as the local source.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * The specs.
+	 */
+	function run() {
+		describe( "RemoteConnectorSource", function() {
+
+			beforeEach( function() {
+				variables.calls = [];
+				variables.reply = {};
+				variables.agentClient = {
+					getJson : ( base, route, query, timeout ) => { calls.append( { verb : "GET", route : route, query : query ?: {} } ); return reply[ route ] ?: { success : false, error : "no such route" }; },
+					postJson : ( base, route, body, timeout ) => { calls.append( { verb : "POST", route : route, body : body } ); return reply[ route ] ?: { success : false, error : "no such route" }; }
+				};
+				variables.source = new bxagents.models.connectors.RemoteConnectorSource( "http://127.0.0.1:9", agentClient );
+			} );
+
+			it( "is available when the server lists at least one connector, and not when it has none or is too old", function() {
+				reply[ "connectors" ] = { success : true, connectors : [ { id : "github" } ], summary : {} };
+				expect( source.available() ).toBeTrue();
+
+				reply[ "connectors" ] = { success : true, connectors : [] };
+				expect( source.available() ).toBeFalse();
+
+				reply.delete( "connectors" );
+				expect( source.available() ).toBeFalse();
+			} );
+
+			it( "asks the routes of the web page and answers plain structs", function() {
+				reply[ "connectors/connect" ] = { success : true, connected : true, row : { id : "github" } };
+				reply[ "connectors/tools" ] = { success : true, tools : [], summary : {} };
+				reply[ "connectors/disconnect" ] = { success : true, connected : false };
+
+				var made = source.connect( { id : "github", method : "token", token : "tok", confirm : true } );
+				expect( made.ok ).toBeTrue();
+				expect( made.connected ).toBeTrue();
+				expect( calls[ 1 ].route ).toBe( "connectors/connect" );
+
+				source.tools( "github" );
+				expect( calls[ 2 ].query.id ).toBe( "github" );
+
+				source.setTools( "github", { tool : "delete_file", on : false } );
+				expect( calls[ 3 ].body ).toBe( { id : "github", tool : "delete_file", on : false } );
+
+				expect( source.disconnect( "github" ).ok ).toBeTrue();
+			} );
+
+			it( "says why the server refused", function() {
+				reply[ "connectors/connect" ] = { success : false, error : "GitHub refused this token." };
+
+				var made = source.connect( { id : "github", method : "token", token : "tok", confirm : true } );
+
+				expect( made.ok ).toBeFalse();
+				expect( made.reason ).toBe( "GitHub refused this token." );
+			} );
+
+		} );
+	}
+
+}

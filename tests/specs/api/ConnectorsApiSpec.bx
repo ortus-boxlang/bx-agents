@@ -1,0 +1,136 @@
+import bxagents.models.connectors.ConnectorSettings;
+
+/**
+ * The connectors as a client sees them through the Agent API: the list with each person's state, connecting with a token
+ * (checked, sealed, never returned), the risk confirmation, disconnecting, options, tool switches and the errors.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * @name A tool name
+	 *
+	 * @return A tool for the fake server
+	 */
+	private struct function tool( required string name ) {
+		return { name : arguments.name, description : "the #arguments.name# tool" };
+	}
+
+	/**
+	 * The connectors through the Agent API.
+	 */
+	function run() {
+		describe( "api.Connectors", function() {
+
+			beforeEach( function() {
+				new bxagents.models.connectors.ConnectorWiring().reset();
+				variables.fake = new tests.support.FakeBearerMcp().start().withTools( [ tool( "search_repositories" ), tool( "delete_file" ) ] );
+				variables.dir = createTempDirectory( prefix = "bxagents-connectorsapi-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				var policy = ConnectorSettings::resolve( {} );
+				for ( var entry in policy.available ) {
+					if ( entry.id == "github" ) {
+						entry.url = fake.mcpUrl();
+					}
+				}
+				variables.agent = new FakeAgent();
+				variables.service = new bxagents.models.api.AgentService( agent, store, nullValue(), { connectors : policy } );
+				variables.ada = new bxagents.models.api.Caller( id = "ada", source = "web" );
+				variables.bob = new bxagents.models.api.Caller( id = "bob", source = "web" );
+			} );
+
+			afterEach( function() {
+				new bxagents.models.connectors.ConnectorWiring().reset();
+				fake.stop();
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "lists every connector the agent offers, available for a person who has connected none", function() {
+				var all = service.connectors( ada ).all();
+
+				expect( all.succeeded() ).toBeTrue();
+				expect( all.data().user ).toBe( "ada" );
+				expect( all.data().connectors ).toHaveLength( 7 );
+				expect( all.data().connectors.filter( c => c.id == "github" )[ 1 ].state ).toBe( "available" );
+				expect( all.data().policy.toolWarning ).toBe( 100 );
+				expect( service.hasConnectors() ).toBeTrue();
+			} );
+
+			it( "connects with a token, checks it first, and never returns it", function() {
+				var done = service.connectors( ada ).connect( { id : "github", method : "token", token : "tok-ada-private", confirm : true } );
+
+				expect( done.succeeded() ).toBeTrue();
+				expect( done.data().connected ).toBeTrue();
+				expect( done.data().row.state ).toBe( "connected" );
+				expect( fake.requests().map( r => r.token ).toSet().toArray() ).toBe( [ "tok-ada-private" ] );
+				expect( jsonSerialize( done.data() ) ).notToInclude( "tok-ada-private" );
+				expect( jsonSerialize( service.connectors( ada ).all().data() ) ).notToInclude( "tok-ada-private" );
+			} );
+
+			it( "connects one person and leaves another available", function() {
+				service.connectors( ada ).connect( { id : "github", method : "token", token : "tok-ada", confirm : true } );
+
+				expect( service.connectors( ada ).all().data().connectors.filter( c => c.id == "github" )[ 1 ].state ).toBe( "connected" );
+				expect( service.connectors( bob ).all().data().connectors.filter( c => c.id == "github" )[ 1 ].state ).toBe( "available" );
+			} );
+
+			it( "asks for confirmation of a connector that can change things, and says what it can do", function() {
+				var refused = service.connectors( ada ).connect( { id : "github", method : "token", token : "tok-ada" } );
+
+				expect( refused.succeeded() ).toBeFalse();
+				expect( refused.code() ).toBe( "bad_request" );
+				expect( refused.reason() ).toInclude( "confirm" );
+				expect( fake.requests() ).toBeEmpty();
+			} );
+
+			it( "stores nothing when the server refuses the token", function() {
+				fake.refuse( "tok-bad" );
+				var refused = service.connectors( ada ).connect( { id : "github", method : "token", token : "tok-bad", confirm : true } );
+
+				expect( refused.code() ).toBe( "bad_request" );
+				expect( service.connectors( ada ).all().data().connectors.filter( c => c.id == "github" )[ 1 ].state ).toBe( "available" );
+			} );
+
+			it( "answers not_found for a connector nobody offers", function() {
+				expect( service.connectors( ada ).connect( { id : "nope", method : "token", token : "x" } ).code() ).toBe( "not_found" );
+				expect( service.connectors( ada ).disconnect( "nope" ).code() ).toBe( "not_found" );
+			} );
+
+			it( "lists the tools of a connected connector and switches one off for that person only", function() {
+				service.connectors( ada ).connect( { id : "github", method : "token", token : "tok-ada", confirm : true } );
+				service.connectors( bob ).connect( { id : "github", method : "token", token : "tok-bob", confirm : true } );
+
+				var listed = service.connectors( ada ).tools( "github" );
+				expect( listed.data().tools.map( t => t.name ) ).toBe( [ "delete_file", "search_repositories" ] );
+
+				var after = service.connectors( ada ).setTools( "github", { tool : "delete_file", on : false } );
+				expect( after.data().tools.filter( t => t.name == "delete_file" )[ 1 ].on ).toBeFalse();
+				expect( service.connectors( bob ).tools( "github" ).data().tools.every( t => t.on ) ).toBeTrue();
+			} );
+
+			it( "says to connect first when the tools of an unconnected connector are asked for", function() {
+				expect( service.connectors( ada ).tools( "github" ).code() ).toBe( "bad_request" );
+			} );
+
+			it( "disconnects and keeps the tool switches", function() {
+				service.connectors( ada ).connect( { id : "github", method : "token", token : "tok-ada", confirm : true } );
+				service.connectors( ada ).setTools( "github", { tool : "delete_file", on : false } );
+
+				var gone = service.connectors( ada ).disconnect( "github" );
+				expect( gone.data().connected ).toBeFalse();
+				expect( gone.data().row.state ).toBe( "available" );
+				expect( gone.data().row.tools.off ).toBe( [ "delete_file" ] );
+			} );
+
+			it( "attaches a connector to the agent once, however many people connect it", function() {
+				service.connectors( ada ).connect( { id : "github", method : "token", token : "tok-ada", confirm : true } );
+				service.connectors( bob ).connect( { id : "github", method : "token", token : "tok-bob", confirm : true } );
+
+				expect( new bxagents.models.connectors.ConnectorWiring().stackOf( variables.agent, {} ).runtime.attached() ).toBe( [ "github" ] );
+			} );
+
+		} );
+	}
+
+}

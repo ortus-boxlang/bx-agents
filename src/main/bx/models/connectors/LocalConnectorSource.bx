@@ -1,0 +1,113 @@
+/**
+ * The connectors of the agent in this process, for the terminal: the chat's /connect and `bxAgents connect`. It asks the
+ * same service the web page's routes ask (api.Connectors), so the rules are the same everywhere: the risk confirm, a token
+ * that is checked before it is kept, a program for admins on a served agent.
+ *
+ * Every answer is a plain struct: { ok : true, ...data } or { ok : false, reason }.
+ */
+class {
+
+	/**
+	 * @stack The parts of ConnectorWiring
+	 * @caller The Caller: who is connecting, and whether they are an admin
+	 * @served True when the agent serves more than one person
+	 * @signIn { start( id, person ), disconnect( id, person ) } that catches the provider's redirect at this terminal, or nothing to use the server's address
+	 */
+	function init( required struct stack, required any caller, boolean served = false, any signIn = "" ) {
+		variables.stack = arguments.stack
+		variables.api = new "models.api.Connectors@bxagents"( arguments.stack, arguments.caller, arguments.served, isObject( arguments.signIn ) ? { oauth : arguments.signIn } : {} )
+		return this
+	}
+
+	/**
+	 * @return True when the agent offers at least one connector
+	 */
+	boolean function available() {
+		return variables.stack.service.ids().len() > 0
+	}
+
+	/**
+	 * @return Why there is nothing to connect to
+	 */
+	string function why() {
+		return "This agent offers no connectors. Add or remove them under `connectors:` in Agent.yaml."
+	}
+
+	/**
+	 * @return The address of the web app of this agent, for a person who must connect a token there; empty when the app has no public address or no web UI
+	 */
+	string function webApp() {
+		var base = trim( getSystemSetting( "BXAGENTS_PUBLIC_URL", "" ) ).reReplace( "/+$", "" )
+		var path = variables.stack.webPath ?: ""
+		return len( base ) && len( path ) ? base & ( path == "/" ? "" : path ) : ""
+	}
+
+	/**
+	 * @return { ok, user, policy, connectors : [ row ], summary }
+	 */
+	struct function list() {
+		return answer( variables.api.all() )
+	}
+
+	/**
+	 * @asked { id, method, token, options, confirm }
+	 *
+	 * @return { ok, connected, authorizationUrl, row } or { ok : false, reason }
+	 */
+	struct function connect( required struct asked ) {
+		return answer( variables.api.connect( arguments.asked ) )
+	}
+
+	/**
+	 * @id The connector
+	 *
+	 * @return { ok, connected, row } or { ok : false, reason }
+	 */
+	struct function disconnect( required string id ) {
+		return answer( variables.api.disconnect( arguments.id ) )
+	}
+
+	/**
+	 * @id The connector
+	 *
+	 * @return { ok, id, tools, summary } or { ok : false, reason }
+	 */
+	struct function tools( required string id ) {
+		return answer( variables.api.tools( arguments.id ) )
+	}
+
+	/**
+	 * @id The connector
+	 * @change { tool, on } or { all } or { readonly }
+	 *
+	 * @return { ok, id, tools, summary } or { ok : false, reason }
+	 */
+	struct function setTools( required string id, required struct change ) {
+		return answer( variables.api.setTools( arguments.id, arguments.change ) )
+	}
+
+	/**
+	 * @id The connector
+	 * @options { key : value }
+	 *
+	 * @return { ok, row } or { ok : false, reason }
+	 */
+	struct function setOptions( required string id, required struct options ) {
+		return answer( variables.api.options( arguments.id, arguments.options ) )
+	}
+
+	/**
+	 * @outcome An Outcome
+	 *
+	 * @return The plain struct the terminal works with
+	 */
+	private struct function answer( required any outcome ) {
+		if ( !arguments.outcome.succeeded() ) {
+			return { ok : false, reason : arguments.outcome.reason() }
+		}
+		var made = { ok : true }
+		made.append( arguments.outcome.data() )
+		return made
+	}
+
+}

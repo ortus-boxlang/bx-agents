@@ -200,6 +200,33 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileRead( result.appDir & "/bxagents/Application.bx" ) ).notToInclude( 'getInstance( "interceptors.AuditLogger" )' );
 			} );
 
+			it( "builds the connectors a person can connect to into the app: only, exclude and override applied", function() {
+				var projectRoot = newTempProject( "with-connectors" );
+				var result = pipeline.build( projectRoot );
+				var handler = fileRead( result.appDir & "/handlers/AgentApi.bx" );
+
+				expect( handler ).notToInclude( "__CONNECTORS__" );
+				expect( handler ).toInclude( '""id"":""github""' );
+				expect( handler ).toInclude( '""id"":""notion""' );
+				expect( handler ).toInclude( '""id"":""supabase""' );
+				// atlassian was in only and then excluded, and stripe was never in only
+				expect( handler ).notToInclude( '""id"":""atlassian""' );
+				expect( handler ).notToInclude( '""id"":""stripe""' );
+				// supabase carries its override
+				expect( handler ).toInclude( '""timeout"":30000' );
+				expect( handler ).toInclude( '""default"":""abc123""' );
+			} );
+
+			it( "offers every connector when the agent has no connectors key", function() {
+				var projectRoot = newTempProject( "gateways-webui" );
+				var result = pipeline.build( projectRoot );
+				var handler = fileRead( result.appDir & "/handlers/AgentApi.bx" );
+
+				for ( var id in [ "atlassian", "cloudflare", "git", "github", "notion", "stripe", "supabase" ] ) {
+					expect( handler ).toInclude( '""id"":""#id#""' );
+				}
+			} );
+
 			it( "generates the web chat UI on the agent API: no handler or key gate of its own", function() {
 				var projectRoot = newTempProject( "gateways-webui" );
 				var result = pipeline.build( projectRoot );

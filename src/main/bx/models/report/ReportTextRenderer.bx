@@ -46,6 +46,7 @@ class {
 			{ name : "tools", title : "Tools", draw : lines => drawTools( r, lines ) },
 			{ name : "skills", title : "Skills", draw : lines => drawSkills( r, lines ) },
 			{ name : "mcp", title : "MCP", draw : lines => drawMcp( r, lines ) },
+			{ name : "connectors", title : "Connectors", draw : lines => drawConnectors( r, lines ) },
 			{ name : "gateways", title : "Exposed through", draw : lines => drawGateways( r, lines ) },
 			{ name : "schedule", title : "Schedule", draw : lines => drawSchedule( r, lines ) },
 			{ name : "ai", title : "Models", draw : lines => drawAi( r, lines ) },
@@ -234,6 +235,31 @@ class {
 		for ( var hosted in arguments.r.mcpHosted ) {
 			var tools = hosted.tools.len() ? plural( hosted.tools.len(), "tool" ) : "all tools"
 			arguments.out.append( "  " & p( "accent", "hosts" ) & " " & hosted.name & p( "muted", "  #tools#" & ( len( hosted.description ) ? " #variables.g.sep# #hosted.description#" : "" ) ) )
+		}
+	}
+
+	/**
+	 * @r The report
+	 * @out The lines of the section
+	 */
+	private void function drawConnectors( required struct r, required array out ) {
+		var found = arguments.r.connectors
+		if ( !len( found.mode ) ) {
+			return
+		}
+		if ( found.mode == "none" ) {
+			arguments.out.append( "  " & p( "muted", "off: connectors is none, so no connector is offered" ) )
+			return
+		}
+		arguments.out.append( "  #plural( found.available.len(), 'connector' )# offered" & ( found.excluded.len() ? ", #found.excluded.len()# left out" : "" ) & "." )
+		arguments.out.append( "  " & p( "muted", "Nothing is attached until a person connects one." ) )
+		if ( found.excluded.len() ) {
+			arguments.out.append( "  " & p( "muted", clip( "left out: " & found.excluded.toList( ", " ), variables.width - 2 ) ) )
+		}
+		var rows = found.available.map( c => [ c.id, c.ways, c.risk, c.overridden ? "overridden" : "" ] )
+		table( rows, arguments.out, 2 )
+		if ( found.shadowed.len() ) {
+			arguments.out.append( "  " & p( "muted", clip( "replaced by your own mcpServers: #found.shadowed.toList( ', ' )#", variables.width - 2 ) ) )
 		}
 	}
 

@@ -43,12 +43,12 @@
 			// Account: the things that were in the Settings menu
 			var account = [];
 			account.push( btn( "key", "Password", function () { keyBtn.click(); } ) );
-			if ( capabilities.connections ) {
-				account.push( btn( "puzzle-piece", "Connections", function () { connectBtn.click(); } ) );
+			if ( capabilities.connectors || capabilities.connections ) {
+				account.push( btn( "puzzle-piece", "Connectors", function () { shellGo( "connectors" ); } ) );
 			}
 			root.appendChild( h( "section", { class: "card", style: "margin-top:0.75rem", "aria-labelledby": "setAccountTitle" }, [
 				h( "h2", { id: "setAccountTitle", text: "Account" } ),
-				h( "p", { class: "pg-note", text: "The password for this server, and the services the agent signs in to for you, such as mail or a calendar." } ),
+				h( "p", { class: "pg-note", text: "The password for this server, and the connectors: the services the agent uses for you, such as GitHub or a calendar." } ),
 				h( "div", { class: "pg-actions" }, account )
 			] ) );
 

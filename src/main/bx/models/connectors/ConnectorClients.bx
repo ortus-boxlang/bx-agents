@@ -1,0 +1,298 @@
+/**
+ * The MCP clients of a running agent, one per person per connector, kept for the life of the application.
+ *
+ * A person's client holds their credential and their MCP session, so one person's token and session never reach
+ * another's call. They are cheap, so they are made the first time a person needs one and kept:
+ *
+ * - the credential comes from `credentialFor( connectorId, personId )`, a function the application gives it. An
+ *   empty answer means the person has not connected, and no client is made;
+ * - a client is made again when the credential changes (the person connected again with a new token);
+ * - `drop()` forgets a person's client when they disconnect or the server rejects their credential;
+ * - `evictIdle()` forgets the clients nobody has used for a while, so the table cannot grow without bound.
+ *
+ * `router()` gives the one object an agent registers with `withMCPServer()`; see PerPersonMcpClient.
+ */
+class {
+
+	/**
+	 * @credentialFor A function ( connectorId, personId ) that returns the person's token, or an empty string
+	 * @idleSeconds How long a client can sit unused before evictIdle() forgets it
+	 * @hooks { endpointFor : ( connectorId, personId ) => connector, toolGate : ( connectorId, personId, tool ) => "" or the reason the call is refused }.
+	 *        endpointFor gives the address and headers that person's option values make; toolGate is the person's tool switches.
+	 *        onRefused ( connectorId, personId, reason ) is told when a service refuses a person's token, so it can be shown as needing attention
+	 */
+	function init( required function credentialFor, numeric idleSeconds = 1800, struct hooks = {} ) {
+		variables.credentialFor = arguments.credentialFor
+		variables.idleSeconds = arguments.idleSeconds
+		variables.endpointFor = arguments.hooks.endpointFor ?: ""
+		variables.toolGate = arguments.hooks.toolGate ?: ""
+		variables.onRefused = arguments.hooks.onRefused ?: ""
+		variables.lastSweep = getTickCount()
+		variables.entries = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
+		variables.lastBy = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
+		return this
+	}
+
+	/**
+	 * The client of one person for one connector, made on first use. Call it when the person connects: the handshake
+	 * and the check of their token then happen at Connect, and a turn finds the client ready. Two calls of one
+	 * person that arrive together while it is being made wait for each other, and a thread that waits is not free to
+	 * do other work, so a pool of a thread or two should not be the one running them.
+	 *
+	 * @connector { id, url, timeout, headers } the connector
+	 * @personId The person
+	 *
+	 * @return The MCP client, or nothing when the person has not connected
+	 */
+	any function forPerson( required struct connector, required string personId ) {
+		sweepWhenDue()
+		var key = keyOf( arguments.connector.id, arguments.personId )
+		var token = toString( variables.credentialFor( arguments.connector.id, arguments.personId ) ?: "" )
+		if ( !len( token ) ) {
+			// no credential: any client held for them is out of date
+			forget( key )
+			return nullValue()
+		}
+		var fingerprint = hash( token, "SHA-256" )
+		// one lock per person and connector: two people never wait for each other's first call
+		lock name = "bxagents-connector-#key#" timeout = 30 type = "exclusive" {
+			var held = variables.entries.get( key )
+			if ( !isNull( held ) && held.fingerprint == fingerprint ) {
+				held.usedAt = getTickCount()
+				return held.mcpClient
+			}
+			if ( !isNull( held ) ) {
+				closeQuietly( held.mcpClient )
+				variables.entries.remove( key )
+			}
+			var made = new bxModules.bxai.models.mcp.MCPHttpClient( arguments.connector.url ).withBearerToken( token ).withHandshake( true )
+			if ( arguments.connector.keyExists( "timeout" ) ) {
+				made.withTimeout( arguments.connector.timeout )
+			}
+			if ( arguments.connector.keyExists( "headers" ) && arguments.connector.headers.count() ) {
+				made.withHeaders( arguments.connector.headers )
+			}
+			// The first request does the MCP handshake. It is done here, before the client is shared, so two calls of the
+			// same person that arrive together cannot both start without a session. It also finds a token the server refuses.
+			var warm = made.listTools()
+			if ( !warm.isSuccess() && [ 401, 403 ].contains( warm.getStatusCode() ) ) {
+				closeQuietly( made )
+				refused( arguments.connector.id, arguments.personId )
+				return nullValue()
+			}
+			if ( !warm.isSuccess() ) {
+				// the server did not answer: hand the client back so the call shows the real error, but keep nothing
+				return made
+			}
+			variables.entries.put( key, { mcpClient : made, fingerprint : fingerprint, person : arguments.personId, connector : arguments.connector.id, usedAt : getTickCount() } )
+			variables.lastBy.put( arguments.connector.id, arguments.personId )
+			return made
+		}
+	}
+
+	/**
+	 * Tries a token against the server without keeping anything: a client of its own makes the handshake and asks for the
+	 * tools, and is closed. Used by Connect, so a refused token is found before it is stored.
+	 *
+	 * @connector { id, url, timeout, headers } the connector, with the person's option values applied
+	 * @token The token to try
+	 *
+	 * @return { ok, refused : the server said no to this token, reason }
+	 */
+	struct function probe( required struct connector, required string token ) {
+		var trial = new bxModules.bxai.models.mcp.MCPHttpClient( arguments.connector.url ).withBearerToken( arguments.token ).withHandshake( true )
+		if ( arguments.connector.keyExists( "timeout" ) ) {
+			trial.withTimeout( arguments.connector.timeout )
+		}
+		if ( arguments.connector.keyExists( "headers" ) && arguments.connector.headers.count() ) {
+			trial.withHeaders( arguments.connector.headers )
+		}
+		try {
+			var answer = trial.listTools()
+			if ( answer.isSuccess() ) {
+				return { ok : true, refused : false, reason : "" }
+			}
+			var refused = [ 401, 403 ].contains( answer.getStatusCode() )
+			return { ok : false, refused : refused, reason : refused ? "the server refused it" : answer.getError() }
+		} finally {
+			closeQuietly( trial )
+		}
+	}
+
+	/**
+	 * Where the connector is reached for one person: the address and headers their option values make.
+	 *
+	 * @connector { id, url, ... } the connector as the router knows it
+	 * @personId The person
+	 *
+	 * @return The connector struct to make that person's client from
+	 */
+	struct function endpointOf( required struct connector, required string personId ) {
+		return isSimpleValue( variables.endpointFor ) ? arguments.connector : variables.endpointFor( arguments.connector.id, arguments.personId )
+	}
+
+	/**
+	 * Whether a person may call a tool.
+	 *
+	 * @connectorId The connector
+	 * @personId The person
+	 * @tool The tool's name on the server
+	 *
+	 * @return An empty string when the call may go on, else the reason it is refused, as a sentence for the person
+	 */
+	string function gateFor( required string connectorId, required string personId, required string tool ) {
+		return isSimpleValue( variables.toolGate ) ? "" : toString( variables.toolGate( arguments.connectorId, arguments.personId, arguments.tool ) ?: "" )
+	}
+
+	/**
+	 * Forgets idle clients, at most once a minute, so nothing has to run on a timer.
+	 */
+	private void function sweepWhenDue() {
+		if ( getTickCount() - variables.lastSweep >= 60000 ) {
+			variables.lastSweep = getTickCount()
+			evictIdle()
+		}
+	}
+
+	/**
+	 * The object an agent registers once, which routes every call to the caller's client.
+	 *
+	 * @connector { id, url, prefix, timeout, headers } the connector
+	 *
+	 * @return A PerPersonMcpClient
+	 */
+	any function router( required struct connector ) {
+		return new PerPersonMcpClient( this, arguments.connector )
+	}
+
+	/**
+	 * @connectorId The connector
+	 *
+	 * @return The person who last had a client made for this connector, or an empty string
+	 */
+	string function lastConnected( required string connectorId ) {
+		return variables.lastBy.containsKey( arguments.connectorId ) ? variables.lastBy.get( arguments.connectorId ) : ""
+	}
+
+	/**
+	 * Forget one person's client, for example when they disconnect.
+	 *
+	 * @connectorId The connector
+	 * @personId The person
+	 */
+	void function drop( required string connectorId, required string personId ) {
+		forget( keyOf( arguments.connectorId, arguments.personId ) )
+	}
+
+	/**
+	 * A service refused a person's token: the client held for them is forgotten and the person is told it needs attention.
+	 *
+	 * @connectorId The connector
+	 * @personId The person
+	 */
+	void function refused( required string connectorId, required string personId ) {
+		drop( arguments.connectorId, arguments.personId )
+		if ( isClosure( variables.onRefused ) || isCustomFunction( variables.onRefused ) ) {
+			try {
+				variables.onRefused( arguments.connectorId, arguments.personId, "The service refused this token. It may have expired or been revoked: connect it again." )
+			} catch ( any e ) {
+				// what a person sees must never stop a call from being answered
+			}
+		}
+	}
+
+	/**
+	 * Forget every client of one connector.
+	 *
+	 * @connectorId The connector
+	 */
+	void function dropConnector( required string connectorId ) {
+		for ( var key in variables.entries.keySet().toArray() ) {
+			var held = variables.entries.get( key )
+			if ( !isNull( held ) && held.connector == arguments.connectorId ) {
+				forget( key )
+			}
+		}
+	}
+
+	/**
+	 * Forget the clients nobody has used for the idle time.
+	 *
+	 * @return How many were forgotten
+	 */
+	numeric function evictIdle() {
+		var cut = getTickCount() - ( variables.idleSeconds * 1000 )
+		var gone = 0
+		for ( var key in variables.entries.keySet().toArray() ) {
+			var held = variables.entries.get( key )
+			if ( !isNull( held ) && held.usedAt < cut ) {
+				forget( key )
+				gone++
+			}
+		}
+		return gone
+	}
+
+	/**
+	 * @connectorId The connector
+	 *
+	 * @return How many clients it has now
+	 */
+	struct function statsOf( required string connectorId ) {
+		var count = 0
+		for ( var held in variables.entries.values().toArray() ) {
+			if ( held.connector == arguments.connectorId ) {
+				count++
+			}
+		}
+		return { clients : count }
+	}
+
+	/**
+	 * @return How many clients there are, all connectors together
+	 */
+	numeric function size() {
+		return variables.entries.size()
+	}
+
+	/**
+	 * Close every client. Call it when the application stops.
+	 */
+	void function close() {
+		for ( var key in variables.entries.keySet().toArray() ) {
+			forget( key )
+		}
+	}
+
+	/**
+	 * @connectorId The connector
+	 * @personId The person
+	 *
+	 * @return The key the client is kept under
+	 */
+	private string function keyOf( required string connectorId, required string personId ) {
+		return arguments.connectorId & "|" & arguments.personId
+	}
+
+	/**
+	 * @key The key of a client
+	 */
+	private void function forget( required string key ) {
+		var held = variables.entries.remove( arguments.key )
+		if ( !isNull( held ) ) {
+			closeQuietly( held.mcpClient )
+		}
+	}
+
+	/**
+	 * @target An MCP client
+	 */
+	private void function closeQuietly( required any target ) {
+		try {
+			arguments.target.close()
+		} catch ( any e ) {
+			// a client that cannot close has nothing left to release
+		}
+	}
+
+}

@@ -12,7 +12,7 @@ _bxagents_complete() {
 	fi
 	local count=${#words[@]}
 	local cur="${words[count-1]}"
-	local verbs="add backup build chat clean connect data deploy doctor extensions hash-password inspect invoke logs models new notes package restore routines serve sessions skills stats test token users vault help"
+	local verbs="add backup build chat clean connect connectors data deploy doctor extensions hash-password inspect invoke logs models new notes package restore routines serve sessions skills stats test token users vault help"
 	local globals="--help -h --version -v"
 	COMPREPLY=()
 
@@ -38,6 +38,7 @@ _bxagents_complete() {
 			"chat --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"clean --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"connect --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"connectors --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"data --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"deploy --destination") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"deploy --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
@@ -54,7 +55,7 @@ _bxagents_complete() {
 			"new --destination") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"new --files") COMPREPLY=($(compgen -W "read all" -- "$part")) ;;
 			"new --guard") COMPREPLY=($(compgen -W "off flag block" -- "$part")) ;;
-			"new --mcp") COMPREPLY=($(compgen -W "github stripe notion atlassian cloudflare supabase git" -- "$part")) ;;
+			"new --mcp") COMPREPLY=($(compgen -W "atlassian cloudflare git github notion stripe supabase" -- "$part")) ;;
 			"new --memory") COMPREPLY=($(compgen -W "cache file" -- "$part")) ;;
 			"new --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"new --search") COMPREPLY=($(compgen -W "http brave tavily exa google" -- "$part")) ;;
@@ -88,7 +89,8 @@ _bxagents_complete() {
 			build) flags="--environment= --generatorVersion= --projectRoot= --verbose" ;;
 			chat) flags="--agent= --api-path= --connect= --continue --no-tui --port= --projectRoot= --record --server --session= --token= --user=" ;;
 			clean) flags="--force --projectRoot=" ;;
-			connect) flags="--port= --projectRoot= --timeout= --user=" ;;
+			connect) flags="--port= --projectRoot= --timeout= --token-env= --user=" ;;
+			connectors) flags="--dir= --json --projectRoot=" ;;
 			data) flags="--projectRoot=" ;;
 			deploy) flags="--destination= --name= --projectRoot= --target=" ;;
 			doctor) flags="--json --projectRoot=" ;;
@@ -98,7 +100,7 @@ _bxagents_complete() {
 			invoke) flags="--json --message= --port= --projectRoot= --server" ;;
 			logs) flags="--grep= --level= --projectRoot= --tail=" ;;
 			models) flags="--all --json --profile= --projectRoot=" ;;
-			new) flags="--app= --channels= --class --deploy= --description= --destination= --files= --files-dir= --forgebox= --guard= --host= --max-tokens= --mcp= --memory= --model= --name= --no-tui --no-wizard --projectRoot= --prompt= --region= --registry= --remote-path= --repo= --search= --skipInstall --temperature= --template= --timeout= --user= --web-auth= --widgets= --widgets-bottom= --with= --wizard --yes" ;;
+			new) flags="--app= --channels= --class --connectors= --deploy= --description= --destination= --files= --files-dir= --forgebox= --guard= --host= --max-tokens= --mcp= --memory= --model= --name= --no-tui --no-wizard --projectRoot= --prompt= --region= --registry= --remote-path= --repo= --search= --skipInstall --temperature= --template= --timeout= --user= --web-auth= --widgets= --widgets-bottom= --with= --wizard --yes" ;;
 			notes) flags="--file= --id= --json --projectRoot= --scope= --text= --user=" ;;
 			package) flags="--projectRoot= --version=" ;;
 			restore) flags="--home= --projectRoot=" ;;

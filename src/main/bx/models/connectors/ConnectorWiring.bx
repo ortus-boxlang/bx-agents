@@ -1,0 +1,191 @@
+import bxModules.bxagents.models.connectors.ConnectorEndpoint;
+import bxModules.bxagents.models.connectors.ConnectorSettings;
+
+/**
+ * Builds what the connectors need once for the running application and hands the same parts to everything that asks: the
+ * agent API, the terminal and the gateways. One set of per person MCP clients, one record of who connected what.
+ *
+ * The parts are kept per agent for the life of the process, in the server scope, so a request never makes its own and a
+ * class loaded twice under two names still shares them. They are not kept in the `application` scope, which does not exist
+ * when an agent is built for `test` or for the terminal chat. A part that reads the vault or the chat database is made
+ * from the app's own store.
+ */
+class {
+
+
+	/**
+	 * The parts, made on first use.
+	 *
+	 * @agent The AiAgent that gets the connectors' tools
+	 * @policy { mode, toolWarning, available, excluded, shadowed } as the build resolved it
+	 * @options { apiPath : where the agent API is served, store : a ChatStore (default: the app's), vault : a VaultService, programExists, clientFactory }
+	 *
+	 * @return { webPath, policy, settings, vault, oauth, service, clients, tools, runtime }
+	 */
+	struct function stackOf( required any agent, required struct policy, struct options = {} ) {
+		var key = keyOf( arguments.agent )
+		if ( !stacks().containsKey( key ) ) {
+			lock name = "bxagents-connector-stack" timeout = 30 type = "exclusive" {
+				if ( !stacks().containsKey( key ) ) {
+					stacks().put( key, build( arguments.agent, arguments.policy, arguments.options ) )
+				}
+			}
+		}
+		return stacks().get( key )
+	}
+
+	/**
+	 * Forgets the parts of every agent, closing their clients. For a restart of the application and for tests.
+	 */
+	void function reset() {
+		for ( var key in stacks().keySet().toArray() ) {
+			try {
+				stacks().get( key ).clients.close()
+			} catch ( any e ) {
+				// nothing to close
+			}
+			try {
+				stacks().get( key ).runtime.close()
+			} catch ( any e ) {
+				// nothing to close
+			}
+			stacks().remove( key )
+		}
+	}
+
+	/**
+	 * @return The parts of every agent, { key : parts }, made on first use
+	 */
+	private any function stacks() {
+		if ( !server.keyExists( "bxagentsConnectorStacks" ) ) {
+			lock name = "bxagents-connector-stacks" timeout = 30 type = "exclusive" {
+				if ( !server.keyExists( "bxagentsConnectorStacks" ) ) {
+					server[ "bxagentsConnectorStacks" ] = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
+				}
+			}
+		}
+		return server.bxagentsConnectorStacks
+	}
+
+	/**
+	 * Forgets the parts of one agent, closing its clients. For a command that borrowed a stand-in agent for one run.
+	 *
+	 * @agent The AiAgent the parts were made for
+	 */
+	void function forget( required any agent ) {
+		var key = keyOf( arguments.agent )
+		if ( !stacks().containsKey( key ) ) {
+			return
+		}
+		try {
+			stacks().get( key ).clients.close()
+		} catch ( any e ) {
+			// nothing to close
+		}
+		stacks().remove( key )
+	}
+
+	/**
+	 * @agent The AiAgent
+	 *
+	 * @return What tells one agent from another for the life of the process
+	 */
+	private string function keyOf( required any agent ) {
+		return toString( createObject( "java", "java.lang.System" ).identityHashCode( arguments.agent ) )
+	}
+
+	/**
+	 * Gives the agent what it needs to offer connectors: the filter that keeps a person's tools to the ones they may
+	 * use, and the connectors somebody had connected before a restart. Nothing is contacted for a connector nobody has
+	 * connected.
+	 *
+	 * @agent The AiAgent
+	 * @config The agent's config as far as the `connectors:` key goes ({} offers every connector)
+	 * @options As stackOf()
+	 *
+	 * @return The agent
+	 */
+	any function attach( required any agent, struct config = {}, struct options = {} ) {
+		var policy = ConnectorSettings::resolve( arguments.config )
+		if ( !policy.available.len() ) {
+			return arguments.agent
+		}
+		// building the agent never fails because of a connector: without the parts the agent has no connector tools, and
+		// the next call that needs them tries again
+		try {
+			var stack = stackOf( arguments.agent, policy, arguments.options.copy().append( { webPath : arguments.config.webPath ?: "" } ) )
+			arguments.agent.withMiddleware( new "models.connectors.ConnectorToolMiddleware@bxagents"( stack.service, stack.tools ) )
+			stack.runtime.restore()
+		} catch ( any e ) {
+			writeLog( text = "Could not attach the connectors: #e.message#", type = "error", log = "ai" )
+		}
+		return arguments.agent
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @agent The AiAgent
+	 * @policy The resolved policy
+	 * @options As stackOf()
+	 *
+	 * @return The parts
+	 */
+	private struct function build( required any agent, required struct policy, required struct options ) {
+		var store = arguments.options.store ?: new "models.vault.VaultWiring@bxagents"().storeFor()
+		var vault = arguments.options.vault ?: new "models.vault.VaultWiring@bxagents"().serviceFor( store )
+		var settings = new "models.connectors.ConnectorSettingsStore@bxagents"( store )
+		var oauth = new "models.connect.ConnectionService@bxagents"(
+			ConnectorEndpoint::oauthEntries( arguments.policy.available ?: [] ),
+			{ apiPath : arguments.options.apiPath ?: "/__bxagents", agent : arguments.agent }
+		)
+		var signedIn = ( id, person ) => oauth.list( person ).some( s => s.name == id && s.connected )
+		var deps = { vault : vault, signedIn : signedIn }
+		if ( arguments.options.keyExists( "programExists" ) ) {
+			deps.programExists = arguments.options.programExists
+		}
+		var service = new "models.connectors.ConnectorService@bxagents"( arguments.policy, settings, deps )
+		var holder = {}
+		var theAgent = arguments.agent
+		var clients = new "models.connectors.ConnectorClients@bxagents"(
+			( id, person ) => tokenOf( vault, service, id, person ),
+			1800,
+			{ endpointFor : ( id, person ) => holder.tools.endpointFor( id, person ), toolGate : ( id, person, tool ) => holder.tools.gate( id, person, tool ), onRefused : ( id, person, reason ) => settings.markRefused( person, id, reason ) }
+		)
+		holder.tools = new "models.connectors.ConnectorTools@bxagents"(
+			service, settings, clients,
+			{ ownTools : () => ( theAgent.getConfig().toolCount ?: 0 ), lister : ( id, person ) => holder.runtime.toolsOf( id ) }
+		)
+		var runtime = new "models.connectors.ConnectorRuntime@bxagents"(
+			arguments.agent, service, clients,
+			{ settings : settings, vault : vault, oauthRefresh : () => oauth.refresh(), oauthTools : id => oauth.tools( id ) }
+		)
+		holder.runtime = runtime
+		return { webPath : arguments.options.webPath ?: "", policy : arguments.policy, settings : settings, vault : vault, oauth : oauth, service : service, clients : clients, tools : holder.tools, runtime : runtime }
+	}
+
+	/**
+	 * A person's own token for a connector, locked to the connector's host. Empty when they have none.
+	 *
+	 * @vault A VaultService
+	 * @service The ConnectorService
+	 * @id The connector
+	 * @person The person
+	 *
+	 * @return The token, or an empty string
+	 */
+	private string function tokenOf( required any vault, required any service, required string id, required string person ) {
+		var entry = arguments.service.entryOf( arguments.id )
+		var method = ( entry.auth ?: [] ).filter( m => m.type == "bearer" )
+		if ( !method.len() || ( entry.transport ?: "" ) != "http" ) {
+			return ""
+		}
+		var host = reReplace( entry.url, "^https?://([^/:]+).*$", "\1" )
+		try {
+			return arguments.vault.resolve( method[ 1 ].envVar, { user : arguments.person, host : host, via : "connectors", ownOnly : true } )
+		} catch ( any e ) {
+			return ""
+		}
+	}
+
+}
