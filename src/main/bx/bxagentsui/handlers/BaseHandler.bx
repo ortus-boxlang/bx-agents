@@ -19,7 +19,11 @@ class {
 		if ( prc.ui.signIn ) {
 			var security = getInstance( "cbSecurity@cbSecurity" )
 			if ( !security.isLoggedIn() ) {
-				relocate( url = prc.ui.loginUrl )
+				// to the sign-in form, as it is (relocate() would rewrite the address as an event)
+				event.setHTTPHeader( statusCode = 302, statusText = "Found" )
+				event.setHTTPHeader( name = "Location", value = prc.ui.loginUrl )
+				event.noExecution()
+				event.noRender()
 				return
 			}
 			var user = security.getUser()

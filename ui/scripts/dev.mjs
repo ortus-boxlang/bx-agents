@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 
 const ui = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
 const children = [
-	spawn( process.execPath, [ "scripts/stack.mjs", ...process.argv.slice( 2 ) ], { cwd: ui, stdio: "inherit" } ),
+	spawn( process.execPath, [ "scripts/stack.mjs", ...process.argv.slice( 2 ) ], { cwd: ui, stdio: "inherit", env: { ...process.env, UI_VITE_DEV: "1" } } ),
 	spawn( process.execPath, [ path.join( ui, "node_modules/vite/bin/vite.js" ) ], { cwd: ui, stdio: "inherit" } )
 ];
 const stop = () => {

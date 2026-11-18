@@ -51,7 +51,8 @@ test( "keeps the theme and the folded menu across pages", async ( { page } ) => 
 } );
 
 test( "asks for a sign in first when nobody is signed in", async ( { browser } ) => {
-	const context = await browser.newContext();
+	// an empty session: browser.newContext() would otherwise take the signed in one of this file's tests
+	const context = await browser.newContext( { storageState: { cookies: [], origins: [] } } );
 	const page = await context.newPage();
 	await page.goto( NEXT + "/" );
 	await expect( page ).toHaveURL( /login\.html/ );

@@ -135,13 +135,17 @@ jobs:
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
-      - name: Run the web app's browser tests
+      - name: Lint, build and test the web app
         timeout-minutes: 20
         working-directory: ui
         env:
           CI: "true"
         run: |
           npm ci
+          npm run lint
+          # the committed build must be what the sources build to: an agent build ships it as it is
+          npm run build
+          git diff --exit-code -- ../src/main/bx/bxagentsui/includes/build
           npx playwright install --with-deps chromium
           npm run e2e
 

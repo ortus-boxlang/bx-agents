@@ -838,6 +838,8 @@ class {
 			// been bitten by more than once.
 			var basePath   = renderLiteral( base )
 			var loginPath  = renderLiteral( base & "/login" )
+			// the form itself: <path>/login is only its POST target, and a GET there has no page to show
+			var formPath   = renderLiteral( base & "/login.html" )
 			var logoutPath = renderLiteral( base & "/logout" )
 			var agentApi   = renderLiteral( arguments.apiBase )
 
@@ -851,7 +853,7 @@ class {
 			lines.append( "			}" )
 			lines.append( "			if ( !auth.isLoggedIn() ) {" )
 			lines.append( "				event.setHTTPHeader( statusCode = 302, statusText = 'Found' )" )
-			lines.append( "				event.setHTTPHeader( name = 'Location', value = #loginPath# )" )
+			lines.append( "				event.setHTTPHeader( name = 'Location', value = #formPath# )" )
 			// See ChatAuth.bx's own redirectTo() for why both calls are needed:
 			// noExecution() alone does not stop ColdBox's own view rendering.
 			lines.append( "				event.noExecution()" )
