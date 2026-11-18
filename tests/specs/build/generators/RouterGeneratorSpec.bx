@@ -257,6 +257,57 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).notToInclude( ".toAi(" );
 			} );
 
+			/**
+			 * Regression: `http://host:port/` on a served app was a ColdBox 500 (EventHandlerNotRegisteredException,
+			 * main.index), because nothing routed "/".
+			 */
+			it( "redirects / to the web UI with a 302 when the project has one", function() {
+				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+				var content = fileRead( generator.generate( discovery, newAppDir() ).router );
+
+				expect( content ).toInclude( 'route( "/" ).toRedirect( "chat/", 302 )' );
+				// ColdBox prefixes its base URL, which ends in a slash: a leading one gave Location http://host:port//chat/
+				expect( content ).notToInclude( 'toRedirect( "/' );
+				expect( content ).notToInclude( "toResponse" );
+				// last, so a gateway that declares "/" itself is matched first
+				expect( content.find( 'route( "/" )' ) ).toBeGT( content.find( "/__bxagents/invoke" ) );
+			} );
+
+			it( "answers / with a pointer to the health route when there is no web UI, on the API's own path", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+
+				var reserved = fileRead( generator.generate( discovery, newAppDir() ).router );
+				expect( reserved ).toInclude( 'route( "/" ).toResponse(' );
+				expect( reserved ).toInclude( '"health" : "/__bxagents/health"' );
+				expect( reserved ).notToInclude( "toRedirect" );
+
+				var moved = fileRead( generator.generate( discovery, newAppDir(), false, false, false, false, false, { path : "/agent-api" } ).router );
+				expect( moved ).toInclude( '"health" : "/agent-api/health"' );
+				expect( moved ).notToInclude( "/__bxagents" );
+			} );
+
+			it( "says nothing about the agent at /, behind a token or not", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var content = fileRead( generator.generate( discovery, newAppDir(), false, false, false, false, false, { tokenEnvVar : "BXA_TOKEN" } ).router );
+
+				var line = content.listToArray( char( 10 ) ).filter( l => l.find( 'route( "/" )' ) )[ 1 ];
+				expect( line ).toInclude( '{ "success" : true, "health" :' );
+				// only those two keys, no name, model or tool list
+				expect( line.reMatch( '"[a-zA-Z]+" :' ).len() ).toBe( 2 );
+				// and it sits outside the gate: the health route it names is open, and nothing else is shown
+				expect( line ).notToInclude( "middleware" );
+			} );
+
+			it( "answers / with a plain 404 when there is no web UI and the API is off, naming nothing", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var result = generator.generate( discovery, newAppDir(), false, false, false, false, false, { enabled : false } );
+
+				var content = fileRead( result.router );
+				expect( content ).toInclude( 'route( "/" ).toResponse( "Not found", 404 )' );
+				expect( content ).notToInclude( "health" );
+				expect( result.hasRoutes ).toBeFalse();
+			} );
+
 			it( "omits the reserved route entirely when agentApi.enabled is false", function() {
 				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
 				var result = generator.generate(

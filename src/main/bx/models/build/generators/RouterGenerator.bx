@@ -111,6 +111,16 @@ class {
 			lines.append( 'post( "/webhooks/github" ).toHandler( "GitHub.process" )' )
 		}
 
+		var hasRoutes = lines.len() > 0
+		// last, so a gateway that declares its own "/" wins
+		var home = renderHomeRoute( exposureEntries, arguments.agentApi )
+		if ( home.len() ) {
+			if ( lines.len() ) {
+				lines.append( "" )
+			}
+			lines.append( home, true )
+		}
+
 		var appDir = Strings::normalizePath( arguments.appDir )
 		directoryCreate( path = appDir & "/config", createPath = true, ignoreExists = true )
 		var routerPath = appDir & "/config/Router.bx"
@@ -125,9 +135,54 @@ class {
 
 		return {
 			router           : routerPath,
-			hasRoutes        : lines.len() > 0,
+			hasRoutes        : hasRoutes,
 			hasAgentExposure : hasAgentExposure
 		}
+	}
+
+	/**
+	 * What `/` answers. Without a route of its own it falls to ColdBox's default event (`main.index`), which a generated
+	 * app does not have, so the first address a person tries, `http://host:port/`, was a 500 with a stack trace.
+	 *
+	 * With a web UI, `/` redirects (302) to it. Without one it answers a small JSON pointer to the API's health route,
+	 * on whatever path `agentApi.path` puts the API (see ApiPath), or a plain 404 when the API is off, so nothing is
+	 * named that is not there. Nothing about the agent is said and no gate is needed: the redirect target is the
+	 * static shell, and the health route is not behind the gate.
+	 *
+	 * @entries The exposure entries, from collectExposureEntries()
+	 * @agentApi The root project's `agentApi` config
+	 *
+	 * @return The route's statement lines; none when a gateway already declares "/"
+	 */
+	private array function renderHomeRoute( required array entries, required struct agentApi ) {
+		var webUi = ""
+		for ( var entry in arguments.entries ) {
+			var path = Strings::normalizePath( entry.config.path ?: "" )
+			if ( !len( path ) || path == "/" ) {
+				return []
+			}
+			if ( entry.config.exposes == "webui" && !len( webUi ) ) {
+				webUi = path
+			}
+		}
+		if ( len( webUi ) ) {
+			return [
+				"// The root address goes to the web UI. No leading slash on purpose: ColdBox puts its base URL (which ends",
+				"// in one) in front of the target, and a leading slash made the Location header http://host:port//chat/.",
+				'route( "/" ).toRedirect( "#Strings::bxLiteral( webUi.reReplace( '^/', '' ) )#/", 302 )'
+			]
+		}
+		if ( arguments.agentApi.enabled ?: true ) {
+			var health = ApiPath::of( arguments.agentApi ) & "/health"
+			return [
+				"// No web UI: the root address points at the health route instead of ColdBox's missing default event",
+				'route( "/" ).toResponse( ( event, rc, prc ) => { return { "success" : true, "health" : "#Strings::bxLiteral( health )#" } } )'
+			]
+		}
+		return [
+			"// No web UI and the agent API is off: nothing to point at",
+			'route( "/" ).toResponse( "Not found", 404 )'
+		]
 	}
 
 	/**
