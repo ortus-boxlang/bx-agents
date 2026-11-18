@@ -1,0 +1,24 @@
+<!--- The services the agent's developer wrote into Agent.yaml, each with a sign in. Inside connectorsPage. --->
+<bx:output>
+<p class="pg-note">Services the agent's developer wrote into Agent.yaml under mcpServers, each with a sign in. You sign in once for each. The agent then acts as you.</p>
+<p class="pg-note" x-show="!shownServers.length" x-text="query.trim() ? 'No service matches that.' : 'No service asks you to sign in.'"></p>
+<ul class="plain-list" aria-label="Services in Agent.yaml">
+	<template x-for="s in shownServers" :key="s.name">
+		<li class="card conn-server">
+			<div class="conn-head">
+				<span class="conn-icon">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "file-text" } )#</span>
+				<div class="conn-server-text">
+					<h2 x-text="s.name"></h2>
+					<p class="pg-note" x-text="s.url + ( s.scope ? ' (scope: ' + s.scope + ')' : '' )"></p>
+				</div>
+				<span class="chip" :class="{ ok: s.connected }"><svg class="i" aria-hidden="true"><use :href="s.connected ? '##i-check-circle' : '##i-plug'"/></svg><span x-text="s.connected ? 'Connected' : 'Not connected'"></span></span>
+			</div>
+			<p class="pg-error" role="alert" x-show="s.problem" x-text="s.problem"></p>
+			<div class="pg-actions conn-actions">
+				<button type="button" class="btn" x-show="s.connected" @click="disconnectServer( s )" :aria-label="'Disconnect ' + s.name">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "x" } )# Disconnect</button>
+				<button type="button" class="btn primary" x-show="!s.connected" @click="connectServer( s )" :aria-label="'Connect ' + s.name">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "plug" } )# Connect</button>
+			</div>
+		</li>
+	</template>
+</ul>
+</bx:output>

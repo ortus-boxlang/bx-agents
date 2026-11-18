@@ -1,0 +1,28 @@
+<!--- One catalog connector: its state, what it is, risk and ways, who connected it, and what this person may do. Inside
+      connectorsPage, as `row`. --->
+<bx:output>
+<article class="card conn-card" :aria-label="row.name">
+	<div class="conn-head">
+		<span class="conn-icon"><svg class="i" aria-hidden="true"><use :href="'##i-' + ( row.icon || 'puzzle-piece' )"/></svg></span>
+		<h2 x-text="row.name"></h2>
+		<span class="chip" :class="state( row ).kind"><svg class="i" aria-hidden="true"><use :href="'##i-' + state( row ).icon"/></svg><span x-text="state( row ).word"></span></span>
+	</div>
+	<p class="conn-summary" x-text="row.summary || ''"></p>
+	<div class="conn-chips">
+		<template x-for="chip in connectorChips( row )" :key="chip.text">
+			<span class="chip" :class="chip.kind"><svg class="i" aria-hidden="true"><use :href="'##i-' + chip.icon"/></svg><span x-text="chip.text"></span></span>
+		</template>
+	</div>
+	<p class="pg-note conn-line" x-text="who( row )"></p>
+	<div class="pg-actions conn-actions">
+		<a class="btn" x-show="actions( row ).install" :href="row.docs" target="_blank" rel="noopener">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "arrow-square-out" } )#<span x-text="'How to install ' + row.program"></span></a>
+		<button type="button" class="btn primary" x-show="actions( row ).connect" @click="openConnect( row )" :aria-label="actions( row ).connect + ' ' + row.name">
+			<svg class="i" aria-hidden="true"><use :href="row.state === 'needs_attention' ? '##i-arrows-clockwise' : '##i-plug'"/></svg><span x-text="actions( row ).connect"></span>
+		</button>
+		<button type="button" class="btn" x-show="actions( row ).tools" @click="openTools( row )" :aria-label="'Tools of ' + row.name">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "wrench" } )# Tools</button>
+		<button type="button" class="btn" x-show="actions( row ).disconnect" @click="disconnect( row )" :aria-label="actions( row ).disconnect + ' ' + row.name">
+			#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "x" } )#<span x-text="actions( row ).disconnect"></span>
+		</button>
+	</div>
+</article>
+</bx:output>
