@@ -12,10 +12,12 @@ class {
 	 * @return The JSON, safe inside a <script type="application/json"> block
 	 */
 	string function json( required any data ) {
+		// a JSON escape is a backslash, u and four hex digits: built from char( 92 ) so nothing here reads it as the character
+		var escape = char( 92 ) & "u00"
 		return jsonSerialize( arguments.data )
-			.replace( "<", "<", "all" )
-			.replace( ">", ">", "all" )
-			.replace( "&", "&", "all" )
+			.replace( "<", escape & "3c", "all" )
+			.replace( ">", escape & "3e", "all" )
+			.replace( "&", escape & "26", "all" )
 	}
 
 }
