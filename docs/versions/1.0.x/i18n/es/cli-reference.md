@@ -23,6 +23,10 @@ Estos se manejan antes del despacho de verbos y nunca llegan a un verbo.
 | `-h`, `--help`, `help` | Imprime el uso (cada verbo + descripción) y sale con 0. Se acepta en **cualquier** posición, así que `bxAgents clean --help` imprime el uso en lugar de ejecutar `clean`. También se imprime (sale con 1) si no se da ningún verbo en absoluto. |
 | `-v`, `--version` | Imprime `bxAgents v{version}` y sale con 0. Solo es significativo como primer token, así que nunca colisiona con `package --version=1.0.0`. |
 
+## Comillas en los valores de los flags
+
+El script launcher `boxlang` de BoxLang 1.19.0 parte cada argumento por los espacios, así que `--description="Daily standup"` llega como `--description=Daily`. Mientras no se arregle en BoxLang, escribe los valores sin espacios (`--description=Daily-standup`), rellena el texto en el archivo generado después, o arranca el módulo con Java, que conserva las comillas: `java -cp boxlang-1.19.0.jar ortus.boxlang.runtime.BoxRunner module:bxagents new ... --description="a b c"`.
+
 ## El banner
 
 En una terminal interactiva, `bxAgents --help` y el final del asistente de `new` te saludan con el nombre BxAgents en letras de bloque, pintado con un degradado elegido al azar entre ocho temas (Ocean, Fire, Sunset, Purple, Mint, Gray, Forest, Gold), la misma idea que el banner de la CLI de ColdBox. Nunca se escribe a un pipe ni a un archivo.
@@ -525,6 +529,7 @@ bxAgents serve [--port=8080] [--host=127.0.0.1]
 
 - Requiere un `build` previo - falla claramente si `.build/app` no existe.
 - Falla claramente si `boxlang-miniserver` no se encuentra en `PATH`.
+- La dirección raíz también responde: `/` redirige (302) a la interfaz web cuando el proyecto tiene una, y si no devuelve un pequeño JSON que apunta a la ruta `health` de la API (en `agentApi.path`), o un 404 simple si la API está apagada. No nombra nada del agente.
 - Sirve siempre el agente en `/__bxagents` (`POST /invoke`, `POST /stream`, `POST /batch`, `GET /info`), declare lo que declare el proyecto en [`gateways/`](conventions/gateways/index.md) - consulta [La ruta de agente siempre activa](conventions/agent-bx.md#la-ruta-de-agente-siempre-activa) para exigir un token en ella, o desactivarla.
 - **Escucha en `127.0.0.1` por defecto.** Una app generada no tiene autenticación salvo que la configures (la clave de API y el inicio de sesión de la interfaz web son ambos opcionales), así que el valor por defecto mantiene un servidor de desarrollo fuera de la red. Pasa `--host=0.0.0.0` para escuchar en todas las interfaces de forma deliberada - la línea de arranque te dice cuál de las dos obtuviste.
 - `--port` debe ser un entero entre 1 y 65535; cualquier otra cosa falla de inmediato en lugar de dentro del proceso del servidor.

@@ -128,7 +128,7 @@ At a terminal this is a full-screen chat that keeps your scrollback: answers str
 bxAgents serve --port=8080
 ```
 
-Every served agent has an HTTP API at `/__bxagents` (open on your own machine, behind tokens when you share it), and the web page, the terminal chat and chat platforms all use it. See [Call your agent from code](../guides/agent-api.md).
+Every served agent has an HTTP API at `/__bxagents` (open on your own machine, behind tokens when you share it), and the web page, the terminal chat and chat platforms all use it. See [Call your agent from code](../guides/agent-api.md). The root address, `http://localhost:8080/`, redirects to the web page when the project has one, and otherwise points at `/__bxagents/health`.
 
 If your project also has a `gateways/*` entry with `{ exposes: "agent", path: "/api/chat" }`, the agent is reachable at `POST http://localhost:8080/api/chat/invoke` (and `/stream`, `/batch`, `/info` - see [gateways/](../conventions/gateways/index.md)). An `exposes: "webui"` entry adds the browser chat page.
 

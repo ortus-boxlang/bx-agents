@@ -123,7 +123,7 @@ En una terminal es un chat a pantalla completa que conserva tu scrollback: las r
 bxAgents serve --port=8080
 ```
 
-Todo agente servido tiene una API HTTP en `/__bxagents` (abierta en tu propia máquina, tras tokens cuando la compartes), y la página web, el chat de terminal y las plataformas de chat la usan. Ver [Llama a tu agente desde código](../guides/agent-api.md).
+Todo agente servido tiene una API HTTP en `/__bxagents` (abierta en tu propia máquina, tras tokens cuando la compartes), y la página web, el chat de terminal y las plataformas de chat la usan. Ver [Llama a tu agente desde código](../guides/agent-api.md). La dirección raíz, `http://localhost:8080/`, redirige a la página web cuando el proyecto tiene una, y si no apunta a `/__bxagents/health`.
 
 Si tu proyecto además tiene una entrada `gateways/*` con `{ exposes: "agent", path: "/api/chat" }`, el agente es alcanzable en `POST http://localhost:8080/api/chat/invoke` (y `/stream`, `/batch`, `/info` - ver [gateways/](../conventions/gateways/index.md)). Una entrada `exposes: "webui"` añade la página de chat del navegador.
 

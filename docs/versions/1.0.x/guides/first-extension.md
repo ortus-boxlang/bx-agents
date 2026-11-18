@@ -16,6 +16,8 @@ An [extension](../conventions/extensions.md) adds to the chat and the app withou
 bxAgents add extension standup --with=command,key --layout=file --description="Daily standup"
 ```
 
+(With the BoxLang 1.19.0 launcher a quoted value with spaces is split at the spaces; see [Quoting flag values](../cli-reference.md#quoting-flag-values).)
+
 That writes `extensions/standup.bx`: one class with a `/standup` command and a key, each with a `TODO` to fill in. Leave `--with` or `--layout` out at a terminal and it asks (what to bring, and one file or a folder). If you tick a scheduler, gateway, tool, skill or web files, it makes a folder (`extensions/standup/Extension.bx` plus those files) instead.
 
 ## 2. Try it

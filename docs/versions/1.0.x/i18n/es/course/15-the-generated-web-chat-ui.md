@@ -144,7 +144,7 @@ bxAgents build
 bxAgents serve --port=8080
 ```
 
-Abre `http://localhost:8080/chat` en un navegador y habla con tu agente - el mismo al que le
+Abre `http://localhost:8080/chat` en un navegador (o solo `http://localhost:8080/`, que redirige ahí) y habla con tu agente - el mismo al que le
 has ido añadiendo tools, skills y subagentes desde la [Lección 9](09-giving-your-agent-tools.md).
 
 Referencia completa: [La UI web de chat](../conventions/web-ui.md).

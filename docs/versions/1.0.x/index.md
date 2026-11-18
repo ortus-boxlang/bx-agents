@@ -56,7 +56,7 @@ Pick the problem, write one file. Most of these have a working example in
 | You need to | You write | You get |
 |---|---|---|
 | Answer people where they are | [`gateways/slack.bx`](conventions/gateways/index.md) | A Slack bot over Socket Mode (also Telegram, Discord, Teams, WhatsApp, Twilio SMS, GitHub, Signal and email) |
-| Run a job every morning | [`schedules/Digest.bx`](conventions/schedules.md) | A task with `.cron()` that calls `run()`, started with the app, no cron daemon |
+| Run a job every morning | [`schedules/Digest.bx`](conventions/schedules.md) | A task with `.everyDayAt()` that calls `run()`, started with the app, no cron daemon |
 | Let other systems call it | [`agentApi` in `Agent.yaml`](guides/agent-api.md) | One HTTP API at `/__bxagents` with an OpenAPI document and a BoxLang client, open on your machine or behind tokens; plus [`gateways/expose.bx`](conventions/gateways/index.md) for a REST path of your choosing, or an MCP server |
 | Keep a human in the loop | a tool that needs approval | The run waits for approve or reject, in the terminal, the [web app](conventions/web-ui.md) or a gateway |
 | Let people schedule their own work | [`routines: enabled: true`](conventions/routines.md) | A person asks, the agent makes a routine, a heartbeat runs it, reports are saved, and a summary can go to a gateway chat |
