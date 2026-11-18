@@ -811,6 +811,7 @@ __CUSTOM_CSS__
 	#settingsPanel button:hover { background: var(--accent-soft); color: var(--accent-ink); }
 	#settingsPanel button[hidden] { display: none; }
 
+	/* Notes: the short things the agent keeps about you and about its own work */
 	#routineEditor, #routineReports {
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
@@ -862,6 +863,7 @@ __CUSTOM_CSS__
 	#tokenSecret { margin: 0 0.9rem 0.7rem; padding: 0.6rem; border: 1px solid var(--accent); border-radius: var(--radius-sm); font-size: 0.82rem; }
 	#tokenSecret code { display: block; margin: 0.3rem 0; overflow-wrap: anywhere; font-family: var(--font-mono); }
 	#routineEditor .notes-foot, #routineReports .notes-foot { padding: 0 0.9rem 0.8rem; font-size: 0.78rem; color: var(--muted); min-height: 1.2em; }
+	/* Vault: the secrets the agent uses. A value goes in once and is never shown again. */
 	#vaultAsk { margin: 0.6rem 0.9rem 0; padding: 0.6rem 0.7rem; border: 1px solid var(--accent); border-radius: var(--radius-sm); font-size: 0.85rem; }
 	#vaultList { list-style: none; margin: 0; padding: 0.5rem 0.9rem; overflow-y: auto; max-height: 34vh; }
 	#vaultList li { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; padding: 0.45rem 0; border-bottom: 1px solid var(--border); }
@@ -875,6 +877,8 @@ __CUSTOM_CSS__
 	#vaultForm input, #vaultList li form input { font: inherit; padding: 0.4rem; background: var(--input-bg); color: var(--fg); border: 1px solid var(--border); border-radius: var(--radius-sm); min-width: 0; }
 	#vaultForm button { grid-column: 1 / -1; justify-self: end; }
 	#vaultForm[hidden] { display: none; }
+
+	/* Logs and gateways (admin) */
 	#logsTabs { display: flex; flex-wrap: wrap; gap: 0.3rem; padding: 0.5rem 0.9rem 0; }
 	#logsTabs button { border: 1px solid var(--border); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 0.25rem 0.7rem; font-size: 0.82rem; cursor: pointer; }
 	#logsTabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
@@ -903,7 +907,8 @@ __CUSTOM_CSS__
 	#gatewaysList .gw-error { color: var(--bubble-error); font-size: 0.8rem; overflow-wrap: anywhere; }
 	#gatewaysList .gw-empty { color: var(--muted); border: none; }
 
-	/* Routines: what runs on a schedule, #routineEditor, #routineReports { width: min(44rem, 94vw); }
+	/* Routines: what runs on a schedule, and what it saved */
+	#routineEditor, #routineReports { width: min(44rem, 94vw); }
 	#routinesTools { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; padding: 0.5rem 0.9rem 0; font-size: 0.82rem; color: var(--muted); }
 	#routinesList { list-style: none; margin: 0; padding: 0.5rem 0.9rem; overflow-y: auto; max-height: 56vh; }
 	#routinesList li { padding: 0.65rem 0; border-bottom: 1px solid var(--border); display: grid; gap: 0.3rem; }
@@ -1551,12 +1556,14 @@ __MARKDOWN_SCRIPTS__
 				var id = ( payload && payload.conversationId ) || newConversationId();
 				localStorage.setItem( CONVERSATION_STORAGE, id );
 				setActiveAgent( chosen );
+				// the transcript is cleared now, before the list is fetched: a message sent while the list loads must not
+				// be wiped when it arrives
+				messagesEl.textContent = "";
+				showHint( "" );
+				showWelcome();
+				inputEl.focus();
 				return loadConversations().then( function () {
-					messagesEl.textContent = "";
-					showHint( "" );
-					showWelcome();
 					renderConversations();
-					inputEl.focus();
 				} );
 			} );
 	}

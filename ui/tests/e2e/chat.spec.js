@@ -28,3 +28,15 @@ test( "calls a tool and answers with its result", async ( { page } ) => {
 	await freshChat( page );
 	await ask( page, "what time is it", "It is" );
 } );
+
+test( "keeps a message sent right after New chat", async ( { page } ) => {
+	await page.goto( "./" );
+	await expect( page.locator( "#input" ) ).toBeVisible();
+	await page.waitForLoadState( "networkidle" );
+	// no wait between the two: the list of conversations is still loading when the message goes
+	await page.click( "#newBtn" );
+	await page.fill( "#input", "sent at once" );
+	await page.click( "#sendBtn" );
+	await expect( page.locator( "#messages" ) ).toContainText( "sent at once" );
+	await expect( page.locator( "#messages" ) ).toContainText( "This is the scripted answer", { timeout: 30_000 } );
+} );

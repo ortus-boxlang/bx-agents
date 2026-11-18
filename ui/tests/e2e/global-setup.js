@@ -21,7 +21,7 @@ export default async function globalSetup( config ) {
 		await Promise.all( [ page.waitForNavigation(), page.click( "button[type=submit]" ) ] );
 		await page.context().storageState( { path: AUTH + user + ".json" } );
 		if ( user === "ada" ) {
-			// the first turn of a fresh server compiles the whole path once: do it here, not in a test with a short wait
+			// the first turn of a fresh server compiles the whole path once: do it here, with a long wait
 			await page.waitForSelector( "#input" );
 			await page.fill( "#input", "warm up" );
 			await page.click( "#sendBtn" );

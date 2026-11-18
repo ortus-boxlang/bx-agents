@@ -41,6 +41,8 @@ export async function freshChat( page ) {
 	await page.click( "#newBtn" );
 	await expect( page.locator( "#messages" ) ).toContainText( "Hi! This agent answers from a script" );
 	await expect( page.locator( "#messages" ) ).not.toContainText( "scripted answer" );
+	// starting a conversation asks the server too: let that finish before the first message
+	await page.waitForLoadState( "networkidle" );
 }
 
 /**
@@ -52,8 +54,17 @@ export async function freshChat( page ) {
  * @returns {Promise<void>}
  */
 export async function ask( page, text, expected ) {
+	const seen = [];
+	const note = r => /__bxagents/.test( r.url() ) && seen.push( r.method() + " " + r.url().replace( /.*__bxagents/, "" ) );
+	page.on( "request", note );
 	await page.fill( "#input", text );
 	await page.click( "#sendBtn" );
-	await expect( page.locator( "#messages" ) ).toContainText( expected, { timeout: 30_000 } );
+	try {
+		await expect( page.locator( "#messages" ) ).toContainText( expected, { timeout: 30_000 } );
+	} catch ( e ) {
+		console.log( "requests while asking [" + text + "]:\n" + seen.join( "\n" ) + "\ninput now: [" + ( await page.inputValue( "#input" ) ) + "] send: " + ( await page.getAttribute( "#sendBtn", "aria-label" ) ) );
+		throw e;
+	}
+	page.off( "request", note );
 	await expect( page.locator( "#stopBtn" ) ).toBeHidden( { timeout: 30_000 } );
 }
