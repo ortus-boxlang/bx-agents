@@ -87,6 +87,10 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.result.totalSpecs ).toBe( 2 );
 				expect( result.result.totalPass ).toBe( 2 );
 				expect( result.result.totalFail ).toBe( 0 );
+				// the child ran with its own BoxLang home inside the project, set through its environment at spawn
+				// time (so its compiled classes never land in a home shared with another project)
+				expect( directoryExists( projectRoot & "/.build/test-runtime/classes" ) ).toBeTrue( "the test child used the project's own runtime home" );
+				expect( fileExists( projectRoot & "/.env" ) ).toBeFalse( "nothing is written to the project root for it" );
 			} );
 
 			it( "reports a real failing spec with exit code 1 and a useful failure message", function() {

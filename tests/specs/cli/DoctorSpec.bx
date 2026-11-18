@@ -145,6 +145,28 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			it( "warns about a relative BOXLANG_HOME in .env, and says why and what to do", function() {
+				var root = newTempProject( "valid-minimal" );
+				fileWrite( root & "/.env", "## old scaffold" & char( 10 ) & "BOXLANG_HOME=.build/runtime" & char( 10 ) & "OPENAI_API_KEY=" & char( 10 ) );
+
+				var result = doctorVerb.run( { projectRoot : root } );
+
+				expect( result.exitCode ).toBe( 0 );
+				expect( result.message ).toInclude( "[WARN] .env sets BOXLANG_HOME=.build/runtime" );
+				expect( result.message ).toInclude( "Delete the line" );
+			} );
+
+			it( "does not warn for an absolute BOXLANG_HOME, a commented one, or no .env at all", function() {
+				var root = newTempProject( "valid-minimal" );
+				expect( doctorVerb.run( { projectRoot : root } ).message ).notToInclude( "BOXLANG_HOME" );
+
+				fileWrite( root & "/.env", "BOXLANG_HOME=/opt/boxlang-home" & char( 10 ) );
+				expect( doctorVerb.run( { projectRoot : root } ).message ).notToInclude( "BOXLANG_HOME" );
+
+				fileWrite( root & "/.env", "## BOXLANG_HOME=.build/runtime" & char( 10 ) );
+				expect( doctorVerb.run( { projectRoot : root } ).message ).notToInclude( "BOXLANG_HOME" );
+			} );
+
 			it( "asks for no key when every model is the mock provider", function() {
 				var root = createTempDirectory( prefix = "bxagents-cli-doctor-" );
 				tempDirs.append( root );

@@ -71,6 +71,7 @@ class {
 		checkMcpPrograms( config, checks )
 		checkModelKeys( root, checks )
 		checkDataHome( root, checks )
+		checkEnvRuntimeHome( root, checks )
 
 		return finish( checks, arguments.options.json ?: false )
 	}
@@ -78,6 +79,37 @@ class {
 	// --------------------------------------------------------------------------
 	// Individual checks
 	// --------------------------------------------------------------------------
+
+	/**
+	 * Projects scaffolded before this was fixed carry `BOXLANG_HOME=.build/runtime` in `.env`. The `boxlang`
+	 * launcher sources that file from the working directory, so a relative home resolves inside the project and
+	 * every `bxAgents` verb run there fails with "Can't execute module [bxagents] as it does not exist". Only
+	 * a relative value is reported: an absolute path is a deliberate choice.
+	 *
+	 * @root The project root
+	 * @checks Accumulator array - append() any findings
+	 */
+	private void function checkEnvRuntimeHome( required string root, required array checks ) {
+		var envFile = arguments.root & "/.env"
+		if ( !fileExists( envFile ) ) {
+			return
+		}
+		for ( var line in fileRead( envFile ).listToArray( char( 10 ) & char( 13 ) ) ) {
+			var found = reFindNoCase( "^\s*(export\s+)?BOXLANG_HOME\s*=\s*[""']?([^""'\s]*)", line, 1, true )
+			if ( found.pos[ 1 ] == 0 ) {
+				continue
+			}
+			var value = found.match[ 3 ]
+			if ( !len( value ) || reFind( "^([/~$]|[A-Za-z]:[\\/])", value ) ) {
+				continue
+			}
+			arguments.checks.append( {
+				status  : "warn",
+				message : ".env sets BOXLANG_HOME=#value#, a relative path. The boxlang launcher reads that file from the project folder, so the runtime home becomes an empty folder inside the project and every bxAgents command run there fails with ""Can't execute module [bxagents] as it does not exist"". Delete the line: bxAgents gives each project its own runtime home when it serves or runs it."
+			} )
+			return
+		}
+	}
 
 	/**
 	 * Where the agent keeps everything, and whether that place can be written. Nothing is made: a home that does
