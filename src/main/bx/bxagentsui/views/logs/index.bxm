@@ -1,0 +1,50 @@
+<!--- Logs (admin): one tab per area, a level filter, a search and a tail. State and actions: logsPage
+      (resources/assets/js/components/admin/LogsPage.js). The area and the search come from the address as data. --->
+<bx:output>
+<div class="pg" x-data="logsPage" data-area="#encodeForHTML( prc.logs.area )#" data-query="#encodeForHTML( prc.logs.query )#">
+	#view( view = "_components/ui/page-head", module = "bxagentsui", args = {
+		title   : "Logs",
+		note    : "What the agent wrote down: gateways, the API, routines and the heartbeat. Secrets are never written.",
+		actions : '<button type="button" class="btn" @click="refresh()">' & view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "arrow-clockwise" } ) & ' Refresh</button>'
+	} )#
+	<nav class="pg-tabs" aria-label="Log areas">
+		<template x-for="tab in tabs" :key="tab.id">
+			<a :href="$store.session.config.basePath + '/logs/' + tab.id" @click.prevent="open( tab.id )" :aria-current="tab.id === area ? 'page' : null">
+				<span x-text="tab.label"></span>
+				<template x-if="errorText( tab.id )">
+					<span class="chip bad">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "warning-circle" } )#<span x-text="errorText( tab.id )"></span></span>
+				</template>
+			</a>
+		</template>
+	</nav>
+	<div class="pg-actions logs-controls">
+		<select aria-label="Level" x-model="level">
+			<option value="">All levels</option>
+			<option value="warn">Warnings and errors</option>
+			<option value="error">Errors only</option>
+		</select>
+		#view( view = "_components/ui/search", module = "bxagentsui", args = { label : "Search the log", model : "query", debounce : 300 } )#
+		<select aria-label="Lines" x-model="tail">
+			<option value="100">100 lines</option>
+			<option value="200">200 lines</option>
+			<option value="500">500 lines</option>
+			<option value="1000">1000 lines</option>
+		</select>
+		#view( view = "_components/ui/switch", module = "bxagentsui", args = { label : "Refresh every 5 s", model : "auto" } )#
+	</div>
+	<div class="card logs-box" x-ref="box">
+		<ul class="logs-lines" aria-label="Log lines">
+			<template x-for="( line, index ) in lines" :key="index">
+				<li>
+					<span class="pg-note" x-text="timeText( line )"></span>
+					<span class="chip" :class="levelChip( line ).kind"><svg class="i" aria-hidden="true"><use :href="'##i-' + levelChip( line ).icon"/></svg><span x-text="String( line.level ).toUpperCase()"></span></span>
+					<span class="pg-note" x-text="line.subject || ''"></span>
+					<span class="logs-message" x-text="line.message"></span>
+				</li>
+			</template>
+			<li class="pg-note logs-empty" x-show="!loading && !failed && !lines.length" x-cloak x-text="'Nothing logged here yet' + ( level || query ? ' that matches.' : '.' )"></li>
+		</ul>
+	</div>
+	<p class="pg-status" role="status" x-text="failed"></p>
+</div>
+</bx:output>

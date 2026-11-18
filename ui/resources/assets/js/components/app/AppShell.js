@@ -8,6 +8,7 @@ export function appShell() {
 		/** Loads the capabilities once, when the page starts. */
 		init() {
 			this.$store.theme.init();
+			this.$store.appearance.init();
 			this.$store.session.init();
 		}
 	};

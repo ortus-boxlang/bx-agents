@@ -1,0 +1,24 @@
+<!--- The extensions that are loaded and what each adds, with Reload for an admin. Inside settingsPage. --->
+<bx:output>
+<div class="card-head">
+	<h2 id="setExtTitle">Extensions</h2>
+	<button type="button" class="btn" @click="reloadExtensions()">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "arrows-clockwise" } )# Reload</button>
+</div>
+<template x-for="problem in extensionProblems">
+	<p class="pg-error" role="status" x-text="problem"></p>
+</template>
+<p class="pg-note" x-show="!extensions.length">No extensions are loaded.</p>
+<template x-for="ext in extensions" :key="ext.name">
+	<div class="ext">
+		<div class="pg-actions">
+			<strong x-text="ext.title || ext.name"></strong>
+			<span class="pg-note" x-show="ext.version" x-text="ext.version"></span>
+			<span class="chip" :class="extensionGood( ext ) ? 'ok' : 'warn'"><svg class="i" aria-hidden="true"><use :href="extensionGood( ext ) ? '##i-check-circle' : '##i-warning'"/></svg><span x-text="String( ext.state || '' )"></span></span>
+			<span class="chip" x-show="ext.layer" x-text="ext.layer"></span>
+		</div>
+		<p class="pg-note" x-show="ext.description" x-text="ext.description"></p>
+		<p class="pg-note" x-show="extensionAdds( ext )" x-text="'Adds ' + extensionAdds( ext )"></p>
+		<p class="pg-error" role="status" x-show="( ext.problems || [] ).length" x-text="( ext.problems || [] ).join( ' ' )"></p>
+	</div>
+</template>
+</bx:output>

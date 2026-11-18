@@ -63,8 +63,19 @@ The app partials (`views/_components/app/`) are `includes`, `sprite`, `sidebar` 
 | `$toast.success( text )`, `$toast.error( text )` | A short message |
 | `$md( text )` | Markdown as safe HTML: the only input `x-html` takes |
 | `$fmt.stampText`, `dayText`, `bytesText`, `countLabel` | Dates, sizes and counts, the same everywhere |
-| `$store.session` | `can( capability )`, `capabilities`, `ready` |
+| `$store.session` | `can( capability )`, `capabilities`, `ready`; `await loaded()` before deciding by a capability in `init()` |
 | `$store.theme`, `$store.nav` | Light or dark; the folded menu and the phone drawer |
+| `$store.appearance` | Accent, text size, density (same key and format as the current page) |
+
+| Page | Handler | View | Component |
+|---|---|---|---|
+| Data and backups | `Data.index` | `views/data/` | `components/admin/DataPage.js` |
+| Logs (`/logs/:area?q=`) | `Logs.index` | `views/logs/` | `components/admin/LogsPage.js` |
+| Gateways | `Gateways.index` | `views/gateways/` | `components/admin/GatewaysPage.js` |
+| Settings | `Settings.index` | `views/settings/` | `components/settings/SettingsPage.js` |
+
+A page handler is one `index()` that calls `showPage( event, prc, id, view )` (BaseHandler): 404 for an unknown page,
+403 for an admin page to anybody else. Server values a component needs go in `data-*` attributes, read in `init()`.
 
 ## Commands (from `ui/`)
 

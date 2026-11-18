@@ -14,12 +14,34 @@ export function session( config ) {
 		/** @type {string} The agent's name */
 		agentName   : "",
 
+		/** @type {Promise<void>|null} Settles once the capabilities are known; see loaded() */
+		pending: null,
+
 		/**
-		 * Asks the agent API what this person may use.
+		 * Asks the agent API what this person may use, once.
 		 *
 		 * @returns {Promise<void>} Settles when the capabilities are known (or could not be read: then nothing is offered)
 		 */
-		async init() {
+		init() {
+			if ( !this.pending ) {
+				this.pending = this.fetchCapabilities();
+			}
+			return this.pending;
+		},
+
+		/**
+		 * For a page that decides what to load by a capability: waits until they are known.
+		 *
+		 * @returns {Promise<void>} Settles when the capabilities are known
+		 */
+		loaded() {
+			return this.init();
+		},
+
+		/**
+		 * @returns {Promise<void>} Settles when GET /agent answered or failed
+		 */
+		async fetchCapabilities() {
 			try {
 				const res = await fetch( config.apiBase + "/agent", { headers: { "x-bxagents-source": "web", "x-bxagents-csrf": "1" } } );
 				if ( res.ok ) {

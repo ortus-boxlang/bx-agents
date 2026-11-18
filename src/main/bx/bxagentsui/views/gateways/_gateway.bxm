@@ -1,0 +1,32 @@
+<!--- One gateway: its state, credentials, last error, Reconnect, and its chats. Inside gatewaysPage, as `gateway`. --->
+<bx:output>
+<div class="pg-actions">
+	<strong x-text="gateway.name"></strong>
+	<span class="chip" :class="state( gateway ).kind"><svg class="i" aria-hidden="true"><use :href="'##i-' + state( gateway ).icon"/></svg><span x-text="state( gateway ).label"></span></span>
+	<span class="pg-note" x-text="gateway.type"></span>
+</div>
+<p class="pg-note" x-text="credentialsText( gateway )"></p>
+<p class="pg-note" x-text="gateway.lastActiveAt ? 'Last conversation ' + $fmt.stampText( gateway.lastActiveAt ) : 'No conversations yet.'"></p>
+<template x-if="gateway.lastError && gateway.lastError.message">
+	<p class="pg-error" role="status">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "warning-circle" } )#
+		<span x-text="'Last error' + ( gateway.lastError.at ? ' ' + $fmt.stampText( gateway.lastError.at ) : '' ) + ': ' + gateway.lastError.message"></span>
+		<a x-show="$store.session.can( 'logs' )" :href="logUrl( gateway )">Open log</a>
+	</p>
+</template>
+<div class="pg-actions">
+	<button type="button" class="btn" @click="reconnect( gateway )" :disabled="gateway.state === 'missing' || reconnecting === gateway.name"
+		:title="gateway.state === 'missing' ? 'This gateway is not registered in the running app, so there is nothing to reconnect' : null"
+		:aria-label="'Reconnect ' + gateway.name">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "arrows-clockwise" } )# Reconnect</button>
+</div>
+<h3>Chats</h3>
+<p class="pg-note" x-show="!( gateway.chats || [] ).length">No chats yet. A chat shows here after someone writes to the agent through this gateway.</p>
+<div x-show="( gateway.chats || [] ).length">
+	#view( view = "_components/ui/table", module = "bxagentsui", args = {
+		caption : "Chats",
+		columns : [ "Chat", "Thread", "Last seen" ],
+		rows    : "gateway.chats || []",
+		item    : "chat",
+		rowView : "gateways/_chat-row"
+	} )#
+</div>
+</bx:output>

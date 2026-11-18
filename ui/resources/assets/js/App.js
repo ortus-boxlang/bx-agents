@@ -13,11 +13,16 @@ import { renderMarkdown } from "./utils/markdown.js";
 import * as format from "./utils/format.js";
 import { session } from "./stores/session.js";
 import { theme } from "./stores/theme.js";
+import { appearance } from "./stores/appearance.js";
 import { nav } from "./stores/nav.js";
 import { toast } from "./stores/toast.js";
 import { confirm } from "./stores/confirm.js";
 import { appShell } from "./components/app/AppShell.js";
 import { kitPage } from "./components/kit/KitPage.js";
+import { dataPage } from "./components/admin/DataPage.js";
+import { logsPage } from "./components/admin/LogsPage.js";
+import { gatewaysPage } from "./components/admin/GatewaysPage.js";
+import { settingsPage } from "./components/settings/SettingsPage.js";
 
 // ============================================================
 // Plugins
@@ -31,7 +36,8 @@ Alpine.plugin( persist );
 const config = readConfig();
 const api = createApi( config.apiBase );
 Alpine.store( "session", session( config ) );
-Alpine.store( "theme", theme( Alpine ) );
+Alpine.store( "theme", theme( api ) );
+Alpine.store( "appearance", appearance() );
 Alpine.store( "nav", nav( Alpine ) );
 Alpine.store( "toast", toast() );
 Alpine.store( "confirm", confirm() );
@@ -56,6 +62,10 @@ Alpine.magic( "fmt", () => format );
 // Components
 // ============================================================
 Alpine.data( "appShell", appShell );
+Alpine.data( "dataPage", dataPage );
+Alpine.data( "logsPage", logsPage );
+Alpine.data( "gatewaysPage", gatewaysPage );
+Alpine.data( "settingsPage", settingsPage );
 Alpine.data( "kitPage", kitPage );
 
 window.Alpine = Alpine;

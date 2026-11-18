@@ -33,4 +33,27 @@ class {
 		event.setLayout( name = "App", module = "bxagentsui" )
 	}
 
+	/**
+	 * Shows a page of the menu with its view, or answers 404 for an unknown page and 403 for an admin page to anybody
+	 * else. Every page action ends here, so the rule lives in one place.
+	 *
+	 * @event The request context
+	 * @prc The private request collection
+	 * @id The page's id in the menu
+	 * @view The view to show, in this module
+	 */
+	function showPage( event, prc, required string id, required string view ) {
+		prc.page = variables.menu.find( arguments.id )
+		if ( !prc.page.count() ) {
+			event.renderData( type = "plain", data = "Not found", statusCode = 404 )
+			return
+		}
+		if ( prc.page.group == "admin" && prc.ui.signIn && !prc.user.admin ) {
+			event.setHTTPHeader( statusCode = 403, statusText = "Forbidden" )
+			event.setView( view = "main/forbidden", module = "bxagentsui" )
+			return
+		}
+		event.setView( view = arguments.view, module = "bxagentsui" )
+	}
+
 }

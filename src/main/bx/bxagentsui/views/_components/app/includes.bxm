@@ -17,11 +17,17 @@
 	"logoutUrl" : prc.ui.logoutUrl
 } )#</script>
 <script>
-	// the theme before the CSS, so the page never flashes the wrong one (the theme store keeps it in step afterwards)
+	// the theme and appearance before the CSS, so the page never flashes the wrong look (the stores keep them in step
+	// afterwards). Same keys and formats as the current page: the theme is a plain "dark" or "light", the appearance JSON.
 	( function () {
+		var root = document.documentElement;
 		try {
-			var mode = JSON.parse( localStorage.getItem( "bxagents_webui_theme" ) || '""' );
-			if ( mode === "dark" || mode === "light" ) { document.documentElement.setAttribute( "data-theme", mode ); }
+			var mode = localStorage.getItem( "bxagents_webui_theme" );
+			if ( mode === "dark" || mode === "light" ) { root.setAttribute( "data-theme", mode ); }
+			var look = JSON.parse( localStorage.getItem( "bxagents_webui_appearance" ) || "{}" );
+			var sizes = { small: "0.85rem", large: "1.05rem" };
+			if ( sizes[ look.size ] ) { root.style.setProperty( "--font-size", sizes[ look.size ] ); }
+			if ( look.density === "compact" ) { root.setAttribute( "data-density", "compact" ); }
 		} catch ( e ) {}
 	} )();
 </script>

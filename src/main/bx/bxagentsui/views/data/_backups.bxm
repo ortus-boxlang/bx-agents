@@ -1,0 +1,22 @@
+<!--- The backups, a restore that waits for the next start, and the actions on each. Inside dataPage. --->
+<bx:output>
+<p class="pg-note" x-show="backupsLoading">Loading...</p>
+<p class="pg-error" role="alert" x-show="backupsFailed" x-text="backupsFailed" x-cloak></p>
+<template x-if="pending">
+	<p class="pg-note" role="status">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "clock" } )#
+		<span x-text="'Restoring ' + pending.name + ' is scheduled for the next start' + ( pending.scheduledAt ? ' (asked ' + $fmt.stampText( pending.scheduledAt ) + ')' : '' ) + '. The data as it is now is kept as before-restore.'"></span>
+	</p>
+</template>
+<div x-show="!backupsLoading && !backupsFailed && !backups.length" x-cloak>
+	#view( view = "_components/ui/empty", module = "bxagentsui", args = { icon : "cloud-arrow-up", title : "No backups yet", text : "Make a backup above." } )#
+</div>
+<div x-show="backups.length" x-cloak>
+	#view( view = "_components/ui/table", module = "bxagentsui", args = {
+		caption : "Backups",
+		columns : [ "Name", "Size", "Made", "Actions" ],
+		rows    : "backups",
+		item    : "backup",
+		rowView : "data/_backup-row"
+	} )#
+</div>
+</bx:output>
