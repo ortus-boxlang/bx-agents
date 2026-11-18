@@ -1,0 +1,32 @@
+/**
+ * What every page of the web app does first: asks for a signed in person when the agent has accounts, picks the layout and
+ * hands the settings and the menu to the views.
+ */
+class {
+
+	property name="menu" inject="Menu@bxagentsui";
+
+	/**
+	 * Runs before every action.
+	 *
+	 * @event The request context
+	 * @rc The request collection
+	 * @prc The private request collection
+	 */
+	function preHandler( event, rc, prc ) {
+		prc.ui = getModuleSettings( "bxagentsui" )
+		prc.user = { label : "", admin : false, signedIn : false }
+		if ( prc.ui.signIn ) {
+			var security = getInstance( "cbSecurity@cbSecurity" )
+			if ( !security.isLoggedIn() ) {
+				relocate( url = prc.ui.loginUrl )
+				return
+			}
+			var user = security.getUser()
+			prc.user = { label : user.getLabel(), admin : user.isAdmin(), signedIn : true }
+		}
+		prc.menu = variables.menu.groups()
+		event.setLayout( name = "App", module = "bxagentsui" )
+	}
+
+}

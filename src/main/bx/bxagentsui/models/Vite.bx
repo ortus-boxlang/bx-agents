@@ -1,0 +1,49 @@
+/**
+ * The script and style tags of the web app, the way cbGenesis' vite() helper does it: from the Vite dev server while
+ * `npm run dev` runs (it writes includes/hot), else from the built files listed in includes/build/.vite/manifest.json.
+ */
+@singleton
+class {
+
+	/**
+	 * @entries The entry points, as Vite knows them (resources/assets/scss/app.scss, resources/assets/js/App.js)
+	 * @includesUrl Where the browser finds this module's includes folder
+	 *
+	 * @return The HTML tags that load them
+	 */
+	string function tags( required array entries, required string includesUrl ) {
+		var includes = getDirectoryFromPath( getCurrentTemplatePath() ).reReplace( "models[\\/]$", "" ) & "includes/"
+		var hot = includes & "hot"
+		if ( fileExists( hot ) ) {
+			var server = trim( fileRead( hot ) )
+			var out = [ '<script type="module" src="#encodeForHTMLAttribute( server )#/@vite/client"></script>' ]
+			for ( var entry in arguments.entries ) {
+				out.append( entry.endsWith( ".js" )
+					? '<script type="module" src="#encodeForHTMLAttribute( server & "/" & entry )#"></script>'
+					: '<link rel="stylesheet" href="#encodeForHTMLAttribute( server & "/" & entry )#">' )
+			}
+			return out.toList( char( 10 ) )
+		}
+		var manifestFile = includes & "build/.vite/manifest.json"
+		if ( !fileExists( manifestFile ) ) {
+			return "<!-- the web app's assets are not built: run npm run build in ui/ -->"
+		}
+		var manifest = jsonDeserialize( fileRead( manifestFile ) )
+		var base = arguments.includesUrl & "/build/"
+		var out = []
+		for ( var entry in arguments.entries ) {
+			if ( !manifest.keyExists( entry ) ) {
+				continue
+			}
+			var file = manifest[ entry ].file
+			out.append( file.endsWith( ".js" )
+				? '<script type="module" src="#encodeForHTMLAttribute( base & file )#"></script>'
+				: '<link rel="stylesheet" href="#encodeForHTMLAttribute( base & file )#">' )
+			for ( var css in manifest[ entry ].css ?: [] ) {
+				out.append( '<link rel="stylesheet" href="#encodeForHTMLAttribute( base & css )#">' )
+			}
+		}
+		return out.toList( char( 10 ) )
+	}
+
+}

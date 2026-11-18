@@ -1,0 +1,35 @@
+<!--- What goes in <head>: the title, the settings the scripts read (as JSON data, never as code), the theme set before
+      the CSS loads so there is no flash, the gateway's theme and the Vite assets.
+
+    Usage:
+        #view( view = "_components/app/includes", module = "bxagentsui" )#
+--->
+<bx:output>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>#encodeForHTML( ( prc.page.title ?: "" ).len() ? prc.page.title & " - " & prc.ui.title : prc.ui.title )#</title>
+<script type="application/json" id="bxagents-config">#encodeForHTML( jsonSerialize( {
+	"basePath"  : prc.ui.basePath,
+	"apiBase"   : prc.ui.apiBase,
+	"title"     : prc.ui.title,
+	"signIn"    : prc.ui.signIn,
+	"loginUrl"  : prc.ui.loginUrl,
+	"logoutUrl" : prc.ui.logoutUrl
+} ) )#</script>
+<script>
+	// the theme before the CSS, so the page never flashes the wrong one (the theme store keeps it in step afterwards)
+	( function () {
+		try {
+			var mode = JSON.parse( localStorage.getItem( "bxagents_webui_theme" ) || '""' );
+			if ( mode === "dark" || mode === "light" ) { document.documentElement.setAttribute( "data-theme", mode ); }
+		} catch ( e ) {}
+	} )();
+</script>
+#getInstance( "Vite@bxagentsui" ).tags( [ "resources/assets/scss/app.scss", "resources/assets/js/App.js" ], prc.ui.includesUrl )#
+<bx:if prc.ui.themeCss.len() || prc.ui.customCss.len()>
+<style>
+#prc.ui.themeCss#
+#prc.ui.customCss#
+</style>
+</bx:if>
+</bx:output>

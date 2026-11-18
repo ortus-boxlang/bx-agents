@@ -54,7 +54,10 @@ const env = {
 	...process.env,
 	PATH: binDir + path.delimiter + ( process.env.PATH || "" ),
 	BXAGENTS_HOME: path.join( stackDir, "home" ),
-	BXAGENTS_PUBLIC_URL: "http://127.0.0.1:" + agentPort
+	BXAGENTS_PUBLIC_URL: "http://127.0.0.1:" + agentPort,
+	// the web app module is linked into the built agent, not copied: a change to a view or a handler shows on reload
+	BXAGENTS_UI_LINK  : process.env.BXAGENTS_UI_LINK || "true",
+	BXAGENTS_UI_SOURCE: path.join( repo, "src/main/bx/bxagentsui" )
 };
 
 /**

@@ -1,0 +1,59 @@
+/**
+ * The BX Agents web app, as a ColdBox module: handlers, a router, layouts, views and partials, with the scripts and styles
+ * built by Vite (see ui/ in the BX Agents repository).
+ *
+ * A built agent copies this folder to modules/bxagentsui and writes config/bxagentsui.json, from its web UI gateway's
+ * configure(): where the app is mounted (the entry point) and the settings below. The entry point has to be known when
+ * ColdBox registers the module, before any setting is merged, so it is read here, in the class body.
+ */
+class {
+
+	this.title = "BX Agents web app"
+	this.author = "Ortus Solutions"
+	this.description = "The web app of a BX Agents agent: chat, conversations, routines, connectors, memory, vault and the admin pages"
+	this.modelNamespace = "bxagentsui"
+	this.classMapping = "bxagentsui"
+	// where the agent's web UI gateway mounts the app (config/bxagentsui.json)
+	variables.mounted = readMounted()
+	this.entryPoint = variables.mounted.basePath ?: "/chat"
+	// the module's own layouts and views win over anything of the same name in the app
+	this.layoutParentLookup = false
+	this.viewParentLookup = false
+
+	/**
+	 * The defaults. A built agent overrides them from config/bxagentsui.json.
+	 */
+	function configure() {
+		settings = {
+			// where the app is mounted, and where the agent API is
+			basePath    : "/chat",
+			apiBase     : "/__bxagents",
+			// what the gateway's configure() says
+			title       : "BX Agents Chat",
+			subtitle    : "",
+			icon        : "",
+			welcome     : "",
+			placeholder : "Message...",
+			footer      : "",
+			// accounts: when true every page asks for a signed in person first
+			signIn      : false,
+			loginUrl    : "",
+			logoutUrl   : "",
+			// CSS custom properties from the gateway's theme block, and the project's own theme.css
+			themeCss    : "",
+			customCss   : "",
+			// where the browser finds this module's includes folder
+			includesUrl : "/modules/bxagentsui/includes"
+		}
+		settings.append( variables.mounted, true )
+	}
+
+	/**
+	 * @return What the build wrote to the app's config/bxagentsui.json, or an empty struct
+	 */
+	private struct function readMounted() {
+		var file = expandPath( "/config/bxagentsui.json" )
+		return fileExists( file ) ? jsonDeserialize( fileRead( file ) ) : {}
+	}
+
+}
