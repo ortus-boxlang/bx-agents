@@ -7,7 +7,7 @@ class {
 
 	function configure() {
 		task( "nightly" )
-			.cron( "0 0 * * *" )
+			.everyDayAt( "00:00" )
 			.call( () => run( "cleanup" ) )
 			.withNoOverlaps()
 	}
