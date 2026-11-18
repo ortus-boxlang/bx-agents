@@ -63,6 +63,8 @@ somewhere else (`agentApi.path`), add `--api-path=/where`. If it wants a token
 bxAgents invoke --message="What's the weather in Boston?" [--json]
 ```
 
+(With the BoxLang 1.19.0 launcher a quoted value with spaces is split at the spaces; see [Quoting flag values](../cli-reference.md#quoting-flag-values).)
+
 Exists for scripting and CI, where `chat`'s TTY requirement is a hard blocker. By
 default this loads the generated factory in-process, the same path `chat` uses
 internally, just without the chat screen - no `serve` prerequisite at all. `--json`

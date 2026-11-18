@@ -53,8 +53,8 @@ my-agent/
         └── AgentSpec.bx
 ```
 
-Más un `.env` que declara `BOXLANG_HOME=.build/runtime` (coincidiendo con el propio
-directorio de runtime acotado de `serve`), un `.gitignore` (ignora `.build/`, `dist/`, `.env`, `lib/` y `data/chat.db*`, entre otros)
+Más un `.env` (solo con comentarios para tus claves de API; a propósito no define
+`BOXLANG_HOME`), un `.gitignore` (ignora `.build/`, `dist/`, `.env`, `lib/` y `data/chat.db*`, entre otros)
 y unos cuantos dotfiles (`.boxlang.json`, `.editorconfig`, `.bxlint.json`, `.gitattributes`,
 `.markdownlint.json`) - `new` nunca sobrescribe ninguno si ya existen. BoxLang carga por sí mismo el `.env`
 desde la raíz del proyecto, así que es donde viven los secretos: el asistente y `add` escriben una

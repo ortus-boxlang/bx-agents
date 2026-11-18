@@ -44,7 +44,7 @@ my-agent/
         └── AgentSpec.bx
 ```
 
-Más un `.env` (con `BOXLANG_HOME=.build/runtime`; los secretos viven aquí, así que pon ahí las claves de API de tu proveedor y mantenlo fuera del control de código) y un `.gitignore`. BoxLang carga por sí mismo el `.env` desde la raíz del proyecto.
+Más un `.env` (los secretos viven aquí, así que pon ahí las claves de API de tu proveedor y mantenlo fuera del control de código) y un `.gitignore`. BoxLang carga por sí mismo el `.env` desde la raíz del proyecto.
 
 Este es el starter `minimal` - el predeterminado cuando se omite `--template`. Una plantilla es un preajuste: el asistente (y flags como `--with`, `--channels` y `--deploy`) añaden tools, canales y un destino de despliegue encima. `new` también puede generar uno de otros 7 starters incorporados (`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent`), cada uno añadiendo un poco de contenido preconfigurado (un gateway, un scheduler) sobre el mismo esqueleto, o saltarse el andamiaje por completo y crear el proyecto a partir de un repositorio de GitHub existente (`--repo=owner/repo`) o un paquete de ForgeBox (`--forgebox=<slug>`) en su lugar - ver la [Referencia de la CLI](../cli-reference.md#new) para la lista completa y cómo funciona cada uno. El agente se define por defecto con un `Agent.yaml`; pasa `--class` para generar en su lugar el `Agent.bx` avanzado basado en clase (ver [Agent.bx](../conventions/agent-bx.md)).
 
@@ -123,7 +123,7 @@ En una terminal es un chat a pantalla completa que conserva tu scrollback: las r
 bxAgents serve --port=8080
 ```
 
-Todo agente servido tiene una API HTTP en `/__bxagents` (abierta en tu propia máquina, tras tokens cuando la compartes), y la página web, el chat de terminal y las plataformas de chat la usan. Ver [Llama a tu agente desde código](../guides/agent-api.md).
+Todo agente servido tiene una API HTTP en `/__bxagents` (abierta en tu propia máquina, tras tokens cuando la compartes), y la página web, el chat de terminal y las plataformas de chat la usan. Ver [Llama a tu agente desde código](../guides/agent-api.md). La dirección raíz, `http://localhost:8080/`, redirige a la página web cuando el proyecto tiene una, y si no apunta a `/__bxagents/health`.
 
 Si tu proyecto además tiene una entrada `gateways/*` con `{ exposes: "agent", path: "/api/chat" }`, el agente es alcanzable en `POST http://localhost:8080/api/chat/invoke` (y `/stream`, `/batch`, `/info` - ver [gateways/](../conventions/gateways/index.md)). Una entrada `exposes: "webui"` añade la página de chat del navegador.
 

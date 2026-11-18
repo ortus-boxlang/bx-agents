@@ -18,7 +18,7 @@ class {
 
 	function configure() {
 		task( "nightly" )
-			.cron( "0 0 * * *" )
+			.everyDayAt( "00:00" )
 			.call( () => run( "cleanup" ) )
 			.withNoOverlaps()
 	}
@@ -26,10 +26,11 @@ class {
 }
 ```
 
-`.cron()` takes five fields (`minute hour day-of-month month day-of-week`) or six, with
-seconds in front. BoxLang's other task methods work too: `.every( 15, "minutes" )`,
-`.everyDayAt( "09:00" )`, `.onWeekdays( "08:30" )`, `.startOn()`/`.endOn()`, `.when()`,
-`.withNoOverlaps()`, lifecycle hooks, timezones.
+BoxLang's task methods say when: `.every( 15, "minutes" )`, `.everyDayAt( "09:00" )`,
+`.onWeekdays( "08:30" )`, `.everyWeekOn( 1, "09:00" )`, `.startOn()`/`.endOn()`, `.when()`,
+`.withNoOverlaps()`, lifecycle hooks, timezones. `.cron()` works with **six** fields
+(second first); a five-field one does not fire on BoxLang 1.19.0, see
+[schedules/](../conventions/schedules.md#cron).
 
 ## Retrieving your agent
 
@@ -39,7 +40,7 @@ seconds in front. BoxLang's other task methods work too: `.every( 15, "minutes" 
 
 ```javascript
 task( "weekly-digest" )
-	.cron( "0 8 * * MON" )
+	.everyWeekOn( 1, "08:00" )
 	.call( () => agent( "ResearchBot" ).run( "summarize this week's findings" ) )
 ```
 
@@ -63,6 +64,8 @@ bxAgents add schedule --when="weekdays 08:30" --prompt="Summarize yesterday's fi
 bxAgents build --verbose
 bxAgents inspect --section=schedule
 ```
+
+(With the BoxLang 1.19.0 launcher a quoted value with spaces is split at the spaces; see [Quoting flag values](../cli-reference.md#quoting-flag-values).)
 
 `add schedule` writes `schedules/<Name>.bx`; `inspect` lists each scheduler with its
 tasks, cron and agent.
