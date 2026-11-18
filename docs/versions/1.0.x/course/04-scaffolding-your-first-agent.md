@@ -53,8 +53,7 @@ my-agent/
         └── AgentSpec.bx
 ```
 
-Plus a `.env` declaring `BOXLANG_HOME=.build/runtime` (matching `serve`'s own scoped
-runtime home), a `.gitignore` (it ignores `.build/`, `dist/`, `.env`, `lib/` and `data/chat.db*`, among others)
+Plus a `.env` (commented API key stubs only; it deliberately does not set `BOXLANG_HOME`), a `.gitignore` (it ignores `.build/`, `dist/`, `.env`, `lib/` and `data/chat.db*`, among others)
 and a few dotfiles (`.boxlang.json`, `.editorconfig`, `.bxlint.json`, `.gitattributes`,
 `.markdownlint.json`) - `new` never overwrites them if they already exist. BoxLang loads the `.env` from the project root itself, so
 this is where secrets live: the wizard and `add` write an empty line for each key your choices

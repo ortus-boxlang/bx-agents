@@ -303,6 +303,28 @@ try {
 	println( "+ Confirmed: the always-on /__bxagents/invoke route reaches the generated agent: " & reservedResult.fileContent )
 
 	// ------------------------------------------------------------------
+	// 4b2. The ROOT address answers, with no token: `/` redirects (302) to the web UI.
+	//
+	// Before the generated router routed "/", http://host:port/ fell to ColdBox's default event and
+	// came back 500 (EventHandlerNotRegisteredException, main.index). The fixture has a webui
+	// exposure at /chat. The redirect is not followed (redirect=false) so the status and the
+	// Location header are the thing asserted, and a double slash in it (a leading slash in the
+	// route's target) is caught too.
+	// ------------------------------------------------------------------
+	bx:http url="http://127.0.0.1:#port#/" method="GET" redirect=false result="rootResult" timeout=30 {}
+	rootLocation = rootResult.responseHeader.Location ?: ( rootResult.responseHeader.location ?: "" )
+	if ( isArray( rootLocation ) ) {
+		rootLocation = rootLocation.len() ? rootLocation[ 1 ] : ""
+	}
+	if ( rootResult.status_code != 302 || !rootLocation.reFindNoCase( "^https?://[^/]+/chat/$" ) ) {
+		throw(
+			type    = "BxAgents.RootRouteFailed",
+			message = "Expected GET / to answer 302 with Location .../chat/ - got HTTP #rootResult.status_code#, Location [#rootLocation#]: #left( rootResult.fileContent, 300 )#"
+		)
+	}
+	println( "+ Confirmed: GET / answers 302 to the web UI (" & rootLocation & ")" )
+
+	// ------------------------------------------------------------------
 	// 4c. The agent STREAMS over SSE, incrementally.
 	//
 	// Exercised through AgentClient itself - the same code `chat --server`

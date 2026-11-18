@@ -23,6 +23,10 @@ These are handled before verb dispatch and never reach a verb.
 | `-h`, `--help`, `help` | Print usage (every verb + description) and exit 0. Accepted in **any** position, so `bxAgents clean --help` prints usage rather than running `clean`. Also printed (exit 1) if no verb is given at all. |
 | `-v`, `--version` | Print `bxAgents v{version}` and exit 0. Only meaningful as the very first token, so it never collides with `package --version=1.0.0`. |
 
+## Quoting flag values
+
+BoxLang 1.19.0's `boxlang` launcher script splits every argument at spaces, so `--description="Daily standup"` arrives as `--description=Daily` (`--description "a b c"` and `"--description=a b c"` too). Until that is fixed upstream, write values without spaces (`--description=Daily-standup`), fill the text in the generated file afterwards, or start the module through Java, which keeps the quoting: `java -cp boxlang-1.19.0.jar ortus.boxlang.runtime.BoxRunner module:bxagents new ... --description="a b c"`.
+
 ## The banner
 
 At an interactive terminal, `bxAgents --help` and the end of the `new` wizard greet you with the BxAgents name in block letters, painted in a gradient picked at random from eight themes (Ocean, Fire, Sunset, Purple, Mint, Gray, Forest, Gold), the same idea as the ColdBox CLI's banner. It is never written to a pipe or a file.
@@ -186,7 +190,7 @@ bxAgents new my-agent --forgebox=some-package-slug
   - `--model` is **required** when no questions are asked - a `provider/model` slug (see [the model slug](conventions/agent-bx.md#the-model-slug)).
   - `--name` defaults to the target directory's own basename.
   - Refuses to run if the target already contains an `Agent.yaml` or an `Agent.bx`.
-  - Creates [`Agent.yaml`](conventions/agent-yaml.md), `instructions.md`, a root [`Application.bx`](conventions/application-bx.md) (extends the class every build generates; never overwritten), every convention folder (empty), a root [`box.json`](conventions/box-json.md) (`testbox` as a development dependency, installed into `lib/testbox`), a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/specs/AgentSpec.bx`), a `.env` declaring `BOXLANG_HOME=.build/runtime` (matching `serve`'s own scoped runtime home), a `.gitignore` (`.env` and `.env.*`, `.build/`, `dist/`, `data/chat.db*`, `lib/`, `boxlang_modules/`, `.agents/skills/`, editor files), and the standard dotfiles `.editorconfig`, `.gitattributes`, `.bxlint.json`, `.markdownlint.json` and a `.boxlang.json` listing every bx-ai setting at its default (the BoxLang runtime reads it when run from the project root; edit the values there). Never overwrites a file that already exists. BoxLang and `boxlang-miniserver` load a `.env` from the project root themselves, so the file also works for your API keys; BxAgents never reads, copies or packages it.
+  - Creates [`Agent.yaml`](conventions/agent-yaml.md), `instructions.md`, a root [`Application.bx`](conventions/application-bx.md) (extends the class every build generates; never overwritten), every convention folder (empty), a root [`box.json`](conventions/box-json.md) (`testbox` as a development dependency, installed into `lib/testbox`), a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/specs/AgentSpec.bx`), a `.env` (commented API key stubs only; it deliberately does not set `BOXLANG_HOME`), a `.gitignore` (`.env` and `.env.*`, `.build/`, `dist/`, `data/chat.db*`, `lib/`, `boxlang_modules/`, `.agents/skills/`, editor files), and the standard dotfiles `.editorconfig`, `.gitattributes`, `.bxlint.json`, `.markdownlint.json` and a `.boxlang.json` listing every bx-ai setting at its default (the BoxLang runtime reads it when run from the project root; edit the values there). Never overwrites a file that already exists. BoxLang and `boxlang-miniserver` load a `.env` from the project root themselves, so the file also works for your API keys; BxAgents never reads, copies or packages it.
   - `--class` (a bare boolean flag, like the others described above) writes the class-based [`Agent.bx`](conventions/agent-bx.md) instead of the default `Agent.yaml`, for agents whose definition needs code (hooks, dynamic instructions). It applies to the root and to any subagents a template scaffolds, and only to `--template` mode - not to `--repo`/`--forgebox`.
   - `--template` picks one of 8 built-in starters, each layering a bit of pre-wired content on top of the base skeleton above (see [Agent Templates](agent-templates.md) for every generated file in full, plus how `--repo`/`--forgebox` sources work and how to publish your own):
     - `minimal` - the bare skeleton, nothing extra.
@@ -271,16 +275,18 @@ bxAgents add schedule                          # asks how often, the details, a 
 
 | Phrase | Runs | Written as |
 |---|---|---|
-| `every 15 minutes`, `every 2 hours`, `every 1 days` | At that interval | `.cron( "*/15 * * * *" )` where the step divides the hour or day evenly, otherwise `.every( n, "unit" )` |
-| `hourly`, `hourly :15` | Every hour, on the hour or at that minute | `.cron( "0 * * * *" )`, `.cron( "15 * * * *" )` |
-| `daily 09:00` | Every day at that time | `.cron( "0 9 * * *" )` |
-| `weekdays 08:30`, `weekends 10:00` | Monday to Friday, or Saturday and Sunday | `.cron( "30 8 * * 1-5" )`, `.cron( "0 10 * * 0,6" )` |
-| `weekly mon 09:00` | Once a week (`mon` `tue` `wed` `thu` `fri` `sat` `sun`) | `.cron( "0 9 * * MON" )` |
-| `monthly 1 09:00` | Once a month on that day, 1 to 28 so that no month skips it | `.cron( "0 9 1 * *" )` |
-| `first-business-day 09:00`, `last-business-day 17:00` | On that business day of each month | `.onFirstBusinessDayOfTheMonth( "09:00" )` (cron cannot say it) |
-| `0 9 * * 1-5`, `0 30 8 * * MON-FRI` | Any cron expression: five fields, or six with seconds in front | `.cron( "..." )`, checked by BoxLang's own parser |
+| `every 15 minutes`, `every 2 hours`, `every 1 days` | At that interval | `.every( 15, "minutes" )`, `.every( 2, "hours" )`, `.every( 1, "days" )` |
+| `hourly`, `hourly :15` | Every hour, on the hour or at that minute | `.everyHour()`, `.everyHourAt( 15 )` |
+| `daily 09:00` | Every day at that time | `.everyDayAt( "09:00" )` |
+| `weekdays 08:30`, `weekends 10:00` | Monday to Friday, or Saturday and Sunday | `.onWeekdays( "08:30" )`, `.onWeekends( "10:00" )` |
+| `weekly mon 09:00` | Once a week (`mon` `tue` `wed` `thu` `fri` `sat` `sun`) | `.everyWeekOn( 1, "09:00" )` |
+| `monthly 1 09:00` | Once a month on that day, 1 to 28 so that no month skips it | `.everyMonthOn( 1, "09:00" )` |
+| `first-business-day 09:00`, `last-business-day 17:00` | On that business day of each month | `.onFirstBusinessDayOfTheMonth( "09:00" )` |
+| `0 9 * * 1-5`, `0 30 8 * * MON-FRI` | Any cron expression: five fields, or six with seconds in front | `.cron( "..." )` with six fields (a leading `0` is added to a five-field one), checked by BoxLang's own parser |
 
 Times are 24 hour `HH:mm` in the scheduler's timezone.
+
+A phrase is never written as a five-field `.cron()`: on BoxLang 1.19.0 that does not fire (see [Cron](conventions/schedules.md#cron)).
 
 - An existing file of the same name is a conflict and nothing is written; `--force` replaces it.
 - Schedulers run while the app is served (`bxAgents serve`). Check the result with `bxAgents inspect --section=schedule`.
@@ -532,11 +538,13 @@ bxAgents serve [--port=8080] [--host=127.0.0.1]
 
 - Requires a prior `build` - fails clearly if `.build/app` doesn't exist.
 - Fails clearly if `boxlang-miniserver` isn't found on `PATH`.
+- The root address answers too: `/` redirects (302) to the web UI when the project has one, and otherwise returns a small JSON pointer to the API's `health` route (on `agentApi.path`), or a plain 404 when the API is off. It names nothing about the agent.
 - Always serves the agent at `/__bxagents` (`POST /invoke`, `POST /stream`, `POST /batch`, `GET /info`), whatever the project declares in [`gateways/`](conventions/gateways/index.md) - see [the always-on agent route](conventions/agent-bx.md#the-always-on-agent-route) for how to require a token on it, or turn it off.
 - **Binds to `127.0.0.1` by default.** A generated app is not authenticated unless you configured it to be (the web UI's API-key gate and sign-in are both opt-in), so the default keeps a development server off the network. Pass `--host=0.0.0.0` to bind all interfaces deliberately - the startup line tells you which of the two you got.
 - `--port` must be an integer in 1-65535; anything else fails immediately rather than inside the server process.
 - Writes `.build/miniserver.json` (rewrites enabled, `rewriteFileName: "index.bxm"`, health check on) before launching, and `.build/runtime/config/boxlang.json`, which turns off whitespace compression (it would collapse the blank lines that end each SSE frame) and points the app at the installed BxAgents module and the modules bundled inside it.
-- Scopes the server's own BoxLang runtime home to `.build/runtime` (via `serverHome`) rather than the shared `~/.boxlang` default, so each project's compiled-class cache and config overrides are isolated - and `clean` sweeps it for free, since it already wipes `.build` wholesale. `invoke --server` gets this too, since it reuses `serve` internally. This does **not** extend to `chat`/`build`/`test`/default `invoke`.
+- Scopes the server's own BoxLang runtime home to `.build/runtime` (via `serverHome`) rather than the shared `~/.boxlang` default, so each project's compiled-class cache and config overrides are isolated - and `clean` sweeps it for free, since it already wipes `.build` wholesale. `chat --server` and `invoke --server` get this too, since they reuse `serve` internally. `test` runs its child process with its own home in `.build/test-runtime`. Both are set through the child's environment when it starts, never by writing a file into the project root.
+- **The scaffolded `.env` does not set `BOXLANG_HOME`.** Each project gets its own runtime home when bxAgents serves or runs it, so a project that runs under `boxlang module:bxagents ...` from its own root keeps working: the `boxlang` launcher reads the project `.env`, and a relative `BOXLANG_HOME` there points the launcher at an empty folder. `build`, `doctor`, `inspect`, the in-process `chat` and the default `invoke` run inside the bxAgents process you started, and a runtime home cannot change mid-process, so they use your own home. They keep per-project state in the project's `.build/` and the data home only; BoxLang's compiled-class cache in your home is named after each source file's full path, so two projects do not overwrite each other. `bxAgents doctor` warns when an older project's `.env` still has a relative `BOXLANG_HOME` line; delete it.
 
 ### `chat`
 

@@ -16,7 +16,7 @@ class {
 
 	function configure() {
 		task( "cleanup" )
-			.cron( "0 0 * * *" )
+			.everyDayAt( "00:00" )
 			.call( () => run( "clean up old tickets" ) )
 			.withNoOverlaps()
 	}
@@ -38,7 +38,7 @@ The build adds `extends="bxagents.Scheduler"` to any scheduler class that names 
 
 | Method | What it does |
 |---|---|
-| `task( name )` | BoxLang's task builder: `.cron()`, `.every()`, `.everyDayAt()`, `.withNoOverlaps()`, `.call()` ... |
+| `task( name )` | BoxLang's task builder: `.every()`, `.everyDayAt()`, `.onWeekdays()`, `.cron()` (six fields), `.withNoOverlaps()`, `.call()` ... |
 | `run( input, params, options )` | Sends a message to the **default agent**, the root agent your `Agent.yaml` or `Agent.bx` defines. Takes the agent's own `run()` arguments. |
 | `agent( name )` | Any agent in the project tree by the `name` its own definition declares, root or subagent at any depth. With no name it is the default agent. |
 | `defaultAgent()` | The root agent. |
@@ -51,7 +51,7 @@ class {
 
 	function configure() {
 		task( "weekly-digest" )
-			.cron( "0 8 * * MON" )
+			.everyWeekOn( 1, "08:00" )
 			.call( () => agent( "ResearchBot" ).run( "summarize this week's findings" ) )
 	}
 
@@ -62,17 +62,36 @@ Everything is reached when a task fires, not when `configure()` runs, so a sched
 
 If a class names a parent already (`class extends="my.BaseScheduler" {`), the build leaves it alone. Make your parent extend `bxagents.Scheduler` to keep the methods above.
 
-## Cron
+## When it runs
 
-`.cron( "..." )` is BoxLang's own and takes **5 fields** (`minute hour day-of-month month day-of-week`) or **6 fields** with seconds in front:
+Say it with the task's own methods. Each of these was served on BoxLang 1.19.0 and waited on until it fired:
 
 ```javascript
-.cron( "*/15 * * * *" )        // every 15 minutes
-.cron( "0 9 * * 1-5" )         // 09:00 on weekdays
-.cron( "0 30 8 * * MON-FRI" )  // 08:30:00 on weekdays (six fields)
+.every( 15, "minutes" )          // from when the app starts, then every 15 minutes
+.everyHour()  .everyHourAt( 15 ) // every hour, or at :15
+.everyDayAt( "09:00" )           // every day at 09:00
+.onWeekdays( "08:30" )           // Monday to Friday; .onWeekends( "10:00" ) for the other two
+.everyWeekOn( 1, "09:00" )       // 1 is Monday
+.everyMonthOn( 1, "09:00" )
+.onFirstBusinessDayOfTheMonth( "09:00" )
 ```
 
-Lists (`1,3,5`), ranges (`1-5`), steps (`*/5`), month names (`JAN`) and day names (`MON`) work. Anything else the task DSL offers is there too: `.every( 15, "minutes" )`, `.everyDayAt( "09:00" )`, `.onWeekdays( "08:30" )`, `.onFirstBusinessDayOfTheMonth( "09:00" )`, `.startOn()`, `.endOn()`, `.when()`, `.withNoOverlaps()`, `.onSuccess()`, `.onFailure()`, timezones.
+Times are `HH:mm` in the scheduler's timezone. Also available: `.startOn()`, `.endOn()`, `.when()`, `.withNoOverlaps()`, `.onSuccess()`, `.onFailure()` and timezones.
+
+## Cron
+
+`.cron( "..." )` needs **six fields**, with the second first:
+
+```javascript
+.cron( "0 */15 * * * *" )       // every 15 minutes
+.cron( "0 0 9 * * 1-5" )        // 09:00:00 on weekdays
+.cron( "0 30 8 * * MON-FRI" )   // 08:30:00 on weekdays
+```
+
+Lists (`1,3,5`), ranges (`1-5`), steps (`*/5`), month names (`JAN`) and day names (`MON`) work.
+
+!!! warning "A five-field cron does not fire on BoxLang 1.19.0"
+    BoxLang's documentation says `.cron()` takes five fields, and its parser accepts them, but a task written as `.cron( "* * * * *" )`, `.cron( "*/2 * * * *" )` or `.cron( "30 14 * * *" )` never ran in a served app or in a bare `boxlang schedule` run (minutes of waiting, no error). The same schedule as six fields, as `.every()` or as `.everyDayAt()`, ran on time. A five-field expression ticks once a minute and BoxLang then requires the second to be 0; in a probe the tick landed just before the minute, so the test failed every time. Treat it as a BoxLang bug: write six fields, or one of the methods above. `bxAgents add schedule` does this for you, and writes a typed five-field expression with a leading `0`.
 
 ## Retrieving an agent
 

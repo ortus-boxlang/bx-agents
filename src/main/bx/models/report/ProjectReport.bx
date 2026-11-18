@@ -593,7 +593,7 @@ class {
 
 	/**
 	 * Each `task( "name" )` call with what follows it up to the next one: the cron expression when it has a
-	 * `.cron( "..." )` (otherwise the frequency method it calls, e.g. `everyDayAt`) and the agent it names with
+	 * `.cron( "..." )` (otherwise the frequency method it calls with its arguments, e.g. `everyDayAt( "09:00" )`) and the agent it names with
 	 * `agent( "Name" )` ("default" when it calls `run()` or names none).
 	 *
 	 * The calls are looked for in the code only, with comments and strings blanked, so a prompt that happens to
@@ -622,11 +622,11 @@ class {
 				var chunkEnd = i < starts.len() ? starts[ i + 1 ].at - 1 : len( source )
 				var codeChunk = code.mid( starts[ i ].at, chunkEnd - starts[ i ].at + 1 )
 				var cron = reFind( "\.cron\(\s*[""']", code, starts[ i ].at, true )
-				var frequency = reFind( "\.(every[A-Za-z]*|on[A-Z][A-Za-z]*|daily|hourly|weekly|monthly)\(", codeChunk, 1, true )
+				var frequency = reFind( "\.((every[A-Za-z]*|on[A-Z][A-Za-z]*|daily|hourly|weekly|monthly)\([^)]*\))", codeChunk, 1, true )
 				var agentHit = reFind( "\bagent\(\s*[""']", code, starts[ i ].at, true )
 				tasks.append( {
 					name  : starts[ i ].name,
-					when  : cron.pos[ 1 ] && cron.pos[ 1 ] <= chunkEnd ? stringArgument( code, source, cron ) : ( frequency.pos[ 1 ] ? codeChunk.mid( frequency.pos[ 2 ], frequency.len[ 2 ] ) : "" ),
+					when  : cron.pos[ 1 ] && cron.pos[ 1 ] <= chunkEnd ? stringArgument( code, source, cron ) : ( frequency.pos[ 1 ] ? source.mid( starts[ i ].at + frequency.pos[ 2 ] - 1, frequency.len[ 2 ] ) : "" ),
 					agent : agentHit.pos[ 1 ] && agentHit.pos[ 1 ] <= chunkEnd ? stringArgument( code, source, agentHit ) : "default"
 				} )
 			}

@@ -48,7 +48,7 @@ my-agent/
         └── AgentSpec.bx
 ```
 
-Plus a root [`Application.bx`](../conventions/application-bx.md) that extends the class every build generates (add your own settings and hooks there), a `.env` (with `BOXLANG_HOME=.build/runtime`; secrets live here, so put your provider API keys in it and keep it out of source control), a `.gitignore` and a few dotfiles (`.editorconfig`, `.gitattributes`, `.bxlint.json`, `.markdownlint.json`, `.boxlang.json`). BoxLang loads the `.env` from the project root itself. The root `box.json` lists `testbox` as a development dependency.
+Plus a root [`Application.bx`](../conventions/application-bx.md) that extends the class every build generates (add your own settings and hooks there), a `.env` (secrets live here, so put your provider API keys in it and keep it out of source control), a `.gitignore` and a few dotfiles (`.editorconfig`, `.gitattributes`, `.bxlint.json`, `.markdownlint.json`, `.boxlang.json`). BoxLang loads the `.env` from the project root itself. The root `box.json` lists `testbox` as a development dependency.
 
 This is the `minimal` starter - the default when `--template` is omitted. A template is a preset: the wizard (and flags such as `--with`, `--channels` and `--deploy`) add tools, channels and a deploy target on top of it. `new` can also scaffold one of 7 other built-in starters (`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent`), each adding a bit of pre-wired content (a gateway, a scheduler) on top of the same skeleton, or skip scaffolding entirely and create the project from an existing GitHub repo (`--repo=owner/repo`) or a ForgeBox package (`--forgebox=<slug>`) instead - see the [CLI Reference](../cli-reference.md#new) for the full list and how each one works. The agent is defined by an `Agent.yaml` by default; pass `--class` to scaffold the advanced, class-based `Agent.bx` instead (see [Agent.bx](../conventions/agent-bx.md)).
 
@@ -128,7 +128,7 @@ At a terminal this is a full-screen chat that keeps your scrollback: answers str
 bxAgents serve --port=8080
 ```
 
-Every served agent has an HTTP API at `/__bxagents` (open on your own machine, behind tokens when you share it), and the web page, the terminal chat and chat platforms all use it. See [Call your agent from code](../guides/agent-api.md).
+Every served agent has an HTTP API at `/__bxagents` (open on your own machine, behind tokens when you share it), and the web page, the terminal chat and chat platforms all use it. See [Call your agent from code](../guides/agent-api.md). The root address, `http://localhost:8080/`, redirects to the web page when the project has one, and otherwise points at `/__bxagents/health`.
 
 If your project also has a `gateways/*` entry with `{ exposes: "agent", path: "/api/chat" }`, the agent is reachable at `POST http://localhost:8080/api/chat/invoke` (and `/stream`, `/batch`, `/info` - see [gateways/](../conventions/gateways/index.md)). An `exposes: "webui"` entry adds the browser chat page.
 

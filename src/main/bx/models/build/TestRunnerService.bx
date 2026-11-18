@@ -82,8 +82,13 @@ class {
 			fileWrite( scriptPath, renderRunnerScript( reportPath ) )
 
 			var javaBin = createObject( "java", "java.lang.System" ).getProperty( "java.home" ) & "/bin/java"
+			// The child gets its own runtime home inside the project (its compiled-class cache and config), so two
+			// projects' test runs never share one. Passed as an argument at spawn time: nothing is written into the
+			// project root for it, and a `.env` is never involved.
+			var runtimeHome = root & "/.build/test-runtime"
+			directoryCreate( path = runtimeHome, createPath = true, ignoreExists = true )
 			var process = createObject( "java", "ortus.boxlang.bxagents.build.TestRunnerLauncher" )
-				.launch( javaBin, currentBoxLangJarPath(), configPath, scriptPath, root )
+				.launch( javaBin, currentBoxLangJarPath(), configPath, scriptPath, root, runtimeHome )
 
 			process.waitFor()
 			var exitCode = process.exitValue()

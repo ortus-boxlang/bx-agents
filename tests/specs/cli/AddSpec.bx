@@ -257,7 +257,7 @@ class extends="testbox.system.BaseSpec" {
 					// no extends: the build adds the scheduler base class
 					expect( source ).notToInclude( "extends" );
 					expect( source ).toInclude( 'task( "morning" )' );
-					expect( source ).toInclude( '.cron( "0 9 * * *" )' );
+					expect( source ).toInclude( '.everyDayAt( "09:00" )' );
 					expect( source ).toInclude( '.call( () => run( "Say hi" ) )' );
 					expect( source ).toInclude( ".withNoOverlaps()" );
 					expect( source ).notToInclude( "getInstance" );
@@ -279,18 +279,18 @@ class extends="testbox.system.BaseSpec" {
 					addSchedule( root, { when : "weekly mon 08:00", name : "monday" } );
 
 					expect( fileRead( root & "/schedules/Nightly.bx" ) ).toBe( before );
-					expect( fileRead( root & "/schedules/Monday.bx" ) ).toInclude( '.cron( "0 8 * * MON" )' );
+					expect( fileRead( root & "/schedules/Monday.bx" ) ).toInclude( '.everyWeekOn( 1, "08:00" )' );
 				} );
 
-				it( "accepts a cron expression for --when", function() {
+				it( "accepts a cron expression for --when, written with six fields because five never fire", function() {
 					var root = newTempProject( "valid-minimal" );
 
 					addSchedule( root, { when : "0 9 * * 1-5", name : "weekday-nine" } );
 
-					expect( fileRead( root & "/schedules/WeekdayNine.bx" ) ).toInclude( '.cron( "0 9 * * 1-5" )' );
+					expect( fileRead( root & "/schedules/WeekdayNine.bx" ) ).toInclude( '.cron( "0 0 9 * * 1-5" )' );
 				} );
 
-				it( "keeps the task's own method where cron cannot say it", function() {
+				it( "writes the task's own method for a business-day phrase", function() {
 					var root = newTempProject( "valid-minimal" );
 
 					addSchedule( root, { when : "first-business-day 09:00", name : "month-open" } );
@@ -298,7 +298,7 @@ class extends="testbox.system.BaseSpec" {
 					expect( fileRead( root & "/schedules/MonthOpen.bx" ) ).toInclude( '.onFirstBusinessDayOfTheMonth( "09:00" )' );
 				} );
 
-				it( "is read back by inspect, with the task name, its cron and the agent", function() {
+				it( "is read back by inspect, with the task name, how often it runs and the agent", function() {
 					var root = newTempProject( "valid-minimal" );
 					addSchedule( root, { when : "hourly", name : "tick" } );
 
@@ -307,7 +307,7 @@ class extends="testbox.system.BaseSpec" {
 					expect( report.schedule.schedulers ).toHaveLength( 1 );
 					expect( report.schedule.schedulers[ 1 ].file ).toBe( "schedules/Tick.bx" );
 					expect( report.schedule.schedulers[ 1 ].tasks[ 1 ].name ).toBe( "tick" );
-					expect( report.schedule.schedulers[ 1 ].tasks[ 1 ].when ).toBe( "0 * * * *" );
+					expect( report.schedule.schedulers[ 1 ].tasks[ 1 ].when ).toBe( "everyHour()" );
 					expect( report.schedule.schedulers[ 1 ].tasks[ 1 ].agent ).toBe( "default" );
 					expect( report.validation.errors ).toBeEmpty();
 				} );
@@ -379,7 +379,7 @@ class extends="testbox.system.BaseSpec" {
 
 					expect( prompter.remaining() ).toBe( 0 );
 					expect( result.exitCode ).toBe( 0 );
-					expect( fileRead( root & "/schedules/FridayReport.bx" ) ).toInclude( '.cron( "0 16 * * FRI" )' );
+					expect( fileRead( root & "/schedules/FridayReport.bx" ) ).toInclude( '.everyWeekOn( 5, "16:00" )' );
 				} );
 
 				it( "can be given a cron expression when asked how often", function() {
@@ -390,7 +390,7 @@ class extends="testbox.system.BaseSpec" {
 
 					expect( prompter.remaining() ).toBe( 0 );
 					expect( result.exitCode ).toBe( 0 );
-					expect( fileRead( root & "/schedules/TenMinutes.bx" ) ).toInclude( '.cron( "*/10 * * * *" )' );
+					expect( fileRead( root & "/schedules/TenMinutes.bx" ) ).toInclude( '.cron( "0 */10 * * * *" )' );
 				} );
 
 				it( "offers the name a person would choose from the phrase", function() {

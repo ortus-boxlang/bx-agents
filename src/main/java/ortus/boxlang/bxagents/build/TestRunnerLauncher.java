@@ -55,14 +55,33 @@ public class TestRunnerLauncher {
 	 * @return The started {@link Process}
 	 */
 	public static Process launch( String javaBin, String boxlangJarPath, String configPath, String scriptPath, String projectRoot ) {
+		return launch( javaBin, boxlangJarPath, configPath, scriptPath, projectRoot, "" );
+	}
+
+	/**
+	 * Same as {@link #launch(String, String, String, String, String)}, with the child's own BoxLang runtime
+	 * home (its compiled-class cache and config) set through the child's {@code BOXLANG_HOME} environment variable, so two projects' test runs
+	 * never share one. A blank {@code runtimeHome} leaves the runtime's default.
+	 *
+	 * @param runtimeHome Absolute path of the folder to use as the child's BoxLang home; blank for the default
+	 *
+	 * @return The started {@link Process}
+	 */
+	public static Process launch( String javaBin, String boxlangJarPath, String configPath, String scriptPath, String projectRoot,
+	    String runtimeHome ) {
 		try {
-			ProcessBuilder builder = new ProcessBuilder(
+			java.util.List<String> command = new java.util.ArrayList<>( java.util.List.of(
 			    javaBin,
 			    "-Dbxagents.testing.projectRoot=" + projectRoot,
 			    "-jar", boxlangJarPath,
-			    "--bx-config", configPath,
-			    scriptPath
-			);
+			    "--bx-config", configPath ) );
+			command.add( scriptPath );
+			ProcessBuilder builder = new ProcessBuilder( command );
+			// The BOXLANG_HOME environment variable, not --bx-home: measured on 1.19.0, when both are given the
+			// variable wins, and this process's own variable would otherwise be inherited by the child.
+			if ( runtimeHome != null && !runtimeHome.isBlank() ) {
+				builder.environment().put( "BOXLANG_HOME", runtimeHome );
+			}
 			builder.redirectErrorStream( true );
 			builder.redirectOutput( ProcessBuilder.Redirect.INHERIT );
 			return builder.start();
