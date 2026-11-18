@@ -44,7 +44,7 @@ my-agent/
         └── AgentSpec.bx
 ```
 
-Más un `.env` (con `BOXLANG_HOME=.build/runtime`; los secretos viven aquí, así que pon ahí las claves de API de tu proveedor y mantenlo fuera del control de código) y un `.gitignore`. BoxLang carga por sí mismo el `.env` desde la raíz del proyecto.
+Más un `.env` (los secretos viven aquí, así que pon ahí las claves de API de tu proveedor y mantenlo fuera del control de código) y un `.gitignore`. BoxLang carga por sí mismo el `.env` desde la raíz del proyecto.
 
 Este es el starter `minimal` - el predeterminado cuando se omite `--template`. Una plantilla es un preajuste: el asistente (y flags como `--with`, `--channels` y `--deploy`) añaden tools, canales y un destino de despliegue encima. `new` también puede generar uno de otros 7 starters incorporados (`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent`), cada uno añadiendo un poco de contenido preconfigurado (un gateway, un scheduler) sobre el mismo esqueleto, o saltarse el andamiaje por completo y crear el proyecto a partir de un repositorio de GitHub existente (`--repo=owner/repo`) o un paquete de ForgeBox (`--forgebox=<slug>`) en su lugar - ver la [Referencia de la CLI](../cli-reference.md#new) para la lista completa y cómo funciona cada uno. El agente se define por defecto con un `Agent.yaml`; pasa `--class` para generar en su lugar el `Agent.bx` avanzado basado en clase (ver [Agent.bx](../conventions/agent-bx.md)).
 
