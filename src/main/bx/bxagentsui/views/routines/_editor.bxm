@@ -1,0 +1,43 @@
+<!--- The routine editor: name, schedule read back in words as it is typed, what to do, and where the answer goes.
+      Inside routinesPage, in a modal. --->
+<bx:output>
+<form class="stack" autocomplete="off" @submit.prevent="save()">
+	<label class="field">Name
+		<input maxlength="40" required placeholder="check-build" x-model="editor.name" :disabled="!!editor.ref" aria-label="Name">
+		<span class="pg-note">Letters, digits and dashes.</span>
+	</label>
+	<label class="field">Schedule
+		<input maxlength="100" required placeholder="0 9 * * 1-5" x-model="editor.schedule" @input.debounce.300ms="readSchedule()" aria-label="Schedule">
+		<span class="pg-note">Either five cron fields (minute hour day month weekday), such as 0 9 * * 1-5 for weekdays at 9, or an interval: every 30m, every 2h, every 1d.</span>
+		<span class="pg-note" :class="{ 'is-bad': editor.readingBad }" aria-live="polite" x-text="editor.reading"></span>
+	</label>
+	<label class="field">What the agent should do
+		<textarea required rows="4" placeholder="Check the build and tell me if anything is red." x-model="editor.prompt" aria-label="What the agent should do"></textarea>
+		<span class="pg-note" x-text="editor.prompt.length + ' characters'"></span>
+	</label>
+	<div class="pg-actions">
+		<label class="field">Where the answer goes
+			<select x-model="editor.where" aria-label="Where the answer goes">
+				<option value="routine">Its own conversation</option>
+				<template x-for="g in gateways" :key="g.name">
+					<option :value="'gateway:' + g.type" x-text="'Gateway: ' + g.type + ( g.name !== g.type ? ' (' + g.name + ')' : '' )" :selected="editor.where === 'gateway:' + g.type"></option>
+				</template>
+			</select>
+		</label>
+		<label class="field" x-show="editor.where !== 'routine' && chats.length">Chat
+			<select x-model="editor.chat" aria-label="Chat">
+				<option value="" x-show="chats.length > 1">Choose a chat</option>
+				<template x-for="c in chats" :key="c.chatId"><option :value="String( c.chatId )" x-text="chatLabel( c )" :selected="String( c.chatId ) === editor.chat"></option></template>
+			</select>
+		</label>
+		<label class="field" x-show="editor.where !== 'routine' && !chats.length">Chat id (the gateway has not talked to anyone yet)
+			<input maxlength="255" x-model="editor.chatTyped" aria-label="Chat id">
+		</label>
+	</div>
+	<p class="pg-error" role="alert" x-show="editor.error" x-text="editor.error"></p>
+	<div class="pg-actions">
+		<button type="submit" class="btn primary" :disabled="editor.saving">Save</button>
+		<button type="button" class="btn" @click="editor.open = false">Cancel</button>
+	</div>
+</form>
+</bx:output>

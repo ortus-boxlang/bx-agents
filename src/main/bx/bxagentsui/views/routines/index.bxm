@@ -1,0 +1,39 @@
+<!--- Routines: scheduled work, with the editor and reports dialogs. State and actions: routinesPage
+      (resources/assets/js/components/routines/RoutinesPage.js). --->
+<bx:output>
+<div class="pg" x-data="routinesPage">
+	#view( view = "_components/ui/page-head", module = "bxagentsui", args = {
+		title   : "Routines",
+		note    : "Things the agent does on a schedule, as you, with your notes, volumes and approvals. Each keeps its answers in a conversation of its own, or sends a summary to a gateway chat.",
+		actions : '<button type="button" class="btn primary" @click="edit()">' & view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "plus" } ) & ' New routine</button>'
+	} )#
+	<div class="pg-actions logs-controls">
+		<template x-if="admin">
+			<div class="pg-actions">
+				<select aria-label="Owner" x-model="owner">
+					<option value="">All owners</option>
+					<template x-for="o in owners" :key="o"><option :value="o" x-text="o"></option></template>
+				</select>
+				#view( view = "_components/ui/switch", module = "bxagentsui", args = { label : "Needs attention only", model : "attention" } )#
+			</div>
+		</template>
+		<button type="button" class="btn" @click="load()">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "arrow-clockwise" } )# Refresh</button>
+	</div>
+	<p class="pg-note" x-show="!admin" x-cloak>#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "info" } )# You see only your own routines. Only an admin can see everyone's or send an answer to another gateway chat. Ask the agent in chat to make one, or use New routine.</p>
+	<div class="pg-actions logs-controls" aria-label="Summary" x-show="admin && rows.length" x-cloak>
+		<template x-for="chip in summary" :key="chip.text">
+			<span class="chip" :class="chip.kind"><svg class="i" aria-hidden="true"><use :href="'##i-' + chip.icon"/></svg><span x-text="chip.text"></span></span>
+		</template>
+	</div>
+	<p class="pg-error" role="alert" x-show="failed" x-text="failed" x-cloak></p>
+	<p class="pg-note" x-show="!loading && !failed && !shown.length" x-cloak x-text="admin ? 'Nobody has a routine yet.' : 'No routines yet. Use New routine, or ask the agent: check the build every weekday at 9.'"></p>
+	<ul class="plain-list" aria-label="Routines">
+		<template x-for="r in shown" :key="r.id || r.name">
+			<li class="card">#view( view = "routines/_routine", module = "bxagentsui" )#</li>
+		</template>
+	</ul>
+	<p class="pg-note">Run now marks a routine due and the heartbeat starts it within a minute.</p>
+	#view( view = "_components/ui/modal", module = "bxagentsui", args = { title : "Routine", titleExpression : "editor.ref ? 'Edit ' + editor.name : 'New routine'", open : "editor.open", contentView : "routines/_editor", icon : "clock-clockwise" } )#
+	#view( view = "_components/ui/modal", module = "bxagentsui", args = { title : "Reports", titleExpression : "'Reports of ' + reports.name", open : "reports.open", contentView : "routines/_reports", icon : "file-text" } )#
+</div>
+</bx:output>

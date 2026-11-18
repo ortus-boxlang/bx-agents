@@ -29,6 +29,7 @@ import { vaultPage } from "./components/vault/VaultPage.js";
 import { conversationsPage } from "./components/conversations/ConversationsPage.js";
 import { memoryPage } from "./components/memory/MemoryPage.js";
 import { agentPage } from "./components/admin/AgentPage.js";
+import { routinesPage } from "./components/routines/RoutinesPage.js";
 
 // ============================================================
 // Plugins
@@ -80,6 +81,7 @@ Alpine.data( "vaultPage", vaultPage );
 Alpine.data( "conversationsPage", conversationsPage );
 Alpine.data( "memoryPage", memoryPage );
 Alpine.data( "agentPage", agentPage );
+Alpine.data( "routinesPage", routinesPage );
 Alpine.data( "kitPage", kitPage );
 
 window.Alpine = Alpine;

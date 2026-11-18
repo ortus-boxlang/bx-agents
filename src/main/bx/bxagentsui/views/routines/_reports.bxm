@@ -1,0 +1,21 @@
+<!--- The reports of a routine: view, delete, and clean up the old ones. Inside routinesPage, in a modal. --->
+<bx:output>
+<p class="pg-note" x-show="!reports.files.length">No reports saved yet.</p>
+<ul class="plain-list rows" aria-label="Reports">
+	<template x-for="f in reports.files" :key="f.file">
+		<li class="pg-actions">
+			<span class="grow" x-text="f.file"></span>
+			<span class="pg-note" x-text="$fmt.bytesText( f.bytes ) + ', ' + $fmt.stampText( f.savedAt )"></span>
+			<button type="button" class="btn" @click="viewReport( f )" :aria-label="'View ' + f.file">View</button>
+			<button type="button" class="btn danger" @click="deleteReport( f )" :aria-label="'Delete ' + f.file">Delete</button>
+		</li>
+	</template>
+</ul>
+<pre class="report-text" x-show="reports.showing" x-text="reports.text"></pre>
+<form class="pg-actions" @submit.prevent="cleanReports()">
+	<label for="routineCleanDays">Clean up reports older than</label>
+	<input id="routineCleanDays" type="number" min="1" inputmode="numeric" class="days" x-model="reports.days"> days
+	<button type="submit" class="btn">Check</button>
+</form>
+<p class="pg-note" role="status" x-text="reports.note"></p>
+</bx:output>
