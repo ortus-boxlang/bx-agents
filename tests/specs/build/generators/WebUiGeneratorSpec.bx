@@ -483,7 +483,7 @@ class extends="testbox.system.BaseSpec" {
 					generator.generate( discovery, appDir );
 					var html = fileRead( appDir & "/chat/index.html" );
 
-					for ( var id in [ "sidebarBtn", "forkBtn", "exportBtn", "clearBtn", "compactBtn", "notesBtn", "keyBtn", "themeBtn", "attachBtn", "commandsBtn", "sendBtn", "stopBtn", "notesClose" ] ) {
+					for ( var id in [ "sidebarBtn", "forkBtn", "exportBtn", "clearBtn", "compactBtn", "notesBtn", "keyBtn", "themeBtn", "attachBtn", "commandsBtn", "sendBtn", "stopBtn" ] ) {
 						var tag = reMatch( '<button[^>]*id="#id#"[^>]*>', html );
 						expect( tag ).toHaveLength( 1, id );
 						expect( tag[ 1 ] ).toInclude( "aria-label=", "#id# has no aria-label" );
@@ -510,17 +510,18 @@ class extends="testbox.system.BaseSpec" {
 					expect( page ).toInclude( 'className = "ext-badge"' );
 				} );
 
-				it( "has a panel for access tokens that shows only when the server offers them, and shows a secret once", function() {
+				it( "has a menu item for access tokens that shows only when the server offers them and opens the Access page", function() {
 					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 					var appDir = newAppDir();
 					generator.generate( discovery, appDir );
 					var html = fileRead( appDir & "/chat/index.html" );
 
-					expect( html ).toInclude( 'id="tokensPanel"' );
+					// the Settings menu item opens the Access page, where the tokens are listed, made and revoked
+					expect( html ).notToInclude( 'id="tokensPanel"' );
 					expect( reMatch( '<button[^>]*id="tokensBtn"[^>]*>', html )[ 1 ] ).toInclude( "aria-label=" );
 					expect( html ).toInclude( "tokensBtn.hidden = !capabilities.tokens" );
+					expect( html ).toInclude( '[ "tokensBtn", "access" ]' );
 					expect( html ).toInclude( 'apiPost( "/tokens/revoke"' );
-					expect( html ).toInclude( "Copy this token now. It is not shown again." );
 				} );
 
 				it( "asks for a shared password in the page, not in a browser prompt, and opens by itself when refused", function() {
@@ -787,7 +788,9 @@ class extends="testbox.system.BaseSpec" {
 
 					var html = fileRead( appDir & "/chat/index.html" );
 					expect( html ).toInclude( "title: ""Gateways""" );
-					expect( html ).toInclude( '<h2 id="gatewaysTitle">Gateways</h2>' );
+					// the old Gateways dialog is gone: the menu item opens the Gateways page
+					expect( html ).notToInclude( 'id="gatewaysPanel"' );
+					expect( html ).toInclude( '[ "gatewaysBtn", "gateways" ]' );
 					expect( html ).toInclude( 'aria-label="Gateways"' );
 					expect( html ).notToInclude( "Chat apps" );
 					// Notes, Vault, Routines, Access tokens, Logs and Gateways stay in the menu, next to their pages
@@ -872,23 +875,23 @@ class extends="testbox.system.BaseSpec" {
 				expect( html ).toInclude( "if ( !known && conversations.length )" );
 			} );
 
-			it( "has a notes panel that only appears when the agent keeps notes", function() {
+			it( "has a Notes menu item that only appears when the agent keeps notes and opens the Memory page", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 				var appDir = newAppDir();
 				generator.generate( discovery, appDir );
 
 				var html = fileRead( appDir & "/chat/index.html" );
 				expect( html ).toInclude( 'id="notesBtn"' );
-				expect( html ).toInclude( 'id="notesPanel"' );
+				expect( html ).notToInclude( 'id="notesPanel"' );
 				expect( html ).toInclude( "notesBtn.hidden = !capabilities.notes" );
+				// the menu item opens the Memory page, which reads and changes the notes
+				expect( html ).toInclude( '[ "notesBtn", "memory" ]' );
 				expect( html ).toInclude( 'apiGet( "/notes" )' );
 				expect( html ).toInclude( 'apiPost( "/notes"' );
 				expect( html ).toInclude( 'apiPost( "/notes/update"' );
 				expect( html ).toInclude( 'apiPost( "/notes/remove"' );
-				// the agent's notes get no Remove button
-				expect( html ).toInclude( 'if ( notesScope === "user" )' );
-				// text from a note goes in with textContent, never as markup
-				expect( html ).toInclude( "text.textContent = note.text" );
+				// text from a note goes in as text, never as markup
+				expect( html ).toInclude( "text: note.text" );
 			} );
 
 			it( "no longer claims the approval UI is missing", function() {

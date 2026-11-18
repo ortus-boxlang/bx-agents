@@ -156,7 +156,7 @@
 			// a dialog saved something: say so, and draw again
 			routinesHook = function () {
 				if ( route.stale() ) { return; }
-				say( routinesFoot.textContent );
+				say( routinesNote );
 				load();
 			};
 			load();
