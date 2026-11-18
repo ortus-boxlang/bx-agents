@@ -60,6 +60,7 @@ The app partials (`views/_components/app/`) are `includes`, `sprite`, `sidebar` 
 | `$api.get( path )`, `$api.post( path, body )` | `{ ok, status, data, error }`, never throws |
 | `$sse( path, { body, onEvent, signal } )` | A stream of the agent API (`/stream`, `/events`, `/resume`) |
 | `$confirm( { title, body, danger } )` | `Promise<boolean>`; never `window.confirm` |
+| `$prompt( { title, label, value } )` | `Promise<string|null>` (null on Cancel); never `window.prompt` |
 | `$toast.success( text )`, `$toast.error( text )` | A short message |
 | `$md( text )` | Markdown as safe HTML: the only input `x-html` takes |
 | `$fmt.stampText`, `dayText`, `bytesText`, `countLabel` | Dates, sizes and counts, the same everywhere |
@@ -73,9 +74,15 @@ The app partials (`views/_components/app/`) are `includes`, `sprite`, `sidebar` 
 | Logs (`/logs/:area?q=`) | `Logs.index` | `views/logs/` | `components/admin/LogsPage.js` |
 | Gateways | `Gateways.index` | `views/gateways/` | `components/admin/GatewaysPage.js` |
 | Settings | `Settings.index` | `views/settings/` | `components/settings/SettingsPage.js` |
+| Access (`/access/:tab`) | `Access.index` | `views/access/` | `components/admin/AccessPage.js` |
+| Registry (`/registry/:tab`) | `Registry.index` | `views/registry/` | `components/registry/RegistryPage.js` |
+| Vault (`?ask=&scope=&why=`) | `Vault.index` | `views/vault/` | `components/vault/VaultPage.js` |
+| Conversations (`?q=&agent=&source=`) | `Conversations.index` | `views/conversations/` | `components/conversations/ConversationsPage.js` |
 
 A page handler is one `index()` that calls `showPage( event, prc, id, view )` (BaseHandler): 404 for an unknown page,
 403 for an admin page to anybody else. Server values a component needs go in `data-*` attributes, read in `init()`.
+A tab or filter the address should keep: `keepInAddress( path, query )` (`utils/address.js`). A file from the API:
+`downloadFile( $api, path, name )` (`utils/download.js`). Until the chat moves here, links to it use `config.chatUrl`.
 
 ## Commands (from `ui/`)
 

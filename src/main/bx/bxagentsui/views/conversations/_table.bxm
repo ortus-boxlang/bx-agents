@@ -1,0 +1,39 @@
+<!--- The conversations of this page, with selection and the actions on each. Inside conversationsPage. The owner column
+      shows only with everyone's conversations. --->
+<bx:output>
+<div class="tbl-wrap">
+	<table>
+		<caption class="visually-hidden">Conversations</caption>
+		<thead>
+			<tr>
+				<th scope="col"><input type="checkbox" aria-label="Select every conversation on this page" :checked="allSelected" @change="toggleAll()"></th>
+				<th scope="col">Title</th><th scope="col">Agent</th><th scope="col">Source</th>
+				<th scope="col" x-show="state.all">Owner</th>
+				<th scope="col">Messages</th><th scope="col">Updated</th><th scope="col">Actions</th>
+			</tr>
+		</thead>
+		<tbody>
+			<template x-for="conv in rows" :key="conv.id">
+				<tr>
+					<td><input type="checkbox" :aria-label="'Select ' + titleOf( conv )" :value="conv.id" x-model="selected"></td>
+					<td><a href="##" class="row-link" @click.prevent="open( conv )" x-text="titleOf( conv )"></a></td>
+					<td><span class="chip">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "robot" } )#<span x-text="conv.agent || 'main'"></span></span></td>
+					<td><span class="chip" x-text="sourceName( conv.source || '' )"></span></td>
+					<td x-show="state.all" x-text="conv.userId || ''"></td>
+					<td x-text="conv.messageCount || 0"></td>
+					<td x-text="$fmt.stampText( conv.updatedAt )"></td>
+					<td>
+						<div class="pg-actions nowrap">
+							<button type="button" class="btn icon" title="Open" :aria-label="'Open ' + titleOf( conv )" @click="open( conv )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "chat-circle-text" } )#</button>
+							<button type="button" class="btn icon" title="Rename" :aria-label="'Rename ' + titleOf( conv )" @click="rename( conv )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "pencil-simple" } )#</button>
+							<button type="button" class="btn icon" title="Fork" :aria-label="'Fork ' + titleOf( conv )" @click="fork( conv )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "git-fork" } )#</button>
+							<button type="button" class="btn icon" title="Export as Markdown" :aria-label="'Export ' + titleOf( conv )" @click="exportMarkdown( conv )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "download-simple" } )#</button>
+							<button type="button" class="btn icon danger" title="Delete" :aria-label="'Delete ' + titleOf( conv )" @click="remove( [ conv.id ] )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "trash" } )#</button>
+						</div>
+					</td>
+				</tr>
+			</template>
+		</tbody>
+	</table>
+</div>
+</bx:output>

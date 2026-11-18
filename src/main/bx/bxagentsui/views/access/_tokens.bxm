@@ -1,0 +1,43 @@
+<!--- The access tokens: make one (shown once), and revoke. Inside accessPage. --->
+<bx:output>
+<p class="pg-note" x-show="!manages && !tokensLoading" x-cloak>This server does not manage tokens from here. Turn on agentApi.manageTokens in Agent.yaml, or use bxAgents tokens.</p>
+<template x-if="manages">
+	<div>
+		<template x-if="made">
+			<div class="card" role="status">
+				<p><strong>Copy this token now. It is shown once and cannot be read again.</strong></p>
+				<p><code class="secret" x-text="made.token"></code></p>
+				<div class="pg-actions">
+					<button type="button" class="btn" @click="copyToken()">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "copy" } )# Copy</button>
+					<button type="button" class="btn" @click="made = null">Done</button>
+				</div>
+			</div>
+		</template>
+		<section class="card" aria-labelledby="makeTokenTitle">
+			<h2 class="card-title" id="makeTokenTitle">Make a token</h2>
+			<form class="pg-actions" @submit.prevent="makeToken()">
+				<input type="text" maxlength="64" placeholder="Name" aria-label="Token name" required x-model="form.name">
+				<select aria-label="Scope" x-model="form.scope"><option value="chat">chat</option><option value="admin">admin</option></select>
+				<input type="text" maxlength="20" placeholder="Lasts (90d)" aria-label="Expires" x-model="form.expires">
+				<button type="submit" class="btn primary" :disabled="making">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "plus" } )# Make a token</button>
+			</form>
+		</section>
+		<h2>Tokens</h2>
+		<p class="pg-error" role="alert" x-show="tokensFailed" x-text="tokensFailed" x-cloak></p>
+		<p class="pg-note" x-show="!tokensLoading && !tokensFailed && !tokens.length" x-cloak>No tokens yet.</p>
+		<ul class="plain-list" aria-label="Tokens">
+			<template x-for="token in tokens" :key="token.name">
+				<li class="card">
+					<div class="pg-actions">
+						<strong x-text="token.name"></strong>
+						<span class="chip" :class="token.status === 'active' ? 'ok' : ''"><svg class="i" aria-hidden="true"><use :href="token.status === 'active' ? '##i-check-circle' : '##i-prohibit'"/></svg><span x-text="token.status"></span></span>
+						<span class="chip"><svg class="i" aria-hidden="true"><use :href="token.scope === 'admin' ? '##i-shield-check' : '##i-chat-circle-text'"/></svg><span x-text="token.scope"></span></span>
+						<span class="pg-note" x-text="tokenUse( token )"></span>
+						<button type="button" class="btn danger" x-show="token.status === 'active'" @click="revoke( token )" :aria-label="'Revoke ' + token.name">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "prohibit" } )# Revoke</button>
+					</div>
+				</li>
+			</template>
+		</ul>
+	</div>
+</template>
+</bx:output>

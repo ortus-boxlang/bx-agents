@@ -1,0 +1,24 @@
+<!--- The tools, grouped by the word before the first underscore, with a search. Inside registryPage. --->
+<bx:output>
+<div class="pg-actions logs-controls">
+	#view( view = "_components/ui/search", module = "bxagentsui", args = { label : "Search the tools", model : "query" } )#
+</div>
+<p class="pg-note" x-show="loaded.tools && !failed && !groups.length" x-cloak x-text="query ? 'No tool matches that.' : 'The agent has no tools.'"></p>
+<template x-for="group in groups" :key="group.key">
+	<section class="card" :aria-label="group.key">
+		<h2 class="card-title">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "wrench" } )# <span x-text="group.key"></span> <span class="chip" x-text="group.tools.length"></span></h2>
+		<ul class="plain-list rows">
+			<template x-for="tool in group.tools" :key="tool.name">
+				<li>
+					<div class="pg-actions">
+						<code x-text="tool.name"></code>
+						<span class="chip" x-show="isConnectorTool( tool.name )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "puzzle-piece" } )# From a connector</span>
+						<span class="chip warn" x-show="tool.approval || tool.asksFirst">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "hand-palm" } )# Asks first</span>
+					</div>
+					<p class="pg-note" x-text="tool.description || ''"></p>
+				</li>
+			</template>
+		</ul>
+	</section>
+</template>
+</bx:output>

@@ -1,0 +1,19 @@
+<!--- The accounts that can sign in, and making one an admin or a member. Inside accessPage. --->
+<bx:output>
+<p class="pg-error" role="alert" x-show="peopleFailed" x-text="peopleFailed" x-cloak></p>
+<p class="pg-note" x-show="!peopleLoading && !peopleFailed && !people.length" x-cloak>No accounts. Add them under users in the gateway's config, or with bxAgents users.</p>
+<ul class="plain-list" aria-label="People">
+	<template x-for="person in people" :key="person.username">
+		<li class="card">
+			<div class="pg-actions">
+				<strong x-text="person.displayName || person.username"></strong>
+				<span class="pg-note" x-show="person.displayName && person.displayName !== person.username" x-text="person.username"></span>
+				<span class="chip" :class="person.admin ? 'ok' : ''"><svg class="i" aria-hidden="true"><use :href="person.admin ? '##i-shield-check' : '##i-user'"/></svg><span x-text="person.admin ? 'Admin' : 'Member'"></span></span>
+				<span class="chip warn" x-show="person.active === false">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "pause" } )# Inactive</span>
+				<button type="button" class="btn" @click="toggleAdmin( person )" :aria-label="person.admin ? 'Make ' + person.username + ' a member' : 'Make ' + person.username + ' an admin'" x-text="person.admin ? 'Make a member' : 'Make an admin'"></button>
+			</div>
+		</li>
+	</template>
+</ul>
+<p class="pg-note">An admin sees the admin pages and everyone's routines. The last admin cannot be made a member.</p>
+</bx:output>
