@@ -27,6 +27,8 @@ import { accessPage } from "./components/admin/AccessPage.js";
 import { registryPage } from "./components/registry/RegistryPage.js";
 import { vaultPage } from "./components/vault/VaultPage.js";
 import { conversationsPage } from "./components/conversations/ConversationsPage.js";
+import { memoryPage } from "./components/memory/MemoryPage.js";
+import { agentPage } from "./components/admin/AgentPage.js";
 
 // ============================================================
 // Plugins
@@ -76,6 +78,8 @@ Alpine.data( "accessPage", accessPage );
 Alpine.data( "registryPage", registryPage );
 Alpine.data( "vaultPage", vaultPage );
 Alpine.data( "conversationsPage", conversationsPage );
+Alpine.data( "memoryPage", memoryPage );
+Alpine.data( "agentPage", agentPage );
 Alpine.data( "kitPage", kitPage );
 
 window.Alpine = Alpine;

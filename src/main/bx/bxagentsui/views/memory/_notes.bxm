@@ -1,0 +1,37 @@
+<!--- One set of notes (about you, or the agent's): how much it uses, each note with Edit and Remove, Add, and Clear
+      all. Inside memoryPage, as `scope`. --->
+<bx:output>
+<div class="card-head">
+	<h2 x-text="scope.title"></h2>
+	<button type="button" class="btn danger" x-show="part( scope.id ).notes.length && canRemove( scope.id )" @click="clear( scope.id )" :aria-label="'Clear all notes: ' + scope.title">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "broom" } )# Clear all</button>
+</div>
+<p class="pg-note" x-text="scope.blurb"></p>
+<p class="pg-note" x-text="notesSummary( part( scope.id ) )"></p>
+<meter class="usage-meter" min="0" :max="part( scope.id ).stats.limit || 1" :value="part( scope.id ).stats.used" :aria-label="scope.title + ': characters used'"></meter>
+<p class="pg-note" x-show="!part( scope.id ).notes.length">No notes yet.</p>
+<ul class="plain-list rows" :aria-label="scope.title">
+	<template x-for="note in part( scope.id ).notes" :key="note.id">
+		<li class="note-row">
+			<template x-if="!editing || editing.id !== note.id || editing.scope !== scope.id">
+				<div class="pg-actions">
+					<span class="grow" x-text="note.text"></span>
+					<span class="pg-note" x-text="note.id"></span>
+					<button type="button" class="btn" @click="edit( scope.id, note )" :aria-label="'Edit the note ' + note.id">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "pencil-simple" } )# Edit</button>
+					<button type="button" class="btn danger" x-show="canRemove( scope.id )" @click="remove( scope.id, note )" :aria-label="'Remove the note ' + note.id">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "trash" } )# Remove</button>
+				</div>
+			</template>
+			<template x-if="editing && editing.id === note.id && editing.scope === scope.id">
+				<form class="pg-actions" @submit.prevent="save()" @keydown.escape.stop="editing = null">
+					<input type="text" class="grow" maxlength="500" aria-label="Note text" x-model="editing.text" x-init="$el.focus()">
+					<button type="submit" class="btn primary">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "check" } )# Save</button>
+					<button type="button" class="btn" @click="editing = null">Cancel</button>
+				</form>
+			</template>
+		</li>
+	</template>
+</ul>
+<form class="pg-actions add-row" @submit.prevent="add( scope.id )">
+	<input type="text" class="grow" maxlength="500" placeholder="Add a note" :aria-label="'Add a note: ' + scope.title" x-model="drafts[ scope.id ]">
+	<button type="submit" class="btn primary">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "plus" } )# Add</button>
+</form>
+</bx:output>

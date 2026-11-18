@@ -1,15 +1,13 @@
 import { keepInAddress } from "../../utils/address.js";
 import { downloadFile, markdownName } from "../../utils/download.js";
+import { openInChat } from "../../utils/chat.js";
 
 /**
  * The Conversations page: every conversation the person may see, paged and filtered by the server (GET /sessions takes
  * limit, offset, q, source, agent, since, before and all; with facets=1 it answers the counts per source and agent), and
  * open, rename, fork, export and delete (one or many). Filters start from the address (data-q, data-source, data-agent).
- *
- * Until the chat moves into this app, Open and New chat go to the current page's chat (chatUrl), which reopens the
- * conversation kept under CONVERSATION_KEY, as its own list does.
+ * Open and New chat go to the chat (utils/chat.js).
  */
-export const CONVERSATION_KEY = "bxagents_webui_conversation";
 
 /**
  * @param {object} state The filters and the page
@@ -189,22 +187,12 @@ export function conversationsPage() {
 		 * @param {{ id: string }} conv The conversation
 		 */
 		open( conv ) {
-			try {
-				localStorage.setItem( CONVERSATION_KEY, conv.id );
-			} catch ( e ) {
-				// the chat then opens its last conversation
-			}
-			window.location.href = this.$store.session.config.chatUrl;
+			openInChat( this.$store.session.config.chatUrl, conv.id );
 		},
 
 		/** Starts a new conversation in the chat. */
 		newChat() {
-			try {
-				localStorage.removeItem( CONVERSATION_KEY );
-			} catch ( e ) {
-				// the chat then opens its last conversation
-			}
-			window.location.href = this.$store.session.config.chatUrl;
+			openInChat( this.$store.session.config.chatUrl );
 		},
 
 		/**

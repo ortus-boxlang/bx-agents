@@ -1,0 +1,59 @@
+<!--- What reaches the agent, what it is made of (its agents and parts), and where it reaches out, with moving lines that
+      can be stopped. Inside agentPage. --->
+<bx:output>
+<div class="pg-actions logs-controls">
+	#view( view = "_components/ui/switch", module = "bxagentsui", args = { label : "Stop the moving lines", model : "still" } )#
+</div>
+<template x-if="comp">
+	<div class="comp" :class="{ still: still }">
+		<section class="comp-col" aria-label="Reaches it">
+			<h2>Reaches it</h2>
+			<template x-for="item in comp.incoming || []" :key="item.name">
+				<div class="card comp-item">
+					<strong x-text="item.name"></strong>
+					<span class="chip" :class="stateChip( item.state ).kind"><svg class="i" aria-hidden="true"><use :href="'##i-' + stateChip( item.state ).icon"/></svg><span x-text="stateChip( item.state ).label"></span></span>
+					<p class="pg-note" x-text="item.detail || ''"></p>
+				</div>
+			</template>
+		</section>
+		<div class="comp-flow" aria-hidden="true"></div>
+		<section class="comp-col" aria-label="The agent">
+			<h2>The agent</h2>
+			<template x-for="a in comp.agents || []" :key="a.name">
+				<div class="card comp-item" :class="{ 'sub-agent': a.parent }">
+					<div class="pg-actions">
+						#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "robot" } )#
+						<strong x-text="a.name"></strong>
+						<span class="chip" :class="a.parent ? '' : 'ok'" x-text="a.parent ? 'sub-agent' : 'main'"></span>
+					</div>
+					<p class="pg-note" x-text="( a.model ? a.model + '. ' : '' ) + ( a.description || '' )"></p>
+					<button type="button" class="btn" x-show="a.parent" @click="talkTo( a )" :aria-label="'Talk to ' + a.name">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "chat-circle-text" } )# Talk to</button>
+				</div>
+			</template>
+			<template x-for="p in comp.parts || []" :key="p.title">
+				<div class="card comp-item">
+					<strong x-text="p.title"></strong> <span class="chip" x-text="p.count"></span>
+					<p class="pg-note" x-text="p.detail || ''"></p>
+				</div>
+			</template>
+			<template x-if="( comp.asksFirst || [] ).length">
+				<div class="card comp-item">
+					<strong>Asks first</strong>
+					<span class="chip warn">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "hand-palm" } )#<span x-text="comp.asksFirst.length"></span></span>
+					<p class="pg-note" x-text="comp.asksFirst.join( ', ' )"></p>
+				</div>
+			</template>
+		</section>
+		<div class="comp-flow" aria-hidden="true"></div>
+		<section class="comp-col" aria-label="Reaches out">
+			<h2>Reaches out</h2>
+			<template x-for="item in comp.outgoing || []" :key="item.name">
+				<div class="card comp-item">
+					<strong x-text="item.name"></strong> <span class="chip" x-text="item.kind"></span>
+					<p class="pg-note" x-text="item.detail || ''"></p>
+				</div>
+			</template>
+		</section>
+	</div>
+</template>
+</bx:output>
