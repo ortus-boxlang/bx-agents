@@ -1,0 +1,21 @@
+/**
+ * The data a page of the web app hands to its scripts: valid JSON that no value can break out of.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "the web app's page data", function() {
+
+			it( "writes JSON that cannot close the script block, and reads back unchanged", function() {
+				var nasty = { title : "</script><script>alert(1)</script> & <b>" }
+				var out = new bxagents.bxagentsui.models.PageData().json( nasty )
+
+				expect( out ).notToInclude( "<" )
+				expect( out ).notToInclude( ">" )
+				expect( jsonDeserialize( out ).title ).toBe( nasty.title )
+			} );
+
+		} );
+	}
+
+}

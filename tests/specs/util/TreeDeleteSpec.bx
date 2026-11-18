@@ -1,0 +1,33 @@
+import bxagents.models.util.TreeDelete;
+
+/**
+ * TreeDelete: a folder deleted without following the links inside it.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "TreeDelete", function() {
+
+			it( "deletes a folder and removes a link inside it as a link, leaving what it points at", function() {
+				var outside = createTempDirectory( prefix = "bxagents-tree-outside-" )
+				fileWrite( outside & "/keep.txt", "must survive" )
+				var root = createTempDirectory( prefix = "bxagents-tree-" )
+				directoryCreate( root & "/modules/real", true, true )
+				fileWrite( root & "/modules/real/file.txt", "x" )
+				createObject( "java", "java.nio.file.Files" ).createSymbolicLink(
+					createObject( "java", "java.io.File" ).init( root & "/modules/linked" ).toPath(),
+					createObject( "java", "java.io.File" ).init( outside ).toPath(),
+					[]
+				)
+
+				TreeDelete::tree( root )
+
+				expect( directoryExists( root ) ).toBeFalse()
+				expect( fileExists( outside & "/keep.txt" ) ).toBeTrue()
+				directoryDelete( outside, true )
+			} );
+
+		} );
+	}
+
+}

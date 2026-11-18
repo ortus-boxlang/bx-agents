@@ -1,0 +1,38 @@
+/**
+ * Deletes a folder and everything in it without following links: a symbolic link inside it is removed as a link, so
+ * whatever it points at (the web app module's source, linked into a dev build) is never touched. directoryDelete( path,
+ * true ) follows links and empties their targets.
+ */
+class {
+
+	/**
+	 * @path The folder to delete (a link itself is removed as a link)
+	 */
+	static void function tree( required string path ) {
+		var files = createObject( "java", "java.nio.file.Files" )
+		var nio = createObject( "java", "java.io.File" ).init( arguments.path ).toPath()
+		if ( files.isSymbolicLink( nio ) ) {
+			files.delete( nio )
+			return
+		}
+		if ( !directoryExists( arguments.path ) ) {
+			if ( fileExists( arguments.path ) ) {
+				fileDelete( arguments.path )
+			}
+			return
+		}
+		var children = createObject( "java", "java.io.File" ).init( arguments.path ).listFiles()
+		for ( var child in children ?: [] ) {
+			var childPath = child.toPath()
+			if ( files.isSymbolicLink( childPath ) ) {
+				files.delete( childPath )
+			} else if ( child.isDirectory() ) {
+				TreeDelete::tree( child.getPath() )
+			} else {
+				files.delete( childPath )
+			}
+		}
+		files.delete( nio )
+	}
+
+}

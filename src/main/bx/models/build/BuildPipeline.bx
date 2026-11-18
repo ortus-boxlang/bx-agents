@@ -1,3 +1,4 @@
+import bxModules.bxagents.models.util.TreeDelete;
 /**
  * Orchestrates BX Agents' full build pipeline for a single project - the
  * `build` CLI verb's real implementation (M12), wiring together every phase
@@ -158,7 +159,8 @@ class {
 
 		if ( directoryExists( appDir ) ) {
 			arguments.onProgress( "+ Removing stale .build/app..." )
-			directoryDelete( appDir, true )
+			// never through a link: a dev build links the web app module from its source (see WebAppModule)
+			TreeDelete::tree( appDir )
 		}
 		directoryCreate( path = appDir, createPath = true, ignoreExists = true )
 
