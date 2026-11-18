@@ -1,0 +1,42 @@
+<!--- Field Component
+    A label, its control, a help line and an error line, wired for a screen reader (aria-describedby).
+
+    Usage:
+        #view( view = "_components/ui/field", module = "bxagentsui", args = { id : "token", label : "Your token", type : "password", model : "form.token", help : "It is checked, then sealed." } )#
+
+    Args:
+        id    : string - the control's id (required)
+        label : string - the label (required)
+        type  : string - text | password | search | number | textarea | select (default: text)
+        model : string - the component variable it binds (Alpine; written by the developer, never data)
+        help  : string - a line under the control (default: "")
+        error : string - an Alpine expression for an error message (default: "")
+        options : array - for a select: [ { value, label } ] (default: [])
+        required : boolean (default: false)
+        autocomplete : string (default: "off")
+--->
+<bx:param name="args.id" default=""/>
+<bx:param name="args.label" default=""/>
+<bx:param name="args.type" default="text"/>
+<bx:param name="args.model" default=""/>
+<bx:param name="args.help" default=""/>
+<bx:param name="args.error" default=""/>
+<bx:param name="args.options" default="#[]#"/>
+<bx:param name="args.required" default="false"/>
+<bx:param name="args.autocomplete" default="off"/>
+<bx:output>
+<div class="field">
+	<label for="#encodeForHTML( args.id )#">#encodeForHTML( args.label )#</label>
+	<bx:if args.type == "textarea">
+		<textarea id="#encodeForHTML( args.id )#" x-model="#args.model#" aria-describedby="#encodeForHTML( args.id )#-help"<bx:if args.required> required</bx:if>></textarea>
+	<bx:elseif args.type == "select">
+		<select id="#encodeForHTML( args.id )#" x-model="#args.model#" aria-describedby="#encodeForHTML( args.id )#-help">
+			<bx:loop array="#args.options#" item="option"><option value="#encodeForHTML( option.value )#">#encodeForHTML( option.label )#</option></bx:loop>
+		</select>
+	<bx:else>
+		<input id="#encodeForHTML( args.id )#" type="#encodeForHTML( args.type )#" x-model="#args.model#" autocomplete="#encodeForHTML( args.autocomplete )#" aria-describedby="#encodeForHTML( args.id )#-help"<bx:if args.required> required</bx:if>>
+	</bx:if>
+	<p class="help" id="#encodeForHTML( args.id )#-help"<bx:if !len( args.help )> hidden</bx:if>>#encodeForHTML( args.help )#</p>
+	<bx:if len( args.error )><p class="err" role="alert" x-show="#args.error#" x-text="#args.error#"></p></bx:if>
+</div>
+</bx:output>

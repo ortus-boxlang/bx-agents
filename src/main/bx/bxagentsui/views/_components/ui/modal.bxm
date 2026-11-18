@@ -1,0 +1,41 @@
+<!--- Modal Component
+    A dialog (the native <dialog>, so focus is held inside and Escape closes it), opened and closed by an Alpine variable
+    of the page's component. The content is another view, as cbGenesis composes partials.
+
+    Usage:
+        #view( view = "_components/ui/modal", module = "bxagentsui", args = {
+            title       : "Connect GitHub",
+            open        : "dialogOpen",
+            contentView : "connectors/_connect",
+            icon        : "plug"
+        } )#
+
+    Args:
+        title       : string - the heading (required); titleExpression replaces it with an Alpine expression
+        titleExpression : string - an Alpine expression for the heading (default: "")
+        open        : string - the component variable that opens it (Alpine; written by the developer, never data)
+        contentView : string - the view inside, in this module (required)
+        contentArgs : struct - its args (default: {})
+        icon        : string - an icon beside the title (default: "")
+--->
+<bx:param name="args.title" default=""/>
+<bx:param name="args.titleExpression" default=""/>
+<bx:param name="args.open" default="open"/>
+<bx:param name="args.contentView" default=""/>
+<bx:param name="args.contentArgs" default="#{}#"/>
+<bx:param name="args.icon" default=""/>
+<bx:script>id = "dlg-" & lCase( left( hash( args.open & args.title ), 8 ) )</bx:script>
+<bx:output>
+<dialog class="dlg" aria-labelledby="#id#-title" x-effect="#args.open# ? ( $el.open || $el.showModal() ) : ( $el.open && $el.close() )" @close="#args.open# = false">
+	<div class="dlg-form">
+		<div class="dlg-head">
+			<bx:if len( args.icon )><span class="conn-icon">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : args.icon } )#</span></bx:if>
+			<h2 id="#id#-title"<bx:if len( args.titleExpression )> x-text="#args.titleExpression#"</bx:if>>#encodeForHTML( args.title )#</h2>
+			<button type="button" class="ib" aria-label="Close" @click="#args.open# = false">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "x" } )#</button>
+		</div>
+		<div class="dlg-body">
+			<bx:if len( args.contentView )>#view( view = args.contentView, module = "bxagentsui", args = args.contentArgs )#</bx:if>
+		</div>
+	</div>
+</dialog>
+</bx:output>
