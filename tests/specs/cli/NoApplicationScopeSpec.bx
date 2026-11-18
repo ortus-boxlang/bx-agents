@@ -1,0 +1,117 @@
+/**
+ * The in-process terminal chat runs as a plain CLI script, which has no `application` scope. Measured on
+ * BoxLang 1.19.0 and the 1.18.0 snapshot, every message of the full-screen `chat` then failed with "The requested
+ * key [application] was not located in any scope or it's undefined", thrown by RunOwners.table() on the turn path.
+ *
+ * Every other spec here runs under tests/Application.bx, so none of them could see it. These run a script in a
+ * fresh BoxLang process with no Application.bx: one bare, one after ApplicationContext.start() as `chat` does it.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "a CLI script without an application scope", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-noapp-" );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			private boolean function canRunChild() {
+				return directoryExists( getSystemSetting( "user.dir", "" ) & "/build/modules/bxagents" ) && len( boxlangJar() );
+			}
+
+			private string function boxlangJar() {
+				var separator = createObject( "java", "java.io.File" ).pathSeparator;
+				for ( var entry in listToArray( getSystemSetting( "java.class.path", "" ), separator ) ) {
+					var name = getFileFromPath( entry );
+					if ( name.reFindNoCase( "^boxlang-.*\.jar$" ) && !name.reFindNoCase( "miniserver" ) ) {
+						return entry;
+					}
+				}
+				return "";
+			}
+
+			/**
+			 * Runs a script in a new process started from the repo root (boxlang.json resolves ${user-dir} there), the
+			 * script itself in a folder with no Application.bx.
+			 *
+			 * @mode "bare" or "context" (start an application context first, as `chat` does)
+			 *
+			 * @return What the script printed, as a struct
+			 */
+			private struct function runScript( required string mode ) {
+				var script = dir & "/probe.bxs";
+				fileWrite( script, "
+					function probe() {
+						var out = { applicationBefore : isDefined( ""application"" ) };
+						if ( getSystemSetting( ""bxagents.probe"" ) == ""context"" ) {
+							new bxagents.models.cli.support.ApplicationContext().start( ""/some/project"" );
+						}
+						out.applicationAfter = isDefined( ""application"" );
+						try {
+							out.claimed = bxagents.models.api.RunOwners::claim( ""t-1"", ""ada"" );
+							bxagents.models.api.RunOwners::release( ""t-1"" );
+							var agent = aiAgent( name : ""helper"", model : aiModel( provider : ""mock"" ) );
+							var session = new bxagents.models.cli.chat.InProcessSession( agent );
+							var hooks = { push : ( e ) => {}, cancelRequested : () => false, takeSteer : () => nullValue() };
+							var result = session.send( ""hello"", hooks );
+							out.status = result.status;
+							out.answered = len( result.text ) > 0;
+						} catch ( any e ) {
+							out.error = e.message;
+						}
+						println( ""PROBE="" & jsonSerialize( out ) );
+					}
+					probe();
+				" );
+				var javaBin = getSystemSetting( "java.home" ) & "/bin/java";
+				var builder = createObject( "java", "java.lang.ProcessBuilder" ).init( [
+					javaBin, "-Dbxagents.probe=" & arguments.mode, "-jar", boxlangJar(),
+					"--bx-config", getSystemSetting( "user.dir" ) & "/boxlang.json", script
+				] );
+				builder.directory( createObject( "java", "java.io.File" ).init( getSystemSetting( "user.dir" ) ) );
+				builder.redirectErrorStream( true );
+				var process = builder.start();
+				var output = createObject( "java", "java.lang.String" ).init( process.getInputStream().readAllBytes(), "UTF-8" );
+				process.waitFor();
+				var line = output.listToArray( char( 10 ) ).filter( l => l.startsWith( "PROBE=" ) );
+				expect( line ).notToBeEmpty( "the probe printed nothing useful: " & output );
+				return jsonDeserialize( line[ 1 ].mid( 7 ) );
+			}
+
+			it( "has no application scope, and RunOwners and a whole in-process turn still work", function() {
+				if ( !canRunChild() ) {
+					return;
+				}
+				var out = runScript( "bare" );
+
+				expect( out.applicationBefore ).toBeFalse();
+				expect( out.keyExists( "error" ) ? out.error : "" ).toBe( "" );
+				expect( out.claimed ).toBeTrue();
+				expect( out.status ).toBe( "done" );
+				expect( out.answered ).toBeTrue();
+			} );
+
+			it( "gets an application scope from ApplicationContext, and the turn works there too", function() {
+				if ( !canRunChild() ) {
+					return;
+				}
+				var out = runScript( "context" );
+
+				expect( out.applicationBefore ).toBeFalse();
+				expect( out.applicationAfter ).toBeTrue();
+				expect( out.keyExists( "error" ) ? out.error : "" ).toBe( "" );
+				expect( out.claimed ).toBeTrue();
+				expect( out.status ).toBe( "done" );
+				expect( out.answered ).toBeTrue();
+			} );
+
+		} );
+	}
+
+}
