@@ -154,7 +154,7 @@ A different kind of channel adapter from `mock`/`cli`/`http` above: instead of b
 
 ### Signing in to a service from a chat platform
 
-A person talking to the agent through any of these can send `/connect` to see the services that ask them to sign in and `/connect NAME` to get a link that works once. The link goes to the server's public address, so set `BXAGENTS_PUBLIC_URL`. See [connect](../connect.md#trying-it-on-a-chat-platform), which walks through it with a Telegram bot.
+A person talking to the agent through any of these can send `/connect` to see the services that ask them to sign in and `/connect NAME` to get a link that works once. The link goes to the server's public address, so set `BXAGENTS_PUBLIC_URL`. See [connect](../connect.md#trying-it-on-a-chat-platform), which walks through it with a Telegram bot. `/connect` also lists the built-in [connectors](../connectors.md). A token is never typed into a chat platform, so connecting a connector there points to the web page; set `BXAGENTS_PUBLIC_URL` so the address is right.
 
 ## The nine push-style platforms
 
