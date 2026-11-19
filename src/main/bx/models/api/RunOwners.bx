@@ -5,12 +5,15 @@
  * can be seen in logs), so knowing one must not be enough to cancel somebody's run. The record lives in the application
  * scope because every request makes its own service: the request that cancels is not the request that started the run.
  * A run is recorded when it starts and forgotten when it ends.
+ *
+ * The table is a case-sensitive BoxLang struct (a ConcurrentHashMap underneath), and claiming is made atomic with an
+ * exclusive named lock, not with `putIfAbsent`: Struct.putIfAbsent is a containsKey then put, so racing callers can all win.
  */
 class {
 
 	/** The map used when there is no application scope at all (a script, a test, a CLI that never started one). */
 	static {
-		static.noApplicationMap = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
+		static.noApplicationMap = structNew( "casesensitive" )
 	}
 
 	/**
@@ -23,9 +26,11 @@ class {
 		if ( !isDefined( "application" ) ) {
 			return static.noApplicationMap
 		}
-		lock name="bxagents-run-owners" type="exclusive" timeout="5" {
-			if ( !application.keyExists( "bxagentsRunOwners" ) ) {
-				application[ "bxagentsRunOwners" ] = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
+		if ( !application.keyExists( "bxagentsRunOwners" ) ) {
+			lock name="bxagents-run-owners" type="exclusive" timeout="5" {
+				if ( !application.keyExists( "bxagentsRunOwners" ) ) {
+					application[ "bxagentsRunOwners" ] = structNew( "casesensitive" )
+				}
 			}
 		}
 		return application.bxagentsRunOwners
@@ -43,7 +48,14 @@ class {
 		if ( !len( arguments.threadId ) || !len( arguments.ownerId ) ) {
 			return false
 		}
-		return isNull( RunOwners::table().putIfAbsent( arguments.threadId, arguments.ownerId ) )
+		var owners = RunOwners::table()
+		lock name="bxagents-run-owners" type="exclusive" timeout="5" {
+			if ( owners.keyExists( arguments.threadId ) ) {
+				return false
+			}
+			owners[ arguments.threadId ] = arguments.ownerId
+		}
+		return true
 	}
 
 	/**
@@ -51,7 +63,10 @@ class {
 	 */
 	static void function release( required string threadId ) {
 		if ( len( arguments.threadId ) ) {
-			RunOwners::table().remove( arguments.threadId )
+			var owners = RunOwners::table()
+			lock name="bxagents-run-owners" type="exclusive" timeout="5" {
+				owners.delete( arguments.threadId )
+			}
 		}
 	}
 
