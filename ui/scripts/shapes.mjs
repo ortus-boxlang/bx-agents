@@ -143,6 +143,10 @@ const children = shapes.map( shape => {
 			"pipe"
 		]
 	} );
+	/**
+	 * @param {string} line One line the shape's server printed
+	 * @returns {boolean|void} Prints it with the shape's name, unless it is empty
+	 */
 	const say = line => line.length && console.log( "[" + shape.name + "] " + line );
 	child.stdout.on( "data", d => String( d ).split( "\n" ).forEach( say ) );
 	child.stderr.on( "data", d => String( d ).split( "\n" ).forEach( say ) );
@@ -177,6 +181,7 @@ async function waitFor( url, seconds ) {
 	throw new Error( "[shapes] " + url + " did not answer" );
 }
 
+/** Stops every shape's server this script started. */
 const stop = () => children.forEach( c => c.kill() );
 process.on( "SIGINT", () => {
 	stop();

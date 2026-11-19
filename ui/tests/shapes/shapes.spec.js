@@ -25,8 +25,8 @@ const PAGES = [
 ];
 
 /**
- * @param {{ name: string }} shape A shape
- * @returns {object} It, with its address
+ * @param {string} name A shape's name, as in ui/dev/shapes
+ * @returns {object} The shape from .stack/shapes.json, with its origin
  */
 const find = name => {
 	const shape = SHAPES.find( s => s.name === name );
