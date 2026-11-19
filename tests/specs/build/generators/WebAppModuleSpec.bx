@@ -39,6 +39,20 @@ class extends="testbox.system.BaseSpec" {
 				expect( settings.showTools ).toBeFalse()
 			} );
 
+			it( "lists the folder extensions' web files for the layout, and leaves out a disabled extension", function() {
+				directoryCreate( appDir & "/extensions/panel/web", true, true )
+				fileWrite( appDir & "/extensions/panel/web/panel.css", "" )
+				fileWrite( appDir & "/extensions/panel/web/panel.js", "" )
+				directoryCreate( appDir & "/extensions/off/web", true, true )
+				fileWrite( appDir & "/extensions/off/web/off.js", "" )
+
+				new bxagents.models.build.generators.WebAppModule().install( entry, appDir, "/__bxagents", "", "", [ "off" ] )
+
+				var settings = jsonDeserialize( fileRead( appDir & "/config/bxagentsui.json" ) )
+				expect( settings.extensionStyles ).toBe( [ "/chat/ext/panel/panel.css" ] )
+				expect( settings.extensionScripts ).toBe( [ "/chat/ext/panel/panel.js" ] )
+			} );
+
 			it( "removes a link left by a dev build as a link, and never deletes what it points at", function() {
 				var source = createTempDirectory( prefix = "bxagents-webapp-src-" )
 				fileWrite( source & "/keep.txt", "must survive" )

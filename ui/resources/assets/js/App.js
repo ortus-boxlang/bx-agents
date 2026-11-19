@@ -17,6 +17,8 @@ import { appearance } from "./stores/appearance.js";
 import { nav } from "./stores/nav.js";
 import { toast } from "./stores/toast.js";
 import { confirm } from "./stores/confirm.js";
+import { password } from "./stores/password.js";
+import { createBxagents } from "./utils/extensions.js";
 import { appShell } from "./components/app/AppShell.js";
 import { kitPage } from "./components/kit/KitPage.js";
 import { dataPage } from "./components/admin/DataPage.js";
@@ -43,13 +45,24 @@ Alpine.plugin( persist );
 // Stores: who is signed in and what the agent offers, the theme, the menu, messages, the question dialog
 // ============================================================
 const config = readConfig();
-const api = createApi( config.apiBase );
+// a refused call (401) asks for the password, once per page load
+const refused = () => window.dispatchEvent( new CustomEvent( "bxagents:refused" ) );
+const api = createApi( config.apiBase, undefined, refused );
 Alpine.store( "session", session( config ) );
 Alpine.store( "theme", theme( api ) );
 Alpine.store( "appearance", appearance() );
 Alpine.store( "nav", nav( Alpine ) );
 Alpine.store( "toast", toast() );
 Alpine.store( "confirm", confirm() );
+Alpine.store( "password", password() );
+// with accounts a refusal means the session ended: to the sign-in form, as the current page does; without, the password
+window.addEventListener( "bxagents:refused", () => {
+	if ( config.signIn && config.loginUrl ) {
+		window.location.href = config.loginUrl;
+		return;
+	}
+	Alpine.store( "password" ).ask( "The server refused the password, or asks for one." );
+} );
 
 // ============================================================
 // Magics: what every component may use
@@ -89,5 +102,7 @@ Alpine.data( "chatPage", chatPage );
 Alpine.data( "kitPage", kitPage );
 
 window.Alpine = Alpine;
+// what the extensions' scripts use: made now, before their deferred scripts run (utils/extensions.js)
+window.bxagents = createBxagents( config.apiBase, document );
 listenForCodeCopy( document );
 Alpine.start();

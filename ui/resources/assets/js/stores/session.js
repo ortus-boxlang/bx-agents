@@ -1,3 +1,5 @@
+import { authHeaders } from "../utils/api.js";
+
 /**
  * Who is signed in and what the agent offers them: the capabilities the agent API answers at GET /agent.
  *
@@ -47,7 +49,11 @@ export function session( config ) {
 		 */
 		async fetchCapabilities() {
 			try {
-				const res = await fetch( config.apiBase + "/agent", { headers: { "x-bxagents-source": "web", "x-bxagents-csrf": "1" } } );
+				const res = await fetch( config.apiBase + "/agent", { headers: authHeaders() } );
+				if ( res.status === 401 ) {
+					// the agent asks for a password this browser does not have, or has wrong
+					window.dispatchEvent( new CustomEvent( "bxagents:refused" ) );
+				}
 				if ( res.ok ) {
 					const payload = await res.json();
 					this.capabilities = payload.capabilities || {};

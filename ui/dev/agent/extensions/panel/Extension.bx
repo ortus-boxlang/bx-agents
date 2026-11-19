@@ -1,0 +1,35 @@
+/**
+ * Pieces of the web page. `@Slot` puts a string in a named place of the page (header, sidebar or composer), and the
+ * files in `web/` are served with the page and linked into it: `panel.css` styles it, and `panel.js` adds a button
+ * through the small `bxagents` object the page gives scripts.
+ *
+ * A slot's string is shown as text. `html : true` is the author saying it is markup they wrote, so it must never carry
+ * what a visitor typed.
+ */
+class {
+
+	function configure() {
+		variables.settings = { name : "panel" }
+		variables.pings = 0
+	}
+
+	// shown as text in the page header, next to the context size
+	@Slot( "header" )
+	function badge( agentContext ) {
+		return variables.pings > 0 ? "#settings.name#: #variables.pings# ping#variables.pings == 1 ? '' : 's'#" : ""
+	}
+
+	// markup the author wrote, under the list of conversations
+	@Slot( { place : "sidebar", html : true } )
+	function about( agentContext ) {
+		return "<strong>#encodeForHTML( settings.name )#</strong><br>Use the Ping button by the message box."
+	}
+
+	@Command
+	@Hint( "count a ping: the web page's Ping button runs it too" )
+	function ping( agentContext, commandArguments ) {
+		variables.pings++
+		return agentContext.reply().ok( "pong #variables.pings#" )
+	}
+
+}
