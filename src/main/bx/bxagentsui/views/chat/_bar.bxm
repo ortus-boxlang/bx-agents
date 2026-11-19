@@ -1,11 +1,21 @@
-<!--- Above the transcript: how much of the model's window the conversation uses (opens the breakdown), and Fork,
-      Export and Compact when the server offers them. Inside chatPage. --->
+<!--- Above the transcript: the agent talked to and the model (when there is a choice), how much of the model's window
+      the conversation uses (opens the breakdown), the extensions' status chips and header slot, and Fork, Export and
+      Compact when the server offers them. Inside chatPage. --->
 <bx:output>
-<div class="chat-bar" x-show="context || offers( '/fork' ) || offers( '/export' ) || $store.session.can( 'compact' )" x-cloak>
+<div class="chat-bar">
+	<select class="talk-select" aria-label="Talk to" title="Which agent you are talking to" x-show="talkChoices.length" x-cloak :disabled="busy" @change="talkTo( $event.target.value )">
+		<template x-for="choice in talkChoices" :key="choice.value"><option :value="choice.value" x-text="choice.label" :title="choice.title" :selected="choice.value === agent"></option></template>
+	</select>
+	<select aria-label="Model" title="The model for your next messages" x-show="profiles.length" x-cloak x-model="profile" @change="pickProfile()">
+		<option value="">Default model</option>
+		<template x-for="p in profiles" :key="p.name"><option :value="p.name" x-text="p.name + ( p.model ? ' (' + p.model + ')' : '' )" :title="p.description || ( p.provider + ( p.model ? '/' + p.model : '' ) )" :selected="p.name === profile"></option></template>
+	</select>
 	<button type="button" class="ctx-ring" :class="contextLevel === 'ok' ? '' : contextLevel" x-show="context" @click="contextOpen = true" :aria-label="contextText" :title="contextText">
 		<svg class="ring" viewBox="0 0 36 36" aria-hidden="true"><circle class="track" cx="18" cy="18" r="14"/><circle class="fill" cx="18" cy="18" r="14" pathLength="100" :stroke-dasharray="contextDash"/></svg>
 	</button>
 	<span class="pg-note" x-show="context" x-text="context ? approx( context.total ) + ' tokens' : ''"></span>
+	<template x-for="item in status" :key="item.name"><span class="chip" :title="item.name" x-text="item.text"></span></template>
+	<span id="slotHeader" class="slot-area" hidden x-ignore></span>
 	<span class="grow"></span>
 	<button type="button" class="ib" x-show="offers( '/fork' )" @click="fork()" title="Copy this conversation under a new name and carry on in the copy" aria-label="Fork">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "git-fork" } )#</button>
 	<button type="button" class="ib" x-show="offers( '/export' )" @click="exportChat()" title="Save this conversation as a Markdown file" aria-label="Export">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "download-simple" } )#</button>

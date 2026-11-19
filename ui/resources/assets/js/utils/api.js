@@ -6,12 +6,54 @@
 
 const HEADERS = { "x-bxagents-source": "web", "x-bxagents-csrf": "1" };
 
+/** Where this browser keeps the password (API key) of an agent without accounts: the same key as the current page */
+export const KEY_STORAGE = "bxagents_webui_api_key";
+
+/**
+ * @returns {string} The password kept in this browser, or ""
+ */
+export function savedKey() {
+	try {
+		return localStorage.getItem( KEY_STORAGE ) || "";
+	} catch ( e ) {
+		return "";
+	}
+}
+
+/**
+ * Keeps the password in this browser, or forgets it.
+ *
+ * @param {string} value The password, or "" to forget it
+ */
+export function saveKey( value ) {
+	try {
+		if ( value ) {
+			localStorage.setItem( KEY_STORAGE, value );
+		} else {
+			localStorage.removeItem( KEY_STORAGE );
+		}
+	} catch ( e ) {
+		// not kept: asked again next time
+	}
+}
+
+/**
+ * @returns {object} The headers every call sends: who is asking, that a script of the page asks, and the password
+ *          when this browser keeps one
+ */
+export function authHeaders() {
+	const key = savedKey();
+	return key ? { ...HEADERS, "x-bxagents-token": key } : { ...HEADERS };
+}
+
 /**
  * @param {string} apiBase Where the agent API is (/__bxagents)
  * @param {typeof fetch} [fetchImpl] The fetch to use (a test passes its own)
+ * @param {Function} [onRefused] Called with the status when the server refuses the caller (401): the page asks for the
+ *        password
  * @returns {{ get: Function, post: Function, url: Function }} The client
  */
-export function createApi( apiBase, fetchImpl = ( ...args ) => fetch( ...args ) ) {
+export function createApi( apiBase, fetchImpl = ( ...args ) => fetch( ...args ), onRefused = () => {} ) {
 	/**
 	 * @param {string} path A path under the API, with its query
 	 * @returns {string} The address
@@ -26,7 +68,7 @@ export function createApi( apiBase, fetchImpl = ( ...args ) => fetch( ...args ) 
 	 * @returns {Promise<{ ok: boolean, status: number, data: any, error: string }>} What came back
 	 */
 	async function call( method, path, body, options = {} ) {
-		const init = { method, headers: { ...HEADERS }, signal: options.signal };
+		const init = { method, headers: authHeaders(), signal: options.signal };
 		if ( method === "POST" ) {
 			init.headers[ "Content-Type" ] = "application/json";
 			init.body = JSON.stringify( body || {} );
@@ -39,6 +81,9 @@ export function createApi( apiBase, fetchImpl = ( ...args ) => fetch( ...args ) 
 				return { ok: false, status: 0, data: null, error: "", aborted: true };
 			}
 			return { ok: false, status: 0, data: null, error: "The server could not be reached." };
+		}
+		if ( res.status === 401 ) {
+			onRefused( res.status );
 		}
 		let data = null;
 		try {
@@ -68,6 +113,6 @@ export function createApi( apiBase, fetchImpl = ( ...args ) => fetch( ...args ) 
 		 */
 		post   : ( path, body, options ) => call( "POST", path, body, options ),
 		/** The headers every call sends, for a stream (sse.js) */
-		headers: () => ( { ...HEADERS } )
+		headers: authHeaders
 	};
 }

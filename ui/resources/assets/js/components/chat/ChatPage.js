@@ -4,6 +4,33 @@ import { base64Of, classifyFile, clipText, withTextFiles } from "../../utils/att
 import { approx, contextLevel, contextSummary, ringDash, windowText } from "../../utils/context.js";
 import { vaultAskUrl, vaultRequestOf } from "../../utils/vault-request.js";
 import { replyEffects, slashMatches } from "../../utils/reply.js";
+import { drawSlots } from "../../utils/extensions.js";
+
+/** Where this browser keeps the profile (model) for the next messages: the same key as the current page */
+export const PROFILE_KEY = "bxagents_webui_profile";
+
+/**
+ * @param {Array<{ name: string, parent?: string, description?: string }>} agents The agent and its sub-agents
+ * @returns {Array<{ value: string, label: string, title: string }>} The choices of the "Talk to" picker: the main agent
+ *          is "" (its conversations carry no agent), a sub-agent its name
+ */
+export function talkChoices( agents ) {
+	return ( agents || [] ).map( a => ( { value: a.parent ? a.name : "", label: a.parent ? a.name : a.name + " (main)", title: a.description || "" } ) );
+}
+
+/**
+ * @param {string} agent The sub-agent talked to, or ""
+ * @param {Array<{ name: string, parent?: string }>} agents The agent tree
+ * @returns {string} What the banner says while a sub-agent is talked to directly, or ""
+ */
+export function talkBanner( agent, agents ) {
+	if ( !agent ) {
+		return "";
+	}
+	const node = ( agents || [] ).find( a => a.name === agent ) || {};
+	return "You are talking to " + agent + " directly" + ( node.parent ? " (a sub-agent of " + node.parent + ")" : "" )
+		+ ". It keeps its own memory of this conversation, and it uses your notes and the notes every agent shares.";
+}
 
 /**
  * The chat: the list of conversations (GET /sessions; POST /sessions, /sessions/rename, /sessions/delete), the
@@ -96,6 +123,23 @@ export function chatPage() {
 		context       : null,
 		/** @type {boolean} True while the context breakdown is open */
 		contextOpen   : false,
+		/** @type {Array<{ name: string, model?: string, description?: string, provider?: string }>} Profiles offered */
+		profiles      : [],
+		/** @type {string} The profile for the next messages ("" for the default model) */
+		profile       : "",
+		/** @type {Array<{ name: string, text: string }>} What the extensions' status items say */
+		status        : [],
+
+		/** @returns {Array<object>} The choices of the "Talk to" picker, when there are sub-agents */
+		get talkChoices() {
+			const agents = this.$store.session.agents;
+			return agents.length > 1 ? talkChoices( agents ) : [];
+		},
+
+		/** @returns {string} What the banner says while a sub-agent is talked to */
+		get talkBanner() {
+			return talkBanner( this.agent, this.$store.session.agents );
+		},
 
 		/** Tokens as "~1.2k" */
 		approx,
@@ -154,7 +198,12 @@ export function chatPage() {
 				this.limit = CONV_PAGE;
 				this.loadConversations();
 			} );
+			this.plugExtensions();
+			this.guardLeaving();
 			await this.$store.session.loaded();
+			if ( this.$store.session.can( "profiles" ) ) {
+				this.loadProfiles();
+			}
 			if ( this.$store.session.can( "commands" ) ) {
 				this.$api.get( "/commands" ).then( result => {
 					this.commands = result.ok ? result.data.commands || [] : [];
@@ -286,6 +335,7 @@ export function chatPage() {
 			this.context = null;
 			this.$refs.input && this.$refs.input.focus();
 			await this.loadConversations();
+			this.refreshExtensions();
 		},
 
 		/** @param {{ id: string, title?: string }} conv The conversation */
@@ -371,6 +421,9 @@ export function chatPage() {
 		async runTurn( text ) {
 			const images = this.images.slice();
 			const body = { input: withTextFiles( text, this.texts ), conversationId: this.conversationId, threadId: newThreadId(), options: {} };
+			if ( this.profile ) {
+				body.options.profile = this.profile;
+			}
 			if ( images.length ) {
 				body.attachments = images.map( i => ( { name: i.name, mime: i.mime, data: i.data } ) );
 			}
@@ -414,6 +467,9 @@ export function chatPage() {
 				const at = this.messages.findIndex( m => m.turn === turn );
 				this.messages.splice( at, 1 );
 				this.messages.push( { role: "error", text: outcome.status === 401 ? "This server asks for a password." : outcome.error || "Something went wrong." } );
+				if ( outcome.status === 401 ) {
+					window.dispatchEvent( new CustomEvent( "bxagents:refused" ) );
+				}
 			}
 			const threadId = this.threadId;
 			this.controller = null;
@@ -553,14 +609,105 @@ export function chatPage() {
 			this.loadConversations();
 		},
 
-		/** Reads how much of the model's window the open conversation uses. */
+		/** Reads what the extensions show (status chips and slots), then how much of the window the conversation uses. */
 		async refreshContext() {
+			this.refreshExtensions();
+			await this.readContext();
+		},
+
+		/** Reads how much of the model's window the open conversation uses. */
+		async readContext() {
 			if ( !this.$store.session.can( "context" ) || this.isLocalOnly() ) {
 				this.context = null;
 				return;
 			}
 			const result = await this.$api.get( "/context?conversationId=" + encodeURIComponent( this.conversationId ) );
 			this.context = result.ok ? result.data : null;
+		},
+
+		/** Reads the extensions' status items and slots for the open conversation, then tells their scripts. */
+		async refreshExtensions() {
+			const id = encodeURIComponent( this.conversationId );
+			const session = this.$store.session;
+			const [ status, slots ] = await Promise.all( [
+				session.can( "status" ) ? this.$api.get( "/status?conversationId=" + id ) : Promise.resolve( null ),
+				session.can( "slots" ) ? this.$api.get( "/slots?conversationId=" + id ) : Promise.resolve( null )
+			] );
+			this.status = status && status.ok ? status.data.items || [] : [];
+			drawSlots( document, slots && slots.ok ? slots.data.items || [] : [] );
+			window.bxagents && window.bxagents.notify && window.bxagents.notify();
+		},
+
+		/** Gives window.bxagents what only the chat knows. */
+		plugExtensions() {
+			if ( !window.bxagents || !window.bxagents.plug ) {
+				return;
+			}
+			window.bxagents.plug( {
+				conversationId: () => this.conversationId,
+				runCommand    : line => ( this.busy ? null : this.runCommand( line ) ),
+				refresh       : () => this.refreshContext()
+			} );
+		},
+
+		/**
+		 * Warns before the page is left while an answer streams: the browser's own question when the page closes or
+		 * reloads, and the app's when a link of the app is followed (the answer stops; nothing already said is lost).
+		 */
+		guardLeaving() {
+			window.addEventListener( "beforeunload", evt => {
+				if ( this.busy ) {
+					evt.preventDefault();
+					evt.returnValue = "";
+				}
+			} );
+			document.addEventListener( "click", async evt => {
+				const link = evt.target.closest && evt.target.closest( "a[href]" );
+				if ( !this.busy || !link || link.getAttribute( "href" ).startsWith( "#" ) || link.target === "_blank" || evt.ctrlKey || evt.metaKey ) {
+					return;
+				}
+				evt.preventDefault();
+				const leave = await this.$confirm( { title: "Leave while the agent answers?", body: "The answer stops. What it already said stays in the conversation.", yes: "Leave" } );
+				if ( leave ) {
+					this.busy = false;
+					window.location.href = link.href;
+				}
+			}, true );
+		},
+
+		/** Reads the profiles the server offers, and the one this browser chose. */
+		async loadProfiles() {
+			const result = await this.$api.get( "/profiles" );
+			this.profiles = result.ok ? result.data.profiles || [] : [];
+			let remembered = "";
+			try {
+				remembered = localStorage.getItem( PROFILE_KEY ) || "";
+			} catch ( e ) {
+				remembered = "";
+			}
+			this.profile = this.profiles.some( p => p.name === remembered ) ? remembered : "";
+		},
+
+		/** Keeps the chosen profile in this browser, as the current page and the Settings page do. */
+		pickProfile() {
+			try {
+				localStorage.setItem( PROFILE_KEY, this.profile );
+			} catch ( e ) {
+				// the choice still holds for this visit
+			}
+		},
+
+		/**
+		 * Talks to another agent: a conversation belongs to the agent it started with, so this starts a new one.
+		 *
+		 * @param {string} agent The sub-agent, or "" for the main agent
+		 */
+		async talkTo( agent ) {
+			if ( this.busy ) {
+				return;
+			}
+			this.agent = agent;
+			await this.newChat();
 		},
 
 		/**

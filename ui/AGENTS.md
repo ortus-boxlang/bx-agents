@@ -68,6 +68,8 @@ The app partials (`views/_components/app/`) are `includes`, `sprite`, `sidebar` 
 | `$store.session` | `can( capability )`, `capabilities`, `agentName`, `agents`, `ready`; `await loaded()` before deciding by a capability in `init()` |
 | `$store.theme`, `$store.nav` | Light or dark; the folded menu and the phone drawer |
 | `$store.appearance` | Accent, text size, density (same key and format as the current page) |
+| `$store.password` | The password of an agent without accounts: sent with every call (`utils/api.js`); a refusal asks once |
+| `window.bxagents` | The extensions' contract (`utils/extensions.js`): made at load, before their deferred scripts run |
 
 | Page | Handler | View | Component |
 |---|---|---|---|

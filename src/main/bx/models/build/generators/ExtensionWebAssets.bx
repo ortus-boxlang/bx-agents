@@ -16,10 +16,11 @@ class {
 	 * @path The page's URL path, such as "/chat" or ""
 	 * @disable The `extensions.disable` entries
 	 *
-	 * @return { styles, scripts, extensions } - the HTML to put in the page, and the extensions that have files
+	 * @return { styles, scripts, extensions, styleHrefs, scriptHrefs } - the HTML to put in the page, the extensions that
+	 *         have files, and the same files as plain addresses (the web app module writes its own tags)
 	 */
 	struct function links( required string projectRoot, required string path, array disable = [] ) {
-		var found = { styles : [], scripts : [], extensions : [] }
+		var found = { styles : [], scripts : [], extensions : [], styleHrefs : [], scriptHrefs : [] }
 		var source = arguments.projectRoot & "/extensions"
 		if ( !directoryExists( source ) ) {
 			return finish( found )
@@ -40,8 +41,10 @@ class {
 				var href = encodeForHTML( base & file )
 				if ( file.lCase().endsWith( ".css" ) ) {
 					found.styles.append( '<link rel="stylesheet" href="#href#">' )
+					found.styleHrefs.append( base & file )
 				} else if ( file.lCase().endsWith( ".js" ) ) {
 					found.scripts.append( '<script src="#href#"></script>' )
+					found.scriptHrefs.append( base & file )
 				}
 			}
 		}
@@ -54,7 +57,9 @@ class {
 		return {
 			styles     : arguments.found.styles.toList( char( 10 ) ),
 			scripts    : arguments.found.scripts.toList( char( 10 ) ),
-			extensions : arguments.found.extensions
+			extensions  : arguments.found.extensions,
+			styleHrefs  : arguments.found.styleHrefs,
+			scriptHrefs : arguments.found.scriptHrefs
 		}
 	}
 
