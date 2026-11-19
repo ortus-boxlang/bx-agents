@@ -46,7 +46,14 @@ The rules are cbGenesis': `eslint.config.mjs` (its rules as they are), `.styleli
 ```bash
 npm run e2e          # every browser test, against a stack it starts (or the one you already started)
 npm run e2e:headed   # the same, with the browser on screen
+npm run e2e:shapes   # every page over a real server for other project shapes (below)
 ```
 
 The tests are in `tests/e2e`. They sign in once as each account (`global-setup.js`), start every chat test on a new
 conversation, and fail on any error the page throws. CI runs the same suite.
+
+`npm run e2e:shapes` builds the dev agent again for each folder of `dev/shapes` (another web path and gateway icon, an
+API password and no accounts, the agent API under a path of its own), serves them side by side on ports 8791 and up,
+and checks every page of each: it answers, draws its frame with no error, links its files and extensions under that
+path, and talks to that API. `scripts/shapes.mjs --no-build` serves them again without building. Add a folder to
+`dev/shapes` (a `gateways/chat.bx` and a `shape.json`, see its README) to test another shape.

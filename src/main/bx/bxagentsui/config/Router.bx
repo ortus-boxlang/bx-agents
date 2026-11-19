@@ -3,6 +3,9 @@
  */
 class {
 
+	/**
+	 * Declares the routes, the catch-all last so every other route wins.
+	 */
 	function configure() {
 		// what the generated app answers under the same path (see Forward): sign in, sign out, extension files
 		// /login.html reaches here as /login (ColdBox reads the extension as the format): GET is the form, POST its target
@@ -29,6 +32,9 @@ class {
 		route( "/routines" ).to( "Routines.index" )
 		route( "/connectors/:tab-regex:(all|connected|attention|agent)" ).to( "Connectors.index" )
 		route( "/connectors" ).to( "Connectors.index" )
+		// anything else under the app is a page it does not have: 404, rather than ColdBox's convention route looking for a
+		// handler of that name (which answered 500)
+		route( "/:missing-regex:(.+)" ).to( "Main.missing" )
 	}
 
 }
