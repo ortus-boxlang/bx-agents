@@ -9,8 +9,18 @@ describe( "routine helpers", () => {
 	} );
 
 	it( "counts the routines for the summary", () => {
-		const rows = [ { statusText: "ok", enabled: true }, { statusText: "failed last time", enabled: true }, { statusText: "paused", enabled: false } ];
-		expect( routineSummary( rows ).map( c => c.text ) ).toEqual( [ "3 routines", "1 ok", "0 waiting for approval", "1 needs attention", "1 paused" ] );
+		const rows = [
+			{ statusText: "ok", enabled: true },
+			{ statusText: "failed last time", enabled: true },
+			{ statusText: "paused", enabled: false }
+		];
+		expect( routineSummary( rows ).map( c => c.text ) ).toEqual( [
+			"3 routines",
+			"1 ok",
+			"0 waiting for approval",
+			"1 needs attention",
+			"1 paused"
+		] );
 	} );
 
 	it( "says what comes next and where answers go", () => {

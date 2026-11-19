@@ -48,7 +48,7 @@ The page talks to the agent API at `/__bxagents` via `POST /__bxagents/stream` (
 !!! warning
     **`toAi()` forwards each bx-ai chunk verbatim - it does not wrap it.** ColdBox's [AI Routing docs](https://coldbox.ortusbooks.com/the-basics/routing/routing-dsl/ai-routing) show the stream as `data: {"token":"..."}` lines, but its own source (`Router.cfc`, `toAi()`'s stream sub-route) does `emitter.send( chunk, "chunk" )` - so every frame carries the **full normalized bx-ai envelope**:
 
-    ```
+    ```text
     event: chunk
     data: {"object":"chat.completion.chunk","choices":[{"delta":{"role":"assistant","content":"Ray","reasoning":"...","tool_calls":[...]}}]}
 
@@ -308,7 +308,7 @@ An account names the **environment variable** holding its password (`passwordEnv
 
 A `passwordHash` is safe to commit precisely because it cannot be reversed. Generate one with the same hasher the app uses:
 
-```
+```text
 bxAgents hash-password --password="<your-password>"
 ```
 
@@ -523,7 +523,6 @@ theme: {
     **Write hex colors bare, with no leading hash.** BoxLang begins string interpolation at `#` in **both** single- and double-quoted strings, so a literal hex color in a `.bx` config is a parse error unless the hash is doubled - a footgun nobody remembers. The generator adds it back for you, so `"0f766e"` just works. `rgb()`, `hsl()` and named colors need nothing special either way.
 
 For anything the tokens don't cover - custom fonts, layout, per-element rules - drop a `resources/webui/theme.css` into the project. It's inlined **last** into the page's `<style>`, so it beats both the shipped defaults and the `theme` tokens; and being a real `.css` file, ordinary `#rrggbb` hex works there normally. (A literal `</style` in that file fails the build, since it would terminate the page's style block early.)
-
 
 
 ## Securing the API

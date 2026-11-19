@@ -9,27 +9,27 @@ import { downloadFile } from "../../utils/download.js";
 export function dataPage() {
 	return {
 		/** @type {boolean} True until the folders have answered */
-		loading       : true,
+		loading        : true,
 		/** @type {string} Why the folders could not be read */
-		failed        : "",
+		failed         : "",
 		/** @type {string} The data home */
-		home          : "",
+		home           : "",
 		/** @type {string} The database, when it is a file */
-		database      : "",
+		database       : "",
 		/** @type {Array<{ name: string, bytes: number, files: number }>} The folders of the data home */
-		items         : [],
+		items          : [],
 		/** @type {Array<{ name: string, mode: string, path: string }>} The volumes */
-		volumes       : [],
+		volumes        : [],
 		/** @type {boolean} True until the backups have answered */
-		backupsLoading: true,
+		backupsLoading : true,
 		/** @type {string} Why the backups could not be read */
-		backupsFailed : "",
+		backupsFailed  : "",
 		/** @type {Array<{ name: string, bytes: number, madeAt: string }>} The backups, newest first */
-		backups       : [],
+		backups        : [],
 		/** @type {{ name: string, scheduledAt?: string } | null} A restore waiting for the next start */
-		pending       : null,
+		pending        : null,
 		/** @type {boolean} True while a backup is being made */
-		making        : false,
+		making         : false,
 
 		/** Loads the folders and the backups. */
 		init() {
@@ -95,8 +95,8 @@ export function dataPage() {
 		 */
 		async restore( backup ) {
 			const yes = await this.$confirm( {
-				title: "Restore " + backup.name + "?",
-				body : "It is restored the next time the app starts. The data as it is now is kept as before-restore."
+				title : "Restore " + backup.name + "?",
+				body  : "It is restored the next time the app starts. The data as it is now is kept as before-restore."
 			} );
 			if ( !yes ) {
 				return;

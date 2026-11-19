@@ -35,7 +35,7 @@ repeat it. Pass `--model` (or `--no-wizard`) to skip the questions. See the
 
 ## What gets created
 
-```
+```text
 my-agent/
 ├── Agent.yaml
 ├── box.json

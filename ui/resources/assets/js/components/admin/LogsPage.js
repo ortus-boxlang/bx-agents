@@ -10,8 +10,11 @@ import { keepInAddress } from "../../utils/address.js";
  * @returns {object} Alpine component state and actions
  */
 export const LOG_AREAS = [
-	{ id: "agent", label: "Agent" }, { id: "gateways", label: "Gateways" }, { id: "routines", label: "Routines" },
-	{ id: "heartbeat", label: "Heartbeat" }, { id: "api", label: "API" }
+	{ id: "agent", label: "Agent" },
+	{ id: "gateways", label: "Gateways" },
+	{ id: "routines", label: "Routines" },
+	{ id: "heartbeat", label: "Heartbeat" },
+	{ id: "api", label: "API" }
 ];
 
 /**
@@ -34,27 +37,27 @@ export function levelChip( line ) {
 export function logsPage() {
 	return {
 		/** @type {string} The open area */
-		area   : "agent",
+		area    : "agent",
 		/** @type {string[]} The areas that have a log */
-		present: [],
+		present : [],
 		/** @type {Object<string, number>} Errors per area */
-		errors : {},
+		errors  : {},
 		/** @type {string} "" | warn | error */
-		level  : "",
+		level   : "",
 		/** @type {string} A search in the lines */
-		query  : "",
+		query   : "",
 		/** @type {string} How many lines from the end */
-		tail   : "200",
+		tail    : "200",
 		/** @type {boolean} True while the page refreshes itself every 5 seconds */
-		auto   : false,
+		auto    : false,
 		/** @type {Array<{ time: string, level: string, subject: string, message: string }>} The lines */
-		lines  : [],
+		lines   : [],
 		/** @type {boolean} True until the first lines answered */
-		loading: true,
+		loading : true,
 		/** @type {string} Why the lines could not be read */
-		failed : "",
+		failed  : "",
 		/** @type {number|null} The refresh timer */
-		timer  : null,
+		timer   : null,
 
 		/** @returns {Array<{ id: string, label: string }>} The tabs: the areas with a log, and the open one */
 		get tabs() {

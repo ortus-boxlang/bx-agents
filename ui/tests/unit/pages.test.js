@@ -16,12 +16,25 @@ describe( "page helpers", () => {
 	} );
 
 	it( "says what an extension adds", () => {
-		expect( extensionAdds( { commands: [ "a", "b" ], slots: [], keys: [ "k" ] } ) ).toBe( "commands: a, b; keys: k" );
+		expect( extensionAdds( {
+			commands : [
+				"a",
+				"b"
+			],
+			slots : [],
+			keys  : [ "k" ]
+		} ) ).toBe( "commands: a, b; keys: k" );
 	} );
 
 	it( "keeps only the server facts that have a value", () => {
 		const facts = serverFacts( { name: "ui-dev", model: "m", toolCount: 0, vision: "no" } );
-		expect( facts.map( f => f.label ) ).toEqual( [ "Agent", "Model", "Tools", "Pictures", "Sub-agents" ] );
+		expect( facts.map( f => f.label ) ).toEqual( [
+			"Agent",
+			"Model",
+			"Tools",
+			"Pictures",
+			"Sub-agents"
+		] );
 		expect( facts.find( f => f.label === "Sub-agents" ).value ).toBe( "None" );
 	} );
 } );

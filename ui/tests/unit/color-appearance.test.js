@@ -50,13 +50,27 @@ describe( "theme store", () => {
 	it( "keeps the mode as the plain word the current page uses, and tells the server", () => {
 		localStorage.clear();
 		const posted = [];
-		const store = theme( { post: ( path, body ) => posted.push( [ path, body ] ) } );
+		const store = theme( {
+			post : ( path, body ) => posted.push( [
+				path,
+				body
+			] )
+		} );
 		store.init();
 		store.set( "dark" );
 		expect( localStorage.getItem( "bxagents_webui_theme" ) ).toBe( "dark" );
 		expect( document.documentElement.getAttribute( "data-theme" ) ).toBe( "dark" );
 		store.set( "system" );
 		expect( localStorage.getItem( "bxagents_webui_theme" ) ).toBeNull();
-		expect( posted ).toEqual( [ [ "/preferences/set", { key: "theme", value: "dark" } ], [ "/preferences/set", { key: "theme", value: "system" } ] ] );
+		expect( posted ).toEqual( [
+			[
+				"/preferences/set",
+				{ key: "theme", value: "dark" }
+			],
+			[
+				"/preferences/set",
+				{ key: "theme", value: "system" }
+			]
+		] );
 	} );
 } );

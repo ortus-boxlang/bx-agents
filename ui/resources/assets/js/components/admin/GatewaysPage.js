@@ -5,10 +5,10 @@
  * @returns {object} Alpine component state and actions
  */
 export const GATEWAY_STATES = {
-	connected: { kind: "ok", icon: "check-circle", label: "Connected" },
-	stopped  : { kind: "", icon: "pause", label: "Stopped" },
-	failing  : { kind: "bad", icon: "warning-circle", label: "Failing" },
-	missing  : { kind: "warn", icon: "question", label: "Not registered" }
+	connected : { kind: "ok", icon: "check-circle", label: "Connected" },
+	stopped   : { kind: "", icon: "pause", label: "Stopped" },
+	failing   : { kind: "bad", icon: "warning-circle", label: "Failing" },
+	missing   : { kind: "warn", icon: "question", label: "Not registered" }
 };
 
 /**
@@ -25,13 +25,13 @@ export function seenText( ms ) {
 export function gatewaysPage() {
 	return {
 		/** @type {boolean} True until the gateways answered */
-		loading     : true,
+		loading      : true,
 		/** @type {string} Why they could not be read */
-		failed      : "",
+		failed       : "",
 		/** @type {Array<object>} The gateways */
-		gateways    : [],
+		gateways     : [],
 		/** @type {string} The gateway being reconnected */
-		reconnecting: "",
+		reconnecting : "",
 
 		/** Loads the gateways. */
 		init() {

@@ -129,7 +129,7 @@ route( "/gateways" ).toAiGateway()
 
 That single terminator mounts the whole bx-ai Gateway surface:
 
-```
+```text
 POST /gateways/:gateway/events                  inbound platform event
 GET  /gateways/:gateway/events                  the platform's URL verification handshake
 GET  /gateways/interactions/:requestID          poll a pending human interaction

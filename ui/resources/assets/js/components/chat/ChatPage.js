@@ -74,61 +74,61 @@ export function transcriptOf( history ) {
 export function chatPage() {
 	return {
 		/** @type {Array<object>} The conversations on the list */
-		conversations : [],
+		conversations  : [],
 		/** @type {number} How many there are in all */
-		total         : 0,
+		total          : 0,
 		/** @type {number} How many the list asks for */
-		limit         : CONV_PAGE,
+		limit          : CONV_PAGE,
 		/** @type {string} A filter on the titles */
-		query         : "",
+		query          : "",
 		/** @type {string} The open conversation */
-		conversationId: "",
+		conversationId : "",
 		/** @type {string} The sub-agent being talked to, or "" for the main agent */
-		agent         : "",
+		agent          : "",
 		/** @type {Array<object>} The transcript */
-		messages      : [],
+		messages       : [],
 		/** @type {boolean} True until the transcript of the open conversation has loaded */
-		loading       : true,
+		loading        : true,
 		/** @type {string} What is typed */
-		draft         : "",
+		draft          : "",
 		/** @type {boolean} True while a turn runs */
-		busy          : false,
+		busy           : false,
 		/** @type {string} The thread of the turn that runs */
-		threadId      : "",
+		threadId       : "",
 		/** @type {AbortController|null} Stops listening to the turn */
-		controller    : null,
+		controller     : null,
 		/** @type {string} A line under the transcript */
-		hint          : "",
+		hint           : "",
 		/** @type {string} What the empty chat says */
-		welcome       : "",
+		welcome        : "",
 		/** @type {string[]} What the empty chat offers to send with one click */
-		suggestions   : [],
+		suggestions    : [],
 		/** @type {boolean} Show the model's reasoning */
-		showReasoning : true,
+		showReasoning  : true,
 		/** @type {boolean} Show the tool calls */
-		showTools     : true,
+		showTools      : true,
 		/** @type {Array<{ name: string, hint: string, extension?: string }>} The slash commands offered */
-		commands      : [],
+		commands       : [],
 		/** @type {number} The command picked in the "/" menu */
-		slashPick     : 0,
+		slashPick      : 0,
 		/** @type {boolean} True while the "/" menu may show */
-		slashOpen     : false,
+		slashOpen      : false,
 		/** @type {Array<{ name: string, mime: string, data: string, url: string }>} Pictures that go with the next message */
-		images        : [],
+		images         : [],
 		/** @type {Array<{ name: string, content: string }>} Text files that go with the next message */
-		texts         : [],
+		texts          : [],
 		/** @type {boolean} True while files are dragged over the composer */
-		dragging      : false,
+		dragging       : false,
 		/** @type {object|null} What GET /context answered for the open conversation */
-		context       : null,
+		context        : null,
 		/** @type {boolean} True while the context breakdown is open */
-		contextOpen   : false,
+		contextOpen    : false,
 		/** @type {Array<{ name: string, model?: string, description?: string, provider?: string }>} Profiles offered */
-		profiles      : [],
+		profiles       : [],
 		/** @type {string} The profile for the next messages ("" for the default model) */
-		profile       : "",
+		profile        : "",
 		/** @type {Array<{ name: string, text: string }>} What the extensions' status items say */
-		status        : [],
+		status         : [],
 
 		/** @returns {Array<object>} The choices of the "Talk to" picker, when there are sub-agents */
 		get talkChoices() {
@@ -188,7 +188,7 @@ export function chatPage() {
 			this.welcome = data.welcome || "";
 			try {
 				this.suggestions = JSON.parse( data.suggestions || "[]" );
-			} catch ( e ) {
+			} catch {
 				this.suggestions = [];
 			}
 			this.showReasoning = data.showReasoning !== "false";
@@ -225,7 +225,7 @@ export function chatPage() {
 		storedId() {
 			try {
 				return localStorage.getItem( CONVERSATION_KEY ) || "";
-			} catch ( e ) {
+			} catch {
 				return "";
 			}
 		},
@@ -238,7 +238,7 @@ export function chatPage() {
 			try {
 				localStorage.setItem( CONVERSATION_KEY, id );
 				localStorage.setItem( LOCAL_KEY, id );
-			} catch ( e ) {
+			} catch {
 				// kept for this visit only
 			}
 			return id;
@@ -248,7 +248,7 @@ export function chatPage() {
 		isLocalOnly() {
 			try {
 				return localStorage.getItem( LOCAL_KEY ) === this.conversationId;
-			} catch ( e ) {
+			} catch {
 				return false;
 			}
 		},
@@ -313,7 +313,7 @@ export function chatPage() {
 			this.agent = agentOfRow( conv, this.$store.session.agentName );
 			try {
 				localStorage.setItem( CONVERSATION_KEY, conv.id );
-			} catch ( e ) {
+			} catch {
 				// kept for this visit only
 			}
 			this.hint = "";
@@ -326,7 +326,7 @@ export function chatPage() {
 			this.conversationId = result.ok && result.data.conversationId ? result.data.conversationId : this.mintId();
 			try {
 				localStorage.setItem( CONVERSATION_KEY, this.conversationId );
-			} catch ( e ) {
+			} catch {
 				// kept for this visit only
 			}
 			// the transcript is cleared now, before the list is fetched: a message sent meanwhile must not be wiped
@@ -432,7 +432,7 @@ export function chatPage() {
 			this.messages.push( { role: "you", text, images: images.map( i => i.url ) } );
 			try {
 				localStorage.removeItem( LOCAL_KEY );
-			} catch ( e ) {
+			} catch {
 				// nothing kept
 			}
 			await this.streamTurn( "/stream", this.withAgent( body ) );
@@ -455,8 +455,8 @@ export function chatPage() {
 			this.controller = new AbortController();
 			const outcome = await this.$sse( path, {
 				body,
-				signal : this.controller.signal,
-				onEvent: ( name, data ) => {
+				signal  : this.controller.signal,
+				onEvent : ( name, data ) => {
 					applyFrame( turn, data );
 					this.scrollToEnd();
 				}
@@ -499,8 +499,8 @@ export function chatPage() {
 				return;
 			}
 			const actions = ( result.data.pendingActions || [] ).map( a => ( {
-				name: a.name || a.tool || "action",
-				args: a.arguments ? ( typeof a.arguments === "string" ? a.arguments : JSON.stringify( a.arguments ) ) : ""
+				name : a.name || a.tool || "action",
+				args : a.arguments ? ( typeof a.arguments === "string" ? a.arguments : JSON.stringify( a.arguments ) ) : ""
 			} ) );
 			this.messages.push( { role: "approval", threadId, actions } );
 			this.scrollToEnd( true );
@@ -629,7 +629,10 @@ export function chatPage() {
 		async refreshExtensions() {
 			const id = encodeURIComponent( this.conversationId );
 			const session = this.$store.session;
-			const [ status, slots ] = await Promise.all( [
+			const [
+				status,
+				slots
+			] = await Promise.all( [
 				session.can( "status" ) ? this.$api.get( "/status?conversationId=" + id ) : Promise.resolve( null ),
 				session.can( "slots" ) ? this.$api.get( "/slots?conversationId=" + id ) : Promise.resolve( null )
 			] );
@@ -644,9 +647,9 @@ export function chatPage() {
 				return;
 			}
 			window.bxagents.plug( {
-				conversationId: () => this.conversationId,
-				runCommand    : line => ( this.busy ? null : this.runCommand( line ) ),
-				refresh       : () => this.refreshContext()
+				conversationId : () => this.conversationId,
+				runCommand     : line => ( this.busy ? null : this.runCommand( line ) ),
+				refresh        : () => this.refreshContext()
 			} );
 		},
 
@@ -682,7 +685,7 @@ export function chatPage() {
 			let remembered = "";
 			try {
 				remembered = localStorage.getItem( PROFILE_KEY ) || "";
-			} catch ( e ) {
+			} catch {
 				remembered = "";
 			}
 			this.profile = this.profiles.some( p => p.name === remembered ) ? remembered : "";
@@ -692,7 +695,7 @@ export function chatPage() {
 		pickProfile() {
 			try {
 				localStorage.setItem( PROFILE_KEY, this.profile );
-			} catch ( e ) {
+			} catch {
 				// the choice still holds for this visit
 			}
 		},
@@ -832,7 +835,7 @@ export function chatPage() {
 			try {
 				await navigator.clipboard.writeText( turn.text );
 				this.$toast.success( "Copied." );
-			} catch ( e ) {
+			} catch {
 				this.$toast.error( "Could not copy." );
 			}
 		},

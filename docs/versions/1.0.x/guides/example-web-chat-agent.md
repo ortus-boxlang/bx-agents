@@ -14,7 +14,7 @@ This is the one example in this guide series with real screenshots, because it's
 
 ## The project
 
-```
+```text
 webui-agent/
 ├── Agent.yaml
 ├── instructions.md

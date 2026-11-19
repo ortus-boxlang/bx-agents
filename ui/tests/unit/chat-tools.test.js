@@ -47,12 +47,20 @@ describe( "vault request", () => {
 describe( "replies and the / menu", () => {
 	it( "opens another conversation or reloads this one", () => {
 		expect( replyEffects( { effects: [ { type: "conversation", id: "b" } ] }, "a" ) ).toEqual( { open: "b", reload: false } );
-		expect( replyEffects( { effects: [ { type: "conversation", id: "a" }, { type: "reset" } ] }, "a" ) ).toEqual( { open: "", reload: true } );
+		expect( replyEffects( {
+			effects : [
+				{ type: "conversation", id: "a" },
+				{ type: "reset" }
+			]
+		}, "a" ) ).toEqual( { open: "", reload: true } );
 		expect( replyEffects( {}, "a" ) ).toEqual( { open: "", reload: false } );
 	} );
 
 	it( "matches commands only while a name is typed", () => {
-		const commands = [ { name: "/help" }, { name: "/new" } ];
+		const commands = [
+			{ name: "/help" },
+			{ name: "/new" }
+		];
 		expect( slashMatches( commands, "/h" ).map( c => c.name ) ).toEqual( [ "/help" ] );
 		expect( slashMatches( commands, "/help me" ) ).toEqual( [] );
 		expect( slashMatches( commands, "hi" ) ).toEqual( [] );

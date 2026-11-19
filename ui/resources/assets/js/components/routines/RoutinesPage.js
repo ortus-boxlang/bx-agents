@@ -9,13 +9,13 @@ import { seenText } from "../admin/GatewaysPage.js";
  */
 
 export const ROUTINE_STATES = {
-	"ok"                   : { kind: "ok", icon: "check-circle" },
-	"failed last time"     : { kind: "bad", icon: "warning-circle" },
-	"paused after failures": { kind: "bad", icon: "pause" },
-	"paused"               : { kind: "", icon: "pause" },
-	"not run yet"          : { kind: "", icon: "clock" },
-	"running"              : { kind: "warn", icon: "circle-notch" },
-	"waiting for approval" : { kind: "warn", icon: "hand-palm" }
+	"ok"                    : { kind: "ok", icon: "check-circle" },
+	"failed last time"      : { kind: "bad", icon: "warning-circle" },
+	"paused after failures" : { kind: "bad", icon: "pause" },
+	"paused"                : { kind: "", icon: "pause" },
+	"not run yet"           : { kind: "", icon: "clock" },
+	"running"               : { kind: "warn", icon: "circle-notch" },
+	"waiting for approval"  : { kind: "warn", icon: "hand-palm" }
 };
 
 /**
@@ -57,23 +57,23 @@ export function routineLine( r ) {
 export function routinesPage() {
 	return {
 		/** @type {boolean} True when the person is an admin (sees everyone's) */
-		admin    : false,
+		admin     : false,
 		/** @type {boolean} True until the routines answered */
-		loading  : true,
+		loading   : true,
 		/** @type {string} Why they could not be read */
-		failed   : "",
+		failed    : "",
 		/** @type {Array<object>} The routines */
-		rows     : [],
+		rows      : [],
 		/** @type {string} An owner to show only (admin) */
-		owner    : "",
+		owner     : "",
 		/** @type {boolean} Only the routines that need attention (admin) */
-		attention: false,
+		attention : false,
 		/** @type {Array<object>} The gateways, for where an answer goes */
-		gateways : [],
+		gateways  : [],
 		/** @type {object} The editor dialog */
-		editor   : { open: false, ref: "", name: "", schedule: "", prompt: "", where: "routine", chat: "", chatTyped: "", reading: "", readingBad: false, error: "", saving: false },
+		editor    : { open: false, ref: "", name: "", schedule: "", prompt: "", where: "routine", chat: "", chatTyped: "", reading: "", readingBad: false, error: "", saving: false },
 		/** @type {object} The reports dialog */
-		reports  : { open: false, ref: "", name: "", files: [], text: "", showing: false, days: 30, note: "" },
+		reports   : { open: false, ref: "", name: "", files: [], text: "", showing: false, days: 30, note: "" },
 
 		/** @returns {string[]} The owners of the routines */
 		get owners() {
@@ -197,18 +197,18 @@ export function routinesPage() {
 		 */
 		async edit( r ) {
 			this.editor = {
-				open      : true,
-				ref       : r ? this.ref( r ) : "",
-				name      : r ? r.name : "",
-				schedule  : r ? r.schedule : "",
-				prompt    : "",
-				where     : r && r.destination !== "routine" ? r.destination : "routine",
-				chat      : r ? String( r.destinationChat || "" ) : "",
-				chatTyped : r ? String( r.destinationChat || "" ) : "",
-				reading   : "",
-				readingBad: false,
-				error     : "",
-				saving    : false
+				open       : true,
+				ref        : r ? this.ref( r ) : "",
+				name       : r ? r.name : "",
+				schedule   : r ? r.schedule : "",
+				prompt     : "",
+				where      : r && r.destination !== "routine" ? r.destination : "routine",
+				chat       : r ? String( r.destinationChat || "" ) : "",
+				chatTyped  : r ? String( r.destinationChat || "" ) : "",
+				reading    : "",
+				readingBad : false,
+				error      : "",
+				saving     : false
 			};
 			const keep = this.editor.chat;
 			const [ full ] = await Promise.all( [
@@ -325,9 +325,9 @@ export function routinesPage() {
 				return;
 			}
 			const yes = await this.$confirm( {
-				title : "Delete " + this.$fmt.countLabel( dry.data.count, "report" ) + "?",
-				body  : this.$fmt.bytesText( dry.data.bytes ) + ", older than " + days + " days. This cannot be undone.",
-				danger: true
+				title  : "Delete " + this.$fmt.countLabel( dry.data.count, "report" ) + "?",
+				body   : this.$fmt.bytesText( dry.data.bytes ) + ", older than " + days + " days. This cannot be undone.",
+				danger : true
 			} );
 			if ( !yes ) {
 				this.reports.note = "Nothing was deleted.";

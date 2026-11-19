@@ -168,7 +168,7 @@ Gestiónalas tú con `/remember` y `/notes` en [`chat`](../cli-reference.md#chat
 
 Las instrucciones del agente son su system prompt. Ponlas en un `instructions.md` junto a `Agent.yaml`, la opción habitual porque el archivo es Markdown sencillo y fácil de editar:
 
-```
+```text
 my-agent/
 ├── Agent.yaml
 └── instructions.md

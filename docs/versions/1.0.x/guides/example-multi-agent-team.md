@@ -12,7 +12,7 @@ tags: [guides, examples, subagents]
 
 ## The project
 
-```
+```text
 multi-agent-team/
 ├── Agent.yaml
 ├── instructions.md

@@ -5,14 +5,14 @@
 
 export const NOTE_SCOPES = [
 	{
-		id   : "user",
-		title: "About you",
-		blurb: "Facts about you that the agent keeps: your name, how you like answers. They are yours alone: nobody sees them, an admin included, and every agent and sub-agent you talk to uses them."
+		id    : "user",
+		title : "About you",
+		blurb : "Facts about you that the agent keeps: your name, how you like answers. They are yours alone: nobody sees them, an admin included, and every agent and sub-agent you talk to uses them."
 	},
 	{
-		id   : "agent",
-		title: "Notes of the agent",
-		blurb: "Lessons about the work itself. They are global: the agent and every sub-agent read and write the same set, and everyone who talks to the agent shares them."
+		id    : "agent",
+		title : "Notes of the agent",
+		blurb : "Lessons about the work itself. They are global: the agent and every sub-agent read and write the same set, and everyone who talks to the agent shares them."
 	}
 ];
 
@@ -31,29 +31,29 @@ export function notesSummary( part ) {
  */
 export function memoryPage() {
 	return {
-		scopes    : NOTE_SCOPES,
+		scopes     : NOTE_SCOPES,
 		/** @type {boolean} True until the notes answered */
-		loading   : true,
+		loading    : true,
 		/** @type {string} Why the notes could not be read */
-		failed    : "",
+		failed     : "",
 		/** @type {Object<string, { notes: Array<{ id: string, text: string }>, stats: { used: number, limit: number } }>} */
-		notes     : {},
+		notes      : {},
 		/** @type {Object<string, string>} The note being typed, per scope */
-		drafts    : { user: "", agent: "" },
+		drafts     : { user: "", agent: "" },
 		/** @type {{ scope: string, id: string, text: string } | null} The note being edited */
-		editing   : null,
+		editing    : null,
 		/** @type {boolean} True when the person is an admin */
-		admin     : false,
+		admin      : false,
 		/** @type {Array<{ value: string, label: string }>} The agents whose conversation memory can be shown */
-		agents    : [],
+		agents     : [],
 		/** @type {string} The agent shown ("" when there is only one) */
-		agentKey  : "",
+		agentKey   : "",
 		/** @type {Array<object>} The newest conversations of that agent */
-		convs     : [],
+		convs      : [],
 		/** @type {number} How many it has in all */
-		convTotal : 0,
+		convTotal  : 0,
 		/** @type {string} Why they could not be read */
-		convFailed: "",
+		convFailed : "",
 
 		/** Loads the notes, and the conversation memory once the agents are known. */
 		async init() {
@@ -211,10 +211,10 @@ export function memoryPage() {
 		/** Forgets what was said in every conversation of the agent shown (admin). */
 		async clearAllConvs() {
 			const yes = await this.$confirm( {
-				title : "Forget the messages of all " + this.convTotal + " conversations" + ( this.agentKey ? " of " + this.agentKey : "" ) + "?",
-				body  : "The conversations stay, empty. This cannot be undone.",
-				yes   : "Clear all",
-				danger: true
+				title  : "Forget the messages of all " + this.convTotal + " conversations" + ( this.agentKey ? " of " + this.agentKey : "" ) + "?",
+				body   : "The conversations stay, empty. This cannot be undone.",
+				yes    : "Clear all",
+				danger : true
 			} );
 			if ( !yes ) {
 				return;

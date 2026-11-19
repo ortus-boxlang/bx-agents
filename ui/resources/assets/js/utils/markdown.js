@@ -22,8 +22,15 @@ import xml from "highlight.js/lib/languages/xml";
 import yaml from "highlight.js/lib/languages/yaml";
 import { registerBoxLangGrammars } from "./bx-grammars.js";
 
-Object.entries( { bash, css, java, javascript, json, markdown, python, sql, typescript, xml, yaml } ).forEach( ( [ name, language ] ) => hljs.registerLanguage( name, language ) );
-hljs.registerAliases( [ "sh", "shell", "zsh" ], { languageName: "bash" } );
+Object.entries( { bash, css, java, javascript, json, markdown, python, sql, typescript, xml, yaml } ).forEach( ( [
+	name,
+	language
+] ) => hljs.registerLanguage( name, language ) );
+hljs.registerAliases( [
+	"sh",
+	"shell",
+	"zsh"
+], { languageName: "bash" } );
 hljs.registerAliases( [ "js" ], { languageName: "javascript" } );
 hljs.registerAliases( [ "ts" ], { languageName: "typescript" } );
 hljs.registerAliases( [ "html" ], { languageName: "xml" } );
@@ -50,9 +57,9 @@ export function escapeHtml( text ) {
 }
 
 const parser = new Marked( {
-	gfm     : true,
-	breaks  : true,
-	renderer: {
+	gfm      : true,
+	breaks   : true,
+	renderer : {
 		html( token ) {
 			return escapeHtml( token.text );
 		},
@@ -80,8 +87,16 @@ DOMPurify.addHook( "afterSanitizeAttributes", node => {
  */
 export function renderMarkdown( text ) {
 	return DOMPurify.sanitize( parser.parse( String( text || "" ), { async: false } ), {
-		FORBID_TAGS: [ "img", "style", "form", "input", "iframe", "svg", "math" ],
-		ADD_ATTR   : [ "target" ]
+		FORBID_TAGS : [
+			"img",
+			"style",
+			"form",
+			"input",
+			"iframe",
+			"svg",
+			"math"
+		],
+		ADD_ATTR : [ "target" ]
 	} );
 }
 
@@ -101,7 +116,7 @@ export function listenForCodeCopy( doc ) {
 		try {
 			await navigator.clipboard.writeText( code.textContent );
 			button.textContent = "Copied";
-		} catch ( e ) {
+		} catch {
 			button.textContent = "Select and copy";
 		}
 		setTimeout( () => {

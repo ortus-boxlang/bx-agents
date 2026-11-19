@@ -81,7 +81,7 @@ reference and the guide [Your first extension](../guides/first-extension.md).
 `modules/` holds BoxLang module dependencies your agent declares - one immediate
 subfolder per module, discovered by folder name (not recursive):
 
-```
+```text
 modules/
 └── my-extra-module/
     ├── module.json

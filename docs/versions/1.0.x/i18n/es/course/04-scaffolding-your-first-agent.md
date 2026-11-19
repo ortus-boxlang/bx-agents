@@ -35,7 +35,7 @@ Consulta el [asistente de `new`](../guides/new-wizard.md) para ver cada pregunta
 
 ## Qué se crea
 
-```
+```text
 my-agent/
 ├── Agent.yaml
 ├── instructions.md

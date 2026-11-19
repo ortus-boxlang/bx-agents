@@ -33,8 +33,13 @@ for a plain answer. The agent keeps its data in `.stack/home`: delete it to star
 
 ```bash
 npm run build      # writes src/main/bx/bxagentsui/includes/build, which is committed
-npm run lint
+npm run lint       # ESLint, the scripts (lint:fix fixes what it can)
+npm run lint:scss  # Stylelint, the Sass (lint:scss:fix)
+npm run lint:md    # markdownlint, docs/, changelog.md, readme.md and these notes
 ```
+
+The rules are cbGenesis': `eslint.config.mjs` (its rules as they are), `.stylelintrc.json`, and `.markdownlint.json` and
+`.bxlint.json` at the repository root. CI runs all three linters.
 
 ## Test it
 

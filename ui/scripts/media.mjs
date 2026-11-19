@@ -15,7 +15,10 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ui = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
-const [ name, outArg ] = process.argv.slice( 2 ).filter( a => !a.startsWith( "--" ) );
+const [
+	name,
+	outArg
+] = process.argv.slice( 2 ).filter( a => !a.startsWith( "--" ) );
 if ( !name ) {
 	console.error( "usage: node scripts/media.mjs <tour> [outDir]" );
 	process.exit( 2 );
@@ -33,16 +36,19 @@ if ( process.argv.includes( "--sign-in" ) || !fs.existsSync( storageState ) ) {
 	await page.goto( base + "login.html" );
 	await page.fill( "input[name=username]", "ada" );
 	await page.fill( "input[type=password]", "demo-pass" );
-	await Promise.all( [ page.waitForNavigation(), page.keyboard.press( "Enter" ) ] );
+	await Promise.all( [
+		page.waitForNavigation(),
+		page.keyboard.press( "Enter" )
+	] );
 	storageState = await page.context().storageState();
 	await page.close();
 }
 const context = await browser.newContext( {
-	baseURL          : base,
-	viewport         : size,
-	deviceScaleFactor: 2,
+	baseURL           : base,
+	viewport          : size,
+	deviceScaleFactor : 2,
 	storageState,
-	recordVideo      : { dir: path.join( out, "raw" ), size }
+	recordVideo       : { dir: path.join( out, "raw" ), size }
 } );
 const page = await context.newPage();
 let count = 0;
@@ -64,8 +70,30 @@ try {
 }
 const raw = fs.readdirSync( path.join( out, "raw" ) ).find( f => f.endsWith( ".webm" ) );
 const webm = path.join( out, "raw", raw );
-execFileSync( "ffmpeg", [ "-y", "-loglevel", "error", "-i", webm, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", path.join( out, "tour.mp4" ) ] );
-execFileSync( "ffmpeg", [ "-y", "-loglevel", "error", "-i", webm, "-vf", "fps=8,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96[p];[b][p]paletteuse=dither=bayer", path.join( out, "tour.gif" ) ] );
+execFileSync( "ffmpeg", [
+	"-y",
+	"-loglevel",
+	"error",
+	"-i",
+	webm,
+	"-c:v",
+	"libx264",
+	"-pix_fmt",
+	"yuv420p",
+	"-movflags",
+	"+faststart",
+	path.join( out, "tour.mp4" )
+] );
+execFileSync( "ffmpeg", [
+	"-y",
+	"-loglevel",
+	"error",
+	"-i",
+	webm,
+	"-vf",
+	"fps=8,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96[p];[b][p]paletteuse=dither=bayer",
+	path.join( out, "tour.gif" )
+] );
 fs.rmSync( path.join( out, "raw" ), { recursive: true, force: true } );
 console.log( "media: " + out );
 for ( const f of fs.readdirSync( out ) ) {

@@ -2,7 +2,12 @@
  * What goes with a message: pictures travel as attachments for the server to check and build, text files are read here
  * and go inside the message. The server checks everything again; these checks only save the upload.
  */
-export const IMAGE_TYPES = [ "image/png", "image/jpeg", "image/gif", "image/webp" ];
+export const IMAGE_TYPES = [
+	"image/png",
+	"image/jpeg",
+	"image/gif",
+	"image/webp"
+];
 export const MAX_IMAGES = 4;
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const MAX_TEXT_CHARS = 100000;

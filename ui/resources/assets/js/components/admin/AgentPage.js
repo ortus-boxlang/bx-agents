@@ -14,37 +14,41 @@ export const MOTION_KEY = "bxagents.motion";
 export function agentPage() {
 	return {
 		/** @type {string} composition | files | usage */
-		tab    : "composition",
+		tab     : "composition",
 		/** @type {Object<string, boolean>} True for each tab that has loaded */
-		loaded : {},
+		loaded  : {},
 		/** @type {string} Why the open tab could not be read */
-		failed : "",
+		failed  : "",
 		/** @type {boolean} True when the moving lines are stopped (kept in this browser) */
-		still  : false,
+		still   : false,
 		/** @type {object|null} What GET /agent/composition answered */
-		comp   : null,
+		comp    : null,
 		/** @type {Array<{ path: string, size: number }>} The project's files */
-		files  : [],
+		files   : [],
 		/** @type {{ path: string, text: string } | null} The file being read */
-		viewing: null,
+		viewing : null,
 		/** @type {string} The usage period, in days */
-		days   : "30",
+		days    : "30",
 		/** @type {object|null} What GET /usage answered */
-		usage  : null,
+		usage   : null,
 
 		/** Opens the tab from the address and loads it. */
 		init() {
 			const wanted = this.$el.dataset.tab;
-			this.tab = [ "composition", "files", "usage" ].includes( wanted ) ? wanted : "composition";
+			this.tab = [
+				"composition",
+				"files",
+				"usage"
+			].includes( wanted ) ? wanted : "composition";
 			try {
 				this.still = localStorage.getItem( MOTION_KEY ) === "off";
-			} catch ( e ) {
+			} catch {
 				this.still = false;
 			}
 			this.$watch( "still", still => {
 				try {
 					localStorage.setItem( MOTION_KEY, still ? "off" : "on" );
-				} catch ( e ) {
+				} catch {
 					// not remembered
 				}
 			} );

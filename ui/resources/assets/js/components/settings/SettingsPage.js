@@ -8,7 +8,15 @@
 import { accentForeground, contrastRatio, normalizeHex } from "../../utils/color.js";
 
 const PROFILE_KEY = "bxagents_webui_profile";
-const EXTENSION_LISTS = [ "commands", "schedulers", "slots", "keys", "verbs", "sources", "prefixes" ];
+const EXTENSION_LISTS = [
+	"commands",
+	"schedulers",
+	"slots",
+	"keys",
+	"verbs",
+	"sources",
+	"prefixes"
+];
 
 /**
  * @param {object} ext An extension as GET /extensions answers it
@@ -40,21 +48,21 @@ export function serverFacts( info ) {
 export function settingsPage() {
 	return {
 		/** @type {string} The accent as typed in the hex box */
-		hex              : "",
+		hex               : "",
 		/** @type {boolean} True when the hex box holds no colour */
-		hexInvalid       : false,
+		hexInvalid        : false,
 		/** @type {Array<{ name: string, model?: string, description?: string, provider?: string }>} Profiles offered */
-		profiles         : [],
+		profiles          : [],
 		/** @type {string} The profile for the next messages ("" for the default model) */
-		profile          : "",
+		profile           : "",
 		/** @type {boolean} True once GET /extensions answered */
-		extensionsShown  : false,
+		extensionsShown   : false,
 		/** @type {Array<object>} The extensions */
-		extensions       : [],
+		extensions        : [],
 		/** @type {string[]} Problems the loader found */
-		extensionProblems: [],
+		extensionProblems : [],
 		/** @type {Array<{ label: string, value: string }>} The server's facts */
-		facts            : [],
+		facts             : [],
 
 		/** Loads what the page shows; the model and the extensions once the capabilities are known. */
 		async init() {
@@ -126,7 +134,7 @@ export function settingsPage() {
 			let remembered = "";
 			try {
 				remembered = localStorage.getItem( PROFILE_KEY ) || "";
-			} catch ( e ) {
+			} catch {
 				remembered = "";
 			}
 			this.profile = this.profiles.some( p => p.name === remembered ) ? remembered : "";
@@ -144,7 +152,7 @@ export function settingsPage() {
 		pickProfile() {
 			try {
 				localStorage.setItem( PROFILE_KEY, this.profile );
-			} catch ( e ) {
+			} catch {
 				// the choice still holds for this visit
 			}
 			const chosen = this.profiles.find( p => p.name === this.profile );

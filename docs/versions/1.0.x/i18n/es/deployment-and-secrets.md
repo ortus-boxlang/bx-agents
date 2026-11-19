@@ -48,7 +48,7 @@ El `.bxa` es **reubicable**: lleva cada archivo que el agente lee en tiempo de e
 
 Un `.bxaignore` opcional en la raíz del proyecto, un patrón glob por línea (las líneas con prefijo `#` son comentarios), excluye las rutas coincidentes del `.bxa` empaquetado:
 
-```
+```text
 # .bxaignore
 *.log
 scratch/
@@ -60,7 +60,7 @@ Esto se suma a una exclusión codificada y siempre activa de `.env`/`.env.*`/dot
 
 Los secretos nunca se escriben en `manifest.json` desde el principio - el bloque `agent` del manifest solo contiene campos seguros y estructurales (`name`, `description`, `model`, `environment`). Como defensa en profundidad, `package` además recorre el manifest recursivamente y reemplaza cualquier clave de struct que **parezca** un secreto con `[REDACTED]`:
 
-```
+```text
 (apikey | api_key | token | secret | password)$   (sin distinguir mayúsculas/minúsculas, cualquier prefijo)
 ```
 

@@ -185,7 +185,7 @@ Your convention tree, and the plain ColdBox application `build` turns it into.
 
 ::: columns
 ::: column
-```
+```text
 your-agent/
 ├── Application.bx     # your settings and hooks
 ├── Agent.yaml         # name, model, description
@@ -201,7 +201,7 @@ your-agent/
 ```
 :::
 ::: column
-```
+```text
 .build/app/
 ├── Application.bx
 ├── bxagents/

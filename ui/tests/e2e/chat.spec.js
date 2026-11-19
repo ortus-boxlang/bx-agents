@@ -4,7 +4,7 @@
  */
 import { test, expect, freshChat, ask } from "./support.js";
 
-test( "streams an answer, draws Markdown and code, and lists the conversation", async ( { page, errors } ) => {
+test( "streams an answer, draws Markdown and code, and lists the conversation", async( { page, errors } ) => {
 	await freshChat( page, "./" );
 	await expect( page.locator( ".welcome .suggestions button" ) ).toHaveCount( 2 );
 	await ask( page, "Show me a list", "Three things" );
@@ -20,7 +20,7 @@ test( "streams an answer, draws Markdown and code, and lists the conversation", 
 	expect( errors ).toEqual( [] );
 } );
 
-test( "never runs or loads markup the model sends", async ( { page } ) => {
+test( "never runs or loads markup the model sends", async( { page } ) => {
 	await freshChat( page, "./" );
 	await ask( page, "xss please", "and **bold**".replace( /\*/g, "" ) );
 	const answer = page.locator( ".bubble.assistant" ).last();
@@ -30,7 +30,7 @@ test( "never runs or loads markup the model sends", async ( { page } ) => {
 	expect( await page.evaluate( () => window.__xss ) ).toBeUndefined();
 } );
 
-test( "shows a tool call with its arguments, done when the turn ends", async ( { page } ) => {
+test( "shows a tool call with its arguments, done when the turn ends", async( { page } ) => {
 	await freshChat( page, "./" );
 	await ask( page, "What time is it?", "It is" );
 	const tool = page.locator( "details.trace.tool" ).last();
@@ -38,7 +38,7 @@ test( "shows a tool call with its arguments, done when the turn ends", async ( {
 	await expect( tool.locator( ".status" ) ).toHaveText( "done" );
 } );
 
-test( "a suggestion sends itself, and a reload reopens the same conversation", async ( { page } ) => {
+test( "a suggestion sends itself, and a reload reopens the same conversation", async( { page } ) => {
 	await freshChat( page, "./" );
 	await page.locator( ".welcome .suggestions button", { hasText: "Show me a list" } ).click();
 	await expect( page.locator( "#messages" ) ).toContainText( "Three things", { timeout: 30_000 } );
@@ -48,7 +48,7 @@ test( "a suggestion sends itself, and a reload reopens the same conversation", a
 	await expect( page.locator( ".bubble.user" ).first() ).toHaveText( "Show me a list" );
 } );
 
-test( "renames and deletes a conversation from the list", async ( { page } ) => {
+test( "renames and deletes a conversation from the list", async( { page } ) => {
 	await freshChat( page, "./" );
 	await ask( page, "Show me a list", "Three things" );
 	const row = page.locator( "#convList li.active" );
@@ -61,7 +61,7 @@ test( "renames and deletes a conversation from the list", async ( { page } ) => 
 	await expect( page.locator( "#convList .name", { hasText: "Renamed in e2e" } ) ).toHaveCount( 0 );
 } );
 
-test( "opens the same conversation as the current page", async ( { page } ) => {
+test( "opens the same conversation as the current page", async( { page } ) => {
 	await freshChat( page, "./" );
 	await ask( page, "Show me a list", "Three things" );
 	await page.goto( "./" );

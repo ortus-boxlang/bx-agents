@@ -26,7 +26,7 @@ bxAgents new my-agent --model=openai/gpt-5
 
 Esto crea:
 
-```
+```text
 my-agent/
 ├── Agent.yaml
 ├── instructions.md

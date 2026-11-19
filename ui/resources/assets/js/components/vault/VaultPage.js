@@ -6,9 +6,9 @@ import { listOf } from "../../utils/address.js";
  * back. When the agent asked for a secret, the ask comes from the address (data-ask, data-scope, data-why).
  */
 export const KEY_SOURCES = {
-	env : "set in the environment (BXAGENTS_VAULT_KEY)",
-	file: "a file beside the database",
-	none: "not set yet: it is made when the first secret is saved"
+	env  : "set in the environment (BXAGENTS_VAULT_KEY)",
+	file : "a file beside the database",
+	none : "not set yet: it is made when the first secret is saved"
 };
 
 /**
@@ -17,25 +17,25 @@ export const KEY_SOURCES = {
 export function vaultPage() {
 	return {
 		/** @type {string} user | agent: whose secrets are shown */
-		scope    : "user",
+		scope     : "user",
 		/** @type {boolean} True until the vault answered */
-		loading  : true,
+		loading   : true,
 		/** @type {string} Why the vault could not be read */
-		failed   : "",
+		failed    : "",
 		/** @type {Array<object>} Every secret this person may see */
-		secrets  : [],
+		secrets   : [],
 		/** @type {boolean} True when this person may change the agent's secrets */
-		admin    : false,
+		admin     : false,
 		/** @type {string} Where the key is kept */
-		keySource: "",
+		keySource : "",
 		/** @type {{ name: string, scope: string, why: string } | null} What the agent asked for */
-		ask      : null,
+		ask       : null,
 		/** @type {{ name: string, value: string, description: string, hosts: string }} The new secret form */
-		form     : { name: "", value: "", description: "", hosts: "" },
+		form      : { name: "", value: "", description: "", hosts: "" },
 		/** @type {{ name: string, value: string, description: string, hosts: string } | null} The secret being edited */
-		editing  : null,
+		editing   : null,
 		/** @type {object|null} The key's state and the recent use of secrets (admin) */
-		activity : null,
+		activity  : null,
 
 		/** @returns {Array<object>} The secrets of the open scope */
 		get rows() {
@@ -159,9 +159,9 @@ export function vaultPage() {
 			}
 			const key = result.data.key || {};
 			this.activity = {
-				note: "The key is " + ( KEY_SOURCES[ key.keySource ] || String( key.keySource || "" ) ) + ". " + ( key.secrets || 0 ) + " sealed."
+				note : "The key is " + ( KEY_SOURCES[ key.keySource ] || String( key.keySource || "" ) ) + ". " + ( key.secrets || 0 ) + " sealed."
 					+ ( key.wrongKey ? " " + key.wrongKey + " were sealed with another key and cannot be opened." : "" ),
-				lines: result.data.activity
+				lines : result.data.activity
 			};
 		}
 	};

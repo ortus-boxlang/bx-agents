@@ -7,9 +7,9 @@
 export function nav( Alpine ) {
 	return {
 		/** @type {boolean} True when the menu shows icons only */
-		folded: Alpine.$persist( false ).as( "bxagents.nav.folded" ),
+		folded : Alpine.$persist( false ).as( "bxagents.nav.folded" ),
 		/** @type {boolean} True while the drawer is open on a narrow screen */
-		open  : false,
+		open   : false,
 
 		/** Folds the menu to icons, or opens it again. */
 		toggleFold() {

@@ -10,13 +10,13 @@ import { saveKey, savedKey } from "../utils/api.js";
 export function password() {
 	return {
 		/** @type {boolean} True while the dialog is open */
-		open   : false,
+		open    : false,
 		/** @type {string} What to say above the box, after a refusal */
-		problem: "",
+		problem : "",
 		/** @type {string} What is typed */
-		value  : "",
+		value   : "",
 		/** @type {boolean} True once the dialog opened by itself */
-		asked  : false,
+		asked   : false,
 
 		/** @returns {boolean} True when this browser keeps a password */
 		get saved() {

@@ -174,7 +174,7 @@ Manage them yourself with `/remember` and `/notes` in [`chat`](../cli-reference.
 
 The agent's instructions are its system prompt. Put them in an `instructions.md` beside `Agent.yaml`, the usual choice because the file is plain Markdown and easy to edit:
 
-```
+```text
 my-agent/
 ├── Agent.yaml
 └── instructions.md

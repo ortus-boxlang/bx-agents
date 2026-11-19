@@ -22,7 +22,7 @@ export async function downloadFile( api, path, filename ) {
 		link.remove();
 		setTimeout( () => URL.revokeObjectURL( url ), 1000 );
 		return true;
-	} catch ( e ) {
+	} catch {
 		return false;
 	}
 }

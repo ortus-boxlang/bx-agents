@@ -11,14 +11,14 @@ export const AUTH = fileURLToPath( new URL( "../../.stack/auth/", import.meta.ur
  * A test with `page` signed in as ada (an admin), `member` as bob, and `errors`: every uncaught error and console error.
  */
 export const test = base.extend( {
-	storageState: AUTH + "ada.json",
-	errors      : async ( { page }, use ) => {
+	storageState : AUTH + "ada.json",
+	errors       : async( { page }, use ) => {
 		const seen = [];
 		page.on( "pageerror", e => seen.push( "pageerror: " + e.message ) );
 		page.on( "console", m => m.type() === "error" && !/Failed to load resource/.test( m.text() ) && seen.push( "console: " + m.text() ) );
 		await use( seen );
 	},
-	member: async ( { browser }, use ) => {
+	member : async( { browser }, use ) => {
 		const context = await browser.newContext( { storageState: AUTH + "bob.json" } );
 		await use( await context.newPage() );
 		await context.close();

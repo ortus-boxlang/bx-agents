@@ -15,7 +15,7 @@ export const KEY_STORAGE = "bxagents_webui_api_key";
 export function savedKey() {
 	try {
 		return localStorage.getItem( KEY_STORAGE ) || "";
-	} catch ( e ) {
+	} catch {
 		return "";
 	}
 }
@@ -32,7 +32,7 @@ export function saveKey( value ) {
 		} else {
 			localStorage.removeItem( KEY_STORAGE );
 		}
-	} catch ( e ) {
+	} catch {
 		// not kept: asked again next time
 	}
 }
@@ -85,10 +85,10 @@ export function createApi( apiBase, fetchImpl = ( ...args ) => fetch( ...args ),
 		if ( res.status === 401 ) {
 			onRefused( res.status );
 		}
-		let data = null;
+		let data;
 		try {
 			data = await res.json();
-		} catch ( e ) {
+		} catch {
 			data = null;
 		}
 		const refused = data && data.success === false;
@@ -104,15 +104,15 @@ export function createApi( apiBase, fetchImpl = ( ...args ) => fetch( ...args ),
 		 * @param {{ signal?: AbortSignal }} [options] Abort when the page leaves
 		 * @returns {Promise<object>} { ok, status, data, error }
 		 */
-		get    : ( path, options ) => call( "GET", path, null, options ),
+		get     : ( path, options ) => call( "GET", path, null, options ),
 		/**
 		 * @param {string} path A path under the API
 		 * @param {object} [body] Sent as JSON
 		 * @param {{ signal?: AbortSignal }} [options] Abort when the page leaves
 		 * @returns {Promise<object>} { ok, status, data, error }
 		 */
-		post   : ( path, body, options ) => call( "POST", path, body, options ),
+		post    : ( path, body, options ) => call( "POST", path, body, options ),
 		/** The headers every call sends, for a stream (sse.js) */
-		headers: authHeaders
+		headers : authHeaders
 	};
 }

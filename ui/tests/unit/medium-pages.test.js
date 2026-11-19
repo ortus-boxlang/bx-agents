@@ -8,8 +8,17 @@ import { confirm } from "../../resources/assets/js/stores/confirm.js";
 
 describe( "registry helpers", () => {
 	it( "groups tools by their first word, other last, and filters by a search", () => {
-		const tools = [ { name: "now" }, { name: "note_remember", description: "Keep a note" }, { name: "note_recall" }, { name: "vault_list" } ];
-		expect( groupTools( tools, "" ).map( g => g.key ) ).toEqual( [ "note", "vault", "other" ] );
+		const tools = [
+			{ name: "now" },
+			{ name: "note_remember", description: "Keep a note" },
+			{ name: "note_recall" },
+			{ name: "vault_list" }
+		];
+		expect( groupTools( tools, "" ).map( g => g.key ) ).toEqual( [
+			"note",
+			"vault",
+			"other"
+		] );
 		expect( groupTools( tools, "keep" ).map( g => g.tools.map( t => t.name ) ) ).toEqual( [ [ "note_remember" ] ] );
 	} );
 
@@ -35,7 +44,10 @@ describe( "conversations helpers", () => {
 
 describe( "small helpers", () => {
 	it( "splits a typed list", () => {
-		expect( listOf( " a.com, ,b.com " ) ).toEqual( [ "a.com", "b.com" ] );
+		expect( listOf( " a.com, ,b.com " ) ).toEqual( [
+			"a.com",
+			"b.com"
+		] );
 	} );
 
 	it( "keeps state in the address without empty values", () => {
@@ -50,7 +62,7 @@ describe( "small helpers", () => {
 } );
 
 describe( "question dialog store", () => {
-	it( "answers $confirm with true or false and $prompt with the text or null", async () => {
+	it( "answers $confirm with true or false and $prompt with the text or null", async() => {
 		const store = confirm();
 		const yes = store.ask( { title: "Sure?" } );
 		store.answer( true );

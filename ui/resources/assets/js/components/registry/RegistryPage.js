@@ -40,23 +40,23 @@ export function fromConnector( name, connectorIds ) {
 export function registryPage() {
 	return {
 		/** @type {string} tools | skills | volumes */
-		tab         : "tools",
+		tab          : "tools",
 		/** @type {Object<string, boolean>} True for each tab that has loaded */
-		loaded      : {},
+		loaded       : {},
 		/** @type {string} Why the open tab could not be read */
-		failed      : "",
+		failed       : "",
 		/** @type {Array<object>} The tools */
-		tools       : [],
+		tools        : [],
 		/** @type {string[]} The connectors' ids */
-		connectorIds: [],
+		connectorIds : [],
 		/** @type {string} A search in the tools */
-		query       : "",
+		query        : "",
 		/** @type {Array<object>} The skills */
-		skills      : [],
+		skills       : [],
 		/** @type {{ name: string, text: string, note: string } | null} The skill being read */
-		reading     : null,
+		reading      : null,
 		/** @type {Array<object>} The volumes */
-		volumes     : [],
+		volumes      : [],
 
 		/** @returns {Array<{ key: string, tools: Array<object> }>} The tools that match the search, grouped */
 		get groups() {
@@ -66,7 +66,11 @@ export function registryPage() {
 		/** Opens the tab from the address and loads it. */
 		init() {
 			const wanted = this.$el.dataset.tab;
-			this.tab = [ "tools", "skills", "volumes" ].includes( wanted ) ? wanted : "tools";
+			this.tab = [
+				"tools",
+				"skills",
+				"volumes"
+			].includes( wanted ) ? wanted : "tools";
 			this.$watch( "tab", tab => {
 				keepInAddress( this.$store.session.config.basePath + "/registry/" + tab );
 				this.load();
@@ -83,7 +87,10 @@ export function registryPage() {
 			const tab = this.tab;
 			if ( tab === "tools" ) {
 				await this.$store.session.loaded();
-				const [ tools, connectors ] = await Promise.all( [
+				const [
+					tools,
+					connectors
+				] = await Promise.all( [
 					this.$api.get( "/tools" ),
 					this.$store.session.can( "connectors" ) ? this.$api.get( "/connectors" ) : Promise.resolve( { ok: false } )
 				] );

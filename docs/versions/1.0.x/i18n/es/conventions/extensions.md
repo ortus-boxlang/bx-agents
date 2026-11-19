@@ -12,7 +12,7 @@ Una **extensión** añade cosas a BxAgents sin modificarlo: comandos de chat (`/
 
 Un archivo es una extensión completa:
 
-```
+```text
 extensions/
   hello.bx             /hello
   roll.bx              /roll, /coin
@@ -28,7 +28,7 @@ Un proyecto funcional con todo esto es [`examples/extensions-agent`](https://git
 
 `extensions/hello.bx`. El nombre del archivo es el nombre de la extensión.
 
-```
+```text
 class {
 
 	function configure() {
@@ -67,7 +67,7 @@ Las anotaciones abreviadas dicen una opción cada una: `@Hint( "..." )`, `@Admin
 
 La extensión dice sus valores por defecto en `configure()`, igual que un módulo:
 
-```
+```text
 function configure() {
 	variables.settings = { target : "staging", environments : [ "staging", "production" ] }
 }
@@ -103,7 +103,7 @@ BxAgents inyecta dos cosas antes de `onLoad()`: `settings` y `log` (`log.info( "
 
 Una carpeta tiene la misma forma que un proyecto de agente:
 
-```
+```text
 extensions/standup/
   Extension.bx        obligatorio: es lo que hace de la carpeta una extensión (el module config: propiedades, configure(), onLoad(), onUnload())
   commands/           una clase por comando, como los integrados
@@ -116,7 +116,7 @@ Una clase en `commands/` extiende `models.chat.commands.BaseCommand@bxagents` y 
 
 Una clase en `schedulers/` es un **scheduler de BoxLang**: una clase con un `configure()` que define tareas mediante la propiedad `scheduler` que BoxLang le da, como cualquier otro scheduler de BoxLang. Cuando se sirve el agente (`bxAgents serve`, un `.bxa`, un servidor desplegado) arranca en el servicio de schedulers del runtime. Como toda clase de una extensión, recibe `settings` (los valores por defecto con los de `Agent.yaml`) y `log` antes de que se ejecute `configure()`:
 
-```
+```text
 class {
 
 	function configure() {
@@ -135,7 +135,7 @@ Los métodos de ciclo de vida de los schedulers de BoxLang (`onStartup()`, `onSh
 
 Una extensión también es un interceptor. Un método con el nombre de un evento lo escucha, igual que un interceptor de BoxLang o de ColdBox:
 
-```
+```text
 class {
 
 	function onChatInput( data ) {
@@ -169,7 +169,7 @@ Los eventos de sesión, entrada, turno y conversación son del chat de terminal;
 
 `@On` asocia un método con otro nombre, o con varios eventos a la vez, y admite las cuatro formas de una anotación:
 
-```
+```text
 @On( [ "beforeAIToolExecute", "afterAIToolExecute" ] )
 function toolCalled( data ) { log.info( "se ejecutó una herramienta" ) }
 ```
@@ -180,7 +180,7 @@ Si `@On` nombra un evento que el runtime no conoce, se informa en `/extensions` 
 
 Como en un module config, `configure()` puede nombrar clases de la carpeta de la extensión para registrar, cada una con sus propiedades, y puntos propios para anunciar:
 
-```
+```text
 function configure() {
 	variables.interceptors = [ { class : "interceptors.Audit", properties : { level : "info" } } ]
 	variables.customInterceptionPoints = [ "onAuditRecorded" ]
@@ -311,7 +311,7 @@ La cadena se muestra como texto. Solo un slot que diga `html : true` tiene su ca
 
 **`web/`** es una carpeta dentro de una extensión de carpeta. La página sirve todo archivo en ella (también imágenes) en `<path>/ext/<nombre>/<archivo>`, leído de la propia extensión en la app compilada; no se copia nada junto a la página. Los archivos `*.css` y `*.js` que están directamente en `web/` se enlazan en la página, por orden de nombre: estilos en el head y scripts al final del body. Una extensión desactivada por nombre en `extensions.disable` no aporta nada.
 
-```
+```text
 extensions/panel/
   Extension.bx
   web/
@@ -338,7 +338,7 @@ Tu CSS puede usar las variables de la página para seguir el claro, el oscuro y 
 
 Una extensión de carpeta puede llevar sus propias herramientas y skills:
 
-```
+```text
 extensions/helpdesk/
   Extension.bx
   tools/Tickets.bx             una clase de herramienta de bx-ai normal

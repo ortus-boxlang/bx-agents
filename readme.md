@@ -1,6 +1,6 @@
 # ⚡︎ BxAgents
 
-```
+```text
 |:------------------------------------------------------:|
 | ⚡︎ B x A g e n t s ⚡︎
 | Build AI Agents by Convention

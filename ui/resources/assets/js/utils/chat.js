@@ -17,7 +17,7 @@ export function openInChat( chatUrl, id ) {
 		} else {
 			localStorage.removeItem( CONVERSATION_KEY );
 		}
-	} catch ( e ) {
+	} catch {
 		// the chat then opens its last conversation
 	}
 	window.location.href = chatUrl;

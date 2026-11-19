@@ -18,12 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Safer connectors:** a connector uses only the person's own token and never an agent-wide secret of the same name, so nobody reaches a service they did not connect. A developer's `mcpServers` entry with a connector's name replaces it at run time as well as at build. A connector tool that is switched off, over the admin's ceiling or not connected is refused at call time, not only hidden from the model. Switching a local program off stops its process and changing its options restarts it, at once. Checking what a person may use before each model call no longer reads the settings once per tool. A service that refuses a token during a call marks the connector as needing attention. A local program (Git) starts with a clean environment, without the vault key or provider keys, and the Git server is pinned to a checked version.
 - **API routes** `GET /connectors`, `POST /connectors/connect`, `/connectors/disconnect`, `/connectors/options` and `GET`, `POST /connectors/tools`.
 - **Wizard: `--connectors`** (`all`, `none`, `only:a,b`, `exclude:a,b`) and a "Leave out any connectors?" question. Every connector is offered unless you leave it out.
-- **Per-person sign in to MCP servers** (`oauth: on an `mcpServers` entry) with `bxAgents connect`, `/connect` and the Connectors page (the **In Agent.yaml** tab), on bx-ai 3.8. The old Connections dialog in the Settings menu is gone.
+- **Per-person sign in to MCP servers** (`oauth: on an`mcpServers` entry) with `bxAgents connect`,`/connect` and the Connectors page (the **In Agent.yaml** tab), on bx-ai 3.8. The old Connections dialog in the Settings menu is gone.
 - **`bxAgents connectors list|show|check`** reads the catalog and checks its files (also run in CI). `inspect` has a connectors section, `add mcp` and the wizard read the catalog, and `doctor` and the shell completions know about the `connectors` verb and the programs a connector needs.
 - **API:** 81 routes (five new, under `/connectors`). Settings has a link to the Connectors page. The web app has thirteen pages and the CLI 29 verbs.
 
 ### Changed
 
+- **Linters from cbGenesis:** ESLint with cbGenesis' rules (now ESLint 10), Stylelint (`stylelint-config-standard-scss`) for the web app's Sass, markdownlint for the docs, and `.bxlint.json` for BoxLang editors. `npm run lint`, `lint:scss` and `lint:md` in `ui/`; CI runs all three.
 - **The web app is a ColdBox module** (`bxagentsui`), built with Vite, Sass and Alpine.js in `ui/` and mounted at the `webui` gateway's `path`. It replaces the single generated `index.html`, which is no longer written; the build ships inside BX Agents, so a project still needs no Node. Pages have their own addresses (`/chat/settings`, `/chat/connectors/connected`), the sign-in form is served at `<path>/login.html` as before, and a `webui` entry at the root path `/` is now a build error. See [the web chat UI](docs/conventions/web-ui.md#working-on-the-web-app).
 - BoxLang 1.19.0 is the runtime used for development and CI.
 - Signing in to a served agent needs the bx-ai fix for web requests (the argument `form` is reserved in web requests, bx-ai issue 334). Tokens connected by hand do not depend on it.
@@ -54,6 +55,7 @@ You describe an agent with a handful of files and folders; `bxAgents build` asse
 real, runnable ColdBox application from them **at build time**, ready to serve, chat with,
 or package as a portable `.bxa`.
 
+<!-- markdownlint-disable-next-line MD024 -->
 ### Added
 
 #### Routines

@@ -7,7 +7,7 @@ import { test, expect } from "./support.js";
 const APP = "/chat";
 
 test.describe( "Access", () => {
-	test( "opens People when this server does not manage tokens, and keeps the tab in the address", async ( { page, errors } ) => {
+	test( "opens People when this server does not manage tokens, and keeps the tab in the address", async( { page, errors } ) => {
 		await page.goto( APP + "/access" );
 		await expect( page.getByRole( "list", { name: "People" } ).getByText( "Ada Lovelace" ) ).toBeVisible();
 		await expect( page.getByRole( "button", { name: "Make bob an admin" } ) ).toBeVisible();
@@ -17,7 +17,7 @@ test.describe( "Access", () => {
 		expect( errors ).toEqual( [] );
 	} );
 
-	test( "makes a token, shows it once, and asks before a revoke", async ( { page } ) => {
+	test( "makes a token, shows it once, and asks before a revoke", async( { page } ) => {
 		let tokens = [ { name: "ci", status: "active", scope: "chat", lastUsedAt: "" } ];
 		await page.route( "**/__bxagents/agent", async route => {
 			const res = await route.fetch();
@@ -27,7 +27,10 @@ test.describe( "Access", () => {
 		} );
 		await page.route( "**/__bxagents/tokens", route => {
 			if ( route.request().method() === "POST" ) {
-				tokens = [ ...tokens, { name: "deploy", status: "active", scope: "admin" } ];
+				tokens = [
+					...tokens,
+					{ name: "deploy", status: "active", scope: "admin" }
+				];
 				return route.fulfill( { json: { success: true, name: "deploy", token: "bxa_secret_once" } } );
 			}
 			return route.fulfill( { json: { success: true, tokens } } );
@@ -54,7 +57,7 @@ test.describe( "Access", () => {
 } );
 
 test.describe( "Registry", () => {
-	test( "groups the tools, searches them, and opens a tab from the address", async ( { page, errors } ) => {
+	test( "groups the tools, searches them, and opens a tab from the address", async( { page, errors } ) => {
 		await page.goto( APP + "/registry" );
 		await expect( page.locator( "section.card" ).first() ).toBeVisible();
 		await page.getByRole( "searchbox", { name: "Search the tools" } ).fill( "zz-no-tool-zz" );
@@ -64,7 +67,7 @@ test.describe( "Registry", () => {
 		expect( errors ).toEqual( [] );
 	} );
 
-	test( "reads a skill", async ( { page } ) => {
+	test( "reads a skill", async( { page } ) => {
 		await page.route( "**/__bxagents/skills", route => route.fulfill( { json: { skills: [ { name: "release-notes", description: "Write them", origin: "agent" } ] } } ) );
 		await page.route( "**/__bxagents/skills/read?*", route => route.fulfill( { json: { body: "# Release notes\nSteps.", origin: "agent", size: 22 } } ) );
 		await page.goto( APP + "/registry/skills" );
@@ -78,7 +81,7 @@ test.describe( "Registry", () => {
 } );
 
 test.describe( "Vault", () => {
-	test( "adds, edits and removes a secret of your own, never showing its value", async ( { page, errors } ) => {
+	test( "adds, edits and removes a secret of your own, never showing its value", async( { page, errors } ) => {
 		const name = "E2E_SECRET_" + Date.now();
 		await page.goto( APP + "/vault" );
 		await page.getByRole( "textbox", { name: "Name" } ).fill( name );
@@ -101,7 +104,7 @@ test.describe( "Vault", () => {
 		expect( errors ).toEqual( [] );
 	} );
 
-	test( "shows what the agent asked for and fills in its name", async ( { page } ) => {
+	test( "shows what the agent asked for and fills in its name", async( { page } ) => {
 		await page.goto( APP + "/vault?ask=GITHUB_TOKEN&scope=user&why=To+read+your+issues." );
 		await expect( page.getByText( "The agent asked for GITHUB_TOKEN." ) ).toBeVisible();
 		await expect( page.getByText( "To read your issues. Type it below" ) ).toBeVisible();
@@ -109,7 +112,7 @@ test.describe( "Vault", () => {
 		await expect( page.getByRole( "textbox", { name: "Value" } ) ).toBeFocused();
 	} );
 
-	test( "a member cannot change the agent's secrets", async ( { member } ) => {
+	test( "a member cannot change the agent's secrets", async( { member } ) => {
 		await member.goto( APP + "/vault" );
 		await member.locator( ".pg-tabs a", { hasText: "The agent's" } ).click();
 		await expect( member.getByText( "Changing them takes an admin." ) ).toBeVisible();
@@ -119,15 +122,15 @@ test.describe( "Vault", () => {
 
 test.describe( "Conversations", () => {
 	const page1 = {
-		total   : 2,
-		facets  : { agent: { main: 1, helper: 1 }, source: { web: 2 } },
-		sessions: [
+		total    : 2,
+		facets   : { agent: { main: 1, helper: 1 }, source: { web: 2 } },
+		sessions : [
 			{ id: "c1", title: "Plan the launch", agent: "main", source: "web", messageCount: 4, updatedAt: "2026-11-18T09:00:00Z" },
 			{ id: "c2", title: "", agent: "helper", source: "web", messageCount: 2, updatedAt: "2026-11-17T09:00:00Z" }
 		]
 	};
 
-	test( "lists, filters by agent, renames with a dialog and deletes the selection", async ( { page, errors } ) => {
+	test( "lists, filters by agent, renames with a dialog and deletes the selection", async( { page, errors } ) => {
 		const asked = [];
 		await page.route( "**/__bxagents/sessions?*", route => {
 			asked.push( route.request().url() );
@@ -135,7 +138,10 @@ test.describe( "Conversations", () => {
 		} );
 		const posted = [];
 		await page.route( "**/__bxagents/sessions/*", route => {
-			posted.push( [ new URL( route.request().url() ).pathname.split( "/" ).pop(), route.request().postDataJSON() ] );
+			posted.push( [
+				new URL( route.request().url() ).pathname.split( "/" ).pop(),
+				route.request().postDataJSON()
+			] );
 			return route.fulfill( { json: { success: true } } );
 		} );
 		await page.goto( APP + "/conversations" );
@@ -150,7 +156,10 @@ test.describe( "Conversations", () => {
 		await page.getByRole( "button", { name: "Rename Plan the launch" } ).click();
 		await page.locator( "#confirmInput" ).fill( "Launch plan" );
 		await page.locator( "#confirmInput" ).press( "Enter" );
-		await expect.poll( () => posted.find( p => p[ 0 ] === "rename" ) ).toEqual( [ "rename", { conversationId: "c1", title: "Launch plan" } ] );
+		await expect.poll( () => posted.find( p => p[ 0 ] === "rename" ) ).toEqual( [
+			"rename",
+			{ conversationId: "c1", title: "Launch plan" }
+		] );
 
 		await page.getByRole( "checkbox", { name: "Select every conversation on this page" } ).check();
 		await expect( page.getByText( "2 selected" ) ).toBeVisible();
@@ -161,7 +170,7 @@ test.describe( "Conversations", () => {
 		expect( errors ).toEqual( [] );
 	} );
 
-	test( "opens a conversation in the chat", async ( { page } ) => {
+	test( "opens a conversation in the chat", async( { page } ) => {
 		await page.route( "**/__bxagents/sessions?*", route => route.fulfill( { json: page1 } ) );
 		await page.goto( APP + "/conversations" );
 		await page.getByRole( "link", { name: "Plan the launch" } ).click();
@@ -169,7 +178,7 @@ test.describe( "Conversations", () => {
 		expect( await page.evaluate( () => localStorage.getItem( "bxagents_webui_conversation" ) ) ).toBe( "c1" );
 	} );
 
-	test( "lists the real conversations of the dev agent", async ( { page } ) => {
+	test( "lists the real conversations of the dev agent", async( { page } ) => {
 		await page.goto( APP + "/conversations" );
 		await expect( page.getByRole( "table", { name: "Conversations" } ).locator( "tbody tr" ).first() ).toBeVisible();
 	} );

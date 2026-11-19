@@ -12,7 +12,7 @@ export function readConfig() {
 	}
 	try {
 		return { ...defaults, ...JSON.parse( block.textContent ) };
-	} catch ( e ) {
+	} catch {
 		return defaults;
 	}
 }

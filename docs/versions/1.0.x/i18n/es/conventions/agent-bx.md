@@ -217,7 +217,7 @@ Construir con `--environment=production` aquí produce `modelDefaults: { tempera
 
 Todo proyecto construido expone su agente raíz sobre HTTP en una ruta reservada fija, declare o no entradas de [`gateways/`](gateways/index.md):
 
-```
+```text
 POST /__bxagents/invoke
 POST /__bxagents/stream    # SSE
 POST /__bxagents/batch
@@ -233,7 +233,7 @@ Una ruta a la que se llega con un verbo que no acepta (un `GET` a `/invoke`) res
 Junto a esas cuatro, un handler generado (`handlers/AgentApi.bx`) sirve lo que un cliente de chat necesita para
 controlar una ejecución. Es lo que usan `chat --server` y `chat --connect`:
 
-```
+```text
 POST /__bxagents/events    # SSE: como /stream, más frames tool y suspended. El cuerpo puede llevar
                            # attachments: [ { name, mime, data (base64) } ], hasta 4 imágenes de 5 MB
 POST /__bxagents/cancel    # { threadId, reason? }
@@ -347,7 +347,7 @@ function production() {
 
 `access: open` (el valor por defecto cuando nada más está puesto) no pregunta nada a nadie: todos son el único usuario `local`. Está pensada para tu propia máquina. Cuando a `serve` se le dice que escuche en una dirección que otras máquinas pueden alcanzar (`--host=0.0.0.0`, por ejemplo) y la API está abierta, imprime un aviso al arrancar:
 
-```
+```text
 WARNING: the agent API is open and this server listens on every network interface (port 8080). Anyone who can reach it can chat with the agent, use its tools and read its conversations. Set agentApi.access to token ...
 ```
 

@@ -55,7 +55,7 @@ on the right:
 
 ::: columns
 ::: column
-```
+```text
 your-agent/
 ├── Application.bx
 ├── Agent.yaml
@@ -71,7 +71,7 @@ your-agent/
 ```
 :::
 ::: column
-```
+```text
 .build/app/
 ├── Application.bx
 ├── bxagents/

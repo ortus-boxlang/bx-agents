@@ -12,7 +12,7 @@ An **extension** adds to BxAgents without changing it: chat commands (`/deploy`,
 
 One file is a whole extension:
 
-```
+```text
 extensions/
   hello.bx             /hello
   roll.bx              /roll, /coin
@@ -28,7 +28,7 @@ A working project with all of these is [`examples/extensions-agent`](https://git
 
 `extensions/hello.bx`. The file name is the extension's name.
 
-```
+```text
 class {
 
 	function configure() {
@@ -67,7 +67,7 @@ Shorthand annotations say one option each: `@Hint( "..." )`, `@Admin`, `@Alias( 
 
 The extension says its defaults in `configure()`, as a module does:
 
-```
+```text
 function configure() {
 	variables.settings = { target : "staging", environments : [ "staging", "production" ] }
 }
@@ -103,7 +103,7 @@ BxAgents injects two things before `onLoad()`: `settings` and `log` (`log.info( 
 
 A folder has the same shape as an agent project:
 
-```
+```text
 extensions/standup/
   Extension.bx        required: it is what makes the folder an extension (the module config: properties, configure(), onLoad(), onUnload())
   commands/           one class per command, like the built-in ones
@@ -116,7 +116,7 @@ A class in `commands/` extends `models.chat.commands.BaseCommand@bxagents` and s
 
 A class in `schedulers/` is a **BoxLang scheduler**: a class with a `configure()` that defines tasks through the `scheduler` property BoxLang gives it, like any other BoxLang scheduler. When the agent is served (`bxAgents serve`, a `.bxa`, a deployed server) it starts in the runtime's scheduler service. Like every class of an extension it is given `settings` (the defaults with the values from `Agent.yaml`) and `log` before `configure()` runs:
 
-```
+```text
 class {
 
 	function configure() {
@@ -135,7 +135,7 @@ The BoxLang scheduler lifecycle methods (`onStartup()`, `onShutdown()`, `onAnyTa
 
 An extension is also an interceptor. A method named after an event listens to it, exactly like a BoxLang or ColdBox interceptor:
 
-```
+```text
 class {
 
 	function onChatInput( data ) {
@@ -169,7 +169,7 @@ The session, input, turn and conversation events are the terminal chat's; the tw
 
 `@On` binds a method with another name, or many events at once, and takes the four forms an annotation takes:
 
-```
+```text
 @On( [ "beforeAIToolExecute", "afterAIToolExecute" ] )
 function toolCalled( data ) { log.info( "a tool ran" ) }
 ```
@@ -180,7 +180,7 @@ function toolCalled( data ) { log.info( "a tool ran" ) }
 
 As in a module config, `configure()` can name classes from the extension's folder to register, each with its own properties, and points of its own to announce:
 
-```
+```text
 function configure() {
 	variables.interceptors = [ { class : "interceptors.Audit", properties : { level : "info" } } ]
 	variables.customInterceptionPoints = [ "onAuditRecorded" ]
@@ -311,7 +311,7 @@ The string is shown as text. Only a slot that says `html : true` has its string 
 
 **`web/`** is a folder inside a folder extension. The page serves every file in it (images too) at `<path>/ext/<name>/<file>`, read from the extension itself in the built app; nothing is copied next to the page. The `*.css` and `*.js` files that sit directly in `web/` are linked into the page, in file name order: styles in the head and scripts at the end of the body. An extension turned off by name in `extensions.disable` brings nothing.
 
-```
+```text
 extensions/panel/
   Extension.bx
   web/
@@ -338,7 +338,7 @@ Your CSS can use the page's variables so it follows light, dark and the accent: 
 
 A folder extension can carry its own tools and skills:
 
-```
+```text
 extensions/helpdesk/
   Extension.bx
   tools/Tickets.bx             a normal bx-ai tool class

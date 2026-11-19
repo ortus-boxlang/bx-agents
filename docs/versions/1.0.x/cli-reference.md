@@ -8,7 +8,7 @@ tags: [reference, cli]
 
 # CLI Reference
 
-```
+```text
 Usage: boxlang module:bxAgents <verb> [options]
 ```
 
@@ -60,7 +60,7 @@ Repeated options: last one wins.
 
 Note the first row: a bare `--option` is a **boolean**, not a way to pass the next token as its value. A flag that requires a value (`--model`, `--message`, `--password`, `--environment`, `--port`, ...) is therefore rejected with an error when written bare, rather than silently becoming `true`:
 
-```
+```text
 $ bxAgents new my-agent --model openai/gpt-5
 Error: --model requires a value - write it as `--model=<value>`.
 ```
@@ -199,7 +199,7 @@ bxAgents new my-agent --forgebox=some-package-slug
     - `telegram-bot` - adds a `gateways/telegram.bx` channel adapter, plus a matching `TELEGRAM_BOT_TOKEN` stub line in `.env`.
     - `github-bot` - adds a `gateways/github.bx` channel adapter, plus matching `GITHUB_TOKEN`/`GITHUB_WEBHOOK_SECRET`/`GITHUB_BOT_NAME` stub lines in `.env`.
     - `mcp-server` - adds an example `mcp/exampleServer.bx` tool server and a `gateways/mcpExpose.bx` entry exposing it as an MCP server at `/mcp`.
-        - `scheduled` - adds a [`schedules/Example.bx`](conventions/schedules.md) scheduler calling the agent on a daily cron schedule.
+    - `scheduled` - adds a [`schedules/Example.bx`](conventions/schedules.md) scheduler calling the agent on a daily cron schedule.
     - `multi-agent` - adds a `subAgents` list to the root `Agent.yaml` declaring two [subagents](conventions/subagents.md) (`researcher`, `writer`), each scaffolded as its own real `subagents/<name>/Agent.yaml` + `instructions.md`.
   - Also runs `box install` in the new project root, so `bxAgents test` works immediately with no separate install step. This is best-effort: if `box` isn't on `PATH` or the install fails, `new` still succeeds - the message just tells you to run it yourself. Pass `--skipInstall` to opt out of this step entirely.
 - **`--repo` mode** (`--repo=owner/repo-name` or a full URL): clones the repo via a bundled [JGit](https://www.eclipse.org/jgit/) dependency - no `git` binary needs to be installed. Always clones shallow (depth 1) and always strips the resulting `.git` folder afterward, so the new project starts with a clean history rather than staying tied to the template repo's own remote. Refuses to run into a directory that already exists and is non-empty, and fails clearly if no `Agent.yaml` or `Agent.bx` is found in the cloned repo.
@@ -933,7 +933,7 @@ bxAgents connectors show supabase
 bxAgents connectors check [--dir=DIR]
 ```
 
-```
+```text
 ID           NAME                              HOW IN              RISK    VERIFIED
 github       GitHub                            token               high    2026-11-14
 notion       Notion                            sign in, token      medium  2026-11-14
@@ -965,7 +965,7 @@ bxAgents models list [--json]
 bxAgents models test [--profile=NAME | --all] [--json]
 ```
 
-```
+```text
 default       openai/gpt-5                    context 128,000  images yes  key set
 fast          openai/gpt-5-mini               context 400,000  images no  key set
 planner       claude/claude-opus-4            context ?  images ?  key MISSING
@@ -1024,7 +1024,7 @@ bxAgents stats [--days=30] [--by=model|provider|day|user] [--user=NAME] [--json]
 bxAgents stats --enable
 ```
 
-```
+```text
 Last 30 days: 128 calls, 412,300 tokens (351,200 in, 61,100 out)
 
 By model              calls          in         out       total
@@ -1054,7 +1054,7 @@ bxAgents inspect --md=AGENT.md          # write the Markdown to a file in the pr
 bxAgents inspect --environment=production
 ```
 
-```
+```text
 ● advanced-agent   Agent.bx · development
   /home/me/advanced-agent
 

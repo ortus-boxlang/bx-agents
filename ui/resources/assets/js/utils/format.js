@@ -27,7 +27,12 @@ export function bytesText( bytes ) {
 	if ( n < 1024 ) {
 		return n + " B";
 	}
-	const units = [ "KB", "MB", "GB", "TB" ];
+	const units = [
+		"KB",
+		"MB",
+		"GB",
+		"TB"
+	];
 	let value = n / 1024;
 	let unit = 0;
 	while ( value >= 1024 && unit < units.length - 1 ) {
