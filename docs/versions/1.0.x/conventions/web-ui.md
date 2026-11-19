@@ -169,7 +169,7 @@ For admins. Where the agent keeps everything (the [data home](data.md)) and how 
 
 ### Phone and accessibility
 
-On a phone the menu becomes a drawer, the header gives way, and a table becomes a list. The page is built to be used without a mouse: a skip link comes first, the focus ring is always visible, targets are at least 44 by 44 pixels, the current page is marked with `aria-current`, status is said in words and icons as well as colour, text keeps a contrast of at least 4.5 to 1, `prefers-reduced-motion` is respected, and dialogs trap focus and give it back.
+On a phone the menu becomes a drawer, the header gives way, and a table becomes a list. The page is built to be used without a mouse: a skip link comes first, the focus ring is always visible, targets are at least 44 by 44 pixels, the current page is marked with `aria-current`, status is said in words and icons as well as colour, text keeps a contrast of at least 4.5 to 1, `prefers-reduced-motion` stops every animation and transition, dialogs trap focus and give it back, and a row of tabs is one Tab stop that the arrow keys, Home and End move along. Every page is checked with [axe-core](https://github.com/dequelabs/axe-core) as an admin and as a member, light and dark, on a desktop and a phone, with its dialogs open, against WCAG 2.2 AA; a serious or critical finding fails the build.
 
 ::: columns
 ::: column

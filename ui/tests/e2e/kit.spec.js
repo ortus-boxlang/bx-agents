@@ -13,12 +13,32 @@ test.beforeEach( async( { page } ) => {
 test( "tabs, search and switch write their component's variables", async( { page, errors } ) => {
 	await page.click( "#kit-tabs [data-tab='two']" );
 	await expect( page.locator( "#kit-tab" ) ).toHaveText( "two" );
-	await expect( page.locator( "#kit-tabs [data-tab='two']" ) ).toHaveAttribute( "aria-current", "page" );
+	await expect( page.locator( "#kit-tabs [data-tab='two']" ) ).toHaveAttribute( "aria-selected", "true" );
 	await page.fill( "#kit-search input", "find me" );
 	await expect( page.locator( "#kit-query" ) ).toHaveText( "find me" );
 	await page.click( "#kit-field .switch-row" );
 	await expect( page.locator( "#kit-switch" ) ).toHaveText( "off" );
 	expect( errors ).toEqual( [] );
+} );
+
+test( "tabs are a tab row for the keyboard: one Tab stop, the arrows, Home and End move and open", async( { page } ) => {
+	const row = page.getByRole( "tablist", { name: "Example" } );
+	const one = row.getByRole( "tab", { name: "One" } );
+	const two = row.getByRole( "tab", { name: "Two" } );
+	await expect( one ).toHaveAttribute( "tabindex", "0" );
+	await expect( two ).toHaveAttribute( "tabindex", "-1" );
+	await one.focus();
+	await page.keyboard.press( "ArrowRight" );
+	await expect( two ).toBeFocused();
+	await expect( two ).toHaveAttribute( "aria-selected", "true" );
+	await expect( page.locator( "#kit-tab" ) ).toHaveText( "two" );
+	await page.keyboard.press( "ArrowRight" );
+	await expect( one ).toBeFocused();
+	await page.keyboard.press( "End" );
+	await expect( two ).toBeFocused();
+	await page.keyboard.press( "Home" );
+	await expect( one ).toHaveAttribute( "aria-selected", "true" );
+	await expect( two ).toHaveAttribute( "tabindex", "-1" );
 } );
 
 test( "a field ties its help line to the control", async( { page } ) => {
