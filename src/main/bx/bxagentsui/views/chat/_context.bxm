@@ -1,0 +1,25 @@
+<!--- The context breakdown: the total, a meter, each part and each tool's tokens, and Compact. Inside chatPage, in a
+      drawer. Drawn as text throughout, since tool names come from the project. --->
+<bx:output>
+<template x-if="context">
+	<div class="ctx-body">
+		<p class="ctx-total"><strong x-text="approx( context.total )"></strong> <span x-text="context.contextWindow > 0 ? 'of ' + windowText( context.contextWindow ) + ' tokens, ' + context.percent + '%' : 'tokens (this model\'s window is not known)'"></span></p>
+		<div class="ctx-meter" :class="contextLevel === 'ok' ? '' : contextLevel" x-show="context.contextWindow > 0"><span :style="{ width: Math.max( 1, Math.min( 100, context.percent ) ) + '%' }"></span></div>
+		<ul aria-label="What is sent to the model">
+			<template x-for="part in context.parts || []" :key="part.label">
+				<li>
+					<div class="ctx-row"><span><span x-text="part.label"></span> <small x-show="part.detail" x-text="part.detail"></small></span><span class="tok" x-text="approx( part.tokens )"></span></div>
+					<div class="ctx-bar"><i :style="{ width: Math.max( 1, Math.round( ( context.total > 0 ? part.tokens / context.total : 0 ) * 100 ) ) + '%' }"></i></div>
+				</li>
+			</template>
+		</ul>
+		<details x-show="( context.tools || [] ).length">
+			<summary x-text="'Tools (' + ( context.tools || [] ).length + ')'"></summary>
+			<ul><template x-for="tool in context.tools || []" :key="tool.name"><li class="ctx-row"><span x-text="tool.name"></span><span x-text="approx( tool.tokens )"></span></li></template></ul>
+		</details>
+		<div class="pg-actions" x-show="$store.session.can( 'compact' )">
+			<button type="button" class="btn" @click="compact()">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "arrows-in-line-vertical" } )# Compact this conversation</button>
+		</div>
+	</div>
+</template>
+</bx:output>

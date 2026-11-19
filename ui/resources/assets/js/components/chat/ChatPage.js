@@ -1,13 +1,19 @@
 import { CONVERSATION_KEY } from "../../utils/chat.js";
 import { applyFrame, argsPreview, newThreadId, newTurn, settleTurn } from "../../utils/turn.js";
+import { base64Of, classifyFile, clipText, withTextFiles } from "../../utils/attachments.js";
+import { approx, contextLevel, contextSummary, ringDash, windowText } from "../../utils/context.js";
+import { vaultAskUrl, vaultRequestOf } from "../../utils/vault-request.js";
+import { replyEffects, slashMatches } from "../../utils/reply.js";
 
 /**
  * The chat: the list of conversations (GET /sessions; POST /sessions, /sessions/rename, /sessions/delete), the
  * transcript (GET /history) and a turn streamed with $sse (POST /stream), steered while it runs (POST /steer) or stopped
  * (POST /cancel). The open conversation is kept under the same key as the current page, so both open the same one.
  *
- * The transcript is plain data (messages) drawn by Alpine; an answer is a turn from utils/turn.js, its Markdown drawn
- * with $md.
+ * The transcript is plain data (messages) drawn by Alpine: { role: "you" | "agent" | "error" | "reply" | "approval" }.
+ * An answer is a turn from utils/turn.js, its Markdown drawn with $md. A slash command (POST /command) answers a Reply
+ * of blocks; a paused tool call shows an approval (GET /pending) answered with POST /resume, streamed like a turn.
+ * Pictures and text files go with a message (utils/attachments.js); the context gauge reads GET /context.
  */
 
 export const LOCAL_KEY = CONVERSATION_KEY + ".local";
@@ -74,6 +80,55 @@ export function chatPage() {
 		showReasoning : true,
 		/** @type {boolean} Show the tool calls */
 		showTools     : true,
+		/** @type {Array<{ name: string, hint: string, extension?: string }>} The slash commands offered */
+		commands      : [],
+		/** @type {number} The command picked in the "/" menu */
+		slashPick     : 0,
+		/** @type {boolean} True while the "/" menu may show */
+		slashOpen     : false,
+		/** @type {Array<{ name: string, mime: string, data: string, url: string }>} Pictures that go with the next message */
+		images        : [],
+		/** @type {Array<{ name: string, content: string }>} Text files that go with the next message */
+		texts         : [],
+		/** @type {boolean} True while files are dragged over the composer */
+		dragging      : false,
+		/** @type {object|null} What GET /context answered for the open conversation */
+		context       : null,
+		/** @type {boolean} True while the context breakdown is open */
+		contextOpen   : false,
+
+		/** Tokens as "~1.2k" */
+		approx,
+		/** A window as "128k" */
+		windowText,
+
+		/** @returns {Array<object>} The commands that match what is typed */
+		get slashShown() {
+			return this.slashOpen ? slashMatches( this.commands, this.draft ) : [];
+		},
+
+		/** @returns {string} The context gauge's level: ok, warn, danger or unknown */
+		get contextLevel() {
+			return this.context ? contextLevel( this.context ) : "unknown";
+		},
+
+		/** @returns {string} What the context gauge says */
+		get contextText() {
+			return this.context ? "Context: " + contextSummary( this.context ) + ". Click for the breakdown" : "";
+		},
+
+		/** @returns {string} How much of the ring is filled */
+		get contextDash() {
+			return this.context ? ringDash( this.context ) : "0 100";
+		},
+
+		/**
+		 * @param {string} name A command, such as "/fork"
+		 * @returns {boolean} True when the server offers it
+		 */
+		offers( name ) {
+			return this.commands.some( c => c.name === name );
+		},
 
 		/** The preview of a tool call's arguments */
 		argsPreview,
@@ -100,6 +155,11 @@ export function chatPage() {
 				this.loadConversations();
 			} );
 			await this.$store.session.loaded();
+			if ( this.$store.session.can( "commands" ) ) {
+				this.$api.get( "/commands" ).then( result => {
+					this.commands = result.ok ? result.data.commands || [] : [];
+				} );
+			}
 			await this.loadConversations();
 			await this.loadHistory();
 			this.$nextTick( () => this.$refs.input && this.$refs.input.focus() );
@@ -188,6 +248,7 @@ export function chatPage() {
 			// a history that cannot be read never blocks the chat
 			this.messages = result.ok ? transcriptOf( result.data.messages ) : [];
 			this.scrollToEnd( true );
+			this.refreshContext();
 		},
 
 		/**
@@ -222,6 +283,7 @@ export function chatPage() {
 			// the transcript is cleared now, before the list is fetched: a message sent meanwhile must not be wiped
 			this.messages = [];
 			this.hint = "";
+			this.context = null;
 			this.$refs.input && this.$refs.input.focus();
 			await this.loadConversations();
 		},
@@ -268,13 +330,29 @@ export function chatPage() {
 			this.send();
 		},
 
-		/** Sends what is typed: a new turn, or a steer when one is running. */
+		/** Sends what is typed: a command, a steer when a turn is running, or a new turn. */
 		async send() {
-			const text = this.draft.trim();
+			let text = this.draft.trim();
 			if ( !text ) {
 				return;
 			}
+			this.slashOpen = false;
+			// a lone question mark asks which keys do what
+			if ( this.commands.length && text === "?" ) {
+				text = "/keys";
+			}
+			if ( this.commands.length && text.startsWith( "/" ) ) {
+				if ( this.busy ) {
+					this.hint = "Wait for the answer, or press Stop, before running a command.";
+					return;
+				}
+				this.draft = "";
+				this.grow();
+				await this.runCommand( text );
+				return;
+			}
 			this.draft = "";
+			this.grow();
 			if ( this.busy && this.threadId ) {
 				this.messages.push( { role: "you", text, images: [] } );
 				this.scrollToEnd( true );
@@ -286,28 +364,44 @@ export function chatPage() {
 		},
 
 		/**
-		 * Streams one turn into the transcript.
+		 * Sends one message as a new turn, with the files that wait.
 		 *
 		 * @param {string} text The message
 		 */
 		async runTurn( text ) {
-			this.messages.push( { role: "you", text, images: [] } );
-			const answer = { role: "agent", turn: newTurn() };
-			this.messages.push( answer );
-			// the reactive copy, so each frame redraws the answer
-			const turn = this.messages[ this.messages.length - 1 ].turn;
-			this.scrollToEnd( true );
-			this.busy = true;
-			this.hint = "";
-			this.threadId = newThreadId();
+			const images = this.images.slice();
+			const body = { input: withTextFiles( text, this.texts ), conversationId: this.conversationId, threadId: newThreadId(), options: {} };
+			if ( images.length ) {
+				body.attachments = images.map( i => ( { name: i.name, mime: i.mime, data: i.data } ) );
+			}
+			this.images = [];
+			this.texts = [];
+			this.messages.push( { role: "you", text, images: images.map( i => i.url ) } );
 			try {
 				localStorage.removeItem( LOCAL_KEY );
 			} catch ( e ) {
 				// nothing kept
 			}
+			await this.streamTurn( "/stream", this.withAgent( body ) );
+		},
+
+		/**
+		 * Streams a turn into the transcript: a new one (/stream) or the rest of a paused one (/resume).
+		 *
+		 * @param {string} path /stream or /resume
+		 * @param {object} body What to send; its threadId names the turn
+		 */
+		async streamTurn( path, body ) {
+			this.messages.push( { role: "agent", turn: newTurn() } );
+			// the reactive copy, so each frame redraws the answer
+			const turn = this.messages[ this.messages.length - 1 ].turn;
+			this.scrollToEnd( true );
+			this.busy = true;
+			this.hint = "";
+			this.threadId = body.threadId;
 			this.controller = new AbortController();
-			const outcome = await this.$sse( "/stream", {
-				body   : this.withAgent( { input: text, conversationId: this.conversationId, threadId: this.threadId, options: {} } ),
+			const outcome = await this.$sse( path, {
+				body,
 				signal : this.controller.signal,
 				onEvent: ( name, data ) => {
 					applyFrame( turn, data );
@@ -317,20 +411,216 @@ export function chatPage() {
 			const stopped = this.controller.signal.aborted;
 			settleTurn( turn );
 			if ( !outcome.ok && !stopped ) {
-				this.messages.splice( this.messages.indexOf( this.messages.find( m => m.turn === turn ) ), 1 );
+				const at = this.messages.findIndex( m => m.turn === turn );
+				this.messages.splice( at, 1 );
 				this.messages.push( { role: "error", text: outcome.status === 401 ? "This server asks for a password." : outcome.error || "Something went wrong." } );
 			}
-			if ( stopped ) {
-				this.hint = "Stopped.";
-			} else if ( turn.suspended ) {
-				this.hint = "The agent paused for your approval.";
-			}
+			const threadId = this.threadId;
 			this.controller = null;
 			this.threadId = "";
 			this.busy = false;
+			if ( stopped ) {
+				this.hint = "Stopped.";
+			} else if ( turn.suspended ) {
+				await this.offerApproval( threadId );
+			}
 			this.$refs.input && this.$refs.input.focus();
 			// the turn moved this conversation to the top of the list, and may have given it its title
 			this.loadConversations();
+			this.refreshContext();
+			this.offerVaultRequest( turn );
+		},
+
+		/**
+		 * The agent paused a tool call for a person to approve: ask the server what it wants to do, and show it.
+		 *
+		 * @param {string} threadId The paused turn
+		 */
+		async offerApproval( threadId ) {
+			const result = await this.$api.get( "/pending?threadId=" + encodeURIComponent( threadId ) + ( this.agent ? "&agent=" + encodeURIComponent( this.agent ) : "" ) );
+			if ( !result.ok || !result.data.pending ) {
+				this.hint = "The agent paused, but no pending approval was found.";
+				return;
+			}
+			const actions = ( result.data.pendingActions || [] ).map( a => ( {
+				name: a.name || a.tool || "action",
+				args: a.arguments ? ( typeof a.arguments === "string" ? a.arguments : JSON.stringify( a.arguments ) ) : ""
+			} ) );
+			this.messages.push( { role: "approval", threadId, actions } );
+			this.scrollToEnd( true );
+		},
+
+		/**
+		 * Answers an approval: the rest of the same turn streams in, so the answer lands in this conversation.
+		 *
+		 * @param {{ threadId: string }} m The approval
+		 * @param {string} decision approve | reject
+		 */
+		async decide( m, decision ) {
+			this.messages.splice( this.messages.indexOf( m ), 1 );
+			await this.streamTurn( "/resume", this.withAgent( { threadId: m.threadId, decision } ) );
+		},
+
+		/**
+		 * When the agent asked for a secret, send the person to the Vault page with the ask: the value never passes
+		 * through the chat.
+		 *
+		 * @param {{ tools: Array }} turn The answer
+		 */
+		offerVaultRequest( turn ) {
+			const ask = vaultRequestOf( turn.tools );
+			if ( ask && this.$store.session.can( "vault" ) ) {
+				window.location.href = vaultAskUrl( this.$store.session.config.basePath, ask );
+			}
+		},
+
+		/**
+		 * Runs a slash command on the server and shows its Reply.
+		 *
+		 * @param {string} line The command, as typed
+		 */
+		async runCommand( line ) {
+			this.messages.push( { role: "you", text: line, images: [] } );
+			this.scrollToEnd( true );
+			const result = await this.$api.post( "/command", { line, conversationId: this.conversationId } );
+			if ( !result.data || !result.data.blocks ) {
+				this.messages.push( { role: "error", text: result.error || "That command did not work." } );
+				return;
+			}
+			const reply = result.data;
+			// a command that moves to another conversation, or empties this one, redraws the transcript first; its
+			// answer is shown after that so it is not wiped with it
+			const effects = replyEffects( reply, this.conversationId );
+			if ( effects.open ) {
+				await this.open( { id: effects.open } );
+			} else if ( effects.reload ) {
+				await this.loadHistory();
+			}
+			this.messages.push( { role: "reply", reply } );
+			reply.blocks.filter( b => b.type === "file" ).forEach( b => this.saveFile( b ) );
+			this.scrollToEnd( true );
+			this.loadConversations();
+			this.refreshContext();
+		},
+
+		/**
+		 * Hands a file a command answered to the browser to save.
+		 *
+		 * @param {{ name: string, mime: string, text: string }} block The file block
+		 */
+		saveFile( block ) {
+			const url = URL.createObjectURL( new Blob( [ block.text ], { type: block.mime } ) );
+			const link = document.createElement( "a" );
+			link.href = url;
+			link.download = block.name;
+			document.body.appendChild( link );
+			link.click();
+			link.remove();
+			setTimeout( () => URL.revokeObjectURL( url ), 60000 );
+		},
+
+		/** Copies this conversation under a new name (the /fork command). */
+		async fork() {
+			const name = await this.$prompt( { title: "Fork this conversation", body: "A copy you can take another way. Leave the name empty for Fork of this one.", label: "Name of the copy", yes: "Fork" } );
+			if ( name !== null && !this.busy ) {
+				await this.runCommand( ( "/fork " + name.trim() ).trim() );
+			}
+		},
+
+		/** Saves this conversation as a Markdown file (the /export command). */
+		async exportChat() {
+			if ( !this.busy ) {
+				await this.runCommand( "/export" );
+			}
+		},
+
+		/** Summarizes older messages and keeps the recent ones. */
+		async compact() {
+			this.contextOpen = false;
+			this.hint = "Compacting...";
+			const result = await this.$api.post( "/compact", { conversationId: this.conversationId } );
+			if ( !result.ok ) {
+				this.hint = "Compaction failed.";
+				return;
+			}
+			if ( !result.data.compacted ) {
+				// not an error: too few messages to be worth summarizing
+				this.hint = "Nothing to compact yet (" + result.data.before + " messages).";
+				return;
+			}
+			this.hint = "Compacted " + result.data.before + " messages down to " + result.data.after + ".";
+			await this.loadHistory();
+			this.loadConversations();
+		},
+
+		/** Reads how much of the model's window the open conversation uses. */
+		async refreshContext() {
+			if ( !this.$store.session.can( "context" ) || this.isLocalOnly() ) {
+				this.context = null;
+				return;
+			}
+			const result = await this.$api.get( "/context?conversationId=" + encodeURIComponent( this.conversationId ) );
+			this.context = result.ok ? result.data : null;
+		},
+
+		/**
+		 * Takes the files a person chose, pasted or dropped.
+		 *
+		 * @param {FileList|File[]} files The files
+		 */
+		addFiles( files ) {
+			Array.from( files || [] ).forEach( file => {
+				const verdict = classifyFile( file, { images: this.images.length, seesImages: this.$store.session.vision !== "no" } );
+				if ( verdict.problem ) {
+					this.hint = verdict.problem;
+					return;
+				}
+				const reader = new FileReader();
+				if ( verdict.kind === "image" ) {
+					reader.onload = () => {
+						const url = String( reader.result );
+						this.images.push( { name: file.name || "pasted.png", mime: file.type, data: base64Of( url ), url } );
+					};
+					reader.readAsDataURL( file );
+				} else {
+					reader.onload = () => this.texts.push( { name: file.name, content: clipText( String( reader.result ) ) } );
+					reader.readAsText( file );
+				}
+			} );
+		},
+
+		/** @param {ClipboardEvent} evt A paste: files in it are attached */
+		onPaste( evt ) {
+			const files = evt.clipboardData && evt.clipboardData.files;
+			if ( this.$store.session.can( "attachments" ) && files && files.length ) {
+				evt.preventDefault();
+				this.addFiles( files );
+			}
+		},
+
+		/** @param {DragEvent} evt Files dropped on the composer */
+		onDrop( evt ) {
+			this.dragging = false;
+			if ( this.$store.session.can( "attachments" ) && evt.dataTransfer && evt.dataTransfer.files.length ) {
+				this.addFiles( evt.dataTransfer.files );
+			}
+		},
+
+		/**
+		 * @param {{ name: string }} c A command of the "/" menu
+		 */
+		pickCommand( c ) {
+			this.draft = c.name + " ";
+			this.slashOpen = false;
+			this.$refs.input && this.$refs.input.focus();
+		},
+
+		/** Opens the "/" menu with every command. */
+		openCommands() {
+			this.draft = "/";
+			this.slashPick = 0;
+			this.slashOpen = true;
+			this.$refs.input && this.$refs.input.focus();
 		},
 
 		/** Stops the turn: the server first (tools stop firing, tokens stop being spent), then the listening. */
@@ -347,10 +637,34 @@ export function chatPage() {
 		 * @param {KeyboardEvent} evt The key
 		 */
 		onKey( evt ) {
+			const open = this.slashShown;
+			if ( open.length ) {
+				if ( evt.key === "ArrowDown" || evt.key === "ArrowUp" ) {
+					evt.preventDefault();
+					this.slashPick = ( this.slashPick + ( evt.key === "ArrowDown" ? 1 : open.length - 1 ) ) % open.length;
+					return;
+				}
+				if ( evt.key === "Tab" ) {
+					evt.preventDefault();
+					this.pickCommand( open[ Math.min( this.slashPick, open.length - 1 ) ] );
+					return;
+				}
+				if ( evt.key === "Escape" ) {
+					this.slashOpen = false;
+					return;
+				}
+			}
 			if ( evt.key === "Enter" && !evt.shiftKey && !evt.isComposing ) {
 				evt.preventDefault();
 				this.send();
 			}
+		},
+
+		/** Opens the "/" menu again as a command name is typed, and grows the composer. */
+		onInput() {
+			this.slashPick = 0;
+			this.slashOpen = true;
+			this.grow();
 		},
 
 		/** Grows the composer with what is typed, up to a limit. */
@@ -382,7 +696,9 @@ export function chatPage() {
 		 * @param {boolean} [force] Scroll whatever the position
 		 */
 		scrollToEnd( force ) {
-			this.$nextTick( () => {
+			// after Alpine has drawn the change (nextTick) and the browser has laid it out (a frame), so a card that
+			// was just added is measured
+			this.$nextTick( () => requestAnimationFrame( () => {
 				const el = this.$refs.messages;
 				if ( !el ) {
 					return;
@@ -390,7 +706,7 @@ export function chatPage() {
 				if ( force || el.scrollHeight - el.scrollTop - el.clientHeight < 48 ) {
 					el.scrollTop = el.scrollHeight;
 				}
-			} );
+			} ) );
 		}
 	};
 }

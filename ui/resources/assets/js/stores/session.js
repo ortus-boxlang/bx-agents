@@ -15,6 +15,8 @@ export function session( config ) {
 		agentName   : "",
 		/** @type {Array<{ name: string, parent?: string }>} The agent and its sub-agents, as GET /agent answers them */
 		agents      : [],
+		/** @type {string} Whether the model sees pictures: "yes", "no", or "" when not known */
+		vision      : "",
 
 		/** @type {Promise<void>|null} Settles once the capabilities are known; see loaded() */
 		pending: null,
@@ -51,6 +53,7 @@ export function session( config ) {
 					this.capabilities = payload.capabilities || {};
 					this.agentName = payload.name || "";
 					this.agents = payload.agents || [];
+					this.vision = payload.vision || "";
 				}
 			} catch ( e ) {
 				// the menu then shows only what needs no capability
