@@ -8,7 +8,7 @@ class extends="testbox.system.BaseSpec" {
 
 			beforeEach( function() {
 				variables.appDir = createTempDirectory( prefix = "bxagents-webapp-" )
-				variables.entry = { config : { path : "/chat", title : "Acme", users : [ { username : "ada" } ], welcome : "Hi" }, projectRoot : appDir }
+				variables.entry = { config : { path : "/chat", title : "Acme", users : [ { username : "ada" } ], welcome : "Hi", suggestions : [ "One", "", 7, "Two", "Three", "Four", "Five" ], showToolCalls : false }, projectRoot : appDir }
 			} )
 
 			afterEach( function() {
@@ -33,6 +33,10 @@ class extends="testbox.system.BaseSpec" {
 				expect( settings.signIn ).toBeTrue()
 				expect( settings.loginUrl ).toBe( "/chat/login.html" )
 				expect( settings.themeCss ).toInclude( "--accent" )
+				// the chat's settings: at most four suggestions that are text, reasoning on unless turned off, tool calls off here
+				expect( settings.suggestions ).toBe( [ "One", "7", "Two", "Three" ] )
+				expect( settings.showReasoning ).toBeTrue()
+				expect( settings.showTools ).toBeFalse()
 			} );
 
 			it( "removes a link left by a dev build as a link, and never deletes what it points at", function() {

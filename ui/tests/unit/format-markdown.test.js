@@ -20,7 +20,11 @@ describe( "markdown", () => {
 	it( "draws Markdown and removes anything that could run", () => {
 		const html = renderMarkdown( "**b** <img src=x onerror=\"alert(1)\"> <script>alert(2)</script> [x](javascript:alert(3))" );
 		expect( html ).toContain( "<strong>b</strong>" );
-		expect( html ).not.toContain( "onerror" );
+		// the model's HTML is shown as text: no element, no handler that could run
+		const box = document.createElement( "div" );
+		box.innerHTML = html;
+		expect( box.querySelector( "img, script" ) ).toBeNull();
+		expect( [ ...box.querySelectorAll( "*" ) ].some( el => [ ...el.attributes ].some( a => a.name.startsWith( "on" ) ) ) ).toBe( false );
 		expect( html ).not.toContain( "<script" );
 		expect( html ).not.toContain( "javascript:" );
 	} );

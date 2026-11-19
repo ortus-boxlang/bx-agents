@@ -13,6 +13,7 @@ The web app is a ColdBox module, `bxagentsui`, built the cbGenesis way. Read thi
 | Vite output, committed so an agent build needs no Node | `src/main/bx/bxagentsui/includes/build/` |
 | The dev agent and its scripted model | `ui/dev/` |
 | Browser tests | `ui/tests/e2e/` |
+| Tours for screenshots and video | `ui/tests/media/` |
 
 A built agent copies the module to `modules/bxagentsui` and writes `config/bxagentsui.json` (see
 `src/main/bx/models/build/generators/WebAppModule.bx`). The module mounts itself at `basePath` from that file.
@@ -70,6 +71,7 @@ The app partials (`views/_components/app/`) are `includes`, `sprite`, `sidebar` 
 
 | Page | Handler | View | Component |
 |---|---|---|---|
+| Chat (the conversations, the transcript, the composer) | `Main.index` | `views/main/index`, `views/chat/` | `components/chat/ChatPage.js`, `utils/turn.js` |
 | Data and backups | `Data.index` | `views/data/` | `components/admin/DataPage.js` |
 | Logs (`/logs/:area?q=`) | `Logs.index` | `views/logs/` | `components/admin/LogsPage.js` |
 | Gateways | `Gateways.index` | `views/gateways/` | `components/admin/GatewaysPage.js` |
@@ -91,6 +93,18 @@ A tab or filter the address should keep: `keepInAddress( path, query )` (`utils/
 
 Bind `:disabled`, `:checked` and other boolean attributes to a real boolean (`!!t.locked`), never to a value that can be
 `undefined` or `null`: in a list rendered by `x-for` that once disabled every switch.
+
+## Proof on every pull request
+
+Each pull request carries screenshots and a short video of what it changes. Write a tour in `tests/media/<name>.tour.js`
+(walk the flows, call `shot( "what-it-shows" )` at each step), then with the stack running:
+
+```
+npm run media -- <name>          # .stack/media/<name>/: NN-*.png, tour.mp4, tour.gif
+```
+
+Publish the folder on the `pr-media` branch (never on a code branch) under `<pr-number>/`, and link the files in the
+pull request: the GIF and the screenshots show inline, the MP4 is a link.
 
 ## Commands (from `ui/`)
 

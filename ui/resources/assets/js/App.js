@@ -9,7 +9,7 @@ import persist from "@alpinejs/persist";
 import { readConfig } from "./utils/config.js";
 import { createApi } from "./utils/api.js";
 import { streamEvents } from "./utils/sse.js";
-import { renderMarkdown } from "./utils/markdown.js";
+import { renderMarkdown, listenForCodeCopy } from "./utils/markdown.js";
 import * as format from "./utils/format.js";
 import { session } from "./stores/session.js";
 import { theme } from "./stores/theme.js";
@@ -31,6 +31,7 @@ import { memoryPage } from "./components/memory/MemoryPage.js";
 import { agentPage } from "./components/admin/AgentPage.js";
 import { routinesPage } from "./components/routines/RoutinesPage.js";
 import { connectorsPage } from "./components/connectors/ConnectorsPage.js";
+import { chatPage } from "./components/chat/ChatPage.js";
 
 // ============================================================
 // Plugins
@@ -84,7 +85,9 @@ Alpine.data( "memoryPage", memoryPage );
 Alpine.data( "agentPage", agentPage );
 Alpine.data( "routinesPage", routinesPage );
 Alpine.data( "connectorsPage", connectorsPage );
+Alpine.data( "chatPage", chatPage );
 Alpine.data( "kitPage", kitPage );
 
 window.Alpine = Alpine;
+listenForCodeCopy( document );
 Alpine.start();

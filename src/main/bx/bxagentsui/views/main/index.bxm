@@ -1,7 +1,22 @@
-<!--- The chat. It moves here from the old page in a later step; until then this says where it is. --->
+<!--- The chat: the conversations, the transcript and the composer. State and actions: chatPage
+      (resources/assets/js/components/chat/ChatPage.js). The gateway's chat settings come as data. --->
 <bx:output>
-<div class="pg">
-	#view( view = "_components/ui/page-head", module = "bxagentsui", args = { title : "Chat", note : prc.ui.welcome } )#
-	#view( view = "_components/ui/empty", module = "bxagentsui", args = { icon : "chat-circle-text", title : "The chat is moving to this app", text : "Until it does, it is on the current page." } )#
+<div id="page-chat" x-data="chatPage"
+	data-welcome="#encodeForHTML( prc.ui.welcome )#"
+	data-suggestions="#encodeForHTML( jsonSerialize( prc.ui.suggestions ?: [] ) )#"
+	data-show-reasoning="#( prc.ui.showReasoning ?: true ) ? 'true' : 'false'#"
+	data-show-tools="#( prc.ui.showTools ?: true ) ? 'true' : 'false'#">
+	<div class="shell">
+		#view( view = "chat/_conversations", module = "bxagentsui" )#
+		<div id="main">
+			<div id="messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Conversation" x-ref="messages">
+				#view( view = "chat/_welcome", module = "bxagentsui" )#
+				<template x-for="( m, i ) in messages" :key="i">#view( view = "chat/_message", module = "bxagentsui" )#</template>
+			</div>
+			<p class="hint" role="status" x-text="hint"></p>
+			#view( view = "chat/_composer", module = "bxagentsui" )#
+			<bx:if len( prc.ui.footer )><footer class="note">#encodeForHTML( prc.ui.footer )#</footer></bx:if>
+		</div>
+	</div>
 </div>
 </bx:output>

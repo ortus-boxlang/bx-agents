@@ -80,6 +80,10 @@ class {
 			"logoutUrl"   : signIn ? path & "/logout" : "",
 			"themeCss"    : arguments.themeCss,
 			"customCss"   : arguments.customCss,
+			// what the empty chat offers, and whether it shows the model's reasoning and its tool calls (both on by default)
+			"suggestions" : suggestionsOf( config ),
+			"showReasoning" : isNull( config.showReasoning ?: javacast( "null", "" ) ) ? true : !!config.showReasoning,
+			"showTools"   : isNull( config.showToolCalls ?: javacast( "null", "" ) ) ? true : !!config.showToolCalls,
 			"includesUrl" : "/modules/bxagentsui/includes",
 			// the /_kit page of partials: only where the module is linked for development
 			"kit"         : link
@@ -121,6 +125,25 @@ class {
 	 */
 	private any function pathOf( required string file ) {
 		return createObject( "java", "java.io.File" ).init( arguments.file ).toPath()
+	}
+
+	/**
+	 * @config The web UI gateway's config
+	 *
+	 * @return The `suggestions` as at most four short texts: what the empty chat offers to send with one click
+	 */
+	array function suggestionsOf( required struct config ) {
+		var given = arguments.config.suggestions ?: []
+		if ( !isArray( given ) ) {
+			return []
+		}
+		var kept = []
+		for ( var suggestion in given ) {
+			if ( isSimpleValue( suggestion ) && len( trim( suggestion ) ) && kept.len() < 4 ) {
+				kept.append( left( trim( suggestion ), 120 ) )
+			}
+		}
+		return kept
 	}
 
 }
