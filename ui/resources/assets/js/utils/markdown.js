@@ -1,6 +1,6 @@
 /**
  * Markdown from the model or a person, as HTML that is safe to put in the page. The only way the web app writes HTML from
- * text it did not make itself; `x-html` is used with $md and nowhere else. The same rules as the current page:
+ * text it did not make itself; `x-html` is used with $md and nowhere else. The rules:
  * - HTML the model writes is shown as text, never parsed (an answer can echo anything it read);
  * - no pictures, frames, forms or styles (a remote picture would tell its server the page was opened);
  * - links open in a new tab, without the opener;
@@ -20,14 +20,26 @@ import sql from "highlight.js/lib/languages/sql";
 import typescript from "highlight.js/lib/languages/typescript";
 import xml from "highlight.js/lib/languages/xml";
 import yaml from "highlight.js/lib/languages/yaml";
+import { registerBoxLangGrammars } from "./bx-grammars.js";
 
 Object.entries( { bash, css, java, javascript, json, markdown, python, sql, typescript, xml, yaml } ).forEach( ( [ name, language ] ) => hljs.registerLanguage( name, language ) );
 hljs.registerAliases( [ "sh", "shell", "zsh" ], { languageName: "bash" } );
 hljs.registerAliases( [ "js" ], { languageName: "javascript" } );
 hljs.registerAliases( [ "ts" ], { languageName: "typescript" } );
-hljs.registerAliases( [ "html", "cfml", "bxm" ], { languageName: "xml" } );
+hljs.registerAliases( [ "html" ], { languageName: "xml" } );
 hljs.registerAliases( [ "yml" ], { languageName: "yaml" } );
-hljs.registerAliases( [ "bx", "bxs", "boxlang", "cfc", "cfscript" ], { languageName: "java" } );
+
+/**
+ * Registers the BoxLang and CFML grammars, with the word lists the terminal uses. Until they are registered, bx, bxm and
+ * cfml code is shown uncoloured, never wrongly coloured.
+ *
+ * @param {Object<string, string>} words The lists of Grammars.words(), each a space separated string
+ */
+export function useBoxLangWords( words ) {
+	if ( words && Object.keys( words ).length && !hljs.getLanguage( "boxlang" ) ) {
+		registerBoxLangGrammars( hljs, words );
+	}
+}
 
 /**
  * @param {string} text Any text

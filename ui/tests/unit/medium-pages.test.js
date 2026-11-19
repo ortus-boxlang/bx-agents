@@ -39,8 +39,8 @@ describe( "small helpers", () => {
 	} );
 
 	it( "keeps state in the address without empty values", () => {
-		keepInAddress( "/chat/next/conversations", { q: "x", agent: "", source: null } );
-		expect( location.pathname + location.search ).toBe( "/chat/next/conversations?q=x" );
+		keepInAddress( "/chat/conversations", { q: "x", agent: "", source: null } );
+		expect( location.pathname + location.search ).toBe( "/chat/conversations?q=x" );
 	} );
 
 	it( "makes a file name from a title", () => {

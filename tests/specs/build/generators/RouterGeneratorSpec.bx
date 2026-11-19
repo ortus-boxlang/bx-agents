@@ -36,12 +36,14 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).notToInclude( ".toAi(" );
 			} );
 
-			it( "routes a webui entry to the extension files and nothing else: the page calls the agent API", function() {
+			it( "gives a webui entry no routes of its own: the web app module answers its path, and calls the agent API", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 				var result = generator.generate( discovery, newAppDir() );
 
 				var content = fileRead( result.router );
-				expect( content ).toInclude( 'get( "/chat/ext/:extension/:file-regex:(.+)" ).toHandler( "AgentApi.extensionFile" )' );
+				// the module's router answers <path>/ext, /login and /logout (ColdBox puts it ahead of the app's routes)
+				expect( content ).notToInclude( "/chat/ext/" );
+				expect( content ).notToInclude( "ChatAuth" );
 				// the page's own calls go to the reserved path, behind the one gate, so no second set of routes exists
 				expect( content ).notToInclude( "ChatUi" );
 				expect( content ).notToInclude( "/chat/api" );

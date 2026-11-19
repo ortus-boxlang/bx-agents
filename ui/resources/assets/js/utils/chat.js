@@ -1,6 +1,6 @@
 /**
- * Ways into the chat. Until the chat moves into this app, the chat is the current page (config.chatUrl), which opens
- * the conversation kept under CONVERSATION_KEY when it loads, as its own list does.
+ * Ways into the chat (config.chatUrl), which opens the conversation kept under CONVERSATION_KEY when it loads, as its
+ * own list does.
  */
 export const CONVERSATION_KEY = "bxagents_webui_conversation";
 

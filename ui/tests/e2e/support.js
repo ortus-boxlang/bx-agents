@@ -31,7 +31,7 @@ export { expect };
  * Opens the chat on a new conversation, so a test never sees another test's messages.
  *
  * @param {import("@playwright/test").Page} page The page
- * @param {string} [path] The chat, under /chat/: "./" for the current page, "next/" for the new app
+ * @param {string} [path] The chat, under /chat/: "./" for the current page, "./" for the new app
  * @returns {Promise<void>}
  */
 export async function freshChat( page, path = "./" ) {

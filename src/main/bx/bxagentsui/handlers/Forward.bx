@@ -1,0 +1,80 @@
+/**
+ * The few addresses under the app's path that belong to the generated app rather than to this module: the sign-in form
+ * and its POST target, sign out, and the files of the project's folder extensions. ColdBox puts a module's routes ahead of the
+ * app's own, so the module answers them and hands each one to the app's handler (ChatAuth, AgentApi) unchanged.
+ */
+class {
+
+	/**
+	 * GET <path>/login.html (or <path>/login): the sign-in form the build wrote (config/bxagentsui-login.html). 404 when the agent has no
+	 * accounts.
+	 *
+	 * @event The request context
+	 * @rc The request collection
+	 * @prc The private request collection
+	 */
+	function form( event, rc, prc ) {
+		var file = expandPath( "/config/bxagentsui-login.html" )
+		if ( !signedInAgent( event ) ) {
+			return
+		}
+		if ( !fileExists( file ) ) {
+			event.renderData( type = "text", data = "Not found", statusCode = 404 )
+			return
+		}
+		event.renderData( type = "html", data = fileRead( file ) )
+	}
+
+	/**
+	 * POST <path>/login: the sign-in form's target. 404 when the agent has no accounts.
+	 *
+	 * @event The request context
+	 * @rc The request collection
+	 * @prc The private request collection
+	 */
+	function login( event, rc, prc ) {
+		if ( !signedInAgent( event ) ) {
+			return
+		}
+		return runEvent( event = "ChatAuth.doLogin" )
+	}
+
+	/**
+	 * GET or POST <path>/logout. 404 when the agent has no accounts.
+	 *
+	 * @event The request context
+	 * @rc The request collection
+	 * @prc The private request collection
+	 */
+	function logout( event, rc, prc ) {
+		if ( !signedInAgent( event ) ) {
+			return
+		}
+		return runEvent( event = "ChatAuth.doLogout" )
+	}
+
+	/**
+	 * GET <path>/ext/:extension/:file: a file of an extension's web/ folder.
+	 *
+	 * @event The request context
+	 * @rc The request collection (extension, file)
+	 * @prc The private request collection
+	 */
+	function extension( event, rc, prc ) {
+		return runEvent( event = "AgentApi.extensionFile" )
+	}
+
+	/**
+	 * @event The request context
+	 *
+	 * @return true when the agent has accounts; else answers 404 and returns false
+	 */
+	private boolean function signedInAgent( required event ) {
+		if ( getModuleSettings( "bxagentsui" ).signIn ) {
+			return true
+		}
+		arguments.event.renderData( type = "text", data = "Not found", statusCode = 404 )
+		return false
+	}
+
+}

@@ -462,6 +462,10 @@ class {
 				}
 
 				if ( config.exposes == "webui" ) {
+					// the web app is a module mounted at this path: at the root it would answer every address, the agent API's too
+					if ( isSimpleValue( config.path ?: "" ) && len( config.path ?: "" ) && !len( normalizeExposurePath( config.path ) ) ) {
+						arguments.errors.append( "Gateway [#gateway.name#] is a 'webui' at the root path [/] - the web app needs a path of its own, so the agent API and the sign-in stay reachable (e.g. ""/chat"")" )
+					}
 					validateOfferedProfiles( "Gateway [#gateway.name#]", config, arguments.profileNames, arguments.errors )
 					offeredByWebUi[ isArray( config.profiles ?: "" ) ? config.profiles.map( p => toString( p ).lcase() ).sort( "text" ).toList() : "" ] = gateway.name
 					validateWebUiTheme( gateway.name, config.theme ?: {}, arguments.errors )

@@ -4,13 +4,13 @@
  */
 import { test, expect } from "./support.js";
 
-const NEXT = "/chat/next";
+const APP = "/chat";
 
 test.describe( "Data and backups", () => {
 	test( "shows where everything is kept and makes a backup that shows in the list", async ( { page, errors } ) => {
 		// count the backups only once they have loaded
 		const listed = page.waitForResponse( r => r.url().endsWith( "/__bxagents/data/backups" ) );
-		await page.goto( NEXT + "/data" );
+		await page.goto( APP + "/data" );
 		await listed;
 		await expect( page.getByText( "Data home:" ) ).toBeVisible();
 		await expect( page.getByRole( "table", { name: "Folders of the data home" } ).locator( "tbody tr" ).first() ).toBeVisible();
@@ -27,7 +27,7 @@ test.describe( "Data and backups", () => {
 			restored = true;
 			return route.fulfill( { json: { note: "Scheduled." } } );
 		} );
-		await page.goto( NEXT + "/data" );
+		await page.goto( APP + "/data" );
 		const restore = page.getByRole( "button", { name: /^Restore / } ).first();
 		await expect( restore ).toBeVisible();
 		await restore.click();
@@ -39,7 +39,7 @@ test.describe( "Data and backups", () => {
 
 test.describe( "Logs", () => {
 	test( "opens the area and search from the address, and keeps a new area in it", async ( { page, errors } ) => {
-		await page.goto( NEXT + "/logs/agent?q=nothing-matches-this" );
+		await page.goto( APP + "/logs/agent?q=nothing-matches-this" );
 		await expect( page.getByRole( "searchbox", { name: "Search the log" } ) ).toHaveValue( "nothing-matches-this" );
 		await expect( page.locator( ".pg-tabs a[aria-current='page']" ) ).toContainText( "Agent" );
 		await expect( page.getByText( "Nothing logged here yet that matches." ) ).toBeVisible();
@@ -52,7 +52,7 @@ test.describe( "Logs", () => {
 	} );
 
 	test( "asks the API again with the level filter", async ( { page } ) => {
-		await page.goto( NEXT + "/logs/api" );
+		await page.goto( APP + "/logs/api" );
 		const asked = page.waitForRequest( req => req.url().includes( "/__bxagents/logs?" ) && req.url().includes( "level=error" ) );
 		await page.getByRole( "combobox", { name: "Level" } ).selectOption( "error" );
 		await asked;
@@ -70,12 +70,12 @@ test.describe( "Gateways", () => {
 
 	test( "shows each gateway's state, credentials, last error with its log, and its chats", async ( { page, errors } ) => {
 		await page.route( "**/__bxagents/gateways", route => route.fulfill( { json: answer } ) );
-		await page.goto( NEXT + "/gateways" );
+		await page.goto( APP + "/gateways" );
 		const slack = page.locator( "li.card" ).filter( { hasText: "slack" } ).first();
 		await expect( slack.locator( ".chip.bad" ) ).toHaveText( "Failing" );
 		await expect( slack.getByText( "SLACK_TOKEN: NOT SET" ) ).toBeVisible();
 		await expect( slack.getByText( /Last error 2026-11-18 09:00: invalid_auth/ ) ).toBeVisible();
-		await expect( slack.getByRole( "link", { name: "Open log" } ) ).toHaveAttribute( "href", "/chat/next/logs/gateways?q=slack" );
+		await expect( slack.getByRole( "link", { name: "Open log" } ) ).toHaveAttribute( "href", "/chat/logs/gateways?q=slack" );
 		await expect( slack.getByRole( "cell", { name: "2026-11-18 09:30" } ) ).toBeVisible();
 		await expect( page.getByRole( "button", { name: "Reconnect gone" } ) ).toBeDisabled();
 		expect( errors ).toEqual( [] );
@@ -84,14 +84,14 @@ test.describe( "Gateways", () => {
 	test( "reconnects a gateway and says so", async ( { page } ) => {
 		await page.route( "**/__bxagents/gateways", route => route.fulfill( { json: answer } ) );
 		await page.route( "**/__bxagents/gateways/reconnect", route => route.fulfill( { json: { success: true } } ) );
-		await page.goto( NEXT + "/gateways" );
+		await page.goto( APP + "/gateways" );
 		await page.getByRole( "button", { name: "Reconnect slack" } ).click();
 		await expect( page.locator( ".toast" ).filter( { hasText: "Reconnected slack." } ) ).toBeVisible();
 	} );
 
 	test( "says when nothing is set up", async ( { page } ) => {
 		await page.route( "**/__bxagents/gateways", route => route.fulfill( { json: { gateways: [] } } ) );
-		await page.goto( NEXT + "/gateways" );
+		await page.goto( APP + "/gateways" );
 		await expect( page.getByText( "No gateways are set up" ) ).toBeVisible();
 	} );
 } );

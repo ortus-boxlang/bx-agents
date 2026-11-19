@@ -23,6 +23,8 @@ export default async function globalSetup( config ) {
 		if ( user === "ada" ) {
 			// the first turn of a fresh server compiles the whole path once: do it here, with a long wait
 			await page.waitForSelector( "#input" );
+			// the remembered conversation loads after the page: let it, so it cannot replace the turn below
+			await page.waitForLoadState( "networkidle" );
 			await page.fill( "#input", "warm up" );
 			await page.click( "#sendBtn" );
 			await page.waitForFunction( () => /scripted answer/.test( document.querySelector( "#messages" ).textContent ), null, { timeout: 180_000 } );

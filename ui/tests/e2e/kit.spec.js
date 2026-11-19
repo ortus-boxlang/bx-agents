@@ -1,9 +1,9 @@
 /**
- * The kit (/chat/next/_kit, a dev build only): every partial and magic of the web app works as documented.
+ * The kit (/chat/_kit, a dev build only): every partial and magic of the web app works as documented.
  */
 import { test, expect } from "./support.js";
 
-const KIT = "/chat/next/_kit";
+const KIT = "/chat/_kit";
 
 test.beforeEach( async ( { page } ) => {
 	await page.goto( KIT );

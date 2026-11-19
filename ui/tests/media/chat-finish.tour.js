@@ -19,7 +19,7 @@ export default async function tour( page, shot ) {
 		? route.fulfill( { json: { success: true, conversationId: "researcher-" + Date.now() } } )
 		: route.fallback() );
 
-	await page.goto( "next/" );
+	await page.goto( "./" );
 	await page.waitForLoadState( "networkidle" );
 	await page.click( "#newBtn" );
 	await page.waitForLoadState( "networkidle" );
@@ -40,7 +40,7 @@ export default async function tour( page, shot ) {
 		await new Promise( done => setTimeout( done, 5000 ) );
 		return route.fulfill( { contentType: "text/event-stream", body: "data: [DONE]\n\n" } ).catch( () => {} );
 	} );
-	await page.goto( "next/" );
+	await page.goto( "./" );
 	await page.waitForLoadState( "networkidle" );
 	await page.locator( "#input" ).pressSequentially( "Take your time", { delay: 40 } );
 	await page.keyboard.press( "Enter" );
@@ -51,14 +51,14 @@ export default async function tour( page, shot ) {
 	await page.locator( "#confirmDialog" ).getByRole( "button", { name: "Cancel" } ).click();
 	await page.unroute( "**/__bxagents/stream" );
 
-	await page.route( "**/chat/next/settings", async route => {
+	await page.route( "**/chat/settings", async route => {
 		const res = await route.fetch();
 		await route.fulfill( { response: res, body: ( await res.text() ).replace( "\"signIn\":true", "\"signIn\":false" ) } );
 	} );
 	await page.route( "**/__bxagents/**", route => route.request().headers()[ "x-bxagents-token" ] === "s3cret"
 		? route.fallback()
 		: route.fulfill( { status: 401, json: { error: "Unauthorized" } } ) );
-	await page.goto( "next/settings" );
+	await page.goto( "settings" );
 	await page.locator( "#keyPanel" ).waitFor();
 	await page.locator( "#keyInput" ).pressSequentially( "s3cret", { delay: 60 } );
 	await pause( 500 );

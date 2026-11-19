@@ -4,6 +4,11 @@
 class {
 
 	function configure() {
+		// what the generated app answers under the same path (see Forward): sign in, sign out, extension files
+		// /login.html reaches here as /login (ColdBox reads the extension as the format): GET is the form, POST its target
+		route( "/login" ).withAction( { GET : "form", POST : "login" } ).toHandler( "Forward" )
+		route( "/logout" ).to( "Forward.logout" )
+		get( "/ext/:extension/:file-regex:(.+)" ).to( "Forward.extension" )
 		route( "/" ).to( "Main.index" )
 		// every partial and magic on one page, in a dev build only (see Main.kit)
 		route( "/_kit" ).to( "Main.kit" )

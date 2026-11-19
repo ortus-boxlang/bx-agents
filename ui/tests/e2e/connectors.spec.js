@@ -4,7 +4,7 @@
  */
 import { test, expect } from "./support.js";
 
-const NEXT = "/chat/next";
+const APP = "/chat";
 
 const catalog = () => ( {
 	success   : true,
@@ -44,7 +44,7 @@ async function routeCatalog( page ) {
 
 test( "shows the catalog: tabs with counts, the banner, states and what each person may do", async ( { page, errors } ) => {
 	await routeCatalog( page );
-	await page.goto( NEXT + "/connectors" );
+	await page.goto( APP + "/connectors" );
 	await expect( page.locator( ".pg-tabs a", { hasText: "Needs attention" } ) ).toContainText( "1" );
 	await expect( page.getByText( "Catalog: 3 of 4 connectors available." ) ).toBeVisible();
 	await expect( page.getByText( "Left out: stripe." ) ).toBeVisible();
@@ -67,7 +67,7 @@ test( "shows the catalog: tabs with counts, the banner, states and what each per
 
 test( "connects with a token: asks to confirm the risk, sends the options, and clears the token", async ( { page } ) => {
 	const posted = await routeCatalog( page );
-	await page.goto( NEXT + "/connectors" );
+	await page.goto( APP + "/connectors" );
 	await page.getByRole( "button", { name: "Connect Linear" } ).click();
 	const dialog = page.getByRole( "dialog", { name: "Connect Linear" } );
 	await expect( dialog.getByText( "High risk." ) ).toBeVisible();
@@ -90,7 +90,7 @@ test( "a sign in hides the token options and offers the link the server answered
 	await page.addInitScript( () => {
 		window.open = () => null;
 	} );
-	await page.goto( NEXT + "/connectors" );
+	await page.goto( APP + "/connectors" );
 	await page.getByRole( "button", { name: "Connect Linear" } ).click();
 	const dialog = page.getByRole( "dialog", { name: "Connect Linear" } );
 	await dialog.getByLabel( "Sign in with Linear" ).check();
@@ -104,7 +104,7 @@ test( "a sign in hides the token options and offers the link the server answered
 
 test( "the tools drawer switches tools, shows locks and filters", async ( { page } ) => {
 	const posted = await routeCatalog( page );
-	await page.goto( NEXT + "/connectors" );
+	await page.goto( APP + "/connectors" );
 	await page.getByRole( "button", { name: "Tools of GitHub" } ).click();
 	const drawer = page.getByRole( "dialog", { name: "GitHub tools" } );
 	await expect( drawer.getByText( "2 of 3 on." ) ).toBeVisible();
@@ -123,13 +123,13 @@ test( "the tools drawer switches tools, shows locks and filters", async ( { page
 
 test( "a member cannot switch a local program on", async ( { member } ) => {
 	await member.route( "**/__bxagents/connectors", route => route.fulfill( { json: catalog() } ) );
-	await member.goto( NEXT + "/connectors" );
+	await member.goto( APP + "/connectors" );
 	const git = member.getByRole( "article", { name: "Git", exact: true } );
 	await expect( git ).toContainText( "An admin switches it on for everyone who uses this agent." );
 	await expect( git.getByRole( "button" ) ).toHaveCount( 0 );
 } );
 
 test( "lists the dev agent's real catalog", async ( { page } ) => {
-	await page.goto( NEXT + "/connectors" );
+	await page.goto( APP + "/connectors" );
 	await expect( page.getByRole( "article" ).first() ).toBeVisible();
 } );

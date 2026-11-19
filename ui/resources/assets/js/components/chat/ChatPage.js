@@ -6,7 +6,7 @@ import { vaultAskUrl, vaultRequestOf } from "../../utils/vault-request.js";
 import { replyEffects, slashMatches } from "../../utils/reply.js";
 import { drawSlots } from "../../utils/extensions.js";
 
-/** Where this browser keeps the profile (model) for the next messages: the same key as the current page */
+/** Where this browser keeps the profile (model) for the next messages (the Settings page uses it too) */
 export const PROFILE_KEY = "bxagents_webui_profile";
 
 /**
@@ -35,7 +35,7 @@ export function talkBanner( agent, agents ) {
 /**
  * The chat: the list of conversations (GET /sessions; POST /sessions, /sessions/rename, /sessions/delete), the
  * transcript (GET /history) and a turn streamed with $sse (POST /stream), steered while it runs (POST /steer) or stopped
- * (POST /cancel). The open conversation is kept under the same key as the current page, so both open the same one.
+ * (POST /cancel). The open conversation is kept in this browser (CONVERSATION_KEY), so a reload opens it again.
  *
  * The transcript is plain data (messages) drawn by Alpine: { role: "you" | "agent" | "error" | "reply" | "approval" }.
  * An answer is a turn from utils/turn.js, its Markdown drawn with $md. A slash command (POST /command) answers a Reply
@@ -688,7 +688,7 @@ export function chatPage() {
 			this.profile = this.profiles.some( p => p.name === remembered ) ? remembered : "";
 		},
 
-		/** Keeps the chosen profile in this browser, as the current page and the Settings page do. */
+		/** Keeps the chosen profile in this browser, as the Settings page does. */
 		pickProfile() {
 			try {
 				localStorage.setItem( PROFILE_KEY, this.profile );

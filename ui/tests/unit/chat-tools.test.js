@@ -40,7 +40,7 @@ describe( "vault request", () => {
 		expect( vaultRequestOf( [ { name: "vault_request", args: "{\"name\":\"GH_TOKEN\",\"scope\":\"agent\"}" } ] ) ).toEqual( { name: "GH_TOKEN", why: "", scope: "agent" } );
 		expect( vaultRequestOf( [ { name: "vault_request", args: "{\"name\":\"bad name\"}" } ] ) ).toBeNull();
 		expect( vaultRequestOf( [ { name: "vault_request", args: "{\"na" } ] ) ).toBeNull();
-		expect( vaultAskUrl( "/chat/next", { name: "A", scope: "user", why: "x y" } ) ).toBe( "/chat/next/vault?ask=A&scope=user&why=x+y" );
+		expect( vaultAskUrl( "/chat", { name: "A", scope: "user", why: "x y" } ) ).toBe( "/chat/vault?ask=A&scope=user&why=x+y" );
 	} );
 } );
 

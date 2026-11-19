@@ -351,11 +351,8 @@ class {
 	 * @return A bare `route(...).toAi(...)` or `route(...).toMCP(...)` statement string
 	 */
 	private string function renderExposureRoute( required struct entry, required boolean gated ) {
-		// Normalized exactly as WebUiGenerator normalizes the same value when it
-		// mounts the chat shell, so the two generators can never disagree about
-		// where an entry lives: a path of "/chat/" mounts at <appDir>/chat, and
-		// without this the router would register "/chat//login" and every
-		// sign-in from the shell would 404.
+		// Normalized exactly as WebUiGenerator and WebAppModule normalize the same value, so the generators can never
+		// disagree about where an entry lives: a path of "/chat/" mounts at /chat.
 		var path = Strings::normalizePath( arguments.entry.config.path ?: "" )
 
 		if ( arguments.entry.config.exposes == "agent" ) {
@@ -364,24 +361,10 @@ class {
 		}
 
 		if ( arguments.entry.config.exposes == "webui" ) {
-			// The static chat shell itself (<path>/index.html) is a real file under the app's own webroot - see WebUiGenerator -
-			// so it is served directly. What it calls is the agent API at the reserved path (see ApiPath), the same one the
-			// terminal and the gateways use, so the only routes here are the extension files and the sign-in.
-			// Sign-in, only when this entry declares accounts. The form itself is
-			// the static login.html mounted beside the shell, so only its POST
-			// target and logout need routes.
-			var authRoutes = ( arguments.entry.config.users ?: [] ).len()
-				? [
-					'post( "#Strings::bxLiteral( path )#/login" ).toHandler( "ChatAuth.doLogin" )',
-					'post( "#Strings::bxLiteral( path )#/logout" ).toHandler( "ChatAuth.doLogout" )',
-					'get( "#Strings::bxLiteral( path )#/logout" ).toHandler( "ChatAuth.doLogout" )'
-				]
-				: []
-
-			return [
-				// the files of an extension's web/ folder, read from the extension itself
-				'get( "#Strings::bxLiteral( path )#/ext/:extension/:file-regex:(.+)" ).toHandler( "AgentApi.extensionFile" )'
-			].append( authRoutes, true ).toList( char( 10 ) & char( 9 ) & char( 9 ) )
+			// The web app is the bxagentsui module mounted at this path (see WebAppModule), and its own router answers the
+			// sign-in, sign out and extension file addresses too: ColdBox puts a module's routes ahead of the app's, so the
+			// app has none of its own here.
+			return "// #Strings::bxLiteral( path )#: the web app module (bxagentsui)"
 		}
 
 		var target = arguments.entry.config.target ?: ""

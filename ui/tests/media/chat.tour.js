@@ -7,7 +7,7 @@
  */
 export default async function tour( page, shot ) {
 	const pause = ms => page.waitForTimeout( ms );
-	await page.goto( "next/" );
+	await page.goto( "./" );
 	await page.waitForLoadState( "networkidle" );
 	await page.click( "#newBtn" );
 	await page.waitForLoadState( "networkidle" );

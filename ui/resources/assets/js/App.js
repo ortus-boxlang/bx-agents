@@ -9,7 +9,7 @@ import persist from "@alpinejs/persist";
 import { readConfig } from "./utils/config.js";
 import { createApi } from "./utils/api.js";
 import { streamEvents } from "./utils/sse.js";
-import { renderMarkdown, listenForCodeCopy } from "./utils/markdown.js";
+import { renderMarkdown, listenForCodeCopy, useBoxLangWords } from "./utils/markdown.js";
 import * as format from "./utils/format.js";
 import { session } from "./stores/session.js";
 import { theme } from "./stores/theme.js";
@@ -55,7 +55,7 @@ Alpine.store( "nav", nav( Alpine ) );
 Alpine.store( "toast", toast() );
 Alpine.store( "confirm", confirm() );
 Alpine.store( "password", password() );
-// with accounts a refusal means the session ended: to the sign-in form, as the current page does; without, the password
+// with accounts a refusal means the session ended: to the sign-in form; without, the password
 window.addEventListener( "bxagents:refused", () => {
 	if ( config.signIn && config.loginUrl ) {
 		window.location.href = config.loginUrl;
@@ -105,4 +105,11 @@ window.Alpine = Alpine;
 // what the extensions' scripts use: made now, before their deferred scripts run (utils/extensions.js)
 window.bxagents = createBxagents( config.apiBase, document );
 listenForCodeCopy( document );
+// the BoxLang and CFML word lists the terminal uses, for coloured code (written by the generator, see WebAppModule)
+try {
+	const grammars = document.getElementById( "bxagents-grammars" );
+	useBoxLangWords( grammars ? JSON.parse( grammars.textContent ) : {} );
+} catch ( e ) {
+	// code is then shown uncoloured
+}
 Alpine.start();
