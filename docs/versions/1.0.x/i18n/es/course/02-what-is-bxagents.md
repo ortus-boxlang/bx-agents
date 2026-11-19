@@ -55,7 +55,7 @@ convierte a la derecha:
 
 ::: columns
 ::: column
-```
+```text
 your-agent/
 ├── Agent.yaml
 ├── instructions.md
@@ -70,7 +70,7 @@ your-agent/
 ```
 :::
 ::: column
-```
+```text
 .build/app/
 ├── Application.bx
 ├── config/

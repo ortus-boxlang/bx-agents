@@ -12,7 +12,7 @@ tags: [guides, examples, schedules]
 
 ## El proyecto
 
-```
+```text
 scheduled-agent/
 ├── Agent.yaml
 ├── instructions.md

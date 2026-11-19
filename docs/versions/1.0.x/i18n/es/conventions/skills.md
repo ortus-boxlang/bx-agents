@@ -10,7 +10,7 @@ tags: [conventions, skills]
 
 Cada subcarpeta inmediata de `skills/` que contiene un archivo `SKILL.md` es una skill, siguiendo la convención de Claude Agent Skills: frontmatter YAML (`name`, `description`) seguido de un cuerpo de instrucciones de formato libre.
 
-```
+```text
 skills/
 └── greeting/
     └── SKILL.md

@@ -7,7 +7,7 @@ import { test, expect } from "./support.js";
 const APP = "/chat";
 
 test.describe( "Data and backups", () => {
-	test( "shows where everything is kept and makes a backup that shows in the list", async ( { page, errors } ) => {
+	test( "shows where everything is kept and makes a backup that shows in the list", async( { page, errors } ) => {
 		// count the backups only once they have loaded
 		const listed = page.waitForResponse( r => r.url().endsWith( "/__bxagents/data/backups" ) );
 		await page.goto( APP + "/data" );
@@ -21,7 +21,7 @@ test.describe( "Data and backups", () => {
 		expect( errors ).toEqual( [] );
 	} );
 
-	test( "asks before a restore and does nothing on Cancel", async ( { page } ) => {
+	test( "asks before a restore and does nothing on Cancel", async( { page } ) => {
 		let restored = false;
 		await page.route( "**/__bxagents/data/restore", route => {
 			restored = true;
@@ -38,7 +38,7 @@ test.describe( "Data and backups", () => {
 } );
 
 test.describe( "Logs", () => {
-	test( "opens the area and search from the address, and keeps a new area in it", async ( { page, errors } ) => {
+	test( "opens the area and search from the address, and keeps a new area in it", async( { page, errors } ) => {
 		await page.goto( APP + "/logs/agent?q=nothing-matches-this" );
 		await expect( page.getByRole( "searchbox", { name: "Search the log" } ) ).toHaveValue( "nothing-matches-this" );
 		await expect( page.locator( ".pg-tabs a[aria-current='page']" ) ).toContainText( "Agent" );
@@ -51,7 +51,7 @@ test.describe( "Logs", () => {
 		expect( errors ).toEqual( [] );
 	} );
 
-	test( "asks the API again with the level filter", async ( { page } ) => {
+	test( "asks the API again with the level filter", async( { page } ) => {
 		await page.goto( APP + "/logs/api" );
 		const asked = page.waitForRequest( req => req.url().includes( "/__bxagents/logs?" ) && req.url().includes( "level=error" ) );
 		await page.getByRole( "combobox", { name: "Level" } ).selectOption( "error" );
@@ -61,14 +61,20 @@ test.describe( "Logs", () => {
 
 test.describe( "Gateways", () => {
 	const answer = {
-		gateways: [
-			{ name       : "slack", type       : "slack", state      : "failing", credentials: [ { env: "SLACK_TOKEN", set: false } ],
-				lastError  : { message: "invalid_auth", at: "2026-11-18T09:00:00Z" }, chats      : [ { chatId: "C1", threadId: "", lastSeen: Date.UTC( 2026, 10, 18, 9, 30 ) } ] },
+		gateways : [
+			{
+				name        : "slack",
+				type        : "slack",
+				state       : "failing",
+				credentials : [ { env: "SLACK_TOKEN", set: false } ],
+				lastError   : { message: "invalid_auth", at: "2026-11-18T09:00:00Z" },
+				chats       : [ { chatId: "C1", threadId: "", lastSeen: Date.UTC( 2026, 10, 18, 9, 30 ) } ]
+			},
 			{ name: "gone", type: "telegram", state: "missing", credentials: [], chats: [] }
 		]
 	};
 
-	test( "shows each gateway's state, credentials, last error with its log, and its chats", async ( { page, errors } ) => {
+	test( "shows each gateway's state, credentials, last error with its log, and its chats", async( { page, errors } ) => {
 		await page.route( "**/__bxagents/gateways", route => route.fulfill( { json: answer } ) );
 		await page.goto( APP + "/gateways" );
 		const slack = page.locator( "li.card" ).filter( { hasText: "slack" } ).first();
@@ -81,7 +87,7 @@ test.describe( "Gateways", () => {
 		expect( errors ).toEqual( [] );
 	} );
 
-	test( "reconnects a gateway and says so", async ( { page } ) => {
+	test( "reconnects a gateway and says so", async( { page } ) => {
 		await page.route( "**/__bxagents/gateways", route => route.fulfill( { json: answer } ) );
 		await page.route( "**/__bxagents/gateways/reconnect", route => route.fulfill( { json: { success: true } } ) );
 		await page.goto( APP + "/gateways" );
@@ -89,7 +95,7 @@ test.describe( "Gateways", () => {
 		await expect( page.locator( ".toast" ).filter( { hasText: "Reconnected slack." } ) ).toBeVisible();
 	} );
 
-	test( "says when nothing is set up", async ( { page } ) => {
+	test( "says when nothing is set up", async( { page } ) => {
 		await page.route( "**/__bxagents/gateways", route => route.fulfill( { json: { gateways: [] } } ) );
 		await page.goto( APP + "/gateways" );
 		await expect( page.getByText( "No gateways are set up" ) ).toBeVisible();

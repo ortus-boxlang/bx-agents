@@ -11,9 +11,9 @@ describe( "memory helpers", () => {
 } );
 
 describe( "talking to an agent", () => {
-	it( "does not leave the page when the server will not start a conversation", async () => {
+	it( "does not leave the page when the server will not start a conversation", async() => {
 		localStorage.setItem( CONVERSATION_KEY, "kept" );
-		const api = { post: vi.fn( async () => ( { ok: false, data: null } ) ) };
+		const api = { post: vi.fn( async() => ( { ok: false, data: null } ) ) };
 		expect( await talkTo( api, "/chat", "helper" ) ).toBe( false );
 		expect( api.post ).toHaveBeenCalledWith( "/sessions", { agent: "helper" } );
 		expect( localStorage.getItem( CONVERSATION_KEY ) ).toBe( "kept" );

@@ -5,12 +5,12 @@ import { test, expect } from "./support.js";
 
 const KIT = "/chat/_kit";
 
-test.beforeEach( async ( { page } ) => {
+test.beforeEach( async( { page } ) => {
 	await page.goto( KIT );
 	await expect( page.locator( "#kit" ) ).toBeVisible();
 } );
 
-test( "tabs, search and switch write their component's variables", async ( { page, errors } ) => {
+test( "tabs, search and switch write their component's variables", async( { page, errors } ) => {
 	await page.click( "#kit-tabs [data-tab='two']" );
 	await expect( page.locator( "#kit-tab" ) ).toHaveText( "two" );
 	await expect( page.locator( "#kit-tabs [data-tab='two']" ) ).toHaveAttribute( "aria-current", "page" );
@@ -21,12 +21,12 @@ test( "tabs, search and switch write their component's variables", async ( { pag
 	expect( errors ).toEqual( [] );
 } );
 
-test( "a field ties its help line to the control", async ( { page } ) => {
+test( "a field ties its help line to the control", async( { page } ) => {
 	await expect( page.locator( "#kit-name" ) ).toHaveAttribute( "aria-describedby", "kit-name-help" );
 	await expect( page.locator( "#kit-name-help" ) ).toHaveText( "A help line under the control." );
 } );
 
-test( "the modal and the drawer open, and Escape closes them", async ( { page } ) => {
+test( "the modal and the drawer open, and Escape closes them", async( { page } ) => {
 	await page.click( "#kit-open-modal" );
 	const modal = page.locator( "dialog.dlg[open]" );
 	await expect( modal ).toContainText( "Escape or Close shuts it" );
@@ -38,7 +38,7 @@ test( "the modal and the drawer open, and Escape closes them", async ( { page } 
 	await expect( page.locator( "dialog.drawer[open]" ) ).toHaveCount( 0 );
 } );
 
-test( "$confirm answers yes, no, and no on Escape", async ( { page } ) => {
+test( "$confirm answers yes, no, and no on Escape", async( { page } ) => {
 	await page.click( "#kit-ask" );
 	await expect( page.locator( "#confirmTitle" ) ).toHaveText( "Delete this?" );
 	await page.click( "#confirmYes" );
@@ -51,14 +51,14 @@ test( "$confirm answers yes, no, and no on Escape", async ( { page } ) => {
 	await expect( page.locator( "#kit-answer" ) ).toHaveText( "no" );
 } );
 
-test( "$toast shows a message in the live region", async ( { page } ) => {
+test( "$toast shows a message in the live region", async( { page } ) => {
 	await page.click( "#kit-toast-ok" );
 	await expect( page.locator( ".toasts .toast.ok" ) ).toContainText( "Saved." );
 	await page.click( "#kit-toast-error" );
 	await expect( page.locator( ".toasts .toast.error" ) ).toContainText( "Could not save." );
 } );
 
-test( "$md draws Markdown and never runs markup; $fmt and the table read the same everywhere", async ( { page } ) => {
+test( "$md draws Markdown and never runs markup; $fmt and the table read the same everywhere", async( { page } ) => {
 	await expect( page.locator( "#kit-markdown strong" ) ).toHaveText( "Bold" );
 	await expect( page.locator( "#kit-markdown img[onerror]" ) ).toHaveCount( 0 );
 	expect( await page.evaluate( () => window.__kitXss ) ).toBeUndefined();

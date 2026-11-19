@@ -10,7 +10,7 @@ export function theme( api ) {
 	const KEY = "bxagents_webui_theme";
 	return {
 		/** @type {string} "light", "dark" or "" (follow the system) */
-		mode: "",
+		mode : "",
 
 		/** @returns {boolean} True when the page is dark now */
 		get dark() {
@@ -22,10 +22,10 @@ export function theme( api ) {
 
 		/** Reads the stored mode and applies it. */
 		init() {
-			let stored = "";
+			let stored;
 			try {
 				stored = localStorage.getItem( KEY ) || "";
-			} catch ( e ) {
+			} catch {
 				stored = "";
 			}
 			this.mode = stored === "dark" || stored === "light" ? stored : "";
@@ -48,7 +48,7 @@ export function theme( api ) {
 				} else {
 					localStorage.removeItem( KEY );
 				}
-			} catch ( e ) {
+			} catch {
 				// the choice still holds for this visit
 			}
 			this.apply();

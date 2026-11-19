@@ -12,12 +12,18 @@ export default async function tour( page, shot ) {
 	await pause( 600 );
 	await shot( "chat-at-chat" );
 
-	await Promise.all( [ page.waitForURL( /login\.html/ ), page.click( "#signOut" ) ] );
+	await Promise.all( [
+		page.waitForURL( /login\.html/ ),
+		page.click( "#signOut" )
+	] );
 	await pause( 600 );
 	await shot( "sign-in-form-at-chat-login" );
 	await page.locator( "input[name=username]" ).pressSequentially( "ada", { delay: 60 } );
 	await page.locator( "input[name=password]" ).pressSequentially( "demo-pass", { delay: 60 } );
-	await Promise.all( [ page.waitForURL( /\/chat\/$/ ), page.keyboard.press( "Enter" ) ] );
+	await Promise.all( [
+		page.waitForURL( /\/chat\/$/ ),
+		page.keyboard.press( "Enter" )
+	] );
 	await page.waitForLoadState( "networkidle" );
 	await page.click( "#newBtn" );
 	await page.waitForLoadState( "networkidle" );
@@ -27,12 +33,22 @@ export default async function tour( page, shot ) {
 	await pause( 800 );
 	await shot( "signed-in-again-and-answered" );
 
-	for ( const id of [ "connectors", "routines", "settings" ] ) {
-		await Promise.all( [ page.waitForURL( new RegExp( "/chat/" + id ) ), page.click( `.nav-item[data-page="${ id }"]` ) ] );
+	for ( const id of [
+		"connectors",
+		"routines",
+		"settings"
+	] ) {
+		await Promise.all( [
+			page.waitForURL( new RegExp( "/chat/" + id ) ),
+			page.click( `.nav-item[data-page="${ id }"]` )
+		] );
 		await page.waitForLoadState( "networkidle" );
 		await pause( 700 );
 		await shot( id + "-page" );
 	}
-	await Promise.all( [ page.waitForURL( /\/chat\/$/ ), page.click( '.nav-item[data-page="chat"]' ) ] );
+	await Promise.all( [
+		page.waitForURL( /\/chat\/$/ ),
+		page.click( ".nav-item[data-page=\"chat\"]" )
+	] );
 	await pause( 600 );
 }

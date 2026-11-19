@@ -8,7 +8,7 @@ export function toast() {
 	let next = 1;
 	return {
 		/** @type {Array<{ id: number, kind: string, text: string }>} What is showing */
-		items: [],
+		items : [],
 
 		/**
 		 * @param {string} text What to say

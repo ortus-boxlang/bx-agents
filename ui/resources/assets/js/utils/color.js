@@ -7,7 +7,11 @@
  * @returns {number} Its WCAG relative luminance
  */
 export function luminance( hex ) {
-	const channels = [ 1, 3, 5 ].map( at => {
+	const channels = [
+		1,
+		3,
+		5
+	].map( at => {
 		const c = parseInt( hex.substr( at, 2 ), 16 ) / 255;
 		return c <= 0.03928 ? c / 12.92 : Math.pow( ( c + 0.055 ) / 1.055, 2.4 );
 	} );

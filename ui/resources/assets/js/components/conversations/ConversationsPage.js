@@ -45,21 +45,21 @@ export function facetChips( counts ) {
 export function conversationsPage() {
 	return {
 		/** @type {{ q: string, source: string|null, agent: string, since: string, before: string, all: boolean, limit: number, offset: number }} */
-		state   : { q: "", source: null, agent: "", since: "", before: "", all: false, limit: 25, offset: 0 },
+		state    : { q: "", source: null, agent: "", since: "", before: "", all: false, limit: 25, offset: 0 },
 		/** @type {boolean} True when the person is an admin (may see everyone's) */
-		admin   : false,
+		admin    : false,
 		/** @type {boolean} True until the list answered */
-		loading : true,
+		loading  : true,
 		/** @type {string} Why the list could not be read */
-		failed  : "",
+		failed   : "",
 		/** @type {Array<object>} The conversations of this page */
-		rows    : [],
+		rows     : [],
 		/** @type {number} How many match in all */
-		total   : 0,
+		total    : 0,
 		/** @type {{ agent?: Object<string, number>, source?: Object<string, number> }} Counts per agent and source */
-		facets  : {},
+		facets   : {},
 		/** @type {string[]} The ids selected */
-		selected: [],
+		selected : [],
 
 		/** @returns {Array<{ name: string, count: number }>} The agents and their counts, when choosing one helps */
 		get agentChips() {
@@ -112,9 +112,9 @@ export function conversationsPage() {
 		refilter() {
 			this.state.offset = 0;
 			keepInAddress( this.$store.session.config.basePath + "/conversations", {
-				q     : this.state.q,
-				agent : this.state.agent,
-				source: this.state.source
+				q      : this.state.q,
+				agent  : this.state.agent,
+				source : this.state.source
 			} );
 			this.load();
 		},
@@ -170,7 +170,12 @@ export function conversationsPage() {
 		toggleAll() {
 			const all = this.allSelected;
 			const ids = this.rows.map( r => r.id );
-			this.selected = all ? this.selected.filter( id => !ids.includes( id ) ) : [ ...new Set( [ ...this.selected, ...ids ] ) ];
+			this.selected = all ? this.selected.filter( id => !ids.includes( id ) ) : [
+				...new Set( [
+					...this.selected,
+					...ids
+				] )
+			];
 		},
 
 		/**
@@ -248,9 +253,9 @@ export function conversationsPage() {
 		async remove( ids ) {
 			const many = ids.length > 1;
 			const yes = await this.$confirm( {
-				title : many ? "Delete " + this.$fmt.countLabel( ids.length, "conversation" ) + "?" : "Delete this conversation?",
-				body  : "Their messages go too. This cannot be undone.",
-				danger: true
+				title  : many ? "Delete " + this.$fmt.countLabel( ids.length, "conversation" ) + "?" : "Delete this conversation?",
+				body   : "Their messages go too. This cannot be undone.",
+				danger : true
 			} );
 			if ( !yes ) {
 				return;

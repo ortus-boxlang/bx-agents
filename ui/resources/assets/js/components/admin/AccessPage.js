@@ -9,27 +9,27 @@ import { keepInAddress } from "../../utils/address.js";
 export function accessPage() {
 	return {
 		/** @type {string} tokens | people */
-		tab          : "tokens",
+		tab           : "tokens",
 		/** @type {boolean} True when this server manages tokens from here */
-		manages      : false,
+		manages       : false,
 		/** @type {Array<object>} The tokens */
-		tokens       : [],
+		tokens        : [],
 		/** @type {boolean} True until the tokens answered */
-		tokensLoading: true,
+		tokensLoading : true,
 		/** @type {string} Why the tokens could not be read */
-		tokensFailed : "",
+		tokensFailed  : "",
 		/** @type {{ name: string, scope: string, expires: string }} The new token form */
-		form         : { name: "", scope: "chat", expires: "" },
+		form          : { name: "", scope: "chat", expires: "" },
 		/** @type {boolean} True while a token is being made */
-		making       : false,
+		making        : false,
 		/** @type {{ name: string, token: string } | null} A token just made: shown once */
-		made         : null,
+		made          : null,
 		/** @type {Array<object>} The accounts */
-		people       : [],
+		people        : [],
 		/** @type {boolean} True until the accounts answered */
-		peopleLoading: true,
+		peopleLoading : true,
 		/** @type {string} Why the accounts could not be read */
-		peopleFailed : "",
+		peopleFailed  : "",
 
 		/** Picks the tab and loads it once the capabilities are known. */
 		async init() {
@@ -81,7 +81,7 @@ export function accessPage() {
 			try {
 				await navigator.clipboard.writeText( this.made.token );
 				this.$toast.success( "Copied." );
-			} catch ( e ) {
+			} catch {
 				this.$toast.error( "Could not copy. Select the token and copy it." );
 			}
 		},

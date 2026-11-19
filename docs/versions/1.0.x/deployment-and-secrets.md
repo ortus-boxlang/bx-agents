@@ -48,7 +48,7 @@ The `.bxa` is **relocatable**: it carries every file the agent reads at runtime 
 
 An optional `.bxaignore` at the project root, one glob pattern per line (`#`-prefixed lines are comments), excludes matching paths from the packaged `.bxa`. Patterns are matched against paths inside the built app (`.build/app`): a pattern with no `/` matches at any depth, one with a `/` is anchored at the app's root, a trailing `/` names a folder and everything under it, and `*` also crosses `/`.
 
-```
+```text
 # .bxaignore
 *.log
 scratch/
@@ -60,7 +60,7 @@ This is on top of a hard-coded, always-on exclusion of `.env`/`.env.*`/dotfiles 
 
 Secrets are never written into `manifest.json` in the first place - the manifest's `agent` block only ever contains safe, structural fields (`name`, `description`, `model`, `environment`). As defense-in-depth, `package` additionally walks the manifest recursively and replaces any struct key that **looks** like a secret with `[REDACTED]`:
 
-```
+```text
 (apikey | api_key | token | secret | password)$   (case-insensitive, any prefix)
 ```
 

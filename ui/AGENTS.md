@@ -32,6 +32,11 @@ A built agent copies the module to `modules/bxagentsui` and writes `config/bxage
 - **One Alpine factory per file**, registered in `App.js` with `Alpine.data( "name", factory )`. JSDoc on every function,
   getter and store member.
 - **Every colour is a token** in `abstracts/_tokens.scss`, so the dark theme and the gateway's theme block work.
+- **Lint with cbGenesis' rules** (`npm run lint`, `lint:scss`, `lint:md`; CI fails on any of them). Differences from
+  cbGenesis, each for a reason: Stylelint's `selector-id-pattern` is off (element ids are camelCase, `#sendBtn`, and
+  views, scripts, browser tests and extensions use them); markdownlint's `code-block-style` and `ul-indent` are off
+  (the docs use indented code inside admonitions and four-space nested lists). A key the API sends in snake_case is
+  written quoted (`"needs_attention"`), so `camelcase` lets it be.
 - **A change needs a test:** a browser test in `ui/tests/e2e` for what a person sees, a TestBox spec for BoxLang code.
 
 ## The building blocks
@@ -61,7 +66,7 @@ The app partials (`views/_components/app/`) are `includes`, `sprite`, `sidebar` 
 | `$api.get( path )`, `$api.post( path, body )` | `{ ok, status, data, error }`, never throws |
 | `$sse( path, { body, onEvent, signal } )` | A stream of the agent API (`/stream`, `/events`, `/resume`) |
 | `$confirm( { title, body, danger } )` | `Promise<boolean>`; never `window.confirm` |
-| `$prompt( { title, label, value } )` | `Promise<string|null>` (null on Cancel); never `window.prompt` |
+| `$prompt( { title, label, value } )` | `Promise<string\|null>` (null on Cancel); never `window.prompt` |
 | `$toast.success( text )`, `$toast.error( text )` | A short message |
 | `$md( text )` | Markdown as safe HTML: the only input `x-html` takes |
 | `$fmt.stampText`, `dayText`, `bytesText`, `countLabel` | Dates, sizes and counts, the same everywhere |
@@ -101,7 +106,7 @@ Bind `:disabled`, `:checked` and other boolean attributes to a real boolean (`!!
 Each pull request carries screenshots and a short video of what it changes. Write a tour in `tests/media/<name>.tour.js`
 (walk the flows, call `shot( "what-it-shows" )` at each step), then with the stack running:
 
-```
+```text
 npm run media -- <name>          # .stack/media/<name>/: NN-*.png, tour.mp4, tour.gif
 ```
 
@@ -110,5 +115,5 @@ pull request: the GIF and the screenshots show inline, the MP4 is a link.
 
 ## Commands (from `ui/`)
 
-`npm run dev` (agent, model and Vite), `npm run stack` (agent and model only), `npm run build`, `npm run lint`,
-`npm test` (unit), `npm run e2e` (browser). A change to a handler, a model or `ModuleConfig.bx` needs the stack restarted; views, Sass and JS do not.
+`npm run dev` (agent, model and Vite), `npm run stack` (agent and model only), `npm run build`, `npm run lint`
+(ESLint), `npm run lint:scss` (Stylelint), `npm run lint:md` (markdownlint), `npm test` (unit), `npm run e2e` (browser). A change to a handler, a model or `ModuleConfig.bx` needs the stack restarted; views, Sass and JS do not.

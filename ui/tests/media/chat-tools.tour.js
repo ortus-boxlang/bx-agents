@@ -34,9 +34,22 @@ export default async function tour( page, shot ) {
 	await idle();
 	await pause( 600 );
 
-	await page.route( "**/__bxagents/stream", route => route.fulfill( { contentType: "text/event-stream", body: sse( [ say( "I will clean the old reports." ), { type: "middleware_stop" }, "[DONE]" ] ) } ) );
+	await page.route( "**/__bxagents/stream", route => route.fulfill( {
+		contentType : "text/event-stream",
+		body        : sse( [
+			say( "I will clean the old reports." ),
+			{ type: "middleware_stop" },
+			"[DONE]"
+		] )
+	} ) );
 	await page.route( "**/__bxagents/pending?*", route => route.fulfill( { json: { pending: true, pendingActions: [ { name: "delete_reports", arguments: { olderThanDays: 30 } } ] } } ) );
-	await page.route( "**/__bxagents/resume", route => route.fulfill( { contentType: "text/event-stream", body: sse( [ say( "Done: **12 reports** older than 30 days are gone." ), "[DONE]" ] ) } ) );
+	await page.route( "**/__bxagents/resume", route => route.fulfill( {
+		contentType : "text/event-stream",
+		body        : sse( [
+			say( "Done: **12 reports** older than 30 days are gone." ),
+			"[DONE]"
+		] )
+	} ) );
 	await page.locator( "#input" ).pressSequentially( "Clean the old reports", { delay: 40 } );
 	await page.keyboard.press( "Enter" );
 	await page.getByRole( "group", { name: "Approval" } ).waitFor();

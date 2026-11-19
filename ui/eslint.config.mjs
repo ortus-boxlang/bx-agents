@@ -1,34 +1,141 @@
 /**
- * ESLint for the web app's scripts, with cbGenesis' style: tabs, double quotes, semicolons, spaces inside parentheses
- * and brackets, aligned object colons.
+ * ESLint for the web app's scripts: the rules of cbGenesis (coldbox-templates/cbgenesis/eslint.config.mjs), as they are,
+ * on top of ESLint's recommended checks. Tabs, double quotes, semicolons, spaces inside parentheses and brackets,
+ * aligned object colons.
  */
 import js from "@eslint/js";
 import globals from "globals";
 
 export default [
-	{ ignores: [ "node_modules/**", "playwright-report/**", "test-results/**", ".stack/**", "dev/**" ] },
-	js.configs.recommended,
+	// ======================================================================
+	// Global ignores
+	// ======================================================================
 	{
-		files          : [ "resources/assets/js/**/*.js", "tests/**/*.js", "scripts/**/*.mjs", "*.js", "*.mjs" ],
-		languageOptions: {
-			ecmaVersion: 2023,
-			sourceType : "module",
-			globals    : { ...globals.browser, ...globals.node }
+		ignores : [
+			"node_modules/**",
+			"playwright-report/**",
+			"test-results/**",
+			".stack/**",
+			"dev/**"
+		]
+	},
+
+	js.configs.recommended,
+
+	// ======================================================================
+	// JavaScript / ES Modules (cbGenesis)
+	// ======================================================================
+	{
+		files : [
+			"resources/assets/js/**/*.js",
+			"tests/**/*.js",
+			"scripts/**/*.mjs",
+			"*.js",
+			"*.mjs"
+		],
+		languageOptions : {
+			ecmaVersion : "latest",
+			sourceType  : "module",
+			globals     : {
+				...globals.browser,
+				...globals.node,
+				Alpine : "readonly"
+			}
 		},
-		rules: {
-			"indent"                   : [ "error", "tab", { SwitchCase: 1 } ],
-			"quotes"                   : [ "error", "double", { avoidEscape: true } ],
-			"semi"                     : [ "error", "always" ],
-			"space-in-parens"          : [ "error", "always", { exceptions: [ "empty" ] } ],
-			"array-bracket-spacing"    : [ "error", "always" ],
-			"computed-property-spacing": [ "error", "always" ],
-			"template-curly-spacing"   : [ "error", "always" ],
-			"key-spacing"              : [ "error", { align: "colon", beforeColon: false, afterColon: true } ],
-			"no-unused-vars"           : [ "error", { args: "after-used", argsIgnorePattern: "^_", caughtErrors: "none" } ],
-			"eqeqeq"                   : [ "error", "always" ],
-			"curly"                    : [ "error", "all" ],
-			"no-var"                   : "error",
-			"prefer-const"             : "error"
+		rules : {
+			"array-bracket-spacing" : [
+				"error",
+				"always",
+				{
+					singleValue     : true,
+					arraysInArrays  : true,
+					objectsInArrays : true
+				}
+			],
+			"array-bracket-newline" : [
+				"error",
+				{ multiline: true }
+			],
+			"array-element-newline" : [
+				"error",
+				{ multiline: true, minItems: 2 }
+			],
+			"camelcase" : [
+				"error",
+				{ properties: "always" }
+			],
+			"indent" : [
+				"error",
+				"tab",
+				{ ignoredNodes: [ "TemplateLiteral" ] }
+			],
+			"keyword-spacing" : [
+				"error",
+				{ after: true, before: true }
+			],
+			"key-spacing" : [
+				"error",
+				{
+					singleLine : {
+						beforeColon : false,
+						afterColon  : true
+					},
+					multiLine : {
+						beforeColon : true,
+						afterColon  : true,
+						align       : "colon"
+					}
+				}
+			],
+			"no-trailing-spaces" : [
+				"error",
+				{
+					skipBlankLines : false,
+					ignoreComments : false
+				}
+			],
+			"no-fallthrough" : "error",
+
+			// allow debugger during development only
+			"no-debugger" : process.env.NODE_ENV === "production" ? "error" : "off",
+
+			"object-curly-newline" : [
+				"error",
+				{ multiline: true }
+			],
+			"object-curly-spacing" : [
+				"error",
+				"always",
+				{
+					objectsInObjects : true,
+					arraysInObjects  : true
+				}
+			],
+			"object-property-newline" : [
+				"error",
+				{ allowAllPropertiesOnSameLine: true }
+			],
+			"prefer-promise-reject-errors" : "off",
+			"quotes"                       : [
+				"error",
+				"double"
+			],
+			"semi" : [
+				"error",
+				"always"
+			],
+			"space-in-parens" : [
+				"error",
+				"always"
+			],
+			"space-before-function-paren" : [
+				"error",
+				{
+					anonymous  : "never",
+					named      : "never",
+					asyncArrow : "never"
+				}
+			]
 		}
 	}
 ];

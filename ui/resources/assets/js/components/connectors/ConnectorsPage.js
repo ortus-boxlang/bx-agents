@@ -8,10 +8,10 @@ import { keepInAddress } from "../../utils/address.js";
  */
 
 export const CONNECTOR_STATES = {
-	available      : { word: "Available", kind: "", icon: "plug" },
-	connected      : { word: "Connected", kind: "ok", icon: "check-circle" },
-	needs_attention: { word: "Needs attention", kind: "bad", icon: "warning-circle" },
-	needs_program  : { word: "Needs a program", kind: "warn", icon: "warning" }
+	available         : { word: "Available", kind: "", icon: "plug" },
+	connected         : { word: "Connected", kind: "ok", icon: "check-circle" },
+	"needs_attention" : { word: "Needs attention", kind: "bad", icon: "warning-circle" },
+	"needs_program"   : { word: "Needs a program", kind: "warn", icon: "warning" }
 };
 export const CONNECTOR_RISK = { low: "Low risk", medium: "Medium risk", high: "High risk" };
 const WAYS = { bearer: { label: "Token", icon: "key" }, oauth: { label: "Sign in", icon: "user" } };
@@ -86,10 +86,10 @@ export function connectorActions( row, admin ) {
 		return { install: !!row.docs, connect: "", tools: false, disconnect: "" };
 	}
 	return {
-		install   : false,
-		connect   : ( !on || row.state === "needs_attention" ) && !memberOfProgram ? ( row.state === "needs_attention" ? "Reconnect" : program ? "Switch on" : "Connect" ) : "",
-		tools     : row.state === "connected",
-		disconnect: on && !memberOfProgram ? ( program ? "Switch off" : "Disconnect" ) : ""
+		install    : false,
+		connect    : ( !on || row.state === "needs_attention" ) && !memberOfProgram ? ( row.state === "needs_attention" ? "Reconnect" : program ? "Switch on" : "Connect" ) : "",
+		tools      : row.state === "connected",
+		disconnect : on && !memberOfProgram ? ( program ? "Switch off" : "Disconnect" ) : ""
 	};
 }
 
@@ -112,27 +112,27 @@ export function connectorRows( rows, tab, query ) {
 export function connectorsPage() {
 	return {
 		/** @type {string} all | connected | attention | agent */
-		tab    : "all",
+		tab     : "all",
 		/** @type {string} A search */
-		query  : "",
+		query   : "",
 		/** @type {boolean} True when the person is an admin */
-		admin  : false,
+		admin   : false,
 		/** @type {boolean} True until the connectors answered */
-		loading: true,
+		loading : true,
 		/** @type {string} Why they could not be read */
-		failed : "",
+		failed  : "",
 		/** @type {object|null} What GET /connectors answered */
-		data   : null,
+		data    : null,
 		/** @type {Array<object>|null} What GET /connect answered (services in Agent.yaml), or null when not offered */
-		servers: null,
+		servers : null,
 		/** @type {{ url: string, name: string }} A sign in link to open, and what it is for */
-		signIn : { url: "", name: "" },
+		signIn  : { url: "", name: "" },
 		/** @type {number|null} The timer that waits for a sign in */
-		timer  : null,
+		timer   : null,
 		/** @type {object} The connect dialog */
-		connect: { open: false, row: null, method: "", ways: [], token: "", options: [], values: {}, confirmed: false, error: "", busy: false, waiting: "" },
+		connect : { open: false, row: null, method: "", ways: [], token: "", options: [], values: {}, confirmed: false, error: "", busy: false, waiting: "" },
 		/** @type {object} The tools drawer */
-		toolsOf: { open: false, row: null, tools: [], query: "", error: "", loading: false, summary: {} },
+		toolsOf : { open: false, row: null, tools: [], query: "", error: "", loading: false, summary: {} },
 
 		/** @returns {Array<object>} Every catalog connector */
 		get rows() {
@@ -203,7 +203,12 @@ export function connectorsPage() {
 		/** Opens the tab from the address and loads. */
 		async init() {
 			const wanted = this.$el.dataset.tab;
-			this.tab = [ "all", "connected", "attention", "agent" ].includes( wanted ) ? wanted : "all";
+			this.tab = [
+				"all",
+				"connected",
+				"attention",
+				"agent"
+			].includes( wanted ) ? wanted : "all";
 			this.$watch( "tab", tab => keepInAddress( this.$store.session.config.basePath + "/connectors/" + tab ) );
 			// a dialog closed by Escape, its X or Cancel: stop waiting for a sign in; the drawer may have changed the counts
 			this.$watch( "connect.open", open => open || this.stopWatching() );
@@ -223,7 +228,10 @@ export function connectorsPage() {
 
 		/** Reads the connectors and the services in Agent.yaml. */
 		async load() {
-			const [ connectors, servers ] = await Promise.all( [
+			const [
+				connectors,
+				servers
+			] = await Promise.all( [
 				this.$api.get( "/connectors" ),
 				this.$store.session.can( "connections" ) ? this.$api.get( "/connect" ) : Promise.resolve( null )
 			] );
@@ -273,7 +281,7 @@ export function connectorsPage() {
 		watchUntil( check, done, gaveUp ) {
 			this.stopWatching();
 			let tries = 0;
-			this.timer = setInterval( async () => {
+			this.timer = setInterval( async() => {
 				tries += 1;
 				await this.load();
 				if ( check() ) {

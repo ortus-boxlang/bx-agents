@@ -9,17 +9,17 @@ export function confirm() {
 	let settle = null;
 	return {
 		/** @type {boolean} True while the dialog is open */
-		open  : false,
-		title : "",
-		body  : "",
-		yes   : "OK",
-		danger: false,
+		open   : false,
+		title  : "",
+		body   : "",
+		yes    : "OK",
+		danger : false,
 		/** @type {boolean} True when the dialog asks for text ($prompt) */
-		input : false,
+		input  : false,
 		/** @type {string} The label of the text box */
-		label : "",
+		label  : "",
 		/** @type {string} The text typed */
-		value : "",
+		value  : "",
 
 		/**
 		 * @param {{ title: string, body?: string, yes?: string, danger?: boolean }} question What to ask

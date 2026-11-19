@@ -7,13 +7,39 @@ import { test, expect } from "./support.js";
 const APP = "/chat";
 
 const catalog = () => ( {
-	success   : true,
-	policy    : { count: 3, excluded: [ "stripe" ] },
-	summary   : { toolsOn: 41, toolWarning: 40, over: true, byConnector: { github: 12 } },
-	connectors: [
-		{ id: "github", name: "GitHub", summary: "Issues and pull requests", state: "connected", connectedWith: "token", ways: [ "bearer", "oauth" ], risk: "medium", host: "api.github.com", icon: "git-branch" },
-		{ id       : "linear", name     : "Linear", summary  : "Issues", state    : "available", ways     : [ "bearer", "oauth" ], risk     : "high", riskNote : "It can delete issues.", host     : "mcp.linear.app",
-			tokenName: "LINEAR_TOKEN", options  : [ { key: "readonly", label: "Read only", type: "boolean", value: true, onlyWith: "bearer" } ] },
+	success    : true,
+	policy     : { count: 3, excluded: [ "stripe" ] },
+	summary    : { toolsOn: 41, toolWarning: 40, over: true, byConnector: { github: 12 } },
+	connectors : [
+		{
+			id            : "github",
+			name          : "GitHub",
+			summary       : "Issues and pull requests",
+			state         : "connected",
+			connectedWith : "token",
+			ways          : [
+				"bearer",
+				"oauth"
+			],
+			risk : "medium",
+			host : "api.github.com",
+			icon : "git-branch"
+		},
+		{
+			id      : "linear",
+			name    : "Linear",
+			summary : "Issues",
+			state   : "available",
+			ways    : [
+				"bearer",
+				"oauth"
+			],
+			risk      : "high",
+			riskNote  : "It can delete issues.",
+			host      : "mcp.linear.app",
+			tokenName : "LINEAR_TOKEN",
+			options   : [ { key: "readonly", label: "Read only", type: "boolean", value: true, onlyWith: "bearer" } ]
+		},
 		{ id: "git", name: "Git", summary: "Local repositories", state: "available", transport: "stdio", program: "uvx", risk: "low" },
 		{ id: "notion", name: "Notion", summary: "Pages", state: "needs_attention", reason: "The token was refused.", ways: [ "oauth" ], risk: "low", host: "mcp.notion.com" }
 	]
@@ -28,21 +54,30 @@ async function routeCatalog( page ) {
 	await page.route( "**/__bxagents/connectors/*", route => {
 		const url = new URL( route.request().url() );
 		if ( route.request().method() === "POST" ) {
-			posted.push( [ url.pathname.split( "/" ).pop(), route.request().postDataJSON() ] );
+			posted.push( [
+				url.pathname.split( "/" ).pop(),
+				route.request().postDataJSON()
+			] );
 		}
 		if ( url.pathname.endsWith( "/tools" ) ) {
-			return route.fulfill( { json: { success: true, summary: { over: false }, tools  : [
-				{ name: "list_issues", description: "List them", on: true, readOnly: true },
-				{ name: "delete_repo", on: false, destructive: true, readOnly: false, locked: true },
-				{ name: "create_issue", on: true, readOnly: false }
-			] } } );
+			return route.fulfill( {
+				json : {
+					success : true,
+					summary : { over: false },
+					tools   : [
+						{ name: "list_issues", description: "List them", on: true, readOnly: true },
+						{ name: "delete_repo", on: false, destructive: true, readOnly: false, locked: true },
+						{ name: "create_issue", on: true, readOnly: false }
+					]
+				}
+			} );
 		}
 		return route.fulfill( { json: { success: true } } );
 	} );
 	return posted;
 }
 
-test( "shows the catalog: tabs with counts, the banner, states and what each person may do", async ( { page, errors } ) => {
+test( "shows the catalog: tabs with counts, the banner, states and what each person may do", async( { page, errors } ) => {
 	await routeCatalog( page );
 	await page.goto( APP + "/connectors" );
 	await expect( page.locator( ".pg-tabs a", { hasText: "Needs attention" } ) ).toContainText( "1" );
@@ -65,7 +100,7 @@ test( "shows the catalog: tabs with counts, the banner, states and what each per
 	expect( errors ).toEqual( [] );
 } );
 
-test( "connects with a token: asks to confirm the risk, sends the options, and clears the token", async ( { page } ) => {
+test( "connects with a token: asks to confirm the risk, sends the options, and clears the token", async( { page } ) => {
 	const posted = await routeCatalog( page );
 	await page.goto( APP + "/connectors" );
 	await page.getByRole( "button", { name: "Connect Linear" } ).click();
@@ -84,7 +119,7 @@ test( "connects with a token: asks to confirm the risk, sends the options, and c
 	expect( await page.content() ).not.toContain( "lin_secret" );
 } );
 
-test( "a sign in hides the token options and offers the link the server answered", async ( { page } ) => {
+test( "a sign in hides the token options and offers the link the server answered", async( { page } ) => {
 	await routeCatalog( page );
 	await page.route( "**/__bxagents/connectors/connect", route => route.fulfill( { json: { success: true, authorizationUrl: "https://mcp.linear.app/authorize?x=1" } } ) );
 	await page.addInitScript( () => {
@@ -102,7 +137,7 @@ test( "a sign in hides the token options and offers the link the server answered
 	await expect( dialog ).toBeHidden();
 } );
 
-test( "the tools drawer switches tools, shows locks and filters", async ( { page } ) => {
+test( "the tools drawer switches tools, shows locks and filters", async( { page } ) => {
 	const posted = await routeCatalog( page );
 	await page.goto( APP + "/connectors" );
 	await page.getByRole( "button", { name: "Tools of GitHub" } ).click();
@@ -114,14 +149,17 @@ test( "the tools drawer switches tools, shows locks and filters", async ( { page
 	// every switch but the locked one can be used (an undefined binding once disabled them all)
 	await expect( drawer.getByRole( "checkbox", { name: "create_issue" } ) ).toBeEnabled();
 	await drawer.getByRole( "checkbox", { name: "list_issues" } ).uncheck();
-	await expect.poll( () => posted.find( p => p[ 0 ] === "tools" ) ).toEqual( [ "tools", { tool: "list_issues", on: false, id: "github" } ] );
+	await expect.poll( () => posted.find( p => p[ 0 ] === "tools" ) ).toEqual( [
+		"tools",
+		{ tool: "list_issues", on: false, id: "github" }
+	] );
 	await drawer.getByRole( "button", { name: "Read only" } ).click();
 	await expect.poll( () => posted.filter( p => p[ 0 ] === "tools" ).length ).toBe( 2 );
 	await drawer.getByRole( "searchbox", { name: "Search the tools" } ).fill( "issue" );
 	await expect( drawer.getByText( "Showing 2 of 3." ) ).toBeVisible();
 } );
 
-test( "a member cannot switch a local program on", async ( { member } ) => {
+test( "a member cannot switch a local program on", async( { member } ) => {
 	await member.route( "**/__bxagents/connectors", route => route.fulfill( { json: catalog() } ) );
 	await member.goto( APP + "/connectors" );
 	const git = member.getByRole( "article", { name: "Git", exact: true } );
@@ -129,7 +167,7 @@ test( "a member cannot switch a local program on", async ( { member } ) => {
 	await expect( git.getByRole( "button" ) ).toHaveCount( 0 );
 } );
 
-test( "lists the dev agent's real catalog", async ( { page } ) => {
+test( "lists the dev agent's real catalog", async( { page } ) => {
 	await page.goto( APP + "/connectors" );
 	await expect( page.getByRole( "article" ).first() ).toBeVisible();
 } );

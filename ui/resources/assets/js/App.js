@@ -109,7 +109,7 @@ listenForCodeCopy( document );
 try {
 	const grammars = document.getElementById( "bxagents-grammars" );
 	useBoxLangWords( grammars ? JSON.parse( grammars.textContent ) : {} );
-} catch ( e ) {
+} catch {
 	// code is then shown uncoloured
 }
 Alpine.start();

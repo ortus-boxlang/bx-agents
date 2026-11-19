@@ -6,19 +6,19 @@
 export function kitPage() {
 	return {
 		/** @type {string} What the last question was answered */
-		answer  : "",
+		answer   : "",
 		/** @type {string} The tab that is open in the tabs example */
-		tab     : "one",
+		tab      : "one",
 		/** @type {boolean} The switch example */
-		on      : true,
+		on       : true,
 		/** @type {boolean} True while the modal example is open */
-		modal   : false,
+		modal    : false,
 		/** @type {boolean} True while the drawer example is open */
-		drawer  : false,
+		drawer   : false,
 		/** @type {string} The search example */
-		query   : "",
+		query    : "",
 		/** @type {string} Markdown with markup that must not run */
-		markdown: "**Bold**, a [link](https://example.com) and <img src=x onerror=\"window.__kitXss=1\">",
+		markdown : "**Bold**, a [link](https://example.com) and <img src=x onerror=\"window.__kitXss=1\">",
 
 		/** Asks a question with $confirm and keeps the answer. */
 		async ask() {

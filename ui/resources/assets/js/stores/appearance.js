@@ -7,8 +7,38 @@
 import { accentForeground, normalizeHex } from "../utils/color.js";
 
 export const ACCENT_PRESETS = [
-	[ "Blue", "#3b5bdb" ], [ "Teal", "#0f9d8a" ], [ "Green", "#2f9e44" ], [ "Amber", "#d9730d" ],
-	[ "Red", "#e03131" ], [ "Pink", "#d6336c" ], [ "Violet", "#7048e8" ], [ "Slate", "#475569" ]
+	[
+		"Blue",
+		"#3b5bdb"
+	],
+	[
+		"Teal",
+		"#0f9d8a"
+	],
+	[
+		"Green",
+		"#2f9e44"
+	],
+	[
+		"Amber",
+		"#d9730d"
+	],
+	[
+		"Red",
+		"#e03131"
+	],
+	[
+		"Pink",
+		"#d6336c"
+	],
+	[
+		"Violet",
+		"#7048e8"
+	],
+	[
+		"Slate",
+		"#475569"
+	]
 ];
 export const TEXT_SIZES = { small: "0.85rem", medium: "", large: "1.05rem" };
 const KEY = "bxagents_webui_appearance";
@@ -19,12 +49,12 @@ const KEY = "bxagents_webui_appearance";
 export function appearance() {
 	return {
 		/** @type {string} "#rrggbb", or "" for the project's own accent */
-		accent : "",
+		accent  : "",
 		/** @type {string} small, medium or large */
-		size   : "medium",
+		size    : "medium",
 		/** @type {string} comfortable or compact */
-		density: "comfortable",
-		presets: ACCENT_PRESETS,
+		density : "comfortable",
+		presets : ACCENT_PRESETS,
 
 		/** Reads what was kept and applies it. */
 		init() {
@@ -33,7 +63,7 @@ export function appearance() {
 				this.accent = normalizeHex( saved.accent );
 				this.size = Object.prototype.hasOwnProperty.call( TEXT_SIZES, saved.size ) ? saved.size : "medium";
 				this.density = saved.density === "compact" ? "compact" : "comfortable";
-			} catch ( e ) {
+			} catch {
 				// nothing kept, or not readable: the defaults
 			}
 			this.apply();
@@ -54,7 +84,7 @@ export function appearance() {
 			}
 			try {
 				localStorage.setItem( KEY, JSON.stringify( { accent: this.accent, size: this.size, density: this.density } ) );
-			} catch ( e ) {
+			} catch {
 				// the choice still holds for this visit
 			}
 			this.apply();

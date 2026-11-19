@@ -46,7 +46,10 @@ const hotFile = path.join( repo, "src/main/bx/bxagentsui/includes/hot" );
 if ( !process.env.UI_VITE_DEV && fs.existsSync( hotFile ) ) {
 	fs.rmSync( hotFile );
 }
-const classPath = [ boxlangJar, path.join( repo, "build/classes/java/main" ) ].join( path.delimiter );
+const classPath = [
+	boxlangJar,
+	path.join( repo, "build/classes/java/main" )
+].join( path.delimiter );
 
 // serve looks for boxlang-miniserver on the PATH; give it one that runs the jar when it is not installed
 const binDir = path.join( stackDir, "bin" );
@@ -59,23 +62,34 @@ if ( !onPath ) {
 
 const env = {
 	...process.env,
-	PATH               : binDir + path.delimiter + ( process.env.PATH || "" ),
-	BXAGENTS_HOME      : path.join( stackDir, "home" ),
-	BXAGENTS_PUBLIC_URL: "http://127.0.0.1:" + agentPort,
+	PATH                : binDir + path.delimiter + ( process.env.PATH || "" ),
+	BXAGENTS_HOME       : path.join( stackDir, "home" ),
+	BXAGENTS_PUBLIC_URL : "http://127.0.0.1:" + agentPort,
 	// the web app module is linked into the built agent, not copied: a change to a view or a handler shows on reload
-	BXAGENTS_UI_LINK   : process.env.BXAGENTS_UI_LINK || "true",
-	BXAGENTS_UI_SOURCE : path.join( repo, "src/main/bx/bxagentsui" )
+	BXAGENTS_UI_LINK    : process.env.BXAGENTS_UI_LINK || "true",
+	BXAGENTS_UI_SOURCE  : path.join( repo, "src/main/bx/bxagentsui" )
 };
 
 /**
  * @param {string[]} args What follows the BoxLang runner
  * @returns {string[]} The java command line
  */
-const boxlang = args => [ "-cp", classPath, "ortus.boxlang.runtime.BoxRunner", "--bx-config", path.join( repo, "boxlang.json" ), ...args ];
+const boxlang = args => [
+	"-cp",
+	classPath,
+	"ortus.boxlang.runtime.BoxRunner",
+	"--bx-config",
+	path.join( repo, "boxlang.json" ),
+	...args
+];
 
 if ( build ) {
 	console.log( "[stack] building ui/dev/agent" );
-	const done = spawnSync( "java", boxlang( [ "module:bxagents", "build", "--projectRoot=" + path.join( ui, "dev/agent" ) ] ), { cwd: repo, env, stdio: "inherit" } );
+	const done = spawnSync( "java", boxlang( [
+		"module:bxagents",
+		"build",
+		"--projectRoot=" + path.join( ui, "dev/agent" )
+	] ), { cwd: repo, env, stdio: "inherit" } );
 	if ( done.status !== 0 ) {
 		process.exit( done.status || 1 );
 	}
@@ -89,7 +103,15 @@ const children = [];
  * @returns {import("node:child_process").ChildProcess} The started process
  */
 function start( name, args ) {
-	const child = spawn( "java", args, { cwd: repo, env, stdio: [ "ignore", "pipe", "pipe" ] } );
+	const child = spawn( "java", args, {
+		cwd   : repo,
+		env,
+		stdio : [
+			"ignore",
+			"pipe",
+			"pipe"
+		]
+	} );
 	const prefix = line => line.length && console.log( "[" + name + "] " + line );
 	child.stdout.on( "data", d => String( d ).split( "\n" ).forEach( prefix ) );
 	child.stderr.on( "data", d => String( d ).split( "\n" ).forEach( prefix ) );
@@ -98,8 +120,17 @@ function start( name, args ) {
 	return child;
 }
 
-start( "model", boxlang( [ path.join( repo, "tools/demo/fakellm.bxs" ), "--port=" + llmPort, "--script=" + path.join( ui, "dev/model.json" ) ] ) );
-start( "agent", boxlang( [ "module:bxagents", "serve", "--projectRoot=" + path.join( ui, "dev/agent" ), "--port=" + agentPort ] ) );
+start( "model", boxlang( [
+	path.join( repo, "tools/demo/fakellm.bxs" ),
+	"--port=" + llmPort,
+	"--script=" + path.join( ui, "dev/model.json" )
+] ) );
+start( "agent", boxlang( [
+	"module:bxagents",
+	"serve",
+	"--projectRoot=" + path.join( ui, "dev/agent" ),
+	"--port=" + agentPort
+] ) );
 
 /**
  * @param {string} url What to ask
@@ -114,7 +145,7 @@ async function waitFor( url, seconds ) {
 			if ( res.status < 500 ) {
 				return;
 			}
-		} catch ( e ) {
+		} catch {
 			// not up yet
 		}
 		await new Promise( r => setTimeout( r, 500 ) );
@@ -125,7 +156,10 @@ async function waitFor( url, seconds ) {
 const stop = () => {
 	children.forEach( c => c.kill() );
 	// serve hands the app to a boxlang-miniserver process of its own and returns: stop that one by its config file
-	spawnSync( "pkill", [ "-f", path.join( ui, "dev/agent/.build/miniserver.json" ) ] );
+	spawnSync( "pkill", [
+		"-f",
+		path.join( ui, "dev/agent/.build/miniserver.json" )
+	] );
 	process.exit( 0 );
 };
 process.on( "SIGINT", stop );

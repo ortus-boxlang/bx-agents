@@ -4,9 +4,22 @@
 import { test, expect } from "./support.js";
 
 const APP = "/chat";
-const PAGES = [ "conversations", "routines", "registry", "connectors", "memory", "vault", "settings", "agent", "gateways", "logs", "access", "data" ];
+const PAGES = [
+	"conversations",
+	"routines",
+	"registry",
+	"connectors",
+	"memory",
+	"vault",
+	"settings",
+	"agent",
+	"gateways",
+	"logs",
+	"access",
+	"data"
+];
 
-test( "draws the frame: the menu with both groups for an admin, the title and who is signed in", async ( { page, errors } ) => {
+test( "draws the frame: the menu with both groups for an admin, the title and who is signed in", async( { page, errors } ) => {
 	await page.goto( APP + "/" );
 	await expect( page.locator( "#mainNav" ) ).toBeVisible();
 	await expect( page.locator( "#navGroup-main" ) ).toBeVisible();
@@ -17,7 +30,7 @@ test( "draws the frame: the menu with both groups for an admin, the title and wh
 	expect( errors ).toEqual( [] );
 } );
 
-test( "serves every page of the menu, each marked as the current one", async ( { page, errors } ) => {
+test( "serves every page of the menu, each marked as the current one", async( { page, errors } ) => {
 	for ( const id of PAGES ) {
 		const res = await page.goto( APP + "/" + id );
 		expect( res.status(), id ).toBe( 200 );
@@ -27,7 +40,7 @@ test( "serves every page of the menu, each marked as the current one", async ( {
 	expect( errors ).toEqual( [] );
 } );
 
-test( "a member sees no admin group and gets 403 on an admin page", async ( { member } ) => {
+test( "a member sees no admin group and gets 403 on an admin page", async( { member } ) => {
 	await member.goto( APP + "/" );
 	await expect( member.locator( "#navGroup-main" ) ).toBeVisible();
 	await expect( member.locator( "#navGroup-admin" ) ).toBeHidden();
@@ -36,7 +49,7 @@ test( "a member sees no admin group and gets 403 on an admin page", async ( { me
 	expect( res.status() ).toBe( 403 );
 } );
 
-test( "keeps the theme and the folded menu across pages", async ( { page } ) => {
+test( "keeps the theme and the folded menu across pages", async( { page } ) => {
 	await page.goto( APP + "/" );
 	const wasDark = await page.evaluate( () => document.documentElement.getAttribute( "data-theme" ) === "dark" );
 	await page.click( "#themeToggle" );
@@ -50,7 +63,7 @@ test( "keeps the theme and the folded menu across pages", async ( { page } ) => 
 	await page.click( "#navFold" );
 } );
 
-test( "asks for a sign in first when nobody is signed in", async ( { browser } ) => {
+test( "asks for a sign in first when nobody is signed in", async( { browser } ) => {
 	// an empty session: browser.newContext() would otherwise take the signed in one of this file's tests
 	const context = await browser.newContext( { storageState: { cookies: [], origins: [] } } );
 	const page = await context.newPage();

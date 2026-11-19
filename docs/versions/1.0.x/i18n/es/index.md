@@ -165,7 +165,7 @@ Tu árbol de convenciones, y la aplicación ColdBox normal en la que `build` lo 
 
 ::: columns
 ::: column
-```
+```text
 your-agent/
 ├── Agent.yaml         # nombre, modelo, descripción
 ├── instructions.md    # el system prompt
@@ -180,7 +180,7 @@ your-agent/
 ```
 :::
 ::: column
-```
+```text
 .build/app/
 ├── Application.bx
 ├── config/

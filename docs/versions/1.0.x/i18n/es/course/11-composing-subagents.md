@@ -12,7 +12,7 @@ tags: [course, conventions, subagents]
 mismo, con su propio `Agent.yaml` + `instructions.md`, y opcionalmente sus propios `tools/`,
 `skills/`, etc.
 
-```
+```text
 my-agent/
 ├── Agent.yaml            # subAgents: [ researcher ]
 ├── instructions.md

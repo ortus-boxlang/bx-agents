@@ -13,7 +13,7 @@ export function vaultRequestOf( tools ) {
 			if ( parsed && /^[A-Za-z][A-Za-z0-9_]*$/.test( parsed.name || "" ) ) {
 				found = { name: parsed.name, why: parsed.why || "", scope: parsed.scope === "agent" ? "agent" : "user" };
 			}
-		} catch ( e ) {
+		} catch {
 			// an unfinished or malformed call asks for nothing
 		}
 	} );

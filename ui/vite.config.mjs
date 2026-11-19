@@ -14,22 +14,23 @@ import coldbox from "coldbox-vite-plugin";
 process.env.ASSET_URL ??= "/modules/bxagentsui/includes";
 
 export default defineConfig( {
-	plugins: [
+	plugins : [
 		coldbox( {
-			input: [
+			input : [
 				"resources/assets/scss/app.scss",
 				"resources/assets/js/App.js"
 			],
-			publicDirectory: "../src/main/bx/bxagentsui/includes",
+			publicDirectory : "../src/main/bx/bxagentsui/includes",
 			// a change to a handler, a layout or a view reloads the page
-			refresh        : [ "../src/main/bx/bxagentsui/**/*.bxm", "../src/main/bx/bxagentsui/**/*.bx" ]
+			refresh         : [
+				"../src/main/bx/bxagentsui/**/*.bxm",
+				"../src/main/bx/bxagentsui/**/*.bx"
+			]
 		} )
 	],
-	server: {
+	server : {
 		// the agent serves the page on another port: let it load the scripts from here
-		cors: true
+		cors : true
 	},
-	build: {
-		emptyOutDir: true
-	}
+	build : { emptyOutDir: true }
 } );

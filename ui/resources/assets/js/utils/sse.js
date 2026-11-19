@@ -50,10 +50,10 @@ export async function streamEvents( url, options ) {
 	let res;
 	try {
 		res = await fetchImpl( url, {
-			method : options.body ? "POST" : "GET",
-			headers: { Accept: "text/event-stream", ...( options.body ? { "Content-Type": "application/json" } : {} ), ...( options.headers || {} ) },
-			body   : options.body ? JSON.stringify( options.body ) : undefined,
-			signal : options.signal
+			method  : options.body ? "POST" : "GET",
+			headers : { Accept: "text/event-stream", ...( options.body ? { "Content-Type": "application/json" } : {} ), ...( options.headers || {} ) },
+			body    : options.body ? JSON.stringify( options.body ) : undefined,
+			signal  : options.signal
 		} );
 	} catch ( e ) {
 		return { ok: false, status: 0, error: e && e.name === "AbortError" ? "" : "The server could not be reached." };
@@ -63,7 +63,7 @@ export async function streamEvents( url, options ) {
 		try {
 			const payload = await res.json();
 			error = payload.error || payload.reason || error;
-		} catch ( e ) {
+		} catch {
 			// not JSON: keep the status
 		}
 		return { ok: false, status: res.status, error };
@@ -97,7 +97,7 @@ export async function streamEvents( url, options ) {
 function parseData( data ) {
 	try {
 		return JSON.parse( data );
-	} catch ( e ) {
+	} catch {
 		return data;
 	}
 }

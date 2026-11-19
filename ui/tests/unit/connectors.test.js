@@ -9,7 +9,18 @@ describe( "connector helpers", () => {
 	} );
 
 	it( "shows the risk and the ways to connect, or that it is a local program", () => {
-		expect( connectorChips( { risk: "high", ways: [ "bearer", "oauth", "other" ] } ).map( c => c.text ) ).toEqual( [ "High risk", "Token", "Sign in" ] );
+		expect( connectorChips( {
+			risk : "high",
+			ways : [
+				"bearer",
+				"oauth",
+				"other"
+			]
+		} ).map( c => c.text ) ).toEqual( [
+			"High risk",
+			"Token",
+			"Sign in"
+		] );
 		expect( connectorChips( { transport: "stdio", ways: [ "bearer" ] } ).map( c => c.text ) ).toEqual( [ "Local program" ] );
 	} );
 
@@ -29,7 +40,10 @@ describe( "connector helpers", () => {
 	} );
 
 	it( "filters by tab and search", () => {
-		const rows = [ { name: "GitHub", state: "connected" }, { name: "Linear", summary: "issues", state: "available" } ];
+		const rows = [
+			{ name: "GitHub", state: "connected" },
+			{ name: "Linear", summary: "issues", state: "available" }
+		];
 		expect( connectorRows( rows, "connected", "" ).map( r => r.name ) ).toEqual( [ "GitHub" ] );
 		expect( connectorRows( rows, "all", "ISSUES" ).map( r => r.name ) ).toEqual( [ "Linear" ] );
 	} );

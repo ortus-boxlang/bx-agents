@@ -14,7 +14,7 @@ Este es el único ejemplo de esta serie de guías con capturas de pantalla reale
 
 ## El proyecto
 
-```
+```text
 webui-agent/
 ├── Agent.yaml
 ├── instructions.md

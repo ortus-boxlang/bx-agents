@@ -11,8 +11,8 @@ describe( "a turn built from the stream", () => {
 		const turn = newTurn();
 		applyFrame( turn, delta( { reasoning: "Let me " } ) );
 		applyFrame( turn, delta( { reasoning: "check." } ) );
-		applyFrame( turn, delta( { tool_calls: [ { index: 0, function: { name: "now", arguments: "{\"tz\":" } } ] } ) );
-		applyFrame( turn, delta( { tool_calls: [ { index: 0, function: { arguments: "\"UTC\"}" } } ] } ) );
+		applyFrame( turn, delta( { "tool_calls": [ { index: 0, function: { name: "now", arguments: "{\"tz\":" } } ] } ) );
+		applyFrame( turn, delta( { "tool_calls": [ { index: 0, function: { arguments: "\"UTC\"}" } } ] } ) );
 		applyFrame( turn, delta( { content: "It is " } ) );
 		applyFrame( turn, delta( { content: "noon." } ) );
 		applyFrame( turn, "[DONE]" );
@@ -40,8 +40,16 @@ describe( "a turn built from the stream", () => {
 
 describe( "the transcript", () => {
 	it( "keeps what you wrote and the agent's answers, without empty messages", () => {
-		const t = transcriptOf( [ { role: "you", body: "hi" }, { role: "agent", body: "hello" }, { role: "agent", body: "" }, { role: "tool", body: "x" } ] );
-		expect( t.map( m => m.role ) ).toEqual( [ "you", "agent" ] );
+		const t = transcriptOf( [
+			{ role: "you", body: "hi" },
+			{ role: "agent", body: "hello" },
+			{ role: "agent", body: "" },
+			{ role: "tool", body: "x" }
+		] );
+		expect( t.map( m => m.role ) ).toEqual( [
+			"you",
+			"agent"
+		] );
 		expect( t[ 1 ].turn ).toMatchObject( { text: "hello", pending: false } );
 	} );
 

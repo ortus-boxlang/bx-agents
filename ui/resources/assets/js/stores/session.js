@@ -10,18 +10,18 @@ export function session( config ) {
 	return {
 		config,
 		/** @type {boolean} True once /agent has answered */
-		ready       : false,
+		ready        : false,
 		/** @type {object} The capabilities, as GET /agent answers them: { admin, notes, vault, logs, ... } */
-		capabilities: {},
+		capabilities : {},
 		/** @type {string} The agent's name */
-		agentName   : "",
+		agentName    : "",
 		/** @type {Array<{ name: string, parent?: string }>} The agent and its sub-agents, as GET /agent answers them */
-		agents      : [],
+		agents       : [],
 		/** @type {string} Whether the model sees pictures: "yes", "no", or "" when not known */
-		vision      : "",
+		vision       : "",
 
 		/** @type {Promise<void>|null} Settles once the capabilities are known; see loaded() */
-		pending: null,
+		pending : null,
 
 		/**
 		 * Asks the agent API what this person may use, once.
@@ -61,7 +61,7 @@ export function session( config ) {
 					this.agents = payload.agents || [];
 					this.vision = payload.vision || "";
 				}
-			} catch ( e ) {
+			} catch {
 				// the menu then shows only what needs no capability
 			}
 			this.ready = true;

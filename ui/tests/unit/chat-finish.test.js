@@ -6,9 +6,15 @@ import { createApi, KEY_STORAGE } from "../../resources/assets/js/utils/api.js";
 import { password } from "../../resources/assets/js/stores/password.js";
 
 describe( "talking to a sub-agent", () => {
-	const tree = [ { name: "main", parent: "" }, { name: "helper", parent: "main", description: "Helps" } ];
+	const tree = [
+		{ name: "main", parent: "" },
+		{ name: "helper", parent: "main", description: "Helps" }
+	];
 	it( "offers the main agent as \"\" and each sub-agent by name", () => {
-		expect( talkChoices( tree ) ).toEqual( [ { value: "", label: "main (main)", title: "" }, { value: "helper", label: "helper", title: "Helps" } ] );
+		expect( talkChoices( tree ) ).toEqual( [
+			{ value: "", label: "main (main)", title: "" },
+			{ value: "helper", label: "helper", title: "Helps" }
+		] );
 	} );
 	it( "says who is talked to, only for a sub-agent", () => {
 		expect( talkBanner( "", tree ) ).toBe( "" );
@@ -23,7 +29,15 @@ describe( "the extension contract", () => {
 
 	it( "fills a slot, refuses an unknown place, and tells listeners", () => {
 		const api = createBxagents( "/__bxagents", document );
-		expect( Object.keys( api ).sort() ).toEqual( [ "apiBase", "conversationId", "icon", "onRefresh", "refresh", "runCommand", "slot" ] );
+		expect( Object.keys( api ).sort() ).toEqual( [
+			"apiBase",
+			"conversationId",
+			"icon",
+			"onRefresh",
+			"refresh",
+			"runCommand",
+			"slot"
+		] );
 		api.slot( "header" ).textContent = "x";
 		expect( document.getElementById( "slotHeader" ).hidden ).toBe( false );
 		expect( () => api.slot( "nowhere" ) ).toThrow( /no place/ );
@@ -39,7 +53,10 @@ describe( "the extension contract", () => {
 	it( "draws server slots as text unless marked html, and keeps what scripts added", () => {
 		const api = createBxagents( "/__bxagents", document );
 		api.slot( "header" ).textContent = "mine";
-		drawSlots( document, [ { place: "header", text: "<b>t</b>" }, { place: "sidebar", text: "<b>h</b>", html: true } ] );
+		drawSlots( document, [
+			{ place: "header", text: "<b>t</b>" },
+			{ place: "sidebar", text: "<b>h</b>", html: true }
+		] );
 		expect( document.getElementById( "slotHeader" ).textContent ).toBe( "mine<b>t</b>" );
 		expect( document.querySelector( "#slotSidebar b" ).textContent ).toBe( "h" );
 		drawSlots( document, [] );
@@ -49,11 +66,11 @@ describe( "the extension contract", () => {
 } );
 
 describe( "the password", () => {
-	it( "is sent with every call once kept, and a refusal is reported", async () => {
+	it( "is sent with every call once kept, and a refusal is reported", async() => {
 		localStorage.setItem( KEY_STORAGE, "s3cret" );
 		const seen = [];
 		const refused = vi.fn();
-		const api = createApi( "/api", async ( url, init ) => {
+		const api = createApi( "/api", async( url, init ) => {
 			seen.push( init.headers[ "x-bxagents-token" ] );
 			return new Response( "{}", { status: 401 } );
 		}, refused );

@@ -16,7 +16,7 @@ La idea detrás de BxAgents es sencilla: describes un agente con **archivos y ca
 no con la superficie de API de un framework, y un solo comando - `bxAgents build` -
 ensambla con ello una aplicación ColdBox real y ejecutable.
 
-```
+```text
 my-agent/
 ├── Agent.yaml         # name, model, description
 ├── instructions.md    # the system prompt

@@ -4,21 +4,28 @@
  */
 import { test, expect, freshChat, ask } from "./support.js";
 
-test( "window.bxagents keeps the current page's shape, and a slot can go in each place", async ( { page, errors } ) => {
+test( "window.bxagents keeps the current page's shape, and a slot can go in each place", async( { page, errors } ) => {
 	await page.goto( "./" );
 	await expect( page.locator( "#input" ) ).toBeVisible();
-	const shape = await page.evaluate( () => Object.fromEntries( Object.keys( window.bxagents ).sort().map( k => [ k, typeof window.bxagents[ k ] ] ) ) );
+	const shape = await page.evaluate( () => Object.fromEntries( Object.keys( window.bxagents ).sort().map( k => [
+		k,
+		typeof window.bxagents[ k ]
+	] ) ) );
 	expect( shape ).toEqual( {
-		apiBase       : "string",
-		conversationId: "function",
-		icon          : "function",
-		onRefresh     : "function",
-		refresh       : "function",
-		runCommand    : "function",
-		slot          : "function"
+		apiBase        : "string",
+		conversationId : "function",
+		icon           : "function",
+		onRefresh      : "function",
+		refresh        : "function",
+		runCommand     : "function",
+		slot           : "function"
 	} );
 	const result = await page.evaluate( () => {
-		const made = [ "header", "sidebar", "composer" ].map( place => {
+		const made = [
+			"header",
+			"sidebar",
+			"composer"
+		].map( place => {
 			const box = window.bxagents.slot( place );
 			box.textContent = "ext-" + place;
 			return box.isConnected;
@@ -31,14 +38,18 @@ test( "window.bxagents keeps the current page's shape, and a slot can go in each
 		}
 		return { made, refused, id: window.bxagents.conversationId() };
 	} );
-	expect( result.made ).toEqual( [ true, true, true ] );
+	expect( result.made ).toEqual( [
+		true,
+		true,
+		true
+	] );
 	expect( result.refused ).toBe( true );
 	expect( result.id ).toBeTruthy();
 	await expect( page.getByText( "ext-header" ) ).toBeVisible();
 	expect( errors ).toEqual( [] );
 } );
 
-test( "the dev agent's panel extension: its script adds Ping, its command runs, its slots are drawn", async ( { page } ) => {
+test( "the dev agent's panel extension: its script adds Ping, its command runs, its slots are drawn", async( { page } ) => {
 	await freshChat( page, "./" );
 	await expect( page.locator( "#slotSidebar .slot-server strong" ) ).toHaveText( "panel" );
 	const ping = page.locator( "#slotComposer .panel-button" );
@@ -48,11 +59,14 @@ test( "the dev agent's panel extension: its script adds Ping, its command runs, 
 	await expect( page.locator( "#slotHeader .slot-server" ) ).toContainText( /panel: \d+ ping/ );
 } );
 
-test( "talks to a sub-agent from the picker, with a banner, and sends the chosen model", async ( { page } ) => {
+test( "talks to a sub-agent from the picker, with a banner, and sends the chosen model", async( { page } ) => {
 	await page.route( "**/__bxagents/agent", async route => {
 		const res = await route.fetch();
 		const body = await res.json();
-		body.agents = [ { name: "ui-dev", parent: "" }, { name: "helper", parent: "ui-dev", description: "Helps" } ];
+		body.agents = [
+			{ name: "ui-dev", parent: "" },
+			{ name: "helper", parent: "ui-dev", description: "Helps" }
+		];
 		await route.fulfill( { response: res, json: body } );
 	} );
 	let started = null;
@@ -79,7 +93,7 @@ test( "talks to a sub-agent from the picker, with a banner, and sends the chosen
 	await page.evaluate( () => localStorage.removeItem( "bxagents_webui_profile" ) );
 } );
 
-test( "asks for the password when the server refuses, keeps it and sends it", async ( { browser } ) => {
+test( "asks for the password when the server refuses, keeps it and sends it", async( { browser } ) => {
 	// a server without accounts that refuses a missing token: the agent API answers 401 until the token is sent
 	const context = await browser.newContext( { storageState: "tests/../.stack/auth/ada.json" } );
 	const page = await context.newPage();
@@ -106,7 +120,7 @@ test( "asks for the password when the server refuses, keeps it and sends it", as
 	await context.close();
 } );
 
-test( "asks before leaving while the agent answers, and stays on Cancel", async ( { page } ) => {
+test( "asks before leaving while the agent answers, and stays on Cancel", async( { page } ) => {
 	await page.route( "**/__bxagents/stream", async route => {
 		// an answer that takes its time
 		await new Promise( done => setTimeout( done, 4000 ) );
@@ -125,7 +139,7 @@ test( "asks before leaving while the agent answers, and stays on Cancel", async 
 	await expect( page ).toHaveURL( /\/chat\/settings$/ );
 } );
 
-test( "an agent with accounts has no Password button", async ( { page } ) => {
+test( "an agent with accounts has no Password button", async( { page } ) => {
 	await page.goto( "./" );
 	await expect( page.locator( "#keyBtn" ) ).toHaveCount( 0 );
 	await ask( page, "Show me a list", "Three things" );

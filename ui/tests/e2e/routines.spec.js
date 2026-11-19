@@ -6,7 +6,7 @@ import { test, expect } from "./support.js";
 
 const APP = "/chat";
 
-test( "makes a routine, reads its schedule back, runs, pauses, resumes and deletes it", async ( { page, errors } ) => {
+test( "makes a routine, reads its schedule back, runs, pauses, resumes and deletes it", async( { page, errors } ) => {
 	const name = "e2e-" + Date.now().toString( 36 );
 	await page.goto( APP + "/routines" );
 	await page.getByRole( "button", { name: "New routine" } ).click();
@@ -41,10 +41,22 @@ test( "makes a routine, reads its schedule back, runs, pauses, resumes and delet
 	expect( errors ).toEqual( [] );
 } );
 
-test( "sends the answer to a gateway chat picked from the ones it has talked to", async ( { page } ) => {
-	await page.route( "**/__bxagents/gateways", route => route.fulfill( { json: { gateways: [
-		{ name: "slack", type: "slack", state: "connected", chats: [ { chatId: "C1", lastSeen: Date.UTC( 2026, 10, 18 ) }, { chatId: "C2", threadId: "T9", lastSeen: Date.UTC( 2026, 10, 17 ) } ] }
-	] } } ) );
+test( "sends the answer to a gateway chat picked from the ones it has talked to", async( { page } ) => {
+	await page.route( "**/__bxagents/gateways", route => route.fulfill( {
+		json : {
+			gateways : [
+				{
+					name  : "slack",
+					type  : "slack",
+					state : "connected",
+					chats : [
+						{ chatId: "C1", lastSeen: Date.UTC( 2026, 10, 18 ) },
+						{ chatId: "C2", threadId: "T9", lastSeen: Date.UTC( 2026, 10, 17 ) }
+					]
+				}
+			]
+		}
+	} ) );
 	let saved = null;
 	await page.route( "**/__bxagents/routines", route => {
 		if ( route.request().method() === "POST" ) {
@@ -65,11 +77,9 @@ test( "sends the answer to a gateway chat picked from the ones it has talked to"
 	await expect.poll( () => saved ).toEqual( { name: "to-slack", schedule: "every 2h", prompt: "Sum up.", destination: "gateway:slack", chat: "C2" } );
 } );
 
-test( "shows the reports, reads one, and asks before cleaning up", async ( { page } ) => {
-	await page.route( "**/__bxagents/routines?*", route => route.fulfill( { json: { routines: [
-		{ id: "r1", name: "daily", ownerId: "", statusText: "ok", enabled: true, schedule: "every 1d", scheduleText: "every day", destination: "routine" } ] } } ) );
-	await page.route( "**/__bxagents/routines", route => route.fulfill( { json: { routines: [
-		{ id: "r1", name: "daily", statusText: "ok", enabled: true, schedule: "every 1d", scheduleText: "every day", destination: "routine" } ] } } ) );
+test( "shows the reports, reads one, and asks before cleaning up", async( { page } ) => {
+	await page.route( "**/__bxagents/routines?*", route => route.fulfill( { json: { routines: [ { id: "r1", name: "daily", ownerId: "", statusText: "ok", enabled: true, schedule: "every 1d", scheduleText: "every day", destination: "routine" } ] } } ) );
+	await page.route( "**/__bxagents/routines", route => route.fulfill( { json: { routines: [ { id: "r1", name: "daily", statusText: "ok", enabled: true, schedule: "every 1d", scheduleText: "every day", destination: "routine" } ] } } ) );
 	await page.route( "**/__bxagents/routines/reports?*", route => route.fulfill( { json: { files: [ { file: "2026-11-18.md", bytes: 2048, savedAt: "2026-11-18T09:00:00Z" } ] } } ) );
 	await page.route( "**/__bxagents/routines/report?*", route => route.fulfill( { json: { text: "# All green" } } ) );
 	const cleans = [];

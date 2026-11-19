@@ -26,14 +26,14 @@ export function createBxagents( apiBase, doc ) {
 	const listeners = [];
 	const api = {
 		apiBase,
-		icon          : iconMarkup,
-		conversationId: () => ( chat ? chat.conversationId() : "" ),
-		runCommand    : line => ( chat ? chat.runCommand( line ) : null ),
-		onRefresh     : listener => {
+		icon           : iconMarkup,
+		conversationId : () => ( chat ? chat.conversationId() : "" ),
+		runCommand     : line => ( chat ? chat.runCommand( line ) : null ),
+		onRefresh      : listener => {
 			listeners.push( listener );
 		},
-		refresh: () => chat && chat.refresh(),
-		slot   : place => {
+		refresh : () => chat && chat.refresh(),
+		slot    : place => {
 			if ( !SLOT_AREAS[ place ] ) {
 				throw new Error( "There is no place [" + place + "]. Use header, sidebar or composer." );
 			}
@@ -47,16 +47,22 @@ export function createBxagents( apiBase, doc ) {
 			return box;
 		}
 	};
-	Object.defineProperty( api, "plug", { enumerable: false, value     : impl => {
-		chat = impl;
-	} } );
-	Object.defineProperty( api, "notify", { enumerable: false, value     : () => listeners.forEach( listener => {
-		try {
-			listener();
-		} catch ( e ) {
-			console.error( "bxagents.onRefresh listener failed", e );
+	Object.defineProperty( api, "plug", {
+		enumerable : false,
+		value      : impl => {
+			chat = impl;
 		}
-	} ) } );
+	} );
+	Object.defineProperty( api, "notify", {
+		enumerable : false,
+		value      : () => listeners.forEach( listener => {
+			try {
+				listener();
+			} catch ( e ) {
+				console.error( "bxagents.onRefresh listener failed", e );
+			}
+		} )
+	} );
 	return api;
 }
 

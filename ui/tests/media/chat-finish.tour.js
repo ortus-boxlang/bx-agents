@@ -12,7 +12,10 @@ export default async function tour( page, shot ) {
 	await page.route( "**/__bxagents/agent", async route => {
 		const res = await route.fetch();
 		const body = await res.json();
-		body.agents = [ { name: "ui-dev", parent: "" }, { name: "researcher", parent: "ui-dev", description: "Reads and sums up" } ];
+		body.agents = [
+			{ name: "ui-dev", parent: "" },
+			{ name: "researcher", parent: "ui-dev", description: "Reads and sums up" }
+		];
 		await route.fulfill( { response: res, json: body } );
 	} );
 	await page.route( "**/__bxagents/sessions", route => route.request().method() === "POST"

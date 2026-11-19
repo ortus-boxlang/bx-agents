@@ -6,14 +6,20 @@ import { test, expect } from "./support.js";
 
 const APP = "/chat";
 
-test( "keeps the mode, accent, size and density in the current page's format, and Reset brings the defaults back", async ( { page, errors } ) => {
+test( "keeps the mode, accent, size and density in the current page's format, and Reset brings the defaults back", async( { page, errors } ) => {
 	await page.goto( APP + "/settings" );
 	await page.getByRole( "group", { name: "Mode" } ).getByRole( "button", { name: "Dark" } ).click();
 	await page.getByRole( "button", { name: "Teal" } ).click();
 	await page.getByRole( "group", { name: "Text size" } ).getByRole( "button", { name: "Large" } ).click();
 	await page.getByRole( "group", { name: "Density" } ).getByRole( "button", { name: "Compact" } ).click();
-	const kept = await page.evaluate( () => [ localStorage.getItem( "bxagents_webui_theme" ), JSON.parse( localStorage.getItem( "bxagents_webui_appearance" ) ) ] );
-	expect( kept ).toEqual( [ "dark", { accent: "#0f9d8a", size: "large", density: "compact" } ] );
+	const kept = await page.evaluate( () => [
+		localStorage.getItem( "bxagents_webui_theme" ),
+		JSON.parse( localStorage.getItem( "bxagents_webui_appearance" ) )
+	] );
+	expect( kept ).toEqual( [
+		"dark",
+		{ accent: "#0f9d8a", size: "large", density: "compact" }
+	] );
 
 	// another page opens with the same look, before any script runs
 	await page.goto( APP + "/data" );
@@ -29,7 +35,7 @@ test( "keeps the mode, accent, size and density in the current page's format, an
 	expect( errors ).toEqual( [] );
 } );
 
-test( "refuses an accent that is not a colour", async ( { page } ) => {
+test( "refuses an accent that is not a colour", async( { page } ) => {
 	await page.goto( APP + "/settings" );
 	const hex = page.getByRole( "textbox", { name: "Accent color as hex" } );
 	await hex.fill( "nope" );
@@ -43,7 +49,7 @@ test( "refuses an accent that is not a colour", async ( { page } ) => {
 	await page.getByRole( "button", { name: "Reset to defaults" } ).click();
 } );
 
-test( "offers the profiles and keeps the choice where the chat reads it", async ( { page } ) => {
+test( "offers the profiles and keeps the choice where the chat reads it", async( { page } ) => {
 	await page.goto( APP + "/settings" );
 	const pick = page.getByRole( "combobox", { name: "Model for your next messages" } );
 	await expect( pick.locator( "option" ) ).toHaveCount( 3 );
@@ -53,13 +59,13 @@ test( "offers the profiles and keeps the choice where the chat reads it", async 
 	await pick.selectOption( "" );
 } );
 
-test( "shows the server and, for an admin, the extensions", async ( { page } ) => {
+test( "shows the server and, for an admin, the extensions", async( { page } ) => {
 	await page.goto( APP + "/settings" );
 	await expect( page.locator( ".facts" ) ).toContainText( "ui-dev" );
 	await expect( page.getByRole( "heading", { name: "Extensions" } ) ).toBeVisible();
 } );
 
-test( "a member sees no extensions card", async ( { member } ) => {
+test( "a member sees no extensions card", async( { member } ) => {
 	await member.goto( APP + "/settings" );
 	await expect( member.locator( ".facts" ) ).toContainText( "ui-dev" );
 	await expect( member.getByRole( "heading", { name: "Extensions" } ) ).toBeHidden();

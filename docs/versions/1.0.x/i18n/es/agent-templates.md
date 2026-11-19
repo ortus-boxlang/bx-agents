@@ -236,7 +236,7 @@ environments:
 
 ...y crea ambos como carpetas de subagente reales y funcionales:
 
-```
+```text
 subagents/
 ├── researcher/
 │   ├── Agent.yaml

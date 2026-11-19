@@ -13,12 +13,18 @@ export default async function globalSetup( config ) {
 	const baseURL = config.projects[ 0 ].use.baseURL;
 	fs.mkdirSync( AUTH, { recursive: true } );
 	const browser = await chromium.launch();
-	for ( const user of [ "ada", "bob" ] ) {
+	for ( const user of [
+		"ada",
+		"bob"
+	] ) {
 		const page = await browser.newPage();
 		await page.goto( baseURL );
 		await page.fill( "input[name=username]", user );
 		await page.fill( "input[name=password]", "demo-pass" );
-		await Promise.all( [ page.waitForNavigation(), page.click( "button[type=submit]" ) ] );
+		await Promise.all( [
+			page.waitForNavigation(),
+			page.click( "button[type=submit]" )
+		] );
 		await page.context().storageState( { path: AUTH + user + ".json" } );
 		if ( user === "ada" ) {
 			// the first turn of a fresh server compiles the whole path once: do it here, with a long wait
