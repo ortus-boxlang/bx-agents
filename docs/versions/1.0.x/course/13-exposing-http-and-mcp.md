@@ -97,7 +97,7 @@ Who may call it is set under `agentApi` in `Agent.yaml`:
 - **Guards**: `allowedIPs` lets only listed addresses and networks in at all, and `rateLimit:
   { requests, perSeconds }` caps calls per address. Both work open or closed.
 - **Managing tokens over the API**: `manageTokens: true` (with `tokens: true`) lets an admin make
-  and revoke tokens remotely, and shows a **Tokens** panel in the web page.
+  and revoke tokens remotely, and shows the **Tokens** tab of the web app's Access page.
 - **Moving it**: `path: /agent-api` serves the whole API somewhere else.
 
 ```yaml

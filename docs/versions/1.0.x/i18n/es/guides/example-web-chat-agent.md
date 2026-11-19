@@ -96,39 +96,35 @@ bxAgents build
 bxAgents serve --port=8080
 ```
 
-Abre **http://localhost:8080/chat/index.html**. Verás la barra lateral de conversaciones a la izquierda, el transcript con streaming en el centro, y un encabezado y un compositor con los colores de tu `theme`:
+Abre **http://localhost:8080/chat/**. Verás el menú de la izquierda, la barra lateral de conversaciones, el transcript con streaming en el centro, y un encabezado y un compositor con los colores de tu `theme`:
 
 ![La UI web de chat generada: una barra lateral de conversaciones, un transcript de varios turnos, y un encabezado/compositor con marca](../assets/webui-chat-light.png)
 
 ### Modo oscuro
 
-Las sobrescrituras de `theme.dark` (`accent`/`accentFg`) se aplican automáticamente cuando la página cambia a oscuro, desde **Settings** o siguiendo el sistema - todo lo demás es el mismo CSS generado, solo que con otros tokens:
+Las sobrescrituras de `theme.dark` (`accent`/`accentFg`) se aplican cuando la página cambia a oscuro, desde el interruptor de la cabecera o la tarjeta **Appearance** de **Settings** - todo lo demás es el mismo CSS, solo que con otros tokens:
 
 ![La misma página y conversación en el tema oscuro - los tokens accent/accentFg de theme.dark se trasladan, el resto es el mismo CSS generado](../assets/webui-chat-dark.png)
 
 ### Pantallas estrechas
 
-La página es responsive sin ningún build móvil aparte - en un viewport estrecho, el transcript conserva todo su ancho y la barra lateral de conversaciones pasa a superponerse en lugar de comprimir el contenido:
+La página es responsive sin ningún build móvil aparte - en un viewport estrecho, el transcript conserva todo su ancho y el menú pasa a ser un cajón en lugar de comprimir el contenido:
 
 ![La misma página en un viewport estrecho - el transcript conserva todo el ancho, la barra lateral se superpone en lugar de exprimirlo](../assets/webui-chat-mobile.png)
 
-## El encabezado y el menú Settings
+## La cabecera y la barra sobre la conversación
 
-El encabezado conserva lo que usas cada minuto: **Chats** (muestra u oculta la barra lateral), el anillo de contexto (púlsalo para ver qué se envía al modelo), el selector de modelo (solo cuando el gateway lista `profiles`) y un engranaje **Settings**. El engranaje abre un menú con tres grupos. Un elemento que el servidor no ofrece, y un grupo sin nada dentro, se omiten.
+La cabecera lleva el icono, el título y el subtítulo del agente, un interruptor de claro u oscuro, y el botón **Password** (la llave, en un agente sin cuentas como este) o quién inició sesión y **Sign out**.
 
-| Grupo | Elementos |
-|---|---|
-| **Conversation** | Bifurcar esta conversación, Exportar como Markdown, Borrar mensajes, Compactar mensajes antiguos |
-| **You** | Notes (cuando el agente tiene un bloque `notes`), Appearance (modo, color de acento, tamaño de texto, densidad, guardados en tu navegador), tema oscuro o claro |
-| **Server** | Contraseña, Tokens de acceso |
+![La cabecera: el título del agente, el interruptor de claro u oscuro, y quién inició sesión con Sign out](../assets/webui/settings-menu.png)
 
-![El menú Settings abierto, con los grupos Conversation, You y Server](../assets/webui/settings-menu.png)
+En la página Chat, la barra sobre la conversación lleva el selector de modelo (solo cuando el gateway lista `profiles`), el anillo de contexto (púlsalo para ver qué se envía al modelo), las etiquetas de estado de las extensiones y los botones **Fork**, **Export** y **Compact**. Todo lo demás es una página del menú de la izquierda, cada una en su dirección (`/chat/memory`, `/chat/vault`, `/chat/settings`, ...); ver [la app web, página por página](../conventions/web-ui.md#las-páginas).
 
 En el cuadro de mensaje, el clip adjunta una imagen o un archivo de texto (también puedes pegarlos o soltarlos), el botón del rayo abre el menú de comandos `/` y la flecha envía. Mientras el agente trabaja, la flecha dirige la ejecución y aparece un botón de parar.
 
 ## La protección opcional por clave de API
 
-Este ejemplo viene con `apiKeyEnvVar` **definido**. Es el secreto compartido de la API del agente, así que cada llamada a `/__bxagents` exige una cabecera `x-bxagents-token` que coincida - el propio armazón estático (`/chat/index.html`) sigue siendo accesible en cualquier caso, ya que la navegación normal de una página en el navegador no puede enviar una cabecera personalizada, y ese armazón es precisamente lo que te pide la clave:
+Este ejemplo viene con `apiKeyEnvVar` **definido**. Es el secreto compartido de la API del agente, así que cada llamada a `/__bxagents` exige una cabecera `x-bxagents-token` que coincida - las páginas de la app (`/chat/`) siguen siendo accesibles en cualquier caso, ya que la navegación normal de una página en el navegador no puede enviar una cabecera personalizada, y la app es precisamente lo que te pide la clave:
 
 ```bash
 export CHAT_UI_API_KEY="a-real-secret"
@@ -136,21 +132,21 @@ bxAgents build
 bxAgents serve --port=8080
 ```
 
-La página carga bien en ambos casos, pero enviar un mensaje sin la clave correspondiente devuelve un 401 y la página abre sola su formulario **Contraseña** - escribe `a-real-secret` y elige **Save**. Una contraseña incorrecta muestra "That password was not accepted". El formulario también está en **Settings**, **Contraseña**, donde **Forget it** borra el valor guardado. La contraseña se guarda en el `localStorage` del navegador hasta que la olvides. Elimina por completo la línea `apiKeyEnvVar` para dejar la UI abierta (aceptable en desarrollo local, nunca en un despliegue público).
+La página carga bien en ambos casos, pero enviar un mensaje sin la clave correspondiente devuelve un 401 y la página abre sola su diálogo **Password** (una vez por carga de página) - escribe `a-real-secret` y elige **Save**, que vuelve a cargar la página con ella. El botón de la llave de la cabecera abre el diálogo en cualquier momento, y **Forget it** borra el valor guardado. La contraseña se guarda en el `localStorage` del navegador hasta que la olvides. Elimina por completo la línea `apiKeyEnvVar` para dejar la UI abierta (aceptable en desarrollo local, nunca en un despliegue público).
 
 ## Tokens de acceso para administradores
 
-Con `agentApi: { tokens: true, manageTokens: true }` en `Agent.yaml`, quien llama con un token `admin` ve **Settings**, **Tokens de acceso**. El panel lista los tokens, crea uno (un nombre, un alcance `chat` o `admin` y cuánto dura, por ejemplo `90d`), muestra el secreto una sola vez para que lo copies y revoca tokens. `manageTokens` está desactivado por defecto y un token `chat` recibe `403`. Lo mismo desde un shell es `bxAgents token create|list|revoke`.
+Con `agentApi: { tokens: true, manageTokens: true }` en `Agent.yaml`, quien llama con un token `admin` ve la página **Access** (`/chat/access/tokens`). Su pestaña **Tokens** lista los tokens, crea uno (un nombre, un alcance `chat` o `admin` y cuánto dura, por ejemplo `90d`), muestra el secreto una sola vez para que lo copies y revoca tokens. `manageTokens` está desactivado por defecto y un token `chat` recibe `403`. Lo mismo desde un shell es `bxAgents token create|list|revoke`.
 
 ![El panel de tokens de acceso: la lista de tokens, un secreto nuevo mostrado una vez y el formulario de creación](../assets/webui/webui-access.png)
 
 ## Una sola API para la página, la terminal y los gateways
 
-`path: "/chat"` es solo el lugar donde se sirve el armazón estático. La página llama a la API del agente en `/__bxagents`, que deriva la identidad del visitante **solo en el servidor**, en lugar de fiarse de un `userId` proporcionado por quien llama, como hace `toAi()`, y que usan también el chat de terminal y los gateways. Consulta [Identidad de conversación](../conventions/web-ui.md#identidad-de-conversación) para el razonamiento completo.
+`path: "/chat"` es solo el lugar donde se sirven las páginas de la app. La página llama a la API del agente en `/__bxagents`, que deriva la identidad del visitante **solo en el servidor**, en lugar de fiarse de un `userId` proporcionado por quien llama, como hace `toAi()`, y que usan también el chat de terminal y los gateways. Consulta [Identidad de conversación](../conventions/web-ui.md#identidad-de-conversación) para el razonamiento completo.
 
 ## Qué está probado, y qué no
 
-La salida del generador en sí - el armazón estático, los marcadores de plantilla, las piezas de inicio de sesión cuando hay cuentas, su registro desde `Application.bx` - está demostrada con specs reales del generador, y se ha confirmado que compila e instancia. Sobre HTTP real, `runColdBoxIntegrationTests.bxs` demuestra `/__bxagents/health` y, además, el viaje de ida y vuelta de preferencias compartidas (`/__bxagents/preferences/set` + `/__bxagents/preferences`) entre dos llamantes independientes. Las capturas de arriba se tomaron de la página generada real, no de un mockup hecho a mano - pero haz al menos una comprobación real con `bxAgents serve` y un navegador de tus propias decisiones de tema y marca antes de depender de ellas en producción.
+La salida del generador en sí - el módulo de la app web y su `config/bxagentsui.json`, las piezas de inicio de sesión cuando hay cuentas, su registro desde `Application.bx` - está demostrada con specs reales del generador, y se ha confirmado que compila e instancia. Sobre HTTP real, `runColdBoxIntegrationTests.bxs` demuestra `/__bxagents/health` y, además, el viaje de ida y vuelta de preferencias compartidas (`/__bxagents/preferences/set` + `/__bxagents/preferences`) entre dos llamantes independientes. Las capturas de arriba se tomaron de la página generada real, no de un mockup hecho a mano - pero haz al menos una comprobación real con `bxAgents serve` y un navegador de tus propias decisiones de tema y marca antes de depender de ellas en producción.
 
 ## Dónde ir a continuación
 

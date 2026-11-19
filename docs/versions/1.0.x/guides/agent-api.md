@@ -96,11 +96,11 @@ Build the client with named arguments. There is one method for each route: `invo
 
 ## Run control
 
-A run belongs to the caller who started it.
+The thread id from a run's first frame is all `cancel` and `steer` take. A paused run can only be resumed by the caller who started it.
 
 | Call | Does |
 |---|---|
-| `cancel( threadId )` | Stops it. Only its owner, or an admin. |
+| `cancel( threadId )` | Stops it. |
 | `steer( threadId, input )` | Adds a message to a run that is going. |
 | `pending( threadId )` and `resume( threadId, decision )` | Approve, reject or edit what a paused run wants to do. |
 
@@ -124,7 +124,7 @@ println( made.token );        // shown once; the server keeps only a fingerprint
 agentClient.revokeToken( "ci" );
 ```
 
-The same list, create and revoke are in the **Tokens** panel of the [web page](../conventions/web-ui.md) (shown to admins on a server that allows it). A `chat` token gets `403`. Leave `manageTokens` off and the routes do not exist.
+The same list, create and revoke are on the **Tokens** tab of the [web app](../conventions/web-ui.md)'s Access page (`<path>/access/tokens`, shown to admins on a server that allows it). A `chat` token gets `403`. Leave `manageTokens` off and the routes do not exist.
 
 ## Every route
 

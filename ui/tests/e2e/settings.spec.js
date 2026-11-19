@@ -29,7 +29,9 @@ test( "keeps the mode, accent, size and density in the current page's format, an
 
 	await page.goto( APP + "/settings" );
 	await page.getByRole( "button", { name: "Reset to defaults" } ).click();
-	await expect( page.locator( "html" ) ).not.toHaveAttribute( "data-theme", /.+/ );
+	// back to following the system, which is light in this browser
+	await expect( page.locator( "html" ) ).toHaveAttribute( "data-theme", "light" );
+	expect( await page.evaluate( () => localStorage.getItem( "bxagents_webui_theme" ) ) ).toBeNull();
 	await expect( page.locator( "html" ) ).not.toHaveAttribute( "data-density", /.+/ );
 	expect( await page.evaluate( () => localStorage.getItem( "bxagents_webui_theme" ) ) ).toBeNull();
 	expect( errors ).toEqual( [] );
@@ -69,4 +71,15 @@ test( "a member sees no extensions card", async( { member } ) => {
 	await member.goto( APP + "/settings" );
 	await expect( member.locator( ".facts" ) ).toContainText( "ui-dev" );
 	await expect( member.getByRole( "heading", { name: "Extensions" } ) ).toBeHidden();
+} );
+
+test( "follows a dark system until a mode is chosen", async( { browser } ) => {
+	const context = await browser.newContext( { colorScheme: "dark", storageState: "tests/../.stack/auth/ada.json" } );
+	const page = await context.newPage();
+	await page.addInitScript( () => localStorage.removeItem( "bxagents_webui_theme" ) );
+	await page.goto( APP + "/settings" );
+	await expect( page.locator( "html" ) ).toHaveAttribute( "data-theme", "dark" );
+	await page.emulateMedia( { colorScheme: "light" } );
+	await expect( page.locator( "html" ) ).toHaveAttribute( "data-theme", "light" );
+	await context.close();
 } );

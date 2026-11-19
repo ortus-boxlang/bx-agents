@@ -27,8 +27,8 @@ const topics = [
 ( async () => {
 	const browser = await chromium.launch();
 	const p = await ( await browser.newContext() ).newPage();
-	await p.goto( base + "/chat/login.html" );
-	await p.fill( "#username", "ada" ); await p.fill( "#password", "demo-pass" );
+	await p.goto( base + "/chat/login" );
+	await p.fill( "input[name=username]", "ada" ); await p.fill( "input[name=password]", "demo-pass" );
 	await Promise.all( [ p.waitForNavigation().catch( () => {} ), p.click( "button[type=submit]" ) ] );
 	await p.waitForTimeout( 1500 );
 	const api = ( path, body ) => p.evaluate( async ( [ path, body ] ) => {

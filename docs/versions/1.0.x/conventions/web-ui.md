@@ -39,7 +39,7 @@ That installs the web app at `<path>`: a ColdBox module (`bxagentsui`) with its 
 
 The screenshots on this page are the real, unmodified web app this repo ships, from a demo project (Acme Support) with a scripted model, sub-agents, skills, notes, routines, vault entries and thirty conversations. Everything runs offline.
 
-The app is written with [Alpine.js](https://alpinejs.dev) and Sass and built with Vite in this repository's `ui/` folder, and the build is **committed inside the module**: `bxAgents build` never runs `npm install`/`npm run build`, and a generated project never needs Node or npm installed at all. Its scripts and styles are served from `/modules/bxagentsui/includes`, and it loads nothing from a CDN. To change the app itself, see [Working on the web app](#working-on-the-web-app).
+The app is written with [Alpine.js](https://alpinejs.dev) and Sass and built with Vite in this repository's `ui/` folder, and the build is **committed inside the module**: `bxAgents build` never runs `npm install`/`npm run build`, and a generated project never needs Node or npm installed at all. The build writes the module's settings (path, branding, theme, extension files) to `config/bxagentsui.json` in the generated app. Its scripts and styles are served from `/modules/bxagentsui/includes`, and it loads nothing from a CDN. To change the app itself, see [Working on the web app](#working-on-the-web-app).
 
 That constraint is about the build, not about scope. The app is a full client: conversation sidebar, streaming with reasoning and tool calls, approvals, compaction, server-side theming. What is genuinely still missing is listed under [What is not here yet](#what-is-not-here-yet).
 
@@ -62,14 +62,14 @@ Because the whole envelope arrives, **reasoning and tool calls are already on th
 
 ## The pages
 
-The page is one generated file with a **left menu** and a **header**. The menu has two groups, and a page opens at a link of its own (`<path>/#/conversations`, `<path>/#/routines`, and so on), so you can bookmark one. The server needs no extra routes for any of it, and the page works behind any reverse proxy path.
+Every page has a **left menu** and a **header**. The menu has two groups, and each page is an address of its own under `<path>`, so you can bookmark one: `<path>/` is the chat, then `<path>/conversations`, `<path>/routines`, `<path>/logs/gateways?q=slack`, `<path>/access/people` and so on. A tab or a filter that matters is kept in the address too. An address under `<path>` that is none of the pages answers `404`.
 
 | Group | Pages | Who sees it |
 |---|---|---|
 | Main | Chat, Conversations, Routines, Registry, Connectors, Memory, Vault, Settings | everyone who can sign in |
 | Admin | Agent, Gateways, Logs, Access, Data and backups | [admins](#admins-and-members) only |
 
-A member never sees the Admin group, and the server refuses the routes behind it anyway. The menu folds to icons (the choice is remembered in the browser), the **Logs** item carries a red count of the sources that logged an error since the app started, and nothing that the old single page offered was removed: the header, the Settings gear and the [extension slots](extensions.md#the-web-page-slots-and-web) are all still there.
+A member never sees the Admin group: an Admin page answers `403` to a member who is signed in, and the API refuses the routes behind it anyway. The menu shows only the pages this person may use, from the capabilities `GET /agent` reports. It folds to icons (the choice is remembered in the browser) and becomes a drawer on a phone. The header holds the agent's icon and title, a light or dark switch, and either **Password** (an agent without accounts) or who is signed in and **Sign out**. Extensions can add to the Chat page with [slots](extensions.md#the-web-page-slots-and-web).
 
 ![The Chat page: the left menu with Main and Admin groups, a conversation with a tool call and a formatted answer, and the model picker and context ring in the header](../assets/webui/webui-chat.png)
 
@@ -77,7 +77,7 @@ A member never sees the Admin group, and the server refuses the routes behind it
 
 ### Chat and Talk to
 
-The page you land on. The conversations sidebar shows 25 at a time with a filter box and a **Show more** button, and the transcript streams the answer with reasoning, tool calls and approvals, as before (see [What the page does](#what-the-page-does)). The **Talk to** menu in the header lists the main agent and each [sub-agent](subagents.md). Pick one and the next message goes to it directly; a banner says who you are talking to, a conversation belongs to the agent it started with, and every agent keeps its own memory. In the terminal chat the same thing is `/agent`.
+The page you land on. The conversations sidebar shows 25 at a time with a filter box and a **Show more** button, and the transcript streams the answer with reasoning, tool calls and approvals (see [What the page does](#what-the-page-does)). The bar above the conversation holds the **Talk to** and model pickers, the context ring, the extensions' status chips and the **Fork**, **Export** and **Compact** buttons. The **Talk to** menu lists the main agent and each [sub-agent](subagents.md). Pick one and the next message goes to it directly; a banner says who you are talking to, a conversation belongs to the agent it started with, and every agent keeps its own memory. In the terminal chat the same thing is `/agent`.
 
 ![Talk to with the researcher sub-agent picked and the banner that says so](../assets/webui/webui-talk-to.png)
 
@@ -141,7 +141,7 @@ For admins. Each [gateway](gateways/index.md) with its state (connected, stopped
 
 ### Logs
 
-For admins. A tab for each of the five [logs](logs.md) (agent, gateways, routines, heartbeat, API), a level filter, a search box, a line count and **Live**, which shows each new line as the agent writes it (over `GET /logs/stream`, with the same filters; on a server without that route it reads the log every 5 seconds instead). New lines keep the view at the end unless you scrolled up. Secrets are never in a log.
+For admins. A tab for each of the five [logs](logs.md) (agent, gateways, routines, heartbeat, API), each with a red chip when it logged errors since the app started, a level filter, a search box, a line count and a **Live** switch. With Live on, each new line shows as the agent writes it (over `GET /logs/stream`, with the same filters). The stream is opened again when the server ends it (after ten minutes) or it drops, and a server without that route is read every 5 seconds instead; the line under the log says which. New lines keep the view at the end unless you scrolled up. The tab and the search are in the address (`<path>/logs/gateways?q=slack`), which is how **Open log** on the Gateways page links to a gateway's lines. Secrets are never in a log. The same logs are in the terminal with `bxAgents logs --follow` and `bxAgents logs --ui`.
 
 ![The Logs page](../assets/webui/webui-logs.png)
 
@@ -161,7 +161,7 @@ For admins. Where the agent keeps everything (the [data home](data.md)) and how 
 
 ### Settings
 
-**Appearance** (mode, accent colour, text size, density), **Model** (which profile answers), **Account** (password), **Connectors** (a link to the Connectors page), **Server** facts, and for admins the **Extensions** the app loaded, with a Reload button.
+**Appearance** (mode, accent colour, text size, density), **Model** (which profile answers, when the gateway lists `profiles`), **Account** (a link to the Connectors page, and **Sign out** with accounts), **Server** facts, and for admins the **Extensions** the app loaded.
 
 ![The Settings page](../assets/webui/webui-settings.png)
 
@@ -190,8 +190,8 @@ The [trailer at the top](#the-web-app) covers every page. These are the details 
 | ![A streamed reply with a numbered list and bold text](../assets/webui/markdown-list.png) **Streaming.** Replies render Markdown as they arrive. | ![The planner profile chosen in the picker, and the reply naming its model](../assets/webui/model-picker.png) **Model picker.** The pick is sent with each message, in the same conversation. |
 | ![A tool call shown as an open block above the reply](../assets/webui/tool-call.png) **Tools.** Each call shows its name and arguments. | ![The command menu opened by typing a slash](../assets/webui/commands-menu.png) **Commands.** Type `/` for the menu. |
 | ![A code block with its language and a Copy button](../assets/webui/code-block.png) **Code.** Each block shows its language and copies the code itself. | ![The Connectors page](../assets/webui/connectors.png) **Connectors.** Connect GitHub, Notion and more once; the agent then acts as you. |
-| ![The context panel listing what fills the model's window](../assets/webui/context-panel.png) **Context.** The ring fills as the conversation grows; click it for the breakdown. | ![The Settings menu open](../assets/webui/settings-menu.png) **Settings.** One gear holds the conversation actions and the quick settings. |
-| ![The Appearance panel with mode, accent colors, text size and density](../assets/webui/appearance.png) **Appearance.** Mode, accent, text size and density, kept in this browser. | ![The page in the dark theme with the accent from the gateway entry](../assets/webui/dark-theme.png) **Theme.** Light or dark, remembered, with your `theme` accent. |
+| ![The context panel listing what fills the model's window](../assets/webui/context-panel.png) **Context.** The ring fills as the conversation grows; click it for the breakdown. | ![The header: the agent's title, the light or dark switch, and who is signed in with Sign out](../assets/webui/settings-menu.png) **Header.** The light or dark switch, and Password or Sign out. |
+| ![The Appearance card of the Settings page with mode, accent colors, text size and density](../assets/webui/appearance.png) **Appearance.** Mode, accent, text size and density, kept in this browser. | ![The page in the dark theme with the accent from the gateway entry](../assets/webui/dark-theme.png) **Theme.** Light or dark, remembered, with your `theme` accent. |
 
 ## What a streaming turn actually looks like
 
@@ -219,21 +219,21 @@ The `thread` event goes first because a response header cannot be read before th
 
 ## The API the page calls
 
-The page has no API of its own. Everything it does goes through the agent API's routes, documented under [The always-on agent route](agent-bx.md#the-always-on-agent-route): turns (`/stream`, `/cancel`, `/steer`, `/resume`, `/pending`), conversations (`/sessions`, `/history`, `/clear`, `/compact`, `/export`), `/preferences`, `/notes`, `/commands` and `/command`, and the capability routes (`/agent`, `/context`, `/status`, `/slots`, `/profiles`, `/tools`). Anything the page can do, a script can do with the same calls.
+The app has no API of its own. Under `<path>` it answers only its pages, the sign-in form and sign out, and the files of the extensions' `web/` folders (`<path>/ext/<name>/<file>`, see [extensions](extensions.md#files-in-web)). Everything else it does goes through the agent API's routes, documented under [The always-on agent route](agent-bx.md#the-always-on-agent-route): turns (`/stream`, `/cancel`, `/steer`, `/resume`, `/pending`), conversations (`/sessions`, `/history`, `/clear`, `/compact`, `/export`), `/preferences`, `/notes`, `/commands` and `/command`, and the capability routes (`/agent`, `/context`, `/status`, `/slots`, `/profiles`, `/tools`). Anything the page can do, a script can do with the same calls.
 
 Each call carries three headers:
 
 | Header | Why |
 | --- | --- |
 | `x-bxagents-source: web` | Marks conversations the page starts, so the API's `?source=` filter (`GET /__bxagents/sessions?source=web`) can tell them from terminal and gateway ones |
-| `x-bxagents-token` | The password typed in the **Password** form (opened from **Password** in the Settings menu, or by itself when the server answers `401`), when one is set (see [Securing the API](#securing-the-api)) |
+| `x-bxagents-token` | The password typed in the **Password** dialog (opened by the key button in the header, or by itself when the server answers `401`), when one is set (see [Securing the API](#securing-the-api)) |
 | `x-bxagents-csrf: 1` | Sent on every request. A request made with the sign-in cookie that changes something must carry it, so another site cannot make your browser do it |
 
 Identity is the API's: with no `users` the page is the one open `local` user, shared with the terminal chat on the same machine, and with `users` it is the signed-in account.
 
 ### Slash commands
 
-Type `/` in the message box and a menu of commands appears (arrow keys, `Tab` to complete, `Esc` to close). They are the same commands as in [the terminal chat](../cli-reference.md#the-same-commands-in-the-web-page-and-in-chat-apps): `/help`, `/new`, `/tools`, `/volumes`, `/skills`, `/routines`, `/routine`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/context`, `/remember`, `/notes`, `/name`, `/fork`, `/export`, `/ping` and `/keys`. Pressing Enter runs the line on the server with `POST /command` and draws the answer: text, a table, or buttons to pick from. `/new`, `/resume` and `/fork` move the page to the conversation they name, `/clear` reloads the transcript, and `/export [file] [--format=md|html]` hands the conversation to the browser to save (**Fork this conversation** and **Export** in the Settings menu run `/fork` and `/export`).
+Type `/` in the message box, or press the lightning button, and a menu of commands appears (arrow keys, `Tab` to complete, `Esc` to close). A command an [extension](extensions.md#commands) adds shows the extension's name as a badge. They are the same commands as in [the terminal chat](../cli-reference.md#the-same-commands-in-the-web-page-and-in-chat-apps): `/help`, `/new`, `/tools`, `/volumes`, `/skills`, `/routines`, `/routine`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/context`, `/remember`, `/notes`, `/name`, `/fork`, `/export`, `/ping` and `/keys`. Pressing Enter runs the line on the server with `POST /command` and draws the answer: text, a table, or buttons to pick from. `/new`, `/resume` and `/fork` move the page to the conversation they name, `/clear` reloads the transcript, and `/export [file] [--format=md|html]` hands the conversation to the browser to save (the **Fork** and **Export** buttons above the conversation run `/fork` and `/export`).
 
 The reply is data, so any client can use it:
 
@@ -253,7 +253,7 @@ Blocks are `text`, `table`, `choose` (options, each with the command line to run
 `/clear` and `/compact` are both careful about scope. `/clear` goes through each memory's own `clear( userId, conversationId )` rather than `AiAgent.clearMemory()`, which takes no arguments and would wipe every visitor's history; `/compact` goes through `summarize( config, userId, conversationId )` for the same reason. Compaction replaces this conversation's older messages with an AI-written summary and keeps the most recent few, touching nothing outside the caller's `(userId, conversationId)` pair.
 
 !!! info
-    **`/compact` needs a summary model, and reports whether it has one.** `summarize()` is a silent no-op unless the memory has *both* `summaryProvider` and `summaryModel` configured, and also when the conversation is already at or under `keepRecent`. Neither is an error, so `/compact` returns `{ compacted, before, after }` and lets the caller see for itself, and `/info`'s `capabilities.compact` reports whether a summary model is configured at all - so a page can hide a button that would do nothing rather than look broken.
+    **`/compact` needs a summary model, and reports whether it has one.** `summarize()` is a silent no-op unless the memory has *both* `summaryProvider` and `summaryModel` configured, and also when the conversation is already at or under `keepRecent`. Neither is an error, so `/compact` returns `{ compacted, before, after }` and lets the caller see for itself, and `GET /agent`'s `capabilities.compact` reports whether a summary model is configured at all - so a page can hide a button that would do nothing rather than look broken.
 
     Only `keepRecent` is taken from the request. `summarize()` also honours `model`/`provider` overrides, but accepting those here would let any visitor aim a summarization call at a provider and model of their choosing on your credentials - the memory's own config decides that instead.
 
@@ -321,7 +321,7 @@ bxAgents hash-password --password="<your-password>"
 
 Everything user-scoped re-keys to the real account. The agent API reads the signed-in account from cbsecurity (which wraps cbauth) in one place (`models/api/Authenticator`), and agent memory, the conversation index, preferences and pending-run ownership all key off the id it gives.
 
-Accounts also close the API: with `users`, a request to `/__bxagents` needs the sign-in cookie or a token, whatever `agentApi.access` says. A page with accounts must never sit in front of an API anyone can call. A visitor who is not signed in is sent to `<path>/login.html`.
+Accounts also close the API: with `users`, a request to `/__bxagents` needs the sign-in cookie or a token, whatever `agentApi.access` says. A page with accounts must never sit in front of an API anyone can call. A visitor who is not signed in is sent to the sign-in form at `<path>/login.html`, and a call refused later (the session ended) sends the page there too. Signing out is `<path>/logout`. Without accounts both addresses answer `404`.
 
 The practical difference: conversations and preferences follow the person across browsers and devices, and clearing cookies no longer creates a brand-new "user".
 
@@ -382,25 +382,25 @@ The transcript lives in the DOM; the conversation lives in the agent's memory. W
 
 ## What the page does
 
-The shipped page is a real chat client, not a demo shell. It reads `GET /info` **first** and shapes itself to what the server actually reports, so a control only appears where the capability exists.
+The Chat page is a real chat client, not a demo shell. The app reads `GET /agent` **first** and shapes itself to the capabilities the server reports, so a control only appears where the capability exists.
 
 | Area | Behaviour |
 | --- | --- |
-| **Conversation sidebar** | Lists this visitor's conversations newest-first, with message counts. Switch, rename (✎), delete (×), or start a new one. Titles render through `textContent` - a title is whatever the user typed first, so it is never parsed as markup |
+| **Conversation sidebar** | Lists this visitor's conversations newest-first, with message counts. Switch, rename, delete, or start a new one with **New chat**. Titles render through `textContent` - a title is whatever the user typed first, so it is never parsed as markup |
 | **Steer while streaming** | The composer stays live during a turn. **Send** becomes **Steer**, and the message splices into the run already in flight rather than starting a new one |
 | **Stop** | Posts `/cancel` *before* aborting the fetch, so the server actually stops spending tokens, then keeps whatever already streamed |
-| **Clear / Compact** | Clear empties this conversation; Compact appears only when a summary model is configured, and reports what it actually did (`Compacted 12 messages down to 3`, or `Nothing to compact yet`) |
+| **Clear / Compact** | `/clear` empties this conversation; **Compact** appears only when a summary model is configured, and reports what it actually did (`Compacted 12 messages down to 3`, or `Nothing to compact yet`) |
 | **Reasoning + tool calls** | Collapsed disclosures fed from `delta.reasoning` and `delta.tool_calls` on the same envelope |
 | **Approvals** | A human-in-the-loop pause renders an Approve/Reject card from `GET /pending`, answered via `/resume`, which streams the continuation of the same turn |
-| **Theme** | Stored server-side in `preferences`, so it follows the identity rather than the browser. `localStorage` keeps a local copy so the choice survives a failed request |
-| **Model** | `/info`'s model name sits in the header, so it is always clear what answered |
+| **Theme** | The light or dark switch in the header. Kept in this browser (`localStorage`) and also saved as the `theme` preference |
+| **Model** | The model picker above the conversation names each profile's model, when the gateway lists `profiles` |
 | **Context size** | A ring in the header that fills as the context does (amber from 70 percent, red from 90), from `GET /context`, refreshed after each turn, command, clear, compaction, conversation switch and change to the notes. Click it for the breakdown: the total, each part with its share (system prompt, tool definitions, notes, messages), the tools, and a button to compact the conversation. The ring fills only when the model's [`contextWindow`](models.md#what-the-project-knows-about-a-model) is set; without it the panel still shows the sizes |
-| **Attachments** | An **Attach** button (shown when `/info` reports `capabilities.attachments`) picks pictures and text files; you can also paste a picture or drop files on the page. Chips show what waits, each with a remove button. Pictures go as base64 `attachments` of the stream request, text files are inlined in the message. At most 4 pictures, 5 MB each; `/info` also reports `vision`, and a picture to a profile without it is refused with the reason |
+| **Attachments** | An **Attach** button (shown when `GET /agent` reports `capabilities.attachments`) picks pictures and text files; you can also paste a picture or drop files on the page. Chips show what waits, each with a remove button. Pictures go as base64 `attachments` of the stream request, text files are inlined in the message. At most 4 pictures, 5 MB each; `GET /agent` also reports `vision`, and a picture to a profile without it is refused with the reason |
 | **Shortcuts** | Enter sends, Shift+Enter adds a line. `?` alone (or `/keys`) lists them |
 
 **Recovery matters more than it sounds.** The last-opened conversation is remembered in `localStorage`, but the conversations themselves live on the server. If that id no longer exists - deleted in another tab, or a fresh store - the page falls back to the newest remaining conversation instead of rehydrating into an empty screen with no active row.
 
-Narrow screens get a real layout rather than a squeezed one: under `40rem` the sidebar overlays the transcript instead of stealing its width, and `prefers-reduced-motion` is honoured.
+Narrow screens get a real layout rather than a squeezed one: under `40rem` the conversations sidebar overlays the transcript instead of stealing its width, the left menu is a drawer, and `prefers-reduced-motion` is honoured.
 
 ![The same page at a narrow viewport - the transcript keeps the full width, the sidebar overlays instead of squeezing it](../assets/webui-chat-mobile.png)
 
@@ -528,28 +528,26 @@ For anything the tokens don't cover - custom fonts, layout, per-element rules - 
 ## Securing the API
 
 !!! warning
-    **`apiKeyEnvVar` is a shared secret, not a login system.** It is the same thing as the agent API's `agentApi.tokenEnvVar` (a name in `Agent.yaml` wins if both are set). Left unset, the API is open (fine on your own machine, not for a public deployment; `serve` warns when an open API listens on every interface). Set it, and every call to `/__bxagents` must carry a matching `x-bxagents-token` header, compared in constant time. **The app's pages (`<path>/`) are not gated by it**, because a browser's plain page navigation can't send a custom header; the page asks for it in a form: a **Password** box that opens by itself when the server answers `401` and again from **Password** in the Settings menu. The password is kept in `localStorage` and sent on every call; a wrong one shows "That password was not accepted." For several people use [issued tokens](agent-bx.md#access-tokens-for-a-deployed-agent) or `users`.
+    **`apiKeyEnvVar` is a shared secret, not a login system.** It is the same thing as the agent API's `agentApi.tokenEnvVar` (a name in `Agent.yaml` wins if both are set). Left unset, the API is open (fine on your own machine, not for a public deployment; `serve` warns when an open API listens on every interface). Set it, and every call to `/__bxagents` must carry a matching `x-bxagents-token` header, compared in constant time. **The app's pages (`<path>/`) are not gated by it**, because a browser's plain page navigation can't send a custom header; the page asks for it in a **Password** dialog. It opens by itself the first time a call is refused with `401` (once per page load, with "The server refused the password, or asks for one."), and any time from the key button in the header. **Save** keeps the password in `localStorage` and loads the page again; it is then sent on every call. **Forget it** removes it. For several people use [issued tokens](agent-bx.md#access-tokens-for-a-deployed-agent) or `users`.
 
 ## Logs and gateways
 
-For an admin, the **Logs** and **Gateways** pages of the Admin group (see [The pages](#the-pages)) show how the app is doing. The **Logs** page has a tab for each log that exists (agent, gateways, routines, heartbeat, API), a level filter, search, a line count and **Live**. The **Gateways** page lists each gateway the project names with its state (connected, stopped, failing or not registered), which credentials are set (the names only, never a value), when it last had a conversation, its last error and a **Reconnect** button. Gateways are still set up in `gateways/` and `.env`: the page shows how they are doing and starts one again in place. See [logs](logs.md).
-
-A small red count on the **Logs** item says how many sources logged an error since the app started.
+For an admin, the **Logs** and **Gateways** pages of the Admin group (see [The pages](#the-pages)) show how the app is doing. The **Logs** page has a tab for each log (agent, gateways, routines, heartbeat, API) with a red chip when it logged errors, a level filter, search, a line count and a **Live** switch that shows new lines as they are written. The **Gateways** page lists each gateway the project names with its state (connected, stopped, failing or not registered), which credentials are set (the names only, never a value), when it last had a conversation, its last error and a **Reconnect** button, and **Open log** goes to that gateway's lines on the Logs page. Gateways are still set up in `gateways/` and `.env`: the page shows how they are doing and starts one again in place. See [logs](logs.md); in the terminal the same logs are `bxAgents logs --follow` and `bxAgents logs --ui`.
 
 ## Settings and appearance
 
-The header keeps only what you use every minute: the menu button, the **Talk to** and model pickers, the context ring and a **Settings** gear. The gear opens a quick menu in three groups: **Conversation** (Fork this conversation, Export as Markdown, Clear messages, Compact older messages), **You** (Memory, Vault, Routines, Appearance, Dark or Light theme) and **Server** (Password, Access tokens, Logs, Gateways). An item shows only where the server offers it, and a group with nothing in it is left out. The full **Settings** page is in the menu too.
+The header keeps the agent's icon and title, a light or dark switch, and **Password** or **Sign out**. What acts on a conversation (the **Talk to** and model pickers, the context ring, **Fork**, **Export** and **Compact**) is in the bar above it on the Chat page, and every other page is in the left menu.
 
-**Settings**, then **Appearance** (or the Appearance section of the Settings page), opens the panel where a visitor picks, for this browser only:
+The **Appearance** card of the **Settings** page is where a visitor picks, for this browser only:
 
 | Setting | Choices |
 |---|---|
-| Mode | System, Light or Dark (the same choice as the **Dark theme** or **Light theme** item, and it follows the account when the page has preferences) |
+| Mode | System, Light or Dark (the same choice as the switch in the header) |
 | Accent color | The gateway's own accent (the **Default** swatch), eight presets, or any hex value. The panel shows the contrast of the button text on it and warns under 4.5 : 1 |
 | Text size | Small, Medium or Large |
 | Density | Comfortable or Compact |
 
-The choice is stored in the browser (`localStorage`, key `bxagents_webui_appearance`) and **Reset to defaults** clears it. It never changes what the operator wrote in `theme`: that stays the default every visitor starts from. A picked accent also sets `--accent-fg` to white or near black, whichever reads better, and the tints and focus glow follow it. Extension scripts and styles can rely on `--accent`, `--accent-fg`, `--accent-soft`, `--accent-ink`, `--ring`, `--bg`, `--fg`, `--muted`, `--border` and `--surface` and so follow the visitor's choice too.
+The choice is stored in the browser (`localStorage`, key `bxagents_webui_appearance`) and **Reset to defaults** clears it. It never changes what the operator wrote in `theme`: that stays the default every visitor starts from. A picked accent also sets `--accent-fg` to white or near black, whichever reads better, and the tints and focus glow follow it. Extension styles that use the page's variables (`--accent`, `--accent-fg`, `--accent-soft`, `--accent-ink`, `--ring`, `--bg`, `--fg`, `--muted`, `--border`, `--surface` and the rest, see [extensions](extensions.md#theming)) follow the visitor's choice too.
 
 ## Conversation identity
 
@@ -588,17 +586,17 @@ Assistant replies render as full Markdown: headings, lists, tables, quotes, stri
 
 ## Notes
 
-When the agent has a [`notes`](agent-yaml.md#notes) block, the **Memory** page of the menu (and **Memory** in the Settings gear) shows two lists, *About you* and *About the agent*, how full each is (characters of the limit, and about how many tokens that adds to every conversation), and the notes with their ids. Add, edit in place and remove work on your own notes. The page and the terminal chat share the same database, so a note added in one shows in the other.
+When the agent has a [`notes`](agent-yaml.md#notes) block, the **Memory** page of the menu (`<path>/memory`) shows two lists, *About you* and *About the agent*, how full each is (characters of the limit, and about how many tokens that adds to every conversation), and the notes with their ids. Add, edit in place and remove work on your own notes. The page and the terminal chat share the same database, so a note added in one shows in the other.
 
 - *About you* belongs to the same identity as your conversations: your account with [`users`](#users-and-sign-in), or the shared workspace without accounts.
 - *About the agent* is shared by everyone who uses the agent, whichever agent or person is talking. Anyone using the page may add or edit one; removing one (or clearing the list) takes an admin, and `/notes/remove` answers `403` to anyone else. With an admin [token](agent-bx.md#access-tokens-for-a-deployed-agent) use the agent's own `/__bxagents/notes/remove` route, or `bxAgents notes remove --scope=agent` where the agent runs.
-- Without a `notes` block the page says so and the routes answer `404`: `/info`'s `capabilities.notes` says which.
+- Without a `notes` block the menu has no Memory page and the routes answer `404`: `GET /agent`'s `capabilities.notes` says which.
 
 The Memory page also has **Conversation memory**: the messages the agent's memory keeps for each conversation. **Clear** forgets the messages of one conversation and keeps the conversation; an admin can clear every conversation, or those of one agent (`POST /memory/clear`, `/clear` in the terminal, `bxAgents sessions clear`).
 
 ## Connections
 
-When an `mcpServers` entry has [`oauth`](connect.md), the [Connectors](#connectors) page has an **In Agent.yaml** tab (it shows only then; `/info`'s `capabilities.connections` says whether). It lists each service with its name, its address, *Connected* or *Not connected*, and a *Connect* or *Disconnect* button. *Connect* opens the provider's sign in in a new tab (a link is also shown, in case the browser blocks the tab) and the page checks again every two seconds until it works. The page never sees a token.
+When an `mcpServers` entry has [`oauth`](connect.md), the [Connectors](#connectors) page has an **In Agent.yaml** tab (`<path>/connectors/agent`; it shows only then, and `GET /agent`'s `capabilities.connections` says whether). It lists each service with its name, its address, *Connected* or *Not connected*, and a *Connect* or *Disconnect* button. *Connect* opens the provider's sign in in a new tab (a link is also shown, in case the browser blocks the tab) and the page checks again every two seconds until it works. The page never sees a token.
 
 
 ## Working on the web app
@@ -613,7 +611,7 @@ npm run build   # writes src/main/bx/bxagentsui/includes/build, which is committ
 npm run e2e     # the browser tests (Playwright)
 ```
 
-The dev agent is at http://127.0.0.1:8780/chat (`ada` or `bob`, password `demo-pass`). A built agent gets the committed build, so a change to a script or a style ships only once `npm run build` has run and its output is committed.
+The dev agent is at http://127.0.0.1:8780/chat (`ada` or `bob`, password `demo-pass`). A built agent gets the committed build, so a change to a script or a style ships only once `npm run build` has run and its output is committed. [Work on the web app](../guides/ui-development.md) is the full guide: the layout, the conventions, adding a page, the linters and the tests.
 
 ## What is not here yet
 
@@ -627,7 +625,7 @@ The page is complete against its own API: every route it needs exists and is exe
 
 ## Routines
 
-When the server has [routines](routines.md) on, the **Routines** page of the menu (and **Routines** in the Settings gear) shows:
+When the server has [routines](routines.md) on, the **Routines** page of the menu (`<path>/routines`) shows:
 
 - A row for each routine: its name, a status chip in words (ok, failed last time, paused, running, waiting for approval, not run yet), the schedule in words with the stored form beside it, the next and last run, and where its answer goes. A failed or auto-paused routine shows its last error and a **Resume** button.
 - **Run now**, **Pause** or **Resume**, **Edit**, **Reports**, **Open conversation** (the routine's own, with its answers) and **Delete**, which asks first and keeps the reports. An admin gets **Show every owner's routines**.

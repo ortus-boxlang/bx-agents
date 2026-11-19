@@ -20,7 +20,7 @@ flowchart TD
     Q -->|"no - tiene una clave 'type' en su lugar"| C["CHANNEL ADAPTER<br/>una conexión a una plataforma de chat"]
     E --> E1["exposes: agent<br/>cuatro rutas de la API del agente"]
     E --> E2["exposes: mcp<br/>route().toMCP()"]
-    E --> E3["exposes: webui<br/>index.html generado"]
+    E --> E3["exposes: webui<br/>el módulo de la app web"]
     C --> C1["mock / cli / http<br/>impulsado por pull: algo nos llama a NOSOTROS"]
     C --> C2["telegram, slack, discord, email, whatsapp-cloud,<br/>teams, twilio, github, signal<br/>estilo push: mantiene su propia conexión"]
     C2 --> S["un GatewaySession<br/>vinculado al agente raíz"]
@@ -89,7 +89,7 @@ class {
 }
 ```
 
-Genera un archivo estático real `<path>/index.html` (servido directamente - no se necesita ruta para él) y la página llama a la [API del agente](../agent-bx.md#la-ruta-de-agente-siempre-activa) en `/__bxagents`, la misma que usa el chat de terminal, así que la entrada no añade una API propia. Sí trae consigo el almacén SQLite compartido.
+Instala la app web (un módulo de ColdBox, `bxagentsui`) en `<path>`, y la app llama a la [API del agente](../agent-bx.md#la-ruta-de-agente-siempre-activa) en `/__bxagents` (o donde la ponga `agentApi.path`), la misma que usa el chat de terminal, así que la entrada no añade una API propia. Sí trae consigo el almacén SQLite compartido. Cada página de la app es una dirección bajo `<path>` (`/chat/settings`, `/chat/logs/gateways`), y una dirección bajo `<path>` que no es ninguna página responde `404`. `path` no puede ser `/`.
 
 La interfaz web es un subsistema en lugar de un simple interruptor de exposición - la lista de rutas, el almacén, las conversaciones y preferencias, el branding y la temática, y por qué no usa `toAi()` están todos en su propia página: **[La interfaz web de chat](../web-ui.md)**.
 

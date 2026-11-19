@@ -105,7 +105,7 @@ Open **http://localhost:8080/chat/**. You get the left menu, the conversation si
 
 ### Dark mode
 
-The `theme.dark` overrides (`accent`/`accentFg`) apply automatically when the page switches to dark, from **Settings** or by following the system - everything else is the same generated CSS, just re-tokened:
+The `theme.dark` overrides (`accent`/`accentFg`) apply when the page switches to dark, from the switch in the header or the **Appearance** card of **Settings** - everything else is the same CSS, just re-tokened:
 
 ![The same page and conversation in the dark theme - theme.dark's accent/accentFg tokens carry over, everything else is the same generated CSS](../assets/webui-chat-dark.png)
 
@@ -115,19 +115,13 @@ The page is responsive with no separate mobile build - at a narrow viewport, the
 
 ![The same page at a narrow viewport, the transcript keeps the full width](../assets/webui-chat-mobile.png)
 
-## The header and the Settings menu
+## The header and the bar above the conversation
 
-The header keeps what you use every minute: **Chats** (shows or hides the sidebar), the context ring (click it for what is sent to the model), the model picker (only when the gateway lists `profiles`) and a **Settings** gear. The gear opens one menu with three groups. An item the server does not offer, and a group with nothing in it, is left out.
+The header holds the agent's icon, title and subtitle, a light or dark switch, and either the **Password** button (the key, on an agent without accounts like this one) or who is signed in and **Sign out**.
 
-| Group | Items |
-|---|---|
-| **Conversation** | Fork this conversation, Export as Markdown, Clear messages, Compact older messages |
-| **You** | Memory (when the agent has a `notes` block), Vault, Routines (when they are on), Appearance (mode, accent color, text size, density, saved in your browser), Dark or Light theme |
-| **Server** | Password, Access tokens, Logs, Gateways |
+![The header: the agent's title, the light or dark switch, and who is signed in with Sign out](../assets/webui/settings-menu.png)
 
-![The Settings menu open, with the Conversation, You and Server groups](../assets/webui/settings-menu.png)
-
-The menu on the left has a page for each of these and more; see [the web app, page by page](../conventions/web-ui.md#the-pages).
+On the Chat page, the bar above the conversation holds the model picker (only when the gateway lists `profiles`), the context ring (click it for what is sent to the model), any status chips from extensions, and the **Fork**, **Export** and **Compact** buttons. Everything else is a page of the menu on the left, each at its own address (`/chat/memory`, `/chat/vault`, `/chat/settings`, ...); see [the web app, page by page](../conventions/web-ui.md#the-pages).
 
 In the message box, the paperclip attaches a picture or a text file (you can also paste or drop them), the lightning button opens the `/` commands menu, and the arrow sends. While the agent works the arrow steers the run and a stop button appears.
 
@@ -141,21 +135,21 @@ bxAgents build
 bxAgents serve --port=8080
 ```
 
-The page loads fine either way, but a call without the matching key gets a 401 and the page opens its **Password** form by itself - type `a-real-secret` and choose **Save**. A wrong password shows "That password was not accepted". The form is also under **Settings**, **Password**, where **Forget it** removes the saved value. The password is kept in the browser's `localStorage` until you forget it. Delete the `apiKeyEnvVar` line entirely to leave the UI open instead (fine for local dev, never for a public deployment).
+The page loads fine either way, but a call without the matching key gets a 401 and the page opens its **Password** dialog by itself (once per page load) - type `a-real-secret` and choose **Save**, which loads the page again with it. The key button in the header opens the dialog any time, and **Forget it** removes the saved value. The password is kept in the browser's `localStorage` until you forget it. Delete the `apiKeyEnvVar` line entirely to leave the UI open instead (fine for local dev, never for a public deployment).
 
 ## Access tokens for administrators
 
-With `agentApi: { tokens: true, manageTokens: true }` in `Agent.yaml`, a caller with an `admin` token sees the **Access** page, and **Access tokens** in the Settings menu. The panel lists tokens, creates one (a name, a scope of `chat` or `admin`, and how long it lasts, such as `90d`), shows the secret once for you to copy, and revokes tokens. `manageTokens` is off by default and a `chat` token gets `403`. The same thing from a shell is `bxAgents token create|list|revoke`.
+With `agentApi: { tokens: true, manageTokens: true }` in `Agent.yaml`, a caller with an `admin` token sees the **Access** page (`/chat/access/tokens`). Its **Tokens** tab lists tokens, creates one (a name, a scope of `chat` or `admin`, and how long it lasts, such as `90d`), shows the secret once for you to copy, and revokes tokens. `manageTokens` is off by default and a `chat` token gets `403`. The same thing from a shell is `bxAgents token create|list|revoke`.
 
 ![The Access page: the token list and the form that makes a token](../assets/webui/webui-access.png)
 
 ## One API for the page, the terminal and the gateways
 
-`path: "/chat"` is only where the static shell is served. The page calls the agent API at `/__bxagents`, which derives the visitor's identity **server-side only**, rather than trusting a caller-supplied `userId` the way ColdBox's `toAi()` does, and which the terminal chat and the gateways use too. See [Conversation identity](../conventions/web-ui.md#conversation-identity) for the full reasoning.
+`path: "/chat"` is only where the app's pages are served. The page calls the agent API at `/__bxagents`, which derives the visitor's identity **server-side only**, rather than trusting a caller-supplied `userId` the way ColdBox's `toAi()` does, and which the terminal chat and the gateways use too. See [Conversation identity](../conventions/web-ui.md#conversation-identity) for the full reasoning.
 
 ## What's proven, and what isn't
 
-The generator output itself - the static shell, the templated placeholders, the sign-in pieces when there are accounts, its registration from `Application.bx` - is proven by real generator specs and confirmed to compile and instantiate. Over real HTTP, `runColdBoxIntegrationTests.bxs` proves `/__bxagents/health` and, further, the shared-preferences round trip (`/__bxagents/preferences/set` + `/__bxagents/preferences`) between two independent callers. The screenshots above were captured from the real generated page, not a hand-built mockup - but do at least one real `bxAgents serve` + browser check of your own theme/branding choices before depending on them in production.
+The generator output itself - the web app module and its `config/bxagentsui.json`, the sign-in pieces when there are accounts, its registration from `Application.bx` - is proven by real generator specs and confirmed to compile and instantiate. Over real HTTP, `runColdBoxIntegrationTests.bxs` proves `/__bxagents/health` and, further, the shared-preferences round trip (`/__bxagents/preferences/set` + `/__bxagents/preferences`) between two independent callers. The screenshots above were captured from the real generated page, not a hand-built mockup - but do at least one real `bxAgents serve` + browser check of your own theme/branding choices before depending on them in production.
 
 ## Where to go next
 
