@@ -133,6 +133,11 @@ public final class LogView {
 		return lines.size();
 	}
 
+	/**
+	 * Keeps the lines that are maps (what LogReader gives); anything else is skipped.
+	 *
+	 * @param more the lines to add, or null for none
+	 */
 	private void addAll( List<?> more ) {
 		if ( more == null ) {
 			return;
@@ -144,6 +149,7 @@ public final class LogView {
 		}
 	}
 
+	/** @return the furthest the view can scroll back: the lines that do not fit on one page */
 	private int maxScroll() {
 		return Math.max( 0, lines.size() - pageRows );
 	}
@@ -184,6 +190,11 @@ public final class LogView {
 		}
 	}
 
+	/**
+	 * A key while the search is being typed: Enter keeps it, Esc or Ctrl+C drops it, Backspace deletes, a letter adds.
+	 *
+	 * @param key the key the person pressed
+	 */
 	private void searchKey( KeyEvent key ) {
 		if ( key.isKey( KeyCode.ENTER ) ) {
 			searching	= false;
@@ -200,6 +211,11 @@ public final class LogView {
 		}
 	}
 
+	/**
+	 * Opens another log, going round at either end.
+	 *
+	 * @param to the index of the log to open, before wrapping
+	 */
 	private void openArea( int to ) {
 		if ( areas.isEmpty() ) {
 			return;
@@ -259,6 +275,11 @@ public final class LogView {
 		return out;
 	}
 
+	/**
+	 * @param l one line of a log: time, level, subject and message
+	 *
+	 * @return the line as drawn: the time of day, the level in its colour, the subject and the message
+	 */
 	private Row line( Map<?, ?> l ) {
 		String	time	= String.valueOf( l.get( "time" ) == null ? "" : l.get( "time" ) );
 		String	lvl		= String.valueOf( l.get( "level" ) == null ? "info" : l.get( "level" ) );
@@ -272,6 +293,12 @@ public final class LogView {
 		return row.add( "  " + message, theme.plain );
 	}
 
+	/**
+	 * @param s the text
+	 * @param n the width
+	 *
+	 * @return the text with spaces after it up to the width, or as it is when it is already that wide
+	 */
 	private static String pad( String s, int n ) {
 		return s.length() >= n ? s : s + " ".repeat( n - s.length() );
 	}

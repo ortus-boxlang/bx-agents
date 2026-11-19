@@ -39,10 +39,21 @@ class LogViewTest {
 	private static final Theme			PLAIN	= Theme.detect( "1", "xterm", null );
 	private static final List<String>	AREAS	= List.of( "agent", "gateways", "routines", "heartbeat", "api" );
 
+	/**
+	 * @param level   the line's level
+	 * @param message the line's message
+	 *
+	 * @return one log line as LogReader gives it
+	 */
 	private static Map<String, String> line( String level, String message ) {
 		return Map.of( "time", "2026-11-19T05:00:00,000", "level", level, "subject", "", "message", message );
 	}
 
+	/**
+	 * @param count how many
+	 *
+	 * @return that many info lines, "line 1" first
+	 */
 	private static List<Map<String, String>> lines( int count ) {
 		List<Map<String, String>> out = new ArrayList<>();
 		for ( int i = 1; i <= count; i++ ) {
@@ -51,14 +62,26 @@ class LogViewTest {
 		return out;
 	}
 
+	/**
+	 * @param v      the view
+	 * @param height the screen's height in rows
+	 *
+	 * @return what a 100 column screen of that height shows, as plain text
+	 */
 	private static String screen( LogView v, int height ) {
 		return v.render( 100, height ).stream().map( Row::plainText ).collect( Collectors.joining( "\n" ) );
 	}
 
+	/**
+	 * @param c a letter
+	 *
+	 * @return the key event of typing it
+	 */
 	private static KeyEvent ch( char c ) {
 		return KeyEvent.ofChar( c );
 	}
 
+	/** The view opens the log asked for, and the arrows and Tab move between the logs, round the ends. */
 	@Test
 	@DisplayName( "opens the log asked for, and the arrows and Tab move between the logs, round the ends" )
 	void areas() {
@@ -76,6 +99,7 @@ class LogViewTest {
 		assertThat( new LogView( PLAIN, AREAS, "nope" ).area() ).isEqualTo( "agent" );
 	}
 
+	/** In the view, l steps the level through all, warn and error. */
 	@Test
 	@DisplayName( "l steps the level through all, warn and error" )
 	void level() {
@@ -90,6 +114,7 @@ class LogViewTest {
 		assertThat( v.level() ).isEqualTo( "" );
 	}
 
+	/** In the view, / types a search that Enter keeps and Esc drops, and keys typed there do not act. */
 	@Test
 	@DisplayName( "/ types a search that Enter keeps and Esc drops, and keys typed there do not act" )
 	void search() {
@@ -114,6 +139,7 @@ class LogViewTest {
 		assertThat( v.isDone() ).isFalse();
 	}
 
+	/** The view shows the newest lines that fit, and says when there are none. */
 	@Test
 	@DisplayName( "shows the newest lines that fit, and says when there are none" )
 	void render() {
@@ -129,6 +155,7 @@ class LogViewTest {
 		assertThat( screen( v, 10 ) ).contains( "05:00:00 ERROR  telegram failed" );
 	}
 
+	/** The view scrolls up and stays on the same lines as new ones arrive; End follows the end again. */
 	@Test
 	@DisplayName( "scrolls up and stays on the same lines as new ones arrive; End follows the end again" )
 	void scroll() {
@@ -151,6 +178,7 @@ class LogViewTest {
 		assertThat( screen( v, 10 ) ).doesNotContain( "line 1\n" );
 	}
 
+	/** The view keeps only the last lines up to the cap. */
 	@Test
 	@DisplayName( "keeps only the last lines up to the cap" )
 	void cap() {
@@ -160,6 +188,7 @@ class LogViewTest {
 		assertThat( v.size() ).isEqualTo( 6 );
 	}
 
+	/** In the view, q, Esc and Ctrl+C leave. */
 	@Test
 	@DisplayName( "q, Esc and Ctrl+C leave" )
 	void quit() {
