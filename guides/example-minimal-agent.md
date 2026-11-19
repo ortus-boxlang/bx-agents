@@ -12,7 +12,7 @@ The smallest complete BxAgents project is [`examples/minimal-agent/`](https://gi
 
 ## The project
 
-```
+```text
 minimal-agent/
 ├── Agent.yaml
 ├── instructions.md
@@ -83,7 +83,7 @@ bxAgents chat
 
 `build` assembles everything above into a plain ColdBox application under `.build/app` (see [The Build Pipeline](../build-pipeline.md)); `chat` loads the generated agent in-process and opens the [terminal chat](terminal-ui.md). Type `/` to see the commands, and `/tools` to see that `sayHello` is there. Try:
 
-```
+```text
 My name is Ada.
 ```
 

@@ -12,7 +12,7 @@ tags: [course, conventions, subagents]
 its own `Agent.yaml` + `instructions.md`, and optionally its own `tools/`, `skills/`,
 etc.
 
-```
+```text
 my-agent/
 ├── Agent.yaml            # subAgents: [ researcher ]
 ├── instructions.md
@@ -23,6 +23,7 @@ my-agent/
 ```
 
 A subagent is wired to its parent by name, declared in the parent's `Agent.yaml`
+
 - this is the `subagents/` **folder name**:
 
 ```yaml

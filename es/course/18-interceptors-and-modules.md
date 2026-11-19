@@ -83,7 +83,7 @@ estás trabajando, y `/reload` recoge tus ediciones. Consulta la referencia de
 `modules/` contiene las dependencias de módulos de BoxLang que tu agente declara - una
 subcarpeta inmediata por módulo, descubierta por nombre de carpeta (no recursivo):
 
-```
+```text
 modules/
 └── my-extra-module/
     ├── module.json

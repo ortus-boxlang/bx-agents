@@ -10,7 +10,7 @@ tags: [conventions, logs]
 
 An agent writes what it does, and what goes wrong, to log files in the `logs/` folder of its [data home](data.md). There is one file per area, so a broken gateway is not buried in the noise of a busy API:
 
-```
+```text
 <data home>/logs/
   agent.log       startup, errors in a turn, tool failures
   gateways.log    every gateway: connect, disconnect, send failures. The gateway's name starts each line
@@ -23,7 +23,7 @@ A file appears when its first line is written. `routines.log` and `heartbeat.log
 
 A line looks like this:
 
-```
+```text
 [2026-11-09T09:15:11,300] [main] [ERROR] [GATEWAYS] [my-agent] [telegram] Could not start: Telegram rejected the configured bot token: Unauthorized
 ```
 

@@ -232,7 +232,7 @@ Building with `--environment=production` here yields `modelDefaults: { temperatu
 Every built project exposes its root agent over HTTP at a fixed reserved path,
 whether or not it declares any [`gateways/`](gateways/index.md) entries:
 
-```
+```text
 POST /__bxagents/invoke
 POST /__bxagents/stream    # SSE
 POST /__bxagents/batch
@@ -253,7 +253,7 @@ A route reached with a verb it does not take (a `GET` to `/invoke`) answers `405
 Beside those four, a generated handler (`handlers/AgentApi.bx`) serves what a chat client needs to
 control a run. It is what `chat --server` and `chat --connect` use:
 
-```
+```text
 POST /__bxagents/events    # SSE: like /stream, plus tool and suspended frames. Body may carry
                            # attachments: [ { name, mime, data (base64) } ], at most 4 pictures of 5 MB
 POST /__bxagents/cancel    # { threadId, reason? }
@@ -387,7 +387,7 @@ function production() {
 
 `access: open` (the default when nothing else is set) asks nobody anything: everyone is the one `local` user. It is meant for your own machine. When `serve` is told to listen on an address other machines can reach (`--host=0.0.0.0`, say) and the API is open, it prints a warning at start:
 
-```
+```text
 WARNING: the agent API is open and this server listens on every network interface (port 8080). Anyone who can reach it can chat with the agent, use its tools and read its conversations. Set agentApi.access to token ...
 ```
 

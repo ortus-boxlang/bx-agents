@@ -29,7 +29,7 @@ bxAgents new my-agent --model=openai/gpt-5
 
 This creates:
 
-```
+```text
 my-agent/
 ├── Application.bx
 ├── Agent.yaml

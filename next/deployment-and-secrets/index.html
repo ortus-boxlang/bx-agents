@@ -278,14 +278,14 @@
 <p><code>package</code> requires a prior <code>build</code> (it reads <code>.build/manifest.json</code>) and refuses to run - producing no <code>.bxa</code> - if <code>manifestVersion</code> is unset or malformed.</p>
 <h2 id="excluding-files-bxaignore"><a href="#excluding-files-bxaignore" id="excluding-files-bxaignore" name="excluding-files-bxaignore" class="anchor"></a>Excluding files: <code>.bxaignore</code></h2>
 <p>An optional <code>.bxaignore</code> at the project root, one glob pattern per line (<code>#</code>-prefixed lines are comments), excludes matching paths from the packaged <code>.bxa</code>. Patterns are matched against paths inside the built app (<code>.build/app</code>): a pattern with no <code>/</code> matches at any depth, one with a <code>/</code> is anchored at the app's root, a trailing <code>/</code> names a folder and everything under it, and <code>*</code> also crosses <code>/</code>.</p>
-<pre><code># .bxaignore
+<pre><code class="language-text"># .bxaignore
 *.log
 scratch/
 </code></pre>
 <p>This is on top of a hard-coded, always-on exclusion of <code>.env</code>/<code>.env.*</code>/dotfiles at the packaging layer - even if <code>.bxaignore</code> doesn't mention them, and even if they somehow ended up inside <code>.build/app</code>, they never make it into the zip.</p>
 <h2 id="secret-redaction"><a href="#secret-redaction" id="secret-redaction" name="secret-redaction" class="anchor"></a>Secret redaction</h2>
 <p>Secrets are never written into <code>manifest.json</code> in the first place - the manifest's <code>agent</code> block only ever contains safe, structural fields (<code>name</code>, <code>description</code>, <code>model</code>, <code>environment</code>). As defense-in-depth, <code>package</code> additionally walks the manifest recursively and replaces any struct key that <strong>looks</strong> like a secret with <code>[REDACTED]</code>:</p>
-<pre><code>(apikey | api_key | token | secret | password)$   (case-insensitive, any prefix)
+<pre><code class="language-text">(apikey | api_key | token | secret | password)$   (case-insensitive, any prefix)
 </code></pre>
 <p>This guards against a future field - or a caller passing a richer struct into <code>package</code> some other way - accidentally leaking a value, even though today's manifest never puts one there to begin with.</p>
 <h2 id="where-real-secrets-live"><a href="#where-real-secrets-live" id="where-real-secrets-live" name="where-real-secrets-live" class="anchor"></a>Where real secrets live</h2>

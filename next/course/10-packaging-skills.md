@@ -17,7 +17,7 @@ following the [Claude Agent Skills](https://www.anthropic.com/engineering/claude
 convention: YAML frontmatter (`name`, `description`) followed by a body of freeform
 instructions.
 
-```
+```text
 skills/
 └── greeting/
     └── SKILL.md
@@ -75,7 +75,7 @@ messages, how to review a pull request against your team's checklist).
 
 ## Try it
 
-```
+```text
 skills/
 └── code-review/
     └── SKILL.md

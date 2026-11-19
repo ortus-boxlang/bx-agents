@@ -8,7 +8,7 @@ tags: [reference, cli]
 
 # Referencia de CLI
 
-```
+```text
 Usage: boxlang module:bxAgents <verb> [options]
 ```
 
@@ -60,7 +60,7 @@ Opciones repetidas: gana la última.
 
 Fíjate en la primera fila: un `--option` suelto es un **booleano**, no una forma de pasar el siguiente token como su valor. Por eso un flag que requiere un valor (`--model`, `--message`, `--password`, `--environment`, `--port`, ...) se rechaza con un error cuando se escribe sin valor, en lugar de convertirse en silencio en `true`:
 
-```
+```text
 $ bxAgents new my-agent --model openai/gpt-5
 Error: --model requires a value - write it as `--model=<value>`.
 ```
@@ -834,7 +834,7 @@ bxAgents models list [--json]
 bxAgents models test [--profile=NOMBRE | --all] [--json]
 ```
 
-```
+```text
 default       openai/gpt-5                    context 128,000  images yes  key set
 fast          openai/gpt-5-mini               context 400,000  images no  key set
 planner       claude/claude-opus-4            context ?  images ?  key MISSING
@@ -955,7 +955,7 @@ bxAgents stats [--days=30] [--by=model|provider|day|user] [--user=NOMBRE] [--jso
 bxAgents stats --enable
 ```
 
-```
+```text
 Last 30 days: 128 calls, 412,300 tokens (351,200 in, 61,100 out)
 
 By model              calls          in         out       total
@@ -985,7 +985,7 @@ bxAgents inspect --md=AGENT.md          # escribe el Markdown en un archivo del 
 bxAgents inspect --environment=production
 ```
 
-```
+```text
 ● advanced-agent   Agent.bx · development
   /home/me/advanced-agent
 

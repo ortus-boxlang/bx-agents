@@ -48,7 +48,7 @@ La página habla con la API del agente en `/__bxagents` vía `POST /__bxagents/s
 !!! warning
     **`toAi()` reenvía cada chunk de bx-ai textualmente - no lo envuelve.** La [documentación de AI Routing](https://coldbox.ortusbooks.com/the-basics/routing/routing-dsl/ai-routing) de ColdBox muestra el stream como líneas `data: {"token":"..."}`, pero su propio código fuente (`Router.cfc`, la subruta de stream de `toAi()`) hace `emitter.send( chunk, "chunk" )` - así que cada frame lleva el **envelope normalizado completo de bx-ai**:
 
-    ```
+    ```text
     event: chunk
     data: {"object":"chat.completion.chunk","choices":[{"delta":{"role":"assistant","content":"Ray","reasoning":"...","tool_calls":[...]}}]}
 
@@ -310,7 +310,7 @@ Una cuenta nombra la **variable de entorno** que contiene su contraseña (`passw
 
 Un `passwordHash` es seguro de commitear precisamente porque no puede revertirse. Genera uno con el mismo hasher que usa la app:
 
-```
+```text
 bxAgents hash-password --password="<tu-contraseña>"
 ```
 
@@ -509,7 +509,6 @@ theme: {
     **Escribe colores hex desnudos, sin almohadilla inicial.** BoxLang comienza la interpolación de cadenas en `#` tanto en cadenas de comillas simples **como** dobles, así que un color hex literal en una configuración `.bx` es un error de análisis a menos que la almohadilla se duplique - una trampa que nadie recuerda. El generador la vuelve a añadir por ti, así que `"0f766e"` simplemente funciona. `rgb()`, `hsl()` y los colores nombrados no necesitan nada especial de cualquier manera.
 
 Para cualquier cosa que los tokens no cubran - fuentes personalizadas, layout, reglas por elemento - coloca un `resources/webui/theme.css` en el proyecto. Se incrusta **al final** en el `<style>` de la página, así que le gana tanto a los valores por defecto enviados como a los tokens de `theme`; y siendo un archivo `.css` real, el hex `#rrggbb` ordinario funciona ahí normalmente. (Un `</style` literal en ese archivo falla el build, ya que terminaría prematuramente el bloque de estilo de la página.)
-
 
 
 ## Proteger la API

@@ -16,7 +16,7 @@ Cada subcarpeta inmediata de `skills/` que contenga un archivo `SKILL.md` es una
 siguiendo la convención [Claude Agent Skills](https://www.anthropic.com/engineering/claude-skills):
 frontmatter YAML (`name`, `description`) seguido de un cuerpo de instrucciones libres.
 
-```
+```text
 skills/
 └── greeting/
     └── SKILL.md
@@ -75,7 +75,7 @@ commit, cómo revisar un pull request contra la checklist de tu equipo).
 
 ## Pruébalo
 
-```
+```text
 skills/
 └── code-review/
     └── SKILL.md

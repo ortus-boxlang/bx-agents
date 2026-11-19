@@ -238,7 +238,7 @@ environments:
 
 ...and scaffolds both as real, working subagent folders:
 
-```
+```text
 subagents/
 ├── researcher/
 │   ├── Agent.yaml

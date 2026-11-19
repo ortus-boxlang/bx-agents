@@ -12,7 +12,7 @@ tags: [guides, examples, gateways, slack]
 
 ## El proyecto
 
-```
+```text
 slack-gateway-agent/
 ├── Agent.yaml
 ├── instructions.md

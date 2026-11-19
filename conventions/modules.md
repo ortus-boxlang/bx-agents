@@ -10,7 +10,7 @@ tags: [conventions, modules]
 
 `modules/` holds BoxLang module dependencies your agent needs - one immediate subfolder per module, discovered by folder name (not recursive - only the top level of `modules/` is enumerated).
 
-```
+```text
 modules/
 └── my-extra-module/
     ├── module.json

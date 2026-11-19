@@ -10,7 +10,7 @@ tags: [conventions, skills]
 
 Each immediate subfolder of `skills/` that contains a `SKILL.md` file is one skill, following the Claude Agent Skills convention: YAML frontmatter (`name`, `description`) followed by a body of freeform instructions.
 
-```
+```text
 skills/
 └── greeting/
     └── SKILL.md
