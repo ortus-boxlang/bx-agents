@@ -51,9 +51,14 @@ bxAgents logs                                     # which logs there are and how
 bxAgents logs gateways                            # the last 100 lines of the gateways log
 bxAgents logs gateways --tail=500 --level=warn --grep=telegram
 bxAgents logs api --json
+bxAgents logs gateways --follow --level=warn         # the last lines, then each new one as it is written
+bxAgents logs --ui                                # a full-screen viewer: a tab per log, level, search, live lines
+bxAgents logs gateways --follow --connect=https://agent.example.com --token=$ADMIN_TOKEN   # a deployed agent
 ```
 
 `--level` shows that level and anything more serious (`debug`, `info`, `warn`, `error`), `--grep` keeps the lines that contain the text (case does not matter), and `--tail` is how many lines, up to 1000. Only the end of a log is read, so a big log is as quick as a small one.
+
+`--follow` keeps printing new lines until Ctrl+C, and `--ui` opens a viewer with a tab per log, the level (`l`), a search (`/`), scrolling and live lines (keys in the [CLI reference](../cli-reference.md#logs)). `--connect=URL` reads a served agent's logs over its API with an admin token. In the terminal chat, `/logs` and `/logs <area>` print them too.
 
 **In the web page**, for an admin, the menu has a **Logs** page and a **Gateways** page (see [the web UI](web-ui.md#logs-and-gateways)). A red count on the **Logs** item says how many sources logged an error since the app started.
 

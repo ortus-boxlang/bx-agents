@@ -4,9 +4,20 @@
  */
 class extends="testbox.system.BaseSpec" {
 
+	/**
+	 * The specs.
+	 */
 	function run() {
 		describe( "ChatController", function() {
 
+			/**
+			 * A screen that types the given lines and records what the chat draws.
+			 *
+			 * @inputs     The lines typed, in order
+			 * @chooseWith What every question is answered with
+			 *
+			 * @return The fake screen, with `log` holding every call
+			 */
 			function fakeScreen( required array inputs, any chooseWith = "approve" ) {
 				var s = { log : [], inputs : inputs.duplicate(), cancelFlag : false, steerQueue : [], chosen : chooseWith, pushed : [] }
 				s.readInput = () => {
@@ -74,6 +85,13 @@ class extends="testbox.system.BaseSpec" {
 				return s
 			}
 
+			/**
+			 * A session that answers each message with the next reply and records what it was sent.
+			 *
+			 * @replies The answers, in order
+			 *
+			 * @return The fake session
+			 */
 			function fakeSession( array replies = [] ) {
 				var q = { sent : [], resumed : [], newThreads : 0, replies : replies.duplicate() }
 				q.agentName = () => "helper"
@@ -148,11 +166,26 @@ class extends="testbox.system.BaseSpec" {
 				return q
 			}
 
-			// the person's own switches: both on unless a spec says otherwise
+			/**
+			 * The person's own switches: both on unless a spec says otherwise.
+			 *
+			 * @shell Whether ! commands may run
+			 * @bifs  Whether ## functions may run
+			 * @keys  The key bindings
+			 *
+			 * @return A fake user config
+			 */
 			function userConfig( shell = true, bifs = true, keys = {} ) {
 				return { chat : () => { shell : shell, bifs : bifs }, keys : () => ( keys ), problems : () => [], path : () => "~/.bxagents/bxAgents.yml" }
 			}
 
+			/**
+			 * @screen  The screen the chat draws on
+			 * @session The session it talks to
+			 * @config  The user config, or the default one when null
+			 *
+			 * @return A chat controller over them, in a temporary folder
+			 */
 			function controllerFor( screen, session, config ) {
 				return new bxagents.models.cli.chat.ChatController( session, getTempDirectory(), nullValue(), isNull( config ) ? userConfig() : config )
 			}
@@ -474,6 +507,12 @@ class extends="testbox.system.BaseSpec" {
 					}
 				} );
 
+				/**
+				 * @screen  The screen the chat draws on
+				 * @session The session it talks to
+				 *
+				 * @return A chat controller over them, in this suite's project folder
+				 */
 				function chatIn( screen, session ) {
 					return new bxagents.models.cli.chat.ChatController( session, dir, nullValue(), userConfig() );
 				}
@@ -544,6 +583,11 @@ class extends="testbox.system.BaseSpec" {
 
 			describe( "!command and ##function() on this machine", function() {
 
+				/**
+				 * @screen The fake screen
+				 *
+				 * @return The text of every line the chat printed
+				 */
 				function printedBy( screen ) {
 					return screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] );
 				}
@@ -805,7 +849,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "offers its commands to the screen for the slash menu", function() {
 				var names = new bxagents.models.cli.chat.ChatController( fakeSession() ).commands().map( c => c.name )
 
-				expect( names ).toBe( [ "/help", "/new", "/name", "/fork", "/tools", "/volumes", "/skills", "/routines", "/routine", "/sessions", "/agent", "/resume", "/clear", "/compact", "/context", "/stats", "/keys", "/prompt", "/model", "/ping", "/profile", "/default", "/info", "/remember", "/notes", "/vault", "/connect", "/copy", "/export", "/record", "/exit" ] );
+				expect( names ).toBe( [ "/help", "/new", "/name", "/fork", "/tools", "/volumes", "/skills", "/routines", "/routine", "/sessions", "/agent", "/resume", "/clear", "/compact", "/context", "/stats", "/keys", "/prompt", "/model", "/ping", "/profile", "/default", "/info", "/remember", "/notes", "/logs", "/vault", "/connect", "/copy", "/export", "/record", "/exit" ] );
 			} );
 
 		} );

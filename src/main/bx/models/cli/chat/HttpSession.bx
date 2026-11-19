@@ -18,13 +18,22 @@
  */
 class {
 
+	static {
+		/**
+		 * The filters of GET /sessions this chat passes on when they are given: a search, the agent, where the
+		 * conversation came from, a date range and the page's offset.
+		 */
+		SESSION_FILTERS = [ "q", "agent", "source", "since", "before", "offset" ]
+	}
+
+
 	/**
 	 * @baseUrl The server root
 	 * @client The AgentClient
 	 */
 	function init( required string baseUrl, any client ) {
 		variables.baseUrl = arguments.baseUrl.reReplace( "[\/]+$", "" )
-		variables.client = isNull( arguments.client ) ? new "models.cli.support.AgentClient@bxagents"() : arguments.client
+		variables.client = isNull( arguments.client ) ? new models.cli.support.AgentClient@bxagents() : arguments.client
 		variables.threadId = ""
 		variables.conversationId = createUUID()
 		variables.about = nullValue()
@@ -33,7 +42,7 @@ class {
 		variables.selected = ""
 		variables.offeredProfiles = nullValue()
 		variables.legacy = false
-		variables.summary = new "models.cli.chat.ToolSummary@bxagents"()
+		variables.summary = new models.cli.chat.ToolSummary@bxagents()
 		return this
 	}
 
@@ -41,24 +50,24 @@ class {
 	 * @return The notes of the agent on the server: RemoteNotes, or NoNotes when it keeps none
 	 */
 	any function notes() {
-		var remote = new "models.cli.chat.RemoteNotes@bxagents"( variables.baseUrl, variables.client )
-		return remote.available() ? remote : new "models.cli.chat.NoNotes@bxagents"()
+		var remote = new models.cli.chat.RemoteNotes@bxagents( variables.baseUrl, variables.client )
+		return remote.available() ? remote : new models.cli.chat.NoNotes@bxagents()
 	}
 
 	/**
 	 * @return The vault of the agent on the server: RemoteVault, or NoVault when it has none
 	 */
 	any function vault() {
-		var remote = new "models.cli.chat.RemoteVault@bxagents"( variables.baseUrl, variables.client )
-		return remote.available() ? remote : new "models.cli.chat.NoVault@bxagents"()
+		var remote = new models.cli.chat.RemoteVault@bxagents( variables.baseUrl, variables.client )
+		return remote.available() ? remote : new models.cli.chat.NoVault@bxagents()
 	}
 
 	/**
 	 * @return The MCP servers on the server that ask people to sign in: RemoteConnections, or NoConnections when it has none
 	 */
 	any function connections() {
-		var remote = new "models.cli.chat.RemoteConnections@bxagents"( variables.baseUrl, variables.client )
-		return remote.available() ? remote : new "models.cli.chat.NoConnections@bxagents"()
+		var remote = new models.cli.chat.RemoteConnections@bxagents( variables.baseUrl, variables.client )
+		return remote.available() ? remote : new models.cli.chat.NoConnections@bxagents()
 	}
 
 	/**
@@ -67,8 +76,8 @@ class {
 	 * @return The connectors on the server: a RemoteConnectorSource, or a NoConnectorSource when it has none
 	 */
 	any function connectors( boolean admin = true ) {
-		var remote = new "models.connectors.RemoteConnectorSource@bxagents"( variables.baseUrl, variables.client )
-		return remote.available() ? remote : new "models.connectors.NoConnectorSource@bxagents"()
+		var remote = new models.connectors.RemoteConnectorSource@bxagents( variables.baseUrl, variables.client )
+		return remote.available() ? remote : new models.connectors.NoConnectorSource@bxagents()
 	}
 
 	/**
@@ -78,6 +87,9 @@ class {
 		return "you"
 	}
 
+	/**
+	 * @return The agent this chat talks to: the chosen sub-agent, or the server's own agent
+	 */
 	string function agentName() {
 		return len( variables.selected ) ? variables.selected : ( describe().name ?: "agent" )
 	}
@@ -129,11 +141,17 @@ class {
 		return { ok : true, agent : agentName(), id : variables.conversationId }
 	}
 
+	/**
+	 * @return The model the server says it uses, or the server's address when it does not say
+	 */
 	string function modelName() {
 		var label = describe().model ?: ""
 		return len( label ) ? label : variables.baseUrl
 	}
 
+	/**
+	 * @return How this chat reaches the agent, for the status line
+	 */
 	string function mode() {
 		return "over http"
 	}
@@ -288,7 +306,7 @@ class {
 		if ( !( ( describe().capabilities ?: {} ).routines ?: false ) ) {
 			return nullValue()
 		}
-		return new "models.cli.chat.RemoteRoutines@bxagents"( variables.client, variables.baseUrl )
+		return new models.cli.chat.RemoteRoutines@bxagents( variables.client, variables.baseUrl )
 	}
 
 	/**
@@ -315,11 +333,17 @@ class {
 		}
 	}
 
+	/**
+	 * Starts a new conversation: a new id, and no paused turn to resume.
+	 */
 	void function newThread() {
 		variables.threadId = ""
 		variables.conversationId = createUUID()
 	}
 
+	/**
+	 * @return The id of the open conversation
+	 */
 	string function conversationId() {
 		return variables.conversationId
 	}
@@ -338,7 +362,7 @@ class {
 	array function sessions( numeric limit = 20, struct filters = {} ) {
 		try {
 			var query = { limit : arguments.limit }
-			for ( var key in [ "q", "agent", "source", "since", "before", "offset" ] ) {
+			for ( var key in static.SESSION_FILTERS ) {
 				if ( len( arguments.filters[ key ] ?: "" ) ) {
 					query[ key ] = arguments.filters[ key ]
 				}
@@ -431,6 +455,11 @@ class {
 		}
 	}
 
+	/**
+	 * Forgets the open conversation's messages on the server.
+	 *
+	 * @return The server's answer, or { ok : true } for a conversation the server has not seen yet
+	 */
 	struct function clear() {
 		try {
 			return variables.client.postJson( variables.baseUrl, "clear", { conversationId : variables.conversationId } )
@@ -440,6 +469,11 @@ class {
 		}
 	}
 
+	/**
+	 * Asks the server to replace the older messages of the open conversation with a summary.
+	 *
+	 * @return The server's answer, or { available : false, compacted : false, before : 0, after : 0 } when it could not
+	 */
 	struct function compact() {
 		try {
 			return variables.client.postJson( variables.baseUrl, "compact", { conversationId : variables.conversationId } )
@@ -461,7 +495,7 @@ class {
 			[ "Conversation", variables.conversationId ]
 		]
 		var at = 2
-		for ( var row in new "models.chat.ModelFactsLines@bxagents"().of( modelFacts() ) ) {
+		for ( var row in new models.chat.ModelFactsLines@bxagents().of( modelFacts() ) ) {
 			at++
 			lines.insertAt( at, row )
 		}
@@ -485,7 +519,7 @@ class {
 			return sendLegacy( arguments.text, arguments.hooks )
 		}
 		// the same limits and the same check of the model as on the server, so a refusal comes before a large upload
-		var builder = new "models.chat.MessageBuilder@bxagents"()
+		var builder = new models.chat.MessageBuilder@bxagents()
 		if ( arguments.images.len() ) {
 			var checked = builder.build( arguments.text, arguments.images, modelFacts() )
 			if ( !checked.ok ) {
@@ -522,6 +556,9 @@ class {
 		return runTurn( "resume", { "threadId" : variables.threadId, "decision" : arguments.decision }, arguments.hooks )
 	}
 
+	/**
+	 * Nothing to let go of: every call is a request of its own.
+	 */
 	void function close() {
 	}
 
@@ -664,4 +701,36 @@ class {
 		return variables.about
 	}
 
+	/**
+	 * The server's logs, for /logs: GET /logs, which answers an admin token only.
+	 *
+	 * @area One of the log areas, or blank for the list of logs
+	 * @tail How many lines from the end
+	 * @level Least serious level to show
+	 * @q Text a line must contain
+	 *
+	 * @return { ok, logs } for blank area, { ok, area, lines } for one, or { ok : false, reason }
+	 */
+	struct function logs( string area = "", numeric tail = 30, string level = "", string q = "" ) {
+		var query = {}
+		if ( len( arguments.area ) ) {
+			query[ "area" ] = arguments.area
+			query[ "tail" ] = arguments.tail
+		}
+		if ( len( arguments.level ) ) {
+			query[ "level" ] = arguments.level
+		}
+		if ( len( arguments.q ) ) {
+			query[ "q" ] = arguments.q
+		}
+		try {
+			var found = variables.client.getJson( variables.baseUrl, "logs", query )
+			if ( ( found.success ?: true ) == false ) {
+				return { ok : false, reason : found.error ?: "The server would not show its logs." }
+			}
+			return { ok : true }.append( found )
+		} catch ( any e ) {
+			return { ok : false, reason : e.message.find( "HTTP 403" ) ? "Only an admin may read the server's logs: connect with an admin token." : e.message }
+		}
+	}
 }

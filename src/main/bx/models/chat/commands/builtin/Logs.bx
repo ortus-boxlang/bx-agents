@@ -1,0 +1,94 @@
+/**
+ * /logs: the agent's logs, in the terminal chat. `/logs` says which there are; `/logs <area>` shows the last lines, with
+ * `--tail=N`, `--level=warn|error` and `--grep=text`. Over --connect it reads the server's logs, which takes an admin
+ * token. For a live view, `bxAgents logs <area> --follow` or `bxAgents logs --ui`.
+ */
+import bxModules.bxagents.models.logs.Logger;
+
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	/**
+	 * @return The command's name, typed after the slash
+	 */
+	string function name() {
+		return "logs"
+	}
+
+	/**
+	 * @return The line the help and the menu show, with the areas the logs have
+	 */
+	string function hint() {
+		return "the agent's logs: /logs, or /logs <" & Logger::areas().toList( "|" ) & "> [--tail=N] [--level=warn] [--grep=text]"
+	}
+
+	/**
+	 * @return Where the command runs: the terminal chat only (a gateway or the web page has its own way to read logs)
+	 */
+	array function transports() {
+		return [ "tui" ]
+	}
+
+	/**
+	 * @return Who may run it: an admin, since the logs can name people and chats
+	 */
+	string function permission() {
+		return "admin"
+	}
+
+	/**
+	 * Lists the logs, or prints the last lines of one.
+	 *
+	 * @context The CommandContext: the chat, its transport and whether the caller is an admin
+	 * @args    What followed /logs: an area and the --tail, --level and --grep flags
+	 *
+	 * @return The Reply: the list, the lines, or a warning with the usage
+	 */
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		var chat = arguments.context.chat()
+		if ( !structKeyExists( chat, "logs" ) ) {
+			return reply.warn( "This chat cannot read the logs. Try: bxAgents logs" )
+		}
+		var area = ""
+		var tail = 30
+		var level = ""
+		var grep = ""
+		for ( var word in listToArray( trim( arguments.args ), " " ) ) {
+			if ( word.reFindNoCase( "^--tail=\d+$" ) ) {
+				tail = int( listLast( word, "=" ) )
+			} else if ( word.reFindNoCase( "^--level=(warn|error)$" ) ) {
+				level = lCase( listLast( word, "=" ) )
+			} else if ( word.reFindNoCase( "^--grep=" ) ) {
+				grep = mid( word, 8, len( word ) )
+			} else if ( !len( area ) && !word.startsWith( "--" ) ) {
+				area = lCase( word )
+			} else {
+				return reply.warn( "Usage: " & hint().listRest( ":" ).trim() )
+			}
+		}
+		var found = chat.logs( area, tail, level, grep )
+		if ( !( found.ok ?: false ) ) {
+			return reply.warn( found.reason ?: "The logs could not be read." )
+		}
+		if ( !len( area ) ) {
+			if ( !( found.logs ?: [] ).len() ) {
+				return reply.text( "No logs yet. They appear when the agent runs." )
+			}
+			reply.text( "Logs (/logs <name> to read one):" )
+			for ( var log in found.logs ) {
+				reply.text( "  " & left( log.area & repeatString( " ", 11 ), 11 ) & log.bytes & " bytes" )
+			}
+			return reply
+		}
+		var lines = found.lines ?: []
+		if ( !lines.len() ) {
+			return reply.text( "No lines in the #area# log" & ( len( level ) || len( grep ) ? " that match." : " yet." ) )
+		}
+		var view = new models.cli.Logs@bxagents()
+		for ( var line in lines ) {
+			reply.text( view.lineText( line ) )
+		}
+		return reply
+	}
+
+}

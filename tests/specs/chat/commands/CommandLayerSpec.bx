@@ -4,6 +4,9 @@
  */
 class extends="testbox.system.BaseSpec" {
 
+	/**
+	 * The specs.
+	 */
 	function run() {
 		describe( "the command layer", function() {
 
@@ -55,7 +58,7 @@ class extends="testbox.system.BaseSpec" {
 				} );
 
 				it( "lists the built-in commands in the order the help shows them", function() {
-					expect( registry.menu( "tui" ).map( c => c.name ) ).toBe( [ "/help", "/new", "/name", "/fork", "/tools", "/volumes", "/skills", "/routines", "/routine", "/sessions", "/agent", "/resume", "/clear", "/compact", "/context", "/stats", "/keys", "/prompt", "/model", "/ping", "/profile", "/default", "/info", "/remember", "/notes", "/vault", "/connect", "/copy", "/export", "/record", "/exit" ] );
+					expect( registry.menu( "tui" ).map( c => c.name ) ).toBe( [ "/help", "/new", "/name", "/fork", "/tools", "/volumes", "/skills", "/routines", "/routine", "/sessions", "/agent", "/resume", "/clear", "/compact", "/context", "/stats", "/keys", "/prompt", "/model", "/ping", "/profile", "/default", "/info", "/remember", "/notes", "/logs", "/vault", "/connect", "/copy", "/export", "/record", "/exit" ] );
 				} );
 
 				it( "leaves the terminal-only commands out of the web menu, and the conversation ones out of the gateway menu", function() {
@@ -64,7 +67,16 @@ class extends="testbox.system.BaseSpec" {
 					expect( registry.menu( "gateway" ).map( c => c.name ) ).toBe( [ "/help", "/new", "/tools", "/volumes", "/skills", "/routines", "/routine", "/sessions", "/resume", "/clear", "/compact", "/model", "/ping", "/info", "/remember", "/notes", "/vault", "/connect" ] );
 				} );
 
-				it( "finds a command by an alias", function() {
+				it( "builds every built-in the catalog lists, in its order, each named after its class", function() {
+					var builtins = new bxagents.models.chat.commands.CommandCatalog().builtins();
+					expect( builtins ).toHaveLength( 32 );
+					expect( registry.menu( "tui" ).map( c => c.name ) ).toBe( builtins.map( n => "/" & lCase( n ) ) );
+					// a copy: changing it leaves the catalog as it was
+					builtins.clear();
+					expect( new bxagents.models.chat.commands.CommandCatalog().builtins() ).toHaveLength( 32 );
+				} );
+
+								it( "finds a command by an alias", function() {
 					expect( registry.lookup( "quit" ).name() ).toBe( "exit" );
 					expect( registry.lookup( "EXIT" ).name() ).toBe( "exit" );
 					expect( isNull( registry.lookup( "nope" ) ) ).toBeTrue();
@@ -87,6 +99,34 @@ class extends="testbox.system.BaseSpec" {
 					expect( registry.run( "/secret", context( "web", true ) ).blocks()[ 1 ].text ).toBe( "ran" );
 					expect( registry.menu( "web", false ).map( c => c.name ) ).notToInclude( "/secret" );
 					expect( registry.menu( "web", true ).map( c => c.name ) ).toInclude( "/secret" );
+				} );
+
+				it( "reads the logs with /logs in the terminal, for an admin only", function() {
+					var asked = [];
+					var chat = {
+						logs : ( area, tail, level, q ) => {
+							asked.append( "#area# #tail# #level# #q#" );
+							if ( !len( area ) ) {
+								return { ok : true, logs : [ { area : "gateways", bytes : 120 } ] };
+							}
+							return { ok : true, area : area, lines : [ { time : "2026-11-19T05:00:00,000", level : "error", subject : "telegram", message : "send failed" } ] };
+						}
+					};
+					var run = ( text, admin = true ) => registry.run( text, new bxagents.models.chat.commands.CommandContext( chat, "tui", admin ) ).blocks().map( b => b.text );
+
+					expect( run( "/logs" ).toList( "|" ) ).toInclude( "gateways" );
+					expect( run( "/logs gateways --tail=5 --level=error --grep=send" ).toList( "|" ) ).toInclude( "ERROR  [telegram] send failed" );
+					expect( asked ).toBe( [ "  30  ", "gateways 5 error send" ] );
+					expect( run( "/logs gateways --colour=red" )[ 1 ] ).toInclude( "Usage:" );
+					expect( run( "/logs", false )[ 1 ] ).toBe( "/logs is for admins." );
+					expect( registry.menu( "web" ).map( c => c.name ) ).notToInclude( "/logs" );
+				} );
+
+				it( "says why /logs could not read them", function() {
+					var chat = { logs : ( area, tail, level, q ) => ( { ok : false, reason : "Only an admin may read the server's logs: connect with an admin token." } ) };
+					var reply = registry.run( "/logs api", new bxagents.models.chat.commands.CommandContext( chat, "tui", true ) );
+					expect( reply.blocks()[ 1 ].style ).toBe( "warn" );
+					expect( reply.blocks()[ 1 ].text ).toInclude( "admin token" );
 				} );
 
 				it( "will not register two commands under one name", function() {

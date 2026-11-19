@@ -168,10 +168,13 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb invoke' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb invoke' -l server
     complete -c $cmd -n '__bxagents_using_verb invoke' -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb logs' -l api-path -x
+    complete -c $cmd -n '__bxagents_using_verb logs' -l connect -x
     complete -c $cmd -n '__bxagents_using_verb logs' -l grep -x
     complete -c $cmd -n '__bxagents_using_verb logs' -l level -x
     complete -c $cmd -n '__bxagents_using_verb logs' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb logs' -l tail -x
+    complete -c $cmd -n '__bxagents_using_verb logs' -l token -x
     complete -c $cmd -n '__bxagents_using_verb logs' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb models' -l all
     complete -c $cmd -n '__bxagents_using_verb models' -l json

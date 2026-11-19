@@ -950,10 +950,17 @@ The agent's logs, kept in the `logs/` folder of the [data home](conventions/data
 
 ```bash
 bxAgents logs [area] [--tail=N] [--level=warn] [--grep=TEXT] [--json]
+bxAgents logs <area> --follow [--tail=N] [--level=warn] [--grep=TEXT]
+bxAgents logs --ui [area]
+bxAgents logs [area] [--follow | --ui] --connect=URL [--token=TOKEN] [--api-path=/where]
 ```
 
 - Without an area it lists the logs and their size. The areas are `agent`, `gateways`, `routines`, `heartbeat` and `api`.
 - With one it prints the last lines: `--tail` is how many (default 100, up to 1000), `--level` the least serious level to show, and `--grep` a word a line must contain.
+- `--follow` prints the last lines (20 unless `--tail` says), then each new line as it is written, with the same filters, until Ctrl+C. It is flushed line by line, so it can be piped (`bxAgents logs gateways --follow | grep slack`), and it says when the file was rotated.
+- `--ui` opens a full-screen viewer: a tab per log (Left and Right, or Tab), `l` for the level (all, warn, error), `/` to search (Enter keeps it, Esc drops it), the arrows, Page Up, Page Down and Home to scroll back (the view stays put while new lines arrive) and End to follow the newest again, `q` to leave. New lines show as they are written. Without a terminal (a pipe, CI) it follows instead.
+- `--connect` reads a served agent over its [API](guides/agent-api.md) instead of this project's files: `GET /logs`, and `GET /logs/stream` for `--follow`. It needs an admin token (`--token`, or `BXAGENTS_TOKEN`), and `--api-path` when the agent serves its API elsewhere. With `--ui` it reads the log again every 2 seconds.
+- In the terminal chat, `/logs` lists the logs and `/logs <area> [--tail=N] [--level=warn] [--grep=text]` prints the last lines (30 unless `--tail` says); over `--connect` it takes an admin token.
 - Secrets are never in a log, and neither is what a person said.
 
 ### `models`

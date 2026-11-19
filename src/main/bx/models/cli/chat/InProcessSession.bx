@@ -15,6 +15,8 @@
  * the next model call or tool call), not in the middle of a token. A message typed while the
  * agent works is spliced into the run with steerRun().
  */
+import bxModules.bxagents.models.logs.Logger;
+
 class extends="models.chat.AgentConversation@bxagents" {
 
 	/**
@@ -85,7 +87,7 @@ class extends="models.chat.AgentConversation@bxagents" {
 	 * The one TurnRunner behind every surface: the same turn, tool and approval handling as the server's.
 	 */
 	private function runner() {
-		return new "models.api.TurnRunner@bxagents"(
+		return new models.api.TurnRunner@bxagents(
 			agent     = variables.agent,
 			sessions  = variables.sessions ?: nullValue(),
 			agentName = variables.selected,
@@ -93,14 +95,25 @@ class extends="models.chat.AgentConversation@bxagents" {
 		)
 	}
 
+	/**
+	 * @return The person at the terminal as a Caller: an admin, since they run the agent themselves
+	 */
 	private function caller() {
-		return new "models.api.Caller@bxagents"( id = variables.userId, scope = "admin", source = "terminal" )
+		return new models.api.Caller@bxagents( id = variables.userId, scope = "admin", source = "terminal" )
 	}
 
+	/**
+	 * @return The state a turn starts with: no text yet, nothing cancelled, paused or stopped, no pending approvals
+	 */
 	private struct function newState() {
 		return { text : "", cancelled : false, suspended : false, stopped : "", pending : [] }
 	}
 
+	/**
+	 * @state The turn's state when it ended
+	 *
+	 * @return How the turn ended: { status (done, suspended, cancelled or stopped), text, pending, reason }
+	 */
 	private struct function finish( required struct state ) {
 		var status = arguments.state.suspended ? "suspended" : ( arguments.state.cancelled ? "cancelled" : ( len( arguments.state.stopped ) ? "stopped" : "done" ) )
 		return { status : status, text : arguments.state.text, pending : arguments.state.pending, reason : arguments.state.stopped }
@@ -115,7 +128,7 @@ class extends="models.chat.AgentConversation@bxagents" {
 		var threadId = variables.threadId
 		var agent = variables.agent
 		var screen = variables.hooks
-		var summary = new "models.cli.chat.ToolSummary@bxagents"()
+		var summary = new models.cli.chat.ToolSummary@bxagents()
 		return ( name, data ) => {
 			switch ( name ) {
 				case "tool":
@@ -164,4 +177,29 @@ class extends="models.chat.AgentConversation@bxagents" {
 		}
 	}
 
+	/**
+	 * The agent's logs, for /logs: the files of the logs folder this chat writes to (see BuiltAgent).
+	 *
+	 * @area One of the log areas, or blank for the list of logs
+	 * @tail How many lines from the end
+	 * @level Least serious level to show
+	 * @q Text a line must contain
+	 *
+	 * @return { ok, logs } for blank area, { ok, area, lines } for one, or { ok : false, reason }
+	 */
+	struct function logs( string area = "", numeric tail = 30, string level = "", string q = "" ) {
+		var folder = Logger::folder()
+		if ( !len( folder ) ) {
+			return { ok : false, reason : "This chat has no logs folder." }
+		}
+		var reader = new models.logs.LogReader@bxagents( folder )
+		if ( !len( arguments.area ) ) {
+			return { ok : true, logs : reader.list() }
+		}
+		try {
+			return { ok : true }.append( reader.tail( arguments.area, arguments.tail, arguments.level, arguments.q ) )
+		} catch ( "BxAgents.UnknownLog" e ) {
+			return { ok : false, reason : e.message }
+		}
+	}
 }
