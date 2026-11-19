@@ -15,6 +15,8 @@
  * the next model call or tool call), not in the middle of a token. A message typed while the
  * agent works is spliced into the run with steerRun().
  */
+import bxModules.bxagents.models.logs.Logger;
+
 class extends="models.chat.AgentConversation@bxagents" {
 
 	/**
@@ -164,4 +166,29 @@ class extends="models.chat.AgentConversation@bxagents" {
 		}
 	}
 
+	/**
+	 * The agent's logs, for /logs: the files of the logs folder this chat writes to (see BuiltAgent).
+	 *
+	 * @area One of the log areas, or blank for the list of logs
+	 * @tail How many lines from the end
+	 * @level Least serious level to show
+	 * @q Text a line must contain
+	 *
+	 * @return { ok, logs } for blank area, { ok, area, lines } for one, or { ok : false, reason }
+	 */
+	struct function logs( string area = "", numeric tail = 30, string level = "", string q = "" ) {
+		var folder = Logger::folder()
+		if ( !len( folder ) ) {
+			return { ok : false, reason : "This chat has no logs folder." }
+		}
+		var reader = new "models.logs.LogReader@bxagents"( folder )
+		if ( !len( arguments.area ) ) {
+			return { ok : true, logs : reader.list() }
+		}
+		try {
+			return { ok : true }.append( reader.tail( arguments.area, arguments.tail, arguments.level, arguments.q ) )
+		} catch ( "BxAgents.UnknownLog" e ) {
+			return { ok : false, reason : e.message }
+		}
+	}
 }

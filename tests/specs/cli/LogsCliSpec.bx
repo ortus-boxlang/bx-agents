@@ -73,6 +73,151 @@ class extends="testbox.system.BaseSpec" {
 				expect( logs( { _positional : "api", grep : "nothing like this" } ).message ).toInclude( "that match" );
 			} );
 
+			function rawLine( required string level, required string message ) {
+				fileAppend( dir & "/home/logs/gateways.log", "[2026-11-19T05:00:00,000] [main] [#arguments.level#] [GATEWAYS] [bxagents-root] [telegram] #arguments.message#" & char( 10 ) );
+			}
+
+			describe( "--follow", function() {
+
+				it( "prints the last lines, then each line written after it, with the filters", function() {
+					directoryCreate( dir & "/home/logs", true, true );
+					rawLine( "INFO ", "before" );
+					var printed = [];
+					var out = logs( {
+						_positional : [ "gateways" ],
+						follow      : true,
+						level       : "warn",
+						_polls      : 2,
+						_pollMs     : 20,
+						_out        : ( text ) => {
+							printed.append( text );
+							// once it follows, the agent writes two lines and only the warning matches
+							if ( text.startsWith( "(following" ) ) {
+								rawLine( "INFO ", "an info line" );
+								rawLine( "WARN ", "a warning" );
+							}
+						}
+					} );
+
+					expect( out.exitCode ).toBe( 0 );
+					expect( printed[ 1 ] ).toInclude( "(following gateways" );
+					expect( printed.filter( l => l.find( "a warning" ) ).len() ).toBe( 1 );
+					expect( printed.filter( l => l.find( "an info line" ) || l.find( "before" ) ).len() ).toBe( 0 );
+				} );
+
+				it( "says the log was rotated", function() {
+					directoryCreate( dir & "/home/logs", true, true );
+					rawLine( "INFO ", "a long line before the rotation" );
+					var printed = [];
+					logs( {
+						_positional : [ "gateways" ],
+						follow      : true,
+						_polls      : 1,
+						_pollMs     : 20,
+						_out        : ( text ) => {
+							printed.append( text );
+							if ( text.startsWith( "(following" ) ) {
+								fileWrite( dir & "/home/logs/gateways.log", "" );
+							}
+						}
+					} );
+					expect( printed ).toInclude( "(the gateways log was rotated)" );
+				} );
+
+				it( "needs a log to follow", function() {
+					var out = logs( { follow : true } );
+					expect( out.exitCode ).toBe( 1 );
+					expect( out.message ).toInclude( "Name the log to follow" );
+				} );
+
+				it( "follows a served agent's log over the stream with --connect", function() {
+					var asked = [];
+					var client = {
+						logs       : ( area, tail, level, q ) => {
+							asked.append( "logs #area# #tail# #level# #q#" );
+							return { lines : [ { time : "t1", level : "info", subject : "", message : "old" } ] };
+						},
+						logsStream : ( area, onEvent, level, q ) => {
+							asked.append( "stream #area# #level# #q#" );
+							onEvent( "lines", { area : area, lines : [ { time : "t2", level : "error", subject : "slack", message : "new" } ] } );
+							onEvent( "reset", {} );
+							return { status : 200 };
+						}
+					};
+					var printed = [];
+					var out = new bxagents.models.cli.Logs().run( {
+						projectRoot : dir, _positional : [ "gateways" ], follow : true, connect : "http://agent", grep : "x", tail : 5,
+						_client : client, _polls : 1, _out : ( text ) => printed.append( text )
+					} );
+
+					expect( out.exitCode ).toBe( 0 );
+					expect( asked ).toBe( [ "logs gateways 5  x", "stream gateways  x" ] );
+					expect( printed[ 1 ] ).toInclude( "old" );
+					expect( printed.filter( l => l.find( "[slack] new" ) ).len() ).toBe( 1 );
+					expect( printed ).toInclude( "(the gateways log was rotated)" );
+				} );
+
+				it( "says an admin token is needed when the server answers 403", function() {
+					var client = {
+						logs : ( area, tail, level, q ) => {
+							throw( type = "BxAgents.AgentStreamFailed", message = "The agent at [x] answered HTTP 403." );
+						}
+					};
+					var out = new bxagents.models.cli.Logs().run( { projectRoot : dir, _positional : [ "gateways" ], connect : "http://agent", _client : client } );
+					expect( out.exitCode ).toBe( 1 );
+					expect( out.message ).toInclude( "Only an admin may read the logs" );
+				} );
+
+			} );
+
+			describe( "--ui", function() {
+
+				it( "loads the open log, reloads it when a filter changes, adds new lines, and closes the screen", function() {
+					directoryCreate( dir & "/home/logs", true, true );
+					rawLine( "INFO ", "first" );
+					var calls = [];
+					var steps = [ "", "changed", "", "quit" ];
+					var at = { i : 0, level : "" };
+					var screen = {
+						step     : ( wait ) => {
+							at.i++;
+							if ( at.i == 2 ) {
+								at.level = "warn";
+							}
+							if ( at.i == 3 ) {
+								rawLine( "WARN ", "added later" );
+								sleep( 1100 );
+							}
+							return steps[ at.i ];
+						},
+						area     : () => "gateways",
+						level    : () => at.level,
+						query    : () => "",
+						setLines : ( lines ) => calls.append( "set #lines.len()#" ),
+						append   : ( lines, cap ) => calls.append( "append " & lines.map( l => l.message ).toList() ),
+						status   : ( text ) => calls.append( "status #text#" ),
+						close    : () => calls.append( "closed" )
+					};
+					var out = logs( { ui : true, _positional : [ "gateways" ], _interactive : true, _screen : screen } );
+
+					expect( out.exitCode ).toBe( 0 );
+					expect( calls[ 1 ] ).toBe( "set 1" );
+					expect( calls ).toInclude( "status live" );
+					// the warn filter: the info line is gone
+					expect( calls ).toInclude( "set 0" );
+					expect( calls ).toInclude( "append added later" );
+					expect( calls.last() ).toBe( "closed" );
+				} );
+
+				it( "follows instead when there is no terminal", function() {
+					var printed = [];
+					var out = logs( { ui : true, _positional : [ "gateways" ], _interactive : false, _polls : 1, _pollMs : 10, _out : ( text ) => printed.append( text ) } );
+					expect( out.exitCode ).toBe( 0 );
+					expect( printed[ 1 ] ).toInclude( "--ui needs a terminal" );
+				} );
+
+			} );
+
 			it( "refuses an area that does not exist, and a bad --tail", function() {
 				var unknown = logs( { _positional : [ "chat" ] } );
 				expect( unknown.exitCode ).toBe( 1 );

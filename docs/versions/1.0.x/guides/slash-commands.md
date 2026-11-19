@@ -66,6 +66,7 @@ Over `--connect` or `--server`, `/profile` can only switch among the profiles th
 | `/remember <text>` | T W G | Keep a note about you | `/remember I prefer short answers` |
 | `/notes` | T W G | Open the notes screen (terminal) | `/notes` |
 | `/connect` | T W G | List the connectors and the services that ask you to sign in, and whether you are connected; `/connect NAME` connects one (a token goes in a hidden box on the terminal), `/connect NAME off` disconnects, `/connect NAME tools` lists and switches its tools | `/connect github` |
+| `/logs [area] [--tail=N] [--level=warn] [--grep=text]` | T | The agent's logs: which there are, or the last lines of one. Admin only; over `--connect` it takes an admin token. To follow one live, `bxAgents logs <area> --follow` or `--ui` | `/logs gateways --level=warn` |
 | `/vault` | T W G | Open the vault screen (terminal), or list the secret names. A value is never typed in a command | `/vault` |
 | `/notes list` | T W G | Print your notes and the agent's, with how full each is | `/notes list` |
 | `/notes add [agent] <text>` | T W G | Add a note about you, or with `agent` about the agent's work | `/notes add agent Use metric units` |

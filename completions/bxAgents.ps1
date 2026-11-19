@@ -185,10 +185,13 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		)
 		'invoke:positional' = 'dir'
 		'logs' = @(
+			@{ Name = 'api-path'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'connect'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'grep'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'level'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 			@{ Name = 'tail'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'token'; Value = $true; Choices = @(); Dir = $false }
 		)
 		'logs:positional' = 'dir'
 		'models' = @(

@@ -664,4 +664,36 @@ class {
 		return variables.about
 	}
 
+	/**
+	 * The server's logs, for /logs: GET /logs, which answers an admin token only.
+	 *
+	 * @area One of the log areas, or blank for the list of logs
+	 * @tail How many lines from the end
+	 * @level Least serious level to show
+	 * @q Text a line must contain
+	 *
+	 * @return { ok, logs } for blank area, { ok, area, lines } for one, or { ok : false, reason }
+	 */
+	struct function logs( string area = "", numeric tail = 30, string level = "", string q = "" ) {
+		var query = {}
+		if ( len( arguments.area ) ) {
+			query[ "area" ] = arguments.area
+			query[ "tail" ] = arguments.tail
+		}
+		if ( len( arguments.level ) ) {
+			query[ "level" ] = arguments.level
+		}
+		if ( len( arguments.q ) ) {
+			query[ "q" ] = arguments.q
+		}
+		try {
+			var found = variables.client.getJson( variables.baseUrl, "logs", query )
+			if ( ( found.success ?: true ) == false ) {
+				return { ok : false, reason : found.error ?: "The server would not show its logs." }
+			}
+			return { ok : true }.append( found )
+		} catch ( any e ) {
+			return { ok : false, reason : e.message.find( "HTTP 403" ) ? "Only an admin may read the server's logs: connect with an admin token." : e.message }
+		}
+	}
 }
