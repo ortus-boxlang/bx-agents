@@ -1,0 +1,33 @@
+<!--- Connectors: the catalog connectors, the services in Agent.yaml, the connect dialog and the tools drawer. State and
+      actions: connectorsPage (resources/assets/js/components/connectors/ConnectorsPage.js). The tab comes from the
+      address as data. --->
+<bx:output>
+<div class="pg" x-data="connectorsPage" data-tab="#encodeForHTML( prc.connectors.tab )#">
+	#view( view = "_components/ui/page-head", module = "bxagentsui", args = { title : "Connectors", note : "Services the agent can use for you. Nothing is active until you connect it, and the agent acts as you." } )#
+	<div class="pg-actions logs-controls">
+		#view( view = "_components/ui/search", module = "bxagentsui", args = { label : "Search the connectors", model : "query" } )#
+	</div>
+	<nav class="pg-tabs" aria-label="Connectors">
+		<template x-for="t in tabs" :key="t.id">
+			<a :href="$store.session.config.basePath + '/connectors/' + t.id" @click.prevent="tab = t.id" :aria-current="tab === t.id ? 'page' : null">
+				<svg class="i" aria-hidden="true"><use :href="'##i-' + t.icon"/></svg>
+				<span x-text="t.label"></span> <span class="tab-count" x-text="t.count"></span>
+			</a>
+		</template>
+	</nav>
+	<p class="pg-error" role="alert" x-show="failed" x-text="failed" x-cloak></p>
+	<template x-if="signIn.url">
+		<p class="pg-note" role="status"><a :href="signIn.url" target="_blank" rel="noopener" x-text="'Open the sign in for ' + signIn.name"></a>. Come back here when you are done.</p>
+	</template>
+	<div x-show="tab !== 'agent'">
+		#view( view = "connectors/_banner", module = "bxagentsui" )#
+		<p class="pg-note" x-show="!loading && !failed && !shown.length" x-cloak x-text="emptyText"></p>
+		<div class="grid conn-grid">
+			<template x-for="row in shown" :key="row.id">#view( view = "connectors/_card", module = "bxagentsui" )#</template>
+		</div>
+	</div>
+	<div x-show="tab === 'agent'" x-cloak>#view( view = "connectors/_servers", module = "bxagentsui" )#</div>
+	#view( view = "_components/ui/modal", module = "bxagentsui", args = { title : "Connect", titleExpression : "connectTitle", open : "connect.open", contentView : "connectors/_connect", icon : "plug" } )#
+	#view( view = "_components/ui/drawer", module = "bxagentsui", args = { title : "Tools", titleExpression : "toolsOf.row ? toolsOf.row.name + ' tools' : ''", open : "toolsOf.open", contentView : "connectors/_tools" } )#
+</div>
+</bx:output>

@@ -1,0 +1,48 @@
+<!--- The connect dialog: the risk, how to connect, the connector's options, then the token or the sign in. Inside
+      connectorsPage, in a modal. The token is cleared as it is sent. --->
+<bx:output>
+<template x-if="connect.row">
+	<form class="stack" autocomplete="off" @submit.prevent="submitConnect()">
+		<template x-if="needsConfirm">
+			<div class="conn-risk" :class="connect.row.risk">
+				<p>#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "shield-check" } )# <strong x-text="riskText( connect.row )"></strong> <span x-text="connect.row.riskNote || ''"></span></p>
+				<label class="conn-confirm"><input type="checkbox" x-model="connect.confirmed"> <span x-text="'I have read this and want to connect ' + connect.row.name + '.'"></span></label>
+			</div>
+		</template>
+		<template x-if="connect.ways.length > 1">
+			<fieldset class="conn-ways">
+				<legend>How do you want to connect?</legend>
+				<template x-for="w in connect.ways" :key="w">
+					<label><input type="radio" name="connect-way" :value="w" :checked="connect.method === w" @change="pickWay( w )"> <span x-text="w === 'oauth' ? 'Sign in with ' + connect.row.name : 'Paste a token'"></span></label>
+				</template>
+			</fieldset>
+		</template>
+		<template x-if="connect.method === 'token'">
+			<div class="field">
+				<label for="connectToken">Your token</label>
+				<input type="password" id="connectToken" autocomplete="new-password" required placeholder="Paste the token" x-model="connect.token">
+				<span class="pg-note" x-text="'It is checked with ' + connect.row.host + ', then sealed in the vault as yours, ' + ( connect.row.tokenName ? 'named ' + connect.row.tokenName + ', ' : '' ) + 'and only ever sent to ' + connect.row.host + '. It is not shown again.'"></span>
+				<a x-show="connect.row.docs" :href="connect.row.docs" target="_blank" rel="noopener">Where to get one</a>
+			</div>
+		</template>
+		<p class="pg-note" x-show="connect.method === 'oauth'" x-text="'You sign in on ' + connect.row.host + '. BX Agents never sees your password. The agent then acts as you.'"></p>
+		<p class="pg-note" x-show="connect.method === 'program'" x-text="'Runs ' + connect.row.program + ' on the machine the agent runs on. Everyone who uses this agent shares it, so only an admin switches it on.'"></p>
+		<template x-for="o in connect.options" :key="o.key">
+			<div>
+				<template x-if="o.type === 'boolean'">
+					<label class="conn-check"><input type="checkbox" x-model="connect.values[ o.key ]"> <span><span x-text="o.label"></span><span class="pg-note block" x-show="o.help" x-text="o.help"></span></span></label>
+				</template>
+				<template x-if="o.type !== 'boolean'">
+					<label class="field"><span x-text="o.label"></span><input type="text" autocomplete="off" x-model="connect.values[ o.key ]"><span class="pg-note" x-show="o.help" x-text="o.help"></span></label>
+				</template>
+			</div>
+		</template>
+		<p class="pg-error" role="alert" x-show="connect.error" x-text="connect.error"></p>
+		<p class="pg-note" role="status" x-show="connect.waiting"><a :href="connect.waiting" target="_blank" rel="noopener" x-text="'Open the sign in for ' + connect.row.name"></a>. Come back here when you are done.</p>
+		<div class="pg-actions">
+			<button type="submit" class="btn primary" :disabled="connect.busy">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "plug" } )# <span x-text="connectWord"></span></button>
+			<button type="button" class="btn" @click="connect.open = false">Cancel</button>
+		</div>
+	</form>
+</template>
+</bx:output>

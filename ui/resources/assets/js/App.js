@@ -30,6 +30,7 @@ import { conversationsPage } from "./components/conversations/ConversationsPage.
 import { memoryPage } from "./components/memory/MemoryPage.js";
 import { agentPage } from "./components/admin/AgentPage.js";
 import { routinesPage } from "./components/routines/RoutinesPage.js";
+import { connectorsPage } from "./components/connectors/ConnectorsPage.js";
 
 // ============================================================
 // Plugins
@@ -82,6 +83,7 @@ Alpine.data( "conversationsPage", conversationsPage );
 Alpine.data( "memoryPage", memoryPage );
 Alpine.data( "agentPage", agentPage );
 Alpine.data( "routinesPage", routinesPage );
+Alpine.data( "connectorsPage", connectorsPage );
 Alpine.data( "kitPage", kitPage );
 
 window.Alpine = Alpine;

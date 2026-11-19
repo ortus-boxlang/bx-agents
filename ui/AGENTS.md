@@ -81,12 +81,16 @@ The app partials (`views/_components/app/`) are `includes`, `sprite`, `sidebar` 
 | Memory | `Memory.index` | `views/memory/` | `components/memory/MemoryPage.js` |
 | Agent (`/agent/:tab`) | `Agent.index` | `views/agent/` | `components/admin/AgentPage.js` |
 | Routines (editor and reports in `modal`) | `Routines.index` | `views/routines/` | `components/routines/RoutinesPage.js` |
+| Connectors (`/connectors/:tab`, connect in `modal`, tools in `drawer`) | `Connectors.index` | `views/connectors/` | `components/connectors/ConnectorsPage.js` |
 
 A page handler is one `index()` that calls `showPage( event, prc, id, view )` (BaseHandler): 404 for an unknown page,
 403 for an admin page to anybody else. Server values a component needs go in `data-*` attributes, read in `init()`.
 A tab or filter the address should keep: `keepInAddress( path, query )` (`utils/address.js`). A file from the API:
 `downloadFile( $api, path, name )` (`utils/download.js`). Until the chat moves here, go to it with `openInChat` or
 `talkTo` (`utils/chat.js`), which use `config.chatUrl`.
+
+Bind `:disabled`, `:checked` and other boolean attributes to a real boolean (`!!t.locked`), never to a value that can be
+`undefined` or `null`: in a list rendered by `x-for` that once disabled every switch.
 
 ## Commands (from `ui/`)
 

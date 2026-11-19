@@ -1,0 +1,30 @@
+<!--- The tools drawer: a switch per tool, kept for this person only; the admin's ceiling shows as a lock. Inside
+      connectorsPage, in a drawer. --->
+<bx:output>
+<p class="pg-note" role="status" aria-live="polite" x-text="toolsOf.loading ? 'Loading the tools.' : toolsIntro"></p>
+<div class="pg-actions">
+	<button type="button" class="btn" @click="changeTools( { all: true } )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "check" } )# All on</button>
+	<button type="button" class="btn" @click="changeTools( { all: false } )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "prohibit" } )# All off</button>
+	<button type="button" class="btn" x-show="readOnlyKnown" @click="changeTools( { readonly: true } )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "hand-palm" } )# Read only</button>
+</div>
+<input type="search" placeholder="Search the tools" aria-label="Search the tools" x-model="toolsOf.query">
+<div class="conn-risk high" role="status" x-show="toolsOf.summary.over">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "warning" } )#
+	<span x-text="'The agent has ' + toolsOf.summary.toolsOn + ' tools on across all connectors. Models answer better with fewer than ' + toolsOf.summary.toolWarning + '.'"></span>
+</div>
+<p class="pg-error" role="alert" x-show="toolsOf.error" x-text="toolsOf.error"></p>
+<ul class="conn-tools" :aria-label="toolsOf.row ? 'Tools of ' + toolsOf.row.name : 'Tools'">
+	<template x-for="t in shownTools" :key="t.name">
+		<li class="conn-tool">
+			<div class="conn-tool-text">
+				<label :for="'tool-' + t.name"><code x-text="t.name"></code></label>
+				<span class="pg-note" x-show="t.description" x-text="t.description"></span>
+				<span class="pg-note" x-show="t.locked">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "lock-key" } )# Turned off by your admin</span>
+			</div>
+			<span class="chip warn" x-show="t.destructive === true">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "warning" } )# Can delete</span>
+			<span class="chip ok" x-show="t.readOnly === true">Reads only</span>
+			<span class="switch"><input type="checkbox" :id="'tool-' + t.name" :checked="!!t.on" :disabled="!!t.locked" @change="changeTools( { tool: t.name, on: $event.target.checked } )"><span class="switch-track" aria-hidden="true"></span></span>
+		</li>
+	</template>
+</ul>
+<p class="pg-note" x-show="toolsOf.query.trim()" x-text="'Showing ' + shownTools.length + ' of ' + toolsOf.tools.length + '.'"></p>
+</bx:output>
