@@ -260,7 +260,7 @@ class {
 			"all"
 		)
 		html = html.replace( "__WELCOME__", escapeJs( welcome ), "all" )
-		html = html.replace( "__SUGGESTIONS__", escapeJs( jsonSerialize( suggestionsOf( config ) ) ), "all" )
+		html = html.replace( "__SUGGESTIONS__", escapeJs( jsonSerialize( new "models.build.generators.WebAppModule@bxagents"().suggestionsOf( config ) ) ), "all" )
 		html = html.replace( "__SHOW_REASONING__", showReasoning ? "true" : "false", "all" )
 		html = html.replace( "__SHOW_TOOLS__", showTools ? "true" : "false", "all" )
 		html = html.replace( "__THEME_TOKENS__", renderThemeTokens( config.theme ?: {} ), "all" )
@@ -1373,25 +1373,6 @@ class {
 			variables.symbols = found
 		}
 		return variables.symbols
-	}
-
-	/**
-	 * @config The entry's config
-	 *
-	 * @return The `suggestions` as at most four short texts: what the empty page offers to send with one click
-	 */
-	private array function suggestionsOf( required struct config ) {
-		var given = arguments.config.suggestions ?: []
-		if ( !isArray( given ) ) {
-			return []
-		}
-		var kept = []
-		for ( var suggestion in given ) {
-			if ( isSimpleValue( suggestion ) && len( trim( suggestion ) ) && kept.len() < 4 ) {
-				kept.append( left( trim( suggestion ), 120 ) )
-			}
-		}
-		return kept
 	}
 
 }

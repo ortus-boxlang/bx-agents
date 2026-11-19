@@ -1,0 +1,28 @@
+<!--- The list of conversations: New chat, a filter, open, rename, delete, and Show more. Inside chatPage. --->
+<bx:output>
+<aside id="sidebar" aria-label="Conversations" x-show="$store.session.can( '~conversations' )">
+	<div class="sidebar-head">
+		<button type="button" id="newBtn" title="Start a new conversation" @click="newChat()">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "plus" } )# New chat</button>
+	</div>
+	<div class="conv-filter"><input type="search" placeholder="Filter conversations" aria-label="Filter conversations" autocomplete="off" x-model.debounce.250ms="query"></div>
+	<ul id="convList">
+		<li class="empty" x-show="!conversations.length" x-text="query ? 'No conversation matches that.' : 'No conversations yet.'"></li>
+		<template x-for="conv in conversations" :key="conv.id">
+			<li :class="{ active: conv.id === conversationId }">
+				<button type="button" class="pick" :aria-current="( conv.id === conversationId ).toString()" @click="open( conv )">
+					<span class="name" x-text="conv.title || 'Untitled'"></span>
+					<span class="count" x-text="( conv.messageCount || 0 ) + ' messages'"></span>
+				</button>
+				<span class="row-actions">
+					<button type="button" title="Rename" :aria-label="'Rename ' + ( conv.title || 'Untitled' )" @click="rename( conv )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "pencil-simple" } )#</button>
+					<button type="button" title="Delete" :aria-label="'Delete ' + ( conv.title || 'Untitled' )" @click="remove( conv )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "trash" } )#</button>
+				</span>
+			</li>
+		</template>
+	</ul>
+	<div class="conv-more">
+		<button type="button" x-show="hasMore" @click="showMore()" x-text="'Show more (' + ( total - conversations.length ) + ' more)'"></button>
+		<a href="#encodeForHTML( prc.ui.basePath )#/conversations">All conversations</a>
+	</div>
+</aside>
+</bx:output>

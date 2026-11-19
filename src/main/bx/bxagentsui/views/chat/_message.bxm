@@ -1,0 +1,39 @@
+<!--- One message of the transcript: what you wrote, an error, or an answer of the agent with its reasoning, its tool calls
+      and a Copy button. Inside chatPage, as `m`. An answer's Markdown goes through $md, the only input x-html takes. --->
+<bx:output>
+<div class="msg" :class="m.role">
+	<template x-if="m.role === 'you'">
+		<!--- on one line: the bubble keeps white space (pre-wrap), so any line break here would show --->
+		<div class="bubble user"><span x-text="m.text"></span><template x-for="src in m.images" :key="src"><img class="sent-image" alt="attached picture" :src="src"></template></div>
+	</template>
+	<template x-if="m.role === 'error'">
+		<div class="bubble error" role="alert" x-text="m.text"></div>
+	</template>
+	<template x-if="m.role === 'agent'">
+		<div class="turn">
+			<template x-if="showReasoning && m.turn.reasoning">
+				<details class="trace reasoning"><summary>Thinking</summary><div class="body" x-text="m.turn.reasoning"></div></details>
+			</template>
+			<template x-if="showTools">
+				<div class="tools">
+					<template x-for="tool in m.turn.tools" :key="tool.index">
+						<details class="trace tool">
+							<summary>
+								<span x-text="tool.name || 'tool'"></span>
+								<span class="preview" x-text="argsPreview( tool.args )"></span>
+								<span class="status" :class="tool.done ? 'done' : 'running'" x-text="tool.done ? 'done' : 'running…'"></span>
+							</summary>
+							<div class="body" x-text="tool.args"></div>
+						</details>
+					</template>
+				</div>
+			</template>
+			<div class="bubble assistant" :class="{ pending: m.turn.pending }">
+				<div x-show="m.turn.text" x-html="$md( m.turn.text )"></div>
+				<span class="pg-note" x-show="m.turn.empty">(no response)</span>
+			</div>
+			<button type="button" class="copy" title="Copy answer" aria-label="Copy answer" x-show="!m.turn.pending && m.turn.text" @click="copy( m.turn )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "copy" } )#</button>
+		</div>
+	</template>
+</div>
+</bx:output>

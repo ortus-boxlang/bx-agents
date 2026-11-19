@@ -31,10 +31,11 @@ export { expect };
  * Opens the chat on a new conversation, so a test never sees another test's messages.
  *
  * @param {import("@playwright/test").Page} page The page
+ * @param {string} [path] The chat, under /chat/: "./" for the current page, "next/" for the new app
  * @returns {Promise<void>}
  */
-export async function freshChat( page ) {
-	await page.goto( "./" );
+export async function freshChat( page, path = "./" ) {
+	await page.goto( path );
 	await expect( page.locator( "#input" ) ).toBeVisible();
 	// the last conversation loads after the page: let it, so it cannot replace the new one afterwards
 	await page.waitForLoadState( "networkidle" );
