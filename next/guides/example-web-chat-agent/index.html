@@ -251,7 +251,7 @@
 
 		
 		<h1 id="example-building-a-web-chat-agent"><a href="#example-building-a-web-chat-agent" id="example-building-a-web-chat-agent" name="example-building-a-web-chat-agent" class="anchor"></a>Example: Building a Web Chat Agent</h1>
-<p><a href="https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent"><code>examples/webui-agent/</code></a> generates a complete, themed browser chat page for an agent from a single <code>gateways/*</code> entry with <code>exposes: &quot;webui&quot;</code> - the <a href="/next/conventions/web-ui/index.html">v1 web chat UI</a>. No frontend code to write, no Node/npm in the build, no separate deploy step for a SPA - the page is a real file BxAgents writes into the generated app.</p>
+<p><a href="https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent"><code>examples/webui-agent/</code></a> generates a complete, themed browser chat page for an agent from a single <code>gateways/*</code> entry with <code>exposes: &quot;webui&quot;</code> - the <a href="/next/conventions/web-ui/index.html">v1 web chat UI</a>. No frontend code to write, no Node/npm in the build, no separate deploy step for a SPA - the app is a ColdBox module BxAgents copies, already built, into the generated app.</p>
 <p>This is the one example in this guide series with real screenshots, because it's the one kind of BxAgents example whose output is actually a browser page. The images below show the current page layout, captured from a demo app (title &quot;Acme Assistant&quot;, blue accent), so the title, tagline and colors differ from this example's own config. The page is the same: only the branding comes from the gateway file.</p>
 <h2 id="the-project"><a href="#the-project" id="the-project" name="the-project" class="anchor"></a>The project</h2>
 <pre><code>webui-agent/
@@ -323,7 +323,7 @@ model: mock/mock-model
 bxAgents build
 bxAgents serve --port=8080
 </code></pre>
-<p>Open <strong><a href="http://localhost:8080/chat/index.html">http://localhost:8080/chat/index.html</a></strong>. You get the left menu, the conversation sidebar, the streaming transcript, and a header and composer in the colors of your <code>theme</code>:</p>
+<p>Open <strong><a href="http://localhost:8080/chat/">http://localhost:8080/chat/</a></strong>. You get the left menu, the conversation sidebar, the streaming transcript, and a header and composer in the colors of your <code>theme</code>:</p>
 <p><picture><source type="image/webp" srcset="/next/assets/webui-chat-light-400w.d857c0c2.webp 400w, /next/assets/webui-chat-light-800w.d857c0c2.webp 800w, /next/assets/webui-chat-light-1200w.d857c0c2.webp 1200w, /next/assets/webui-chat-light-1600w.d857c0c2.webp 1600w, /next/assets/webui-chat-light-2560w.d857c0c2.webp 2560w" sizes="(min-width: 800px) 800px, 100vw"><img src="/next/assets/webui-chat-light.png" srcset="/next/assets/webui-chat-light-400w.d857c0c2.png 400w, /next/assets/webui-chat-light-800w.d857c0c2.png 800w, /next/assets/webui-chat-light-1200w.d857c0c2.png 1200w, /next/assets/webui-chat-light-1600w.d857c0c2.png 1600w" sizes="(min-width: 800px) 800px, 100vw"  alt="The generated web app: the left menu, a conversation with a tool call, and a themed header and composer" /></picture></p>
 <h3 id="dark-mode"><a href="#dark-mode" id="dark-mode" name="dark-mode" class="anchor"></a>Dark mode</h3>
 <p>The <code>theme.dark</code> overrides (<code>accent</code>/<code>accentFg</code>) apply automatically when the page switches to dark, from <strong>Settings</strong> or by following the system - everything else is the same generated CSS, just re-tokened:</p>
@@ -347,7 +347,7 @@ bxAgents serve --port=8080
 <p>The menu on the left has a page for each of these and more; see <a href="/next/conventions/web-ui/index.html#the-pages">the web app, page by page</a>.</p>
 <p>In the message box, the paperclip attaches a picture or a text file (you can also paste or drop them), the lightning button opens the <code>/</code> commands menu, and the arrow sends. While the agent works the arrow steers the run and a stop button appears.</p>
 <h2 id="the-optional-api-key"><a href="#the-optional-api-key" id="the-optional-api-key" name="the-optional-api-key" class="anchor"></a>The optional API key</h2>
-<p>This example ships <code>apiKeyEnvVar</code> <strong>set</strong>. It is the agent API's shared secret, so every call to <code>/__bxagents</code> must carry a matching <code>x-bxagents-token</code> header - the static shell (<code>/chat/index.html</code>) itself stays reachable regardless, since a browser's plain page navigation can't send a custom header, and the shell is exactly what prompts you for the key:</p>
+<p>This example ships <code>apiKeyEnvVar</code> <strong>set</strong>. It is the agent API's shared secret, so every call to <code>/__bxagents</code> must carry a matching <code>x-bxagents-token</code> header - the app's pages (<code>/chat/</code>) stay reachable regardless, since a browser's plain page navigation can't send a custom header, and the app is exactly what prompts you for the key:</p>
 <pre><code class="language-bash">export CHAT_UI_API_KEY=&quot;a-real-secret&quot;
 bxAgents build
 bxAgents serve --port=8080
