@@ -34,9 +34,9 @@ Asking for a name finds the person's own secret first, then the agent's. A perso
 A value is **never a flag and never typed in a chat message**: it would sit in a history, a log or a transcript.
 
 - **Terminal chat:** `/vault` opens a screen. `a` adds (the value is typed in a box that shows bullets), `e` edits, `d` removes, `t` switches between your secrets and the agent's.
-- **Web page:** *Vault* in the settings menu. The value goes in a password field, is sent once and the field is cleared.
+- **Web page:** the *Vault* page of the menu (`<path>/vault`). The value goes in a password field, is sent once and the field is cleared.
 - **Command line:** `bxAgents vault add --name=GMAIL_TOKEN` asks for the value hidden, or reads it from a pipe with `--stdin`. See [`vault`](../cli-reference.md#vault).
-- **The agent asks:** with a `vault:` block, the agent has a `vault_request` tool. Calling it opens the vault screen or the web panel on that name, with the reason, and the person types the value there. See [what the agent can do](#what-the-agent-can-do).
+- **The agent asks:** with a `vault:` block, the agent has a `vault_request` tool. Calling it opens the vault screen in the terminal, or the Vault page on that name with the reason (`<path>/vault?ask=<name>&scope=&why=`), and the person types the value there. See [what the agent can do](#what-the-agent-can-do).
 
 Sign ins to services such as mail are kept in the same sealed way: see [connect](connect.md). Tokens people connect for the [built-in connectors](connectors.md) are sealed per person and locked to the host of the service.
 

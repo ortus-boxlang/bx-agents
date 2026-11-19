@@ -85,11 +85,11 @@ Construye el cliente con argumentos con nombre. Hay un método por cada ruta: `i
 
 ## Control de ejecuciones
 
-Una ejecución pertenece a quien la empezó.
+El id de hilo del primer frame de una ejecución es todo lo que piden `cancel` y `steer`. Una ejecución en pausa solo la puede reanudar quien la empezó.
 
 | Llamada | Hace |
 |---|---|
-| `cancel( threadId )` | La detiene. Solo su dueño, o un admin. |
+| `cancel( threadId )` | La detiene. |
 | `steer( threadId, input )` | Añade un mensaje a una ejecución en marcha. |
 | `pending( threadId )` y `resume( threadId, decision )` | Aprobar, rechazar o editar lo que quiere hacer una ejecución detenida. |
 
@@ -109,7 +109,7 @@ println( made.token );        // se muestra una vez; el servidor guarda solo una
 client.revokeToken( "ci" );
 ```
 
-La misma lista, creación y revocación están en el panel **Tokens** de la [página web](../conventions/web-ui.md) (se muestra a los admins en un servidor que lo permite). Un token `chat` recibe `403`. Sin `manageTokens`, las rutas no existen.
+La misma lista, creación y revocación están en la pestaña **Tokens** de la página Access de la [app web](../conventions/web-ui.md) (`<path>/access/tokens`, se muestra a los admins en un servidor que lo permite). Un token `chat` recibe `403`. Sin `manageTokens`, las rutas no existen.
 
 ## Todas las rutas
 

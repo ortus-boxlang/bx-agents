@@ -587,11 +587,11 @@ Each slash command is written once, as a small class that answers with data (tex
 | Where | How you use them |
 |---|---|
 | Terminal chat | Type `/`, as above |
-| [Web page](conventions/web-ui.md#slash-commands) | Type `/`: a menu of the commands appears, `Tab` completes one |
+| [Web page](conventions/web-ui.md#slash-commands) | Type `/` (or press the lightning button): a menu of the commands appears, `Tab` completes one |
 | [Chat platforms](conventions/gateways/index.md#commands-in-a-gateway) (Telegram, Slack, ...) | Type the command as a message. A safe set is on by default (`help`, `info`, `tools`, `model`, `ping`, `notes`, `remember`); a project can widen or switch it off |
 | A server over HTTP | `GET /__bxagents/commands` and `POST /__bxagents/command`, see [Run control](conventions/agent-bx.md#run-control) |
 
-`/name`, `/fork` and `/export` work in the terminal and in the web page (where `/export` hands the file to the browser to save, and the page has **Fork** and **Export** buttons). The size of the context is also always in front of you: the hint row under the message box starts with `ctx ~12.4k / 128k 9%` (just `ctx ~12.4k` when the project does not say the window), refreshed before every prompt, so after each message, `/clear`, `/compact`, `/resume` and a change to your notes. The web page shows the same in its header; click it for the breakdown. The numbers are estimates, characters divided by four (what bx-ai's `aiTokens()` does), good for seeing which part is big and not for an exact bill. The tools of MCP servers are fetched when a run starts and are not counted.
+`/name`, `/fork` and `/export` work in the terminal and in the web page (where `/export` hands the file to the browser to save, and the page has **Fork** and **Export** buttons). The size of the context is also always in front of you: the hint row under the message box starts with `ctx ~12.4k / 128k 9%` (just `ctx ~12.4k` when the project does not say the window), refreshed before every prompt, so after each message, `/clear`, `/compact`, `/resume` and a change to your notes. The web page shows the same in the bar above the conversation; click the ring for the breakdown. The numbers are estimates, characters divided by four (what bx-ai's `aiTokens()` does), good for seeing which part is big and not for an exact bill. The tools of MCP servers are fetched when a run starts and are not counted.
 
 `/copy`, `/record`, `/profile`, `/default` and `/exit` act on your own machine or on your own session's model, so they stay in the terminal.
 
@@ -961,6 +961,7 @@ bxAgents logs [area] [--follow | --ui] --connect=URL [--token=TOKEN] [--api-path
 - `--ui` opens a full-screen viewer: a tab per log (Left and Right, or Tab), `l` for the level (all, warn, error), `/` to search (Enter keeps it, Esc drops it), the arrows, Page Up, Page Down and Home to scroll back (the view stays put while new lines arrive) and End to follow the newest again, `q` to leave. New lines show as they are written. Without a terminal (a pipe, CI) it follows instead.
 - `--connect` reads a served agent over its [API](guides/agent-api.md) instead of this project's files: `GET /logs`, and `GET /logs/stream` for `--follow`. It needs an admin token (`--token`, or `BXAGENTS_TOKEN`), and `--api-path` when the agent serves its API elsewhere. With `--ui` it reads the log again every 2 seconds.
 - In the terminal chat, `/logs` lists the logs and `/logs <area> [--tail=N] [--level=warn] [--grep=text]` prints the last lines (30 unless `--tail` says); over `--connect` it takes an admin token.
+- In the web app an admin has the same logs on the [Logs page](conventions/web-ui.md#logs), with a **Live** switch that follows new lines.
 - Secrets are never in a log, and neither is what a person said.
 
 ### `models`

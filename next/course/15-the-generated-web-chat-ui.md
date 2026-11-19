@@ -57,26 +57,30 @@ same page for real.
   them as buttons that send on one click.
 - **Pictures** - an Attach button, paste and drop send pictures with a message (refused when the
   model's profile says `vision: false`).
-- **Context ring** - the header shows how much of the model's window is used; click it for the
+- **Context ring** - the bar above the conversation shows how much of the model's window is used; click it for the
   breakdown.
 - **Model picker** - when the entry lists `profiles`, visitors can choose one per message.
 
-### The Settings menu
+### The pages and the header
 
-The header keeps only what you use every minute: the **Chats** button, the context ring, the model
-picker and a **Settings** gear. The gear opens one menu in three groups. An item the server does
-not offer, and a group with nothing in it, is left out.
+The app is more than the chat. A left menu lists its pages, and each page is an address of its own
+under `<path>` (`/chat/conversations`, `/chat/routines`, `/chat/settings`), so you can bookmark one.
+The menu shows only what this person may use. An address under `<path>` that is no page answers `404`.
 
-| Group | Items |
+| Group | Pages |
 |---|---|
-| Conversation | Fork this conversation, Export as Markdown, Clear messages, Compact older messages |
-| You | Notes (what the agent keeps about you and about its own work), Appearance, light or dark theme |
-| Server | Password, Access tokens |
+| Main | Chat, Conversations, Routines, Registry, Connectors, Memory, Vault, Settings |
+| Admin | Agent, Gateways, Logs, Access, Data and backups |
 
-**Appearance** lets each visitor pick light, dark or system, an accent color, the text size and the
-density, saved in their own browser. It never changes your `theme`, which stays the default.
-**Access tokens** lists, creates and revokes tokens for admins, when the server sets
-`agentApi.manageTokens: true` ([Lesson 13](13-exposing-http-and-mcp.md)).
+The header holds the agent's icon and title, a light or dark switch, and **Password** (an agent
+without accounts) or who is signed in and **Sign out**. On the Chat page, the bar above the
+conversation holds the model picker, the context ring and the **Fork**, **Export** and **Compact**
+buttons.
+
+The **Settings** page has **Appearance**: each visitor picks light, dark or system, an accent color,
+the text size and the density, saved in their own browser. It never changes your `theme`, which
+stays the default. The **Access** page lists, creates and revokes tokens for admins, when the server
+sets `agentApi.manageTokens: true` ([Lesson 13](13-exposing-http-and-mcp.md)).
 
 ## Without accounts: one shared workspace
 
@@ -127,10 +131,10 @@ image address or `phosphor:<name>` (a Phosphor icon built into the page).
 
 `apiKeyEnvVar` is the agent API's shared secret - not a full login system. Left unset,
 the API is open (fine for local dev). Set it, and every call to `/__bxagents` must carry
-a matching `x-bxagents-token` header. The static shell itself is deliberately **not**
+a matching `x-bxagents-token` header. The app's pages themselves are deliberately **not**
 gated, since a browser's plain page navigation can't send a custom header: the page asks for the
-secret in a **Password** form that opens by itself when the server answers `401`, and says when
-the password was not accepted. For several people, use issued tokens or list `users`
+secret in a **Password** dialog that opens by itself when the server answers `401`, and from the
+key button in the header. For several people, use issued tokens or list `users`
 ([Lesson 13](13-exposing-http-and-mcp.md) covers tokens, `allowedIPs` and `rateLimit`).
 
 ## Try it
@@ -143,6 +147,7 @@ bxAgents serve --port=8080
 Open `http://localhost:8080/chat` in a browser (or just `http://localhost:8080/`, which redirects there) and talk to your agent - the same one
 you've been building tools, skills and subagents onto since [Lesson 9](09-giving-your-agent-tools.md).
 
-Full reference: [The web chat UI](../conventions/web-ui.md).
+Full reference: [The web chat UI](../conventions/web-ui.md). To change the app itself, see
+[Work on the web app](../guides/ui-development.md).
 
 Next: [Lesson 16 - Scheduling Background Work](16-scheduling-background-work.md)

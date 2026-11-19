@@ -26,10 +26,10 @@ class {
 }
 ```
 
-Esto genera un `<path>/index.html` estático (servido directamente, sin necesidad de ruta) que
-llama a la API del agente en `/__bxagents`. La página es HTML/CSS/JS puro y sin dependencias,
-precompilado e incluido dentro del propio BxAgents - `bxAgents build` nunca ejecuta
-`npm install`, y un proyecto generado no necesita tener Node instalado en absoluto.
+Esto instala la app web en `<path>`: un módulo de ColdBox que llama a la API del agente en
+`/__bxagents`. Sus scripts y estilos se compilan de antemano y van dentro del propio BxAgents -
+`bxAgents build` nunca ejecuta `npm install`, y un proyecto generado no necesita tener Node
+instalado en absoluto.
 
 ![La UI web de chat generada, con marca propia y con una conversación de ejemplo](../assets/webui-chat-light.png)
 
@@ -60,26 +60,32 @@ Ejecutar `bxAgents build && bxAgents serve` en ese ejemplo te da esa misma pági
   muestra como botones que envían con un clic.
 - **Imágenes** - un botón Attach, pegar y arrastrar envían imágenes con un mensaje (se rechazan
   cuando el perfil del modelo dice `vision: false`).
-- **Anillo de contexto** - el encabezado muestra cuánto de la ventana del modelo está en uso; haz
+- **Anillo de contexto** - la barra sobre la conversación muestra cuánto de la ventana del modelo está en uso; haz
   clic para ver el desglose.
 - **Selector de modelo** - cuando la entrada lista `profiles`, los visitantes pueden elegir uno por mensaje.
 
-### El menú Settings
+### Las páginas y la cabecera
 
-El encabezado conserva solo lo que usas a cada minuto: el botón **Chats**, el anillo de contexto, el
-selector de modelo y un engranaje **Settings**. El engranaje abre un menú con tres grupos. Un
-elemento que el servidor no ofrece, y un grupo sin nada dentro, se omiten.
+La app es más que el chat. Un menú a la izquierda lista sus páginas, y cada página es una dirección
+propia bajo `<path>` (`/chat/conversations`, `/chat/routines`, `/chat/settings`), así que puedes
+guardarla como marcador. El menú muestra solo lo que esta persona puede usar. Una dirección bajo
+`<path>` que no es ninguna página responde `404`.
 
-| Grupo | Elementos |
+| Grupo | Páginas |
 |---|---|
-| Conversation | Fork this conversation, Export as Markdown, Clear messages, Compact older messages |
-| You | Notes (lo que el agente guarda sobre ti y sobre su propio trabajo), Appearance, tema claro u oscuro |
-| Server | Password, Access tokens |
+| Main | Chat, Conversations, Routines, Registry, Connectors, Memory, Vault, Settings |
+| Admin | Agent, Gateways, Logs, Access, Data and backups |
 
-**Appearance** deja a cada visitante elegir claro, oscuro o el del sistema, un color de acento, el
-tamaño del texto y la densidad, guardados en su propio navegador. Nunca cambia tu `theme`, que sigue
-siendo el valor por defecto. **Access tokens** lista, crea y revoca tokens para admins, cuando el
-servidor define `agentApi.manageTokens: true` ([Lección 13](13-exposing-http-and-mcp.md)).
+La cabecera lleva el icono y el título del agente, un interruptor de claro u oscuro, y **Password**
+(un agente sin cuentas) o quién inició sesión y **Sign out**. En la página Chat, la barra sobre la
+conversación lleva el selector de modelo, el anillo de contexto y los botones **Fork**, **Export**
+y **Compact**.
+
+La página **Settings** tiene **Appearance**: cada visitante elige claro, oscuro o el del sistema, un
+color de acento, el tamaño del texto y la densidad, guardados en su propio navegador. Nunca cambia
+tu `theme`, que sigue siendo el valor por defecto. La página **Access** lista, crea y revoca tokens
+para admins, cuando el servidor define `agentApi.manageTokens: true`
+([Lección 13](13-exposing-http-and-mcp.md)).
 
 ## Sin cuentas: un único espacio de trabajo compartido
 
@@ -130,11 +136,11 @@ emoji, una dirección de imagen o `phosphor:<name>` (un icono Phosphor incluido 
 
 `apiKeyEnvVar` es el secreto compartido de la API del agente - no un sistema de login completo. Si
 no se define, la API queda abierta (aceptable en desarrollo local). Si lo defines, cada
-llamada a `/__bxagents` debe llevar una cabecera `x-bxagents-token` que coincida. El armazón
-estático en sí **no** está protegido deliberadamente, ya que la navegación normal de una página
+llamada a `/__bxagents` debe llevar una cabecera `x-bxagents-token` que coincida. Las páginas
+de la app en sí **no** están protegidas deliberadamente, ya que la navegación normal de una página
 en el navegador no puede enviar una cabecera personalizada: la página pide el secreto en un
-formulario **Password** que se abre solo cuando el servidor responde `401`, y avisa cuando la
-contraseña no fue aceptada. Para varias personas, usa tokens emitidos o lista `users`
+diálogo **Password** que se abre solo cuando el servidor responde `401`, y con el botón de la
+llave de la cabecera. Para varias personas, usa tokens emitidos o lista `users`
 ([la Lección 13](13-exposing-http-and-mcp.md) cubre tokens, `allowedIPs` y `rateLimit`).
 
 ## Pruébalo
@@ -147,6 +153,7 @@ bxAgents serve --port=8080
 Abre `http://localhost:8080/chat` en un navegador (o solo `http://localhost:8080/`, que redirige ahí) y habla con tu agente - el mismo al que le
 has ido añadiendo tools, skills y subagentes desde la [Lección 9](09-giving-your-agent-tools.md).
 
-Referencia completa: [La UI web de chat](../conventions/web-ui.md).
+Referencia completa: [La UI web de chat](../conventions/web-ui.md). Para cambiar la app misma, ver
+[Trabajar en la app web](../guides/ui-development.md).
 
 Siguiente: [Lección 16 - Programar trabajo en segundo plano](16-scheduling-background-work.md)

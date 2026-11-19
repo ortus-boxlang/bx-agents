@@ -98,7 +98,7 @@ Quién puede llamarla se define bajo `agentApi` en `Agent.yaml`:
 - **Protecciones**: `allowedIPs` deja entrar solo a las direcciones y redes listadas, y `rateLimit:
   { requests, perSeconds }` limita las llamadas por dirección. Ambas valen abierta o cerrada.
 - **Gestionar tokens por la API**: `manageTokens: true` (con `tokens: true`) permite a un admin crear
-  y revocar tokens de forma remota, y muestra un panel **Tokens** en la página web.
+  y revocar tokens de forma remota, y muestra la pestaña **Tokens** de la página Access de la app web.
 - **Moverla**: `path: /agent-api` sirve toda la API en otro sitio.
 
 ```yaml

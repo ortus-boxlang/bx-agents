@@ -145,7 +145,7 @@ Making and changing a routine is usually asked of the agent, where a person sees
 | Chat: `/routines`, `/routine <name> [run \| pause \| resume \| delete confirm \| reports \| report <file>]` | List yours (an admin adds `all`), show one, run, pause, resume, delete (only with `confirm`), list and read reports |
 | Terminal: `bxAgents routines list \| show \| add \| edit \| pause \| resume \| run \| delete \| reports \| report \| clean` | The same, as the local operator, so `--all` lists every owner's. See [the CLI reference](../cli-reference.md#routines) |
 | [API](../guides/agent-api.md#routines) | `GET /routines` and the routes below, for your own program |
-| [Web page](web-ui.md#routines) | A **Routines** item in the Settings menu: a list with run, pause, edit, delete, reports and clean-up |
+| [Web page](web-ui.md#routines) | The **Routines** page of the menu (`<path>/routines`): a list with run, pause, edit, delete, reports and clean-up |
 
 `run` marks a routine due. It starts within a minute, by the heartbeat of a served app, so from a terminal that is not serving the app nothing starts until the app is running.
 

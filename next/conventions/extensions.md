@@ -1,14 +1,14 @@
 ---
 title: extensions/
 icon: phosphor-duotone:puzzle-piece
-summary: Add commands and schedules to the chat and the served agent, as one file or a folder, with settings.
-description: Add commands and schedules to the chat and the served agent, as one file or a folder, with settings.
-tags: [conventions, extensions, commands, scheduling]
+summary: Add commands, schedules and pieces of the web page to the chat and the served agent, as one file or a folder, with settings.
+description: Add commands, schedules, web page slots, styles and scripts to the chat and the served agent, as one file or a folder, with settings.
+tags: [conventions, extensions, commands, scheduling, web-ui]
 ---
 
 # extensions/
 
-An **extension** adds to BxAgents without changing it: chat commands (`/deploy`, `/roll 2d6`), listeners for the events of the chat and of bx-ai, and schedules that run when the agent is served. It is a class that looks and behaves like a ColdBox `ModuleConfig`: it has a `configure()`, an `onLoad()` and an `onUnload()`, its settings come from `Agent.yaml`, and things are handed to it with `$inject`.
+An **extension** adds to BxAgents without changing it: chat commands (`/deploy`, `/roll 2d6`), listeners for the events of the chat and of bx-ai, schedules that run when the agent is served, and pieces of the [web page](#the-web-page-slots-and-web). It is a class that looks and behaves like a ColdBox `ModuleConfig`: it has a `configure()`, an `onLoad()` and an `onUnload()`, its settings come from `Agent.yaml`, and things are handed to it with `$inject`.
 
 One file is a whole extension:
 
@@ -108,6 +108,7 @@ extensions/standup/
   Extension.bx        required: it is what makes the folder an extension (the module config: properties, configure(), onLoad(), onUnload())
   commands/           one class per command, like the built-in ones
   schedulers/         BoxLang scheduler classes, started when the agent is served
+  web/                styles, scripts and other files for the web page (see below)
 ```
 
 A class in `commands/` extends `models.chat.commands.BaseCommand@bxagents` and says its `name()`, `hint()`, `transports()` and `run( context, args )`. `settings` and `log` are injected into it.
@@ -207,7 +208,7 @@ function resetPulse( agentContext, commandArguments ) { ... }
 
 A key is named `extension:method` (`pulse:pulse`). `/keys` lists it with the built-in ones, and a person can give it other keys under `chat: keys:` in `~/.bxagents/bxAgents.yml`. A key a built-in action already uses, or an earlier extension holds, is refused with a sentence that says so. A typed draft stays in the box while a key runs. Keys are for the terminal chat; the web page and chat platforms have commands.
 
-`@Status` is a piece of status next to the size of the context: a method that returns a short text, asked each time the box is drawn in the terminal and after each change to the conversation on the web page (small chips in the header). Return an empty string to show nothing. It must be quick; one that throws is left out and the reason is put on its extension once.
+`@Status` is a piece of status next to the size of the context: a method that returns a short text, asked each time the box is drawn in the terminal and after each change to the conversation on the web page (chips in the bar above the conversation, see [Status items](#status-items)). Return an empty string to show nothing. It must be quick; one that throws is left out and the reason is put on its extension once.
 
 ```js
 @Status
@@ -295,9 +296,17 @@ if ( agentContext.confirm( "Make the #priority# ticket?" ) ) { ... }
 
 ## The web page: slots and `web/`
 
-Two ways to add to the web page. Both are served with the page; the terminal chat has no page, so they are ignored there.
+An extension can add to the [web app](web-ui.md) four ways: **slots** (a string the server draws in a place of the Chat page), **status items** (chips above the conversation), **commands** (in the page's `/` menu), and **files in `web/`** (styles and scripts linked into every page). The terminal chat has no page, so slots and `web/` files are ignored there.
 
-**Slots** put a string in a named place of the page: `header` (a chip next to the context size), `sidebar` (a panel under the list of conversations) or `composer` (next to the Attach button). The method is called with the `agentContext` and returns the string:
+### Slots
+
+A slot puts a string in a named place of the Chat page. The method is called with the `agentContext` and returns the string:
+
+| Place | Where on the Chat page |
+|---|---|
+| `header` | the bar above the conversation, after the context size and the status chips |
+| `sidebar` | under the list of conversations |
+| `composer` | in the message box, before the Attach button |
 
 ```js
 @Slot( "header" )
@@ -307,9 +316,76 @@ function badge( agentContext ) { return variables.pings > 0 ? "#variables.pings#
 function about( agentContext ) { return "<strong>Panel</strong><br>Use the Ping button." }
 ```
 
-The string is shown as text. Only a slot that says `html : true` has its string put into the page as markup; that is the author saying it is their own markup, so it must never carry what a visitor typed (use `encodeForHTML()`). An empty string shows nothing. The page asks for every slot in one request, `GET /__bxagents/slots?conversationId=` (the agent API's own path, which `agentApi.path` can move), behind the same sign-in or token as the rest of the API, each time it refreshes the context size. A slot that throws is left out and the reason is put on its extension once. Written as a call: `registry.slot( "header", ( agentContext ) => "...", { html : false, name : "badge" } )`. `extensions.disable` takes `extension:method` for a slot.
+An empty string shows nothing. A place other than these three is refused when the extension loads. Written as a call: `registry.slot( "header", ( agentContext ) => "...", { html : false, name : "badge" } )`. `extensions.disable` takes `extension:method` for a slot.
 
-**`web/`** is a folder inside a folder extension. The page serves every file in it (images too) at `<path>/ext/<name>/<file>`, read from the extension itself in the built app; nothing is copied next to the page. The `*.css` and `*.js` files that sit directly in `web/` are linked into the page, in file name order: styles in the head and scripts at the end of the body. An extension turned off by name in `extensions.disable` brings nothing.
+**Text or markup.** The string is shown as text (`textContent`): `<b>` shows as `<b>`. Only a slot that says `html : true` has its string put into the page as markup (`innerHTML`). That is the author saying the markup is their own. The page does not clean it, so it must never carry what a visitor typed, a model wrote or a service sent: pass any such value through `encodeForHTML()`. The slot places are outside Alpine (`x-ignore`), so `x-`, `:` and `@` attributes in a slot do nothing; behaviour belongs in a script of `web/`.
+
+**When it is drawn.** The page asks for every slot in one request, `GET /__bxagents/slots?conversationId=` (the agent API's path, which `agentApi.path` can move), behind the same sign-in or token as the rest of the API. It asks when the Chat page opens and after each turn, command and change of conversation, at the same moments it reads the context size. Each draw replaces what the server drew before and leaves what a script added alone. A slot that throws is left out and the reason is put on its extension once. When no extension has a slot, `GET /agent` says `capabilities.slots: false` and the page does not ask.
+
+### Status items
+
+`@Status` (see [Keys and status](#keys-and-status)) is shown on the web page too: a chip for each item, in the bar above the conversation, read from `GET /__bxagents/status?conversationId=` at the same moments as the slots. An empty string shows no chip.
+
+### Commands
+
+A `@Command` whose `transports` include `web` (the default) is offered on the Chat page: in the menu that `/` opens and behind the lightning button, with the extension's name as a badge (`GET /commands`). Enter runs the line on the server with `POST /command` (`{ line, conversationId }`) and the page draws the `Reply`: text, a table, or buttons to pick from. A command that asks the person something gets `null` at once on the page (see [Asking the person](#asking-the-person)). A script runs one with `bxagents.runCommand( "/ping" )`, as if it were typed.
+
+### Files in `web/`
+
+`web/` is a folder inside a folder extension. Every file in it (images and fonts too, in subfolders as well) is served at `<path>/ext/<name>/<file>`, where `<path>` is the `webui` gateway's path: `extensions/panel/web/logo.png` is `/chat/ext/panel/logo.png`. The file is read from the extension itself in the built app (`<app>/extensions/<name>/web/`); nothing is copied next to the page.
+
+```text
+extensions/panel/
+  Extension.bx
+  web/
+    panel.css       linked into every page
+    panel.js        linked into every page
+    logo.png        served at <path>/ext/panel/logo.png
+    img/icon.svg    served at <path>/ext/panel/img/icon.svg, not linked
+```
+
+- The `*.css` and `*.js` files that sit directly in `web/` are linked into **every page** of the app, in file name order: styles in the head, after the app's own; scripts at the end of the body, deferred, after the app's own script. Files in subfolders are served but not linked.
+- Like the page's own scripts and styles, these files are not behind the sign-in. Do not put anything secret in `web/`.
+- An address is checked before any file is read: the extension is a plain folder name, the file a relative path with no `..`, no part that starts with a dot and no backslash, and the file must be inside the extension's `web/` folder. Anything else, a missing file, or an extension turned off in `extensions.disable` answers 404.
+- Which files are linked is written by `bxAgents build`, so build again after you add or rename one.
+- Only the project's own `extensions/` bring `web/` files (see [What stays in the project](#what-stays-in-the-project)).
+
+A script runs on every page, but the slot places, the open conversation and the commands exist only on the Chat page. Elsewhere `bxagents.slot()` gives a box that is not in the page, `conversationId()` is `""` and `runCommand()` does nothing. Check for the Chat page's message box (`document.getElementById( "input" )`) if a script should only run there.
+
+### The `bxagents` object
+
+The page makes one object, `window.bxagents`, before the extensions' deferred scripts run. Its members are fixed (a browser test keeps them so):
+
+| Member | What it does |
+|---|---|
+| `bxagents.apiBase` | the agent API's path (`/__bxagents`, or what `agentApi.path` says), for your own `fetch` calls |
+| `bxagents.slot( place )` | a new box of your own in `header`, `sidebar` or `composer` to draw into. Another place throws an error |
+| `bxagents.runCommand( line )` | runs a slash command as if it were typed, and shows its answer in the conversation. Does nothing while a turn runs |
+| `bxagents.onRefresh( fn )` | calls `fn()` after each draw of the slots and status chips: when the Chat page opens and after each turn, command and change of conversation. A listener that throws is logged in the browser console and the others still run |
+| `bxagents.refresh()` | asks the Chat page to read the slots, the status chips and the context size now |
+| `bxagents.conversationId()` | the id of the conversation in view, or `""` |
+| `bxagents.icon( name )` | the markup of one of the page's [Phosphor icons](https://phosphoricons.com) (`bxagents.icon( "robot" )`), sized by the text around it. The names are in `tools/webui-vendor/icons.json` |
+
+There is no event bus and no other member. `plug` and `notify` are the page's own, not part of the contract. A call to the API from a script goes to `bxagents.apiBase + "/..."` on the same origin, so the sign-in cookie goes with it. A call that changes something must also send the header `x-bxagents-csrf: 1`. On an agent with an API password and no accounts, a script's own `fetch` does not carry the password: run a command instead.
+
+### Theming
+
+The page's colours, shapes and fonts are CSS custom properties. Use them in your CSS and it follows light and dark, the visitor's accent and the gateway's `theme` block:
+
+| Variable | What it is |
+|---|---|
+| `--bg`, `--surface`, `--input-bg` | the page, a card or panel, a text box |
+| `--fg`, `--muted`, `--border` | text, quieter text, lines |
+| `--accent`, `--accent-fg` | the brand colour, and text on it |
+| `--accent-soft`, `--accent-ink`, `--ring` | a light tint of the accent, the accent as text or an icon, the focus glow |
+| `--radius`, `--radius-sm` | large and small corners |
+| `--font`, `--font-mono`, `--font-size` | the text font, the code font, the base size |
+
+The dark theme sets the same variables on `:root[data-theme="dark"]`, so a rule that uses them needs no dark copy. The gateway's [`theme` block](web-ui.md#branding-and-theming) and the project's `resources/webui/theme.css` come after the extensions' styles in the page, so the operator's choices win over an extension's. Do not hard-code a colour: it breaks the dark theme and the operator's brand.
+
+### A worked example: the panel extension
+
+The dev agent of the web app (`ui/dev/agent/extensions/panel`) uses all of it: a header slot that counts pings, a sidebar slot with markup, a `/ping` command, and a script that adds a **Ping** button to the message box.
 
 ```text
 extensions/panel/
@@ -317,22 +393,78 @@ extensions/panel/
   web/
     panel.css
     panel.js
-    logo.png        served at <path>/ext/panel/logo.png
 ```
 
-The page gives scripts one small object, `bxagents`:
+`Extension.bx`:
 
-| | |
-|---|---|
-| `bxagents.slot( place )` | a box of your own in `header`, `sidebar` or `composer`, to draw into |
-| `bxagents.runCommand( "/ping" )` | runs a slash command as if it were typed |
-| `bxagents.onRefresh( fn )` | called after each change to the conversation, once the slots are drawn |
-| `bxagents.refresh()` | asks the page to refresh now |
-| `bxagents.conversationId()` | the conversation in view |
-| `bxagents.apiBase` | the page's API path, for your own `fetch` calls |
-| `bxagents.icon( "robot" )` | markup for one of the page's [Phosphor icons](https://phosphoricons.com), sized by the text around it. The names are in `tools/webui-vendor/icons.json` |
+```js
+class {
 
-Your CSS can use the page's variables so it follows light, dark and the accent: `--bg`, `--surface`, `--fg`, `--muted`, `--border`, `--accent`, `--accent-fg`, `--accent-soft` (a light tint of the accent), `--accent-ink` (the accent as text or an icon), `--ring` (a focus glow), `--radius` and `--font`.
+	function configure() {
+		variables.settings = { name : "panel" }
+		variables.pings = 0
+	}
+
+	// shown as text in the bar above the conversation, next to the context size
+	@Slot( "header" )
+	function badge( agentContext ) {
+		return variables.pings > 0 ? "#settings.name#: #variables.pings# ping#variables.pings == 1 ? '' : 's'#" : ""
+	}
+
+	// markup the author wrote, under the list of conversations
+	@Slot( { place : "sidebar", html : true } )
+	function about( agentContext ) {
+		return "<strong>#encodeForHTML( settings.name )#</strong><br>Use the Ping button by the message box."
+	}
+
+	@Command
+	@Hint( "count a ping: the web page's Ping button runs it too" )
+	function ping( agentContext, commandArguments ) {
+		variables.pings++
+		return agentContext.reply().ok( "pong #variables.pings#" )
+	}
+
+}
+```
+
+The sidebar slot is markup, so the setting in it goes through `encodeForHTML()`: `settings.name` can be changed in `Agent.yaml`.
+
+`web/panel.css` uses the page's variables, so the button follows light, dark and the accent:
+
+```css
+.panel-button {
+	font: inherit;
+	padding: 0.25rem 0.6rem;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+}
+```
+
+`web/panel.js` adds the button to the message box and runs the command:
+
+```js
+( function () {
+	var button = document.createElement( "button" );
+	button.type = "button";
+	button.className = "panel-button";
+	button.textContent = "Ping";
+	button.title = "Run /ping";
+	button.addEventListener( "click", function () { bxagents.runCommand( "/ping" ); } );
+	bxagents.slot( "composer" ).appendChild( button );
+} )();
+```
+
+What happens on the Chat page:
+
+1. The page loads `panel.css` in the head and `panel.js` at the end of the body. The script finds `bxagents` there and puts the **Ping** button in the message box.
+2. The page asks `GET /slots`. The header slot is empty (no ping yet), so nothing shows there; the sidebar shows **panel** in bold and the line under it.
+3. A click on **Ping** runs `/ping` with `POST /command`. The answer, `pong 1`, shows in the conversation.
+4. After the command the page asks for the slots again, and the header shows `panel: 1 ping`. The button stays: it is in a box of the script's own, which a draw never removes.
+
+`/ping` typed in the message box, or in the terminal chat, counts the same way. To try it, run the web app's dev stack (see [Work on the web app](../guides/ui-development.md)) and open http://127.0.0.1:8780/chat.
 
 ## Tools and skills
 

@@ -89,7 +89,7 @@ class {
 }
 ```
 
-Installs the web app (a ColdBox module) at `<path>`, and the app calls the [agent API](../agent-bx.md#the-always-on-agent-route) at `/__bxagents`, the same one the terminal chat uses, so the entry adds no API of its own. It does bring the shared SQLite store with it.
+Installs the web app (a ColdBox module, `bxagentsui`) at `<path>`, and the app calls the [agent API](../agent-bx.md#the-always-on-agent-route) at `/__bxagents` (or where `agentApi.path` puts it), the same one the terminal chat uses, so the entry adds no API of its own. It does bring the shared SQLite store with it. Each page of the app is an address under `<path>` (`/chat/settings`, `/chat/logs/gateways`), and an address under `<path>` that is no page answers `404`. `path` cannot be `/`.
 
 The web UI is a subsystem rather than a single exposure switch - the store, conversations and preferences, branding and theming, sign-in and how the page uses the agent API are all on its own page: **[The web chat UI](../web-ui.md)**.
 

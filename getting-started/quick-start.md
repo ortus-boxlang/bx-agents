@@ -144,7 +144,7 @@ If you scaffolded with `--template=webui-chat`, `bxAgents serve` also serves the
 
 ![The web app: the left menu, a conversation with a tool call and a formatted answer, and the model picker in the header](../assets/webui/webui-chat.png)
 
-Every page is described in [the web app guide](../conventions/web-ui.md#the-pages).
+Each page has its own address under `/chat` (`/chat/routines`, `/chat/settings`, ...), and an address there that is no page answers `404`. Every page is described in [the web app guide](../conventions/web-ui.md#the-pages).
 
 ## 6. Inspect, package, deploy
 

@@ -62,7 +62,7 @@ A connector asks for either a token or a sign in, shown on its page in the [cata
 
 | Where | How |
 |---|---|
-| Web page | The **Connectors** page, with tabs for All, Connected, Needs attention and In Agent.yaml. See [web-ui](web-ui.md) |
+| Web page | The **Connectors** page, with tabs for All, Connected, Needs attention and In Agent.yaml, each at its own address (`<path>/connectors/all`, `connected`, `attention`, `agent`). See [web-ui](web-ui.md#connectors) |
 | Chat in the terminal | `/connect`, `/connect NAME`, `/connect NAME off`, `/connect NAME tools` |
 | CLI | `bxAgents connect`, `bxAgents connect NAME` |
 | Gateways | `/connect` lists them. A token is never typed in a chat: the reply points to the web page |

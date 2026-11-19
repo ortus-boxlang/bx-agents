@@ -8,7 +8,7 @@ tags: [guides, cli, tui, reference]
 
 # Comandos con barra
 
-Escribe `/` en el chat de terminal o en el [chat web](../conventions/web-ui.md#comandos-con-barra) para ver los comandos. Cada uno se escribe una sola vez, como una clase pequeña que responde con datos, y cada superficie dibuja esa respuesta a su manera. En las [plataformas de chat](../conventions/gateways/index.md#comandos-en-un-gateway) escribe el comando como un mensaje; el prefijo por defecto es `/` y un gateway puede cambiarlo.
+Escribe `/` en el chat de terminal o en el [chat web](../conventions/web-ui.md#comandos-con-barra) para ver los comandos (en la página web el botón del rayo abre el mismo menú, y el comando de una extensión lleva el nombre de la extensión). Cada uno se escribe una sola vez, como una clase pequeña que responde con datos, y cada superficie dibuja esa respuesta a su manera. En las [plataformas de chat](../conventions/gateways/index.md#comandos-en-un-gateway) escribe el comando como un mensaje; el prefijo por defecto es `/` y un gateway puede cambiarlo.
 
 **Dónde** es `T` terminal, `W` página web, `G` plataformas de chat. Un comando marcado con `G` aún debe estar en la lista `allow` del gateway; la lista por defecto es `help`, `info`, `tools`, `model`, `ping`, `notes` y `remember`.
 

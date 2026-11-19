@@ -33,13 +33,13 @@ class {
 }
 ```
 
-Eso genera un `<path>/index.html` estático (servido directamente - no se necesita ruta) La página es cliente de la [API del agente](agent-bx.md#la-ruta-de-agente-siempre-activa) en `/__bxagents`, la misma que usan el chat de terminal y los gateways, así que no hay una segunda API bajo `<path>`. La API del agente debe seguir activa (`agentApi.enabled: false` con una entrada `webui` es un error de build).
+Eso instala la app web en `<path>`: un módulo de ColdBox (`bxagentsui`) con sus propios handlers, rutas, layouts y vistas, copiado en la app generada. La app es cliente de la [API del agente](agent-bx.md#la-ruta-de-agente-siempre-activa) en `/__bxagents`, la misma que usan el chat de terminal y los gateways, así que no hay una segunda API bajo `<path>`. La API del agente debe seguir activa (`agentApi.enabled: false` con una entrada `webui` es un error de build).
 
 ![La interfaz web de chat generada: una barra lateral de conversaciones, un transcript de varios turnos, y un encabezado/compositor con marca](../assets/webui-chat-light.png)
 
 La captura de pantalla anterior es la página generada real y sin modificar - la misma plantilla que este repositorio distribuye - con la marca de [`examples/webui-agent`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent) (su propia configuración de `theme`/`title`/`icon`) y poblada con contenido de conversación de ejemplo para ilustrarla; `bxAgents build && bxAgents serve` en ese ejemplo la reproduce de verdad.
 
-La interfaz es HTML/CSS/JS vainilla sin dependencias - sin Bootstrap, AlpineJS ni un paso de build de Vite - y está **preconstruida y empaquetada dentro de BxAgents mismo**: `bxAgents build` nunca ejecuta `npm install`/`npm run build`, y un proyecto generado nunca necesita Node ni npm instalados en absoluto. Todo lo que la página necesita está incrustado en el único `index.html` generado.
+La app está escrita con [Alpine.js](https://alpinejs.dev) y Sass y se compila con Vite en la carpeta `ui/` de este repositorio, y el build está **confirmado dentro del módulo**: `bxAgents build` nunca ejecuta `npm install`/`npm run build`, y un proyecto generado nunca necesita Node ni npm instalados en absoluto. El build escribe la configuración del módulo (ruta, marca, tema, archivos de extensiones) en `config/bxagentsui.json` de la app generada. Sus scripts y estilos se sirven desde `/modules/bxagentsui/includes` y no carga nada de un CDN. Para cambiar la app misma, ver [Trabajar en la app web](#trabajar-en-la-app-web).
 
 Esa restricción es sobre el build, no sobre el alcance. La página es un cliente completo: barra lateral de conversación, streaming con razonamiento y llamadas de tool, aprobaciones, compactación, temática del lado del servidor. Lo que realmente todavía falta se lista bajo [What is not here yet](#what-is-not-here-yet).
 
@@ -62,14 +62,14 @@ Porque llega el envelope completo, **el razonamiento y las llamadas de tool ya e
 
 ## Las páginas
 
-La página es un solo archivo generado con un **menú a la izquierda** y una **cabecera**. El menú tiene dos grupos, y cada página se abre en un enlace propio (`<path>/#/conversations`, `<path>/#/routines`, etc.), así que puedes guardarla como marcador. El servidor no necesita rutas extra y la página funciona detrás de cualquier ruta de proxy inverso.
+Cada página tiene un **menú a la izquierda** y una **cabecera**. El menú tiene dos grupos, y cada página es una dirección propia bajo `<path>`, así que puedes guardarla como marcador: `<path>/` es el chat, y luego `<path>/conversations`, `<path>/routines`, `<path>/logs/gateways?q=slack`, `<path>/access/people`, etc. Una pestaña o un filtro que importa también se guarda en la dirección. Una dirección bajo `<path>` que no es ninguna página responde `404`.
 
 | Grupo | Páginas | Quién la ve |
 |---|---|---|
-| Main | Chat, Conversations, Routines, Registry, Memory, Vault, Settings | todos los que pueden iniciar sesión |
+| Main | Chat, Conversations, Routines, Registry, Connectors, Memory, Vault, Settings | todos los que pueden iniciar sesión |
 | Admin | Agent, Gateways, Logs, Access, Data and backups | solo los [admins](#usuarios-e-inicio-de-sesión) |
 
-Un miembro nunca ve el grupo Admin, y el servidor rechaza igualmente las rutas que hay detrás. El menú se pliega a iconos (se recuerda en el navegador), el elemento **Logs** lleva un contador rojo de las fuentes que registraron un error desde que arrancó la app, y no se quitó nada de lo que ofrecía la antigua página única: la cabecera, el engranaje de Settings y los slots de extensión siguen ahí.
+Un miembro nunca ve el grupo Admin: una página Admin responde `403` a un miembro con sesión iniciada, y la API rechaza igualmente las rutas que hay detrás. El menú muestra solo las páginas que esta persona puede usar, según las capacidades que informa `GET /agent`. Se pliega a iconos (se recuerda en el navegador) y en un teléfono pasa a ser un cajón. La cabecera lleva el icono y el título del agente, un interruptor de claro u oscuro, y **Password** (un agente sin cuentas) o quién inició sesión y **Sign out**. Las extensiones pueden añadir cosas a la página Chat con [slots](extensions.md#la-página-web-slots-y-web).
 
 ![La página Chat: el menú de la izquierda con los grupos Main y Admin, una conversación con una llamada a una tool y una respuesta con formato, y el selector de modelo y el anillo de contexto en la cabecera](../assets/webui/webui-chat.png)
 
@@ -77,7 +77,7 @@ Un miembro nunca ve el grupo Admin, y el servidor rechaza igualmente las rutas q
 
 ### Chat y Talk to
 
-La página de aterrizaje. La barra lateral de conversaciones muestra 25 a la vez con un cuadro de filtro y un botón **Show more**, y el transcript hace streaming de la respuesta con razonamiento, llamadas de tool y aprobaciones. El menú **Talk to** de la cabecera lista el agente principal y cada [sub-agente](subagents.md). Elige uno y el siguiente mensaje va directamente a él; un banner dice con quién hablas, una conversación pertenece al agente con el que empezó y cada agente guarda su propia memoria. En el chat de terminal es `/agent`.
+La página de aterrizaje. La barra lateral de conversaciones muestra 25 a la vez con un cuadro de filtro y un botón **Show more**, y el transcript hace streaming de la respuesta con razonamiento, llamadas de tool y aprobaciones. La barra sobre la conversación lleva los selectores **Talk to** y de modelo, el anillo de contexto, las etiquetas de estado de las extensiones y los botones **Fork**, **Export** y **Compact**. El menú **Talk to** lista el agente principal y cada [sub-agente](subagents.md). Elige uno y el siguiente mensaje va directamente a él; un banner dice con quién hablas, una conversación pertenece al agente con el que empezó y cada agente guarda su propia memoria. En el chat de terminal es `/agent`.
 
 ![Talk to con el sub-agente researcher elegido y el banner que lo indica](../assets/webui/webui-talk-to.png)
 
@@ -102,6 +102,12 @@ Lo que puede usar el agente, en tres pestañas. **Tools** lista cada tool agrupa
 ![La página Registry en la pestaña Tools](../assets/webui/webui-registry.png)
 
 ![Una skill abierta en el lector](../assets/webui/webui-registry-skills.png)
+
+### Connectors
+
+Los [connectors](connectors.md) que ofrece el agente, como tarjetas, con pestañas **All**, **Connected**, **Needs attention** e **In Agent.yaml** (los servicios escritos bajo `mcpServers`), cada una en su dirección (`<path>/connectors/connected`). **Connect** pide un token o inicia un inicio de sesión, y muestra antes el riesgo de los connectors de riesgo medio o alto. **Tools** abre un cajón para activar o desactivar herramientas sueltas. Cada persona conecta su propia cuenta; solo un admin puede conectar un programa local como Git.
+
+![La página Connectors](../assets/webui/connectors.png)
 
 ### Memory
 
@@ -129,13 +135,13 @@ Para admins. **Composition** dibuja cómo está montado el agente: qué llega a 
 
 ### Gateways
 
-Para admins. Cada [gateway](gateways/index.md) con su estado (connected, stopped, failing o not registered), cuáles de sus credenciales están definidas (los nombres, nunca un valor), cuándo tuvo su última conversación, su último error y los chats con los que ha hablado. **Reconnect** detiene y arranca un gateway en el sitio, para que corregir una credencial no exija reiniciar la app. Un turno que ya esté en marcha no se cancela.
+Para admins. Cada [gateway](gateways/index.md) con su estado (connected, stopped, failing o not registered), cuáles de sus credenciales están definidas (los nombres, nunca un valor), cuándo tuvo su última conversación, su último error y los chats con los que ha hablado. **Reconnect** detiene y arranca un gateway en el sitio, para que corregir una credencial no exija reiniciar la app. Un turno que ya esté en marcha no se cancela. **Open log** lleva a las líneas de ese gateway en la página Logs.
 
 ![La página Gateways](../assets/webui/webui-gateways.png)
 
 ### Logs
 
-Para admins. Una pestaña por cada uno de los cinco [logs](logs.md) (agent, gateways, routines, heartbeat, API), un filtro de nivel, un cuadro de búsqueda, un número de líneas y **Live**, que muestra cada línea nueva en cuanto el agente la escribe (con `GET /logs/stream` y los mismos filtros; en un servidor sin esa ruta, lee el log cada 5 segundos). Un log nunca contiene secretos.
+Para admins. Una pestaña por cada uno de los cinco logs (agent, gateways, routines, heartbeat, API), cada una con una etiqueta roja cuando registró errores desde que arrancó la app, un filtro de nivel, un cuadro de búsqueda, un número de líneas y un interruptor **Live**. Con Live activo, cada línea nueva aparece en cuanto el agente la escribe (con `GET /logs/stream` y los mismos filtros). El stream se vuelve a abrir cuando el servidor lo cierra (a los diez minutos) o se corta, y un servidor sin esa ruta se lee cada 5 segundos; la línea bajo el log dice cuál. La pestaña y la búsqueda van en la dirección (`<path>/logs/gateways?q=slack`). Un log nunca contiene secretos. Los mismos logs están en la terminal con `bxAgents logs --follow` y `bxAgents logs --ui`.
 
 ![La página Logs](../assets/webui/webui-logs.png)
 
@@ -155,7 +161,7 @@ Para admins. Dónde guarda todo el agente (el [directorio de datos](data.md)) y 
 
 ### Settings
 
-**Appearance** (modo, color de acento, tamaño de texto, densidad), **Model** (qué perfil responde), **Account** (contraseña), **Connections** para servicios que piden iniciar sesión a cada persona, datos del **Server** y, para admins, las **Extensions** que cargó la app, con un botón Reload.
+**Appearance** (modo, color de acento, tamaño de texto, densidad), **Model** (qué perfil responde, cuando el gateway lista `profiles`), **Account** (un enlace a la página Connectors y, con cuentas, **Sign out**), datos del **Server** y, para admins, las **Extensions** que cargó la app.
 
 ![La página Settings](../assets/webui/webui-settings.png)
 
@@ -186,21 +192,21 @@ Tres minutos y medio por toda la aplicación web: el chat en directo con tarjeta
 
 | | |
 |---|---|
-| ![Inicio de sesión con las cuentas declaradas en `users`](../assets/webui/login.png) **Inicio de sesión.** Las cuentas vienen de [`users`](#usuarios-e-inicio-de-sesión). | ![Un chat con sesión iniciada, con el selector de modelo, el anillo de contexto y botones de icono para Chats, Fork, Export, Clear, Notes, Key y Theme en la cabecera](../assets/webui/webui-chat.png) **La cabecera.** Botones de icono con ayuda emergente. El selector aparece cuando la entrada lista [`profiles`](#elegir-el-modelo). |
+| ![Inicio de sesión con las cuentas declaradas en `users`](../assets/webui/login.png) **Inicio de sesión.** Las cuentas vienen de [`users`](#usuarios-e-inicio-de-sesión). | ![Un chat con sesión iniciada, con el selector de modelo, el anillo de contexto y los botones Fork, Export y Compact sobre la conversación](../assets/webui/webui-chat.png) **La barra del chat.** Botones de icono con ayuda emergente. El selector aparece cuando la entrada lista [`profiles`](#elegir-el-modelo). |
 | ![Una respuesta en streaming con lista numerada y negritas](../assets/webui/markdown-list.png) **Streaming.** Las respuestas muestran Markdown según llegan. | ![El perfil planner elegido en el selector, y la respuesta con el nombre de su modelo](../assets/webui/model-picker.png) **Selector de modelo.** La elección se envía con cada mensaje, en la misma conversación. |
 | ![Una llamada a una herramienta mostrada como bloque abierto sobre la respuesta](../assets/webui/tool-call.png) **Herramientas.** Cada llamada muestra su nombre y argumentos. | ![La barra lateral con dos chats guardados](../assets/webui/webui-conversations.png) **Conversaciones.** Guardadas por cuenta, y siguen ahí tras recargar. |
 | ![El panel Notes con una nota en About you](../assets/webui/webui-memory.png) **Notas.** Lo que el agente debe recordar, con el tamaño que añade. | ![La página en tema oscuro con el acento de la entrada del gateway](../assets/webui/dark-theme.png) **Tema.** Claro u oscuro, recordado, con tu acento de `theme`. |
 | ![El panel de contexto con lo que llena la ventana del modelo](../assets/webui/context-panel.png) **Contexto.** El anillo se llena según crece la conversación; pulsa para ver el desglose. | ![El menú de comandos al escribir una barra](../assets/webui/commands-menu.png) **Comandos.** Escribe `/` para ver el menú. |
 | ![La conversación vacía con el mensaje de bienvenida y tres botones de sugerencia](../assets/webui/empty-suggestions.png) **Sugerencias.** Una conversación vacía puede ofrecer `suggestions` que se envían con un clic. | ![Un bloque de código con su lenguaje y un botón Copy](../assets/webui/markdown-list.png) **Código.** Cada bloque muestra su lenguaje y copia el código mismo. |
-| ![El menú Ajustes abierto, con los grupos Conversación, Tú y Servidor](../assets/webui/settings-menu.png) **Ajustes.** Un engranaje reúne las acciones de la conversación, tus notas, la apariencia y lo del servidor. | ![El panel Apariencia con modo, colores de acento, tamaño de texto y densidad](../assets/webui/appearance.png) **Apariencia.** Modo, acento, tamaño de texto y densidad, guardados en este navegador. |
-| ![El panel de tokens de acceso con un token nuevo mostrado una vez](../assets/webui/webui-access.png) **Tokens de acceso.** Un admin crea y revoca tokens con nombre; el secreto se muestra una vez. | |
+| ![La cabecera: el título del agente, el interruptor de claro u oscuro, y quién inició sesión con Sign out](../assets/webui/settings-menu.png) **Cabecera.** El interruptor de claro u oscuro, y Password o Sign out. | ![La tarjeta Apariencia con modo, colores de acento, tamaño de texto y densidad](../assets/webui/appearance.png) **Apariencia.** Modo, acento, tamaño de texto y densidad, guardados en este navegador. |
+| ![El panel de tokens de acceso con un token nuevo mostrado una vez](../assets/webui/webui-access.png) **Tokens de acceso.** En la página Access, un admin crea y revoca tokens con nombre; el secreto se muestra una vez. | |
 
 ## Cómo se ve realmente un turno de streaming
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant B as navegador (index.html generado)
+    participant B as navegador (la app web)
     participant H as handlers/AgentApi.bx
     participant A as el agente
     participant D as el almacén compartido (SQLite)
@@ -221,21 +227,21 @@ El evento `thread` va primero porque una cabecera de respuesta no puede leerse a
 
 ## La API que llama la página
 
-La página no tiene una API propia. Todo lo que hace pasa por las rutas de la API del agente, documentadas en [La ruta del agente siempre activa](agent-bx.md#la-ruta-de-agente-siempre-activa): turnos (`/stream`, `/cancel`, `/steer`, `/resume`, `/pending`), conversaciones (`/sessions`, `/history`, `/clear`, `/compact`, `/export`), `/preferences`, `/notes`, `/commands` y `/command`, y las rutas de capacidades (`/agent`, `/context`, `/status`, `/slots`, `/profiles`, `/tools`). Todo lo que la página puede hacer, un script puede hacerlo con las mismas llamadas.
+La app no tiene una API propia. Bajo `<path>` solo responde sus páginas, el formulario de inicio de sesión y el cierre de sesión, y los archivos de las carpetas `web/` de las extensiones (`<path>/ext/<nombre>/<archivo>`, ver [extensiones](extensions.md#archivos-en-web)). Todo lo demás que hace pasa por las rutas de la API del agente, documentadas en [La ruta del agente siempre activa](agent-bx.md#la-ruta-de-agente-siempre-activa): turnos (`/stream`, `/cancel`, `/steer`, `/resume`, `/pending`), conversaciones (`/sessions`, `/history`, `/clear`, `/compact`, `/export`), `/preferences`, `/notes`, `/commands` y `/command`, y las rutas de capacidades (`/agent`, `/context`, `/status`, `/slots`, `/profiles`, `/tools`). Todo lo que la página puede hacer, un script puede hacerlo con las mismas llamadas.
 
 Cada llamada lleva tres cabeceras:
 
 | Cabecera | Para qué |
 | --- | --- |
 | `x-bxagents-source: web` | Marca las conversaciones que inicia la página, para que el filtro `?source=` de la API (`GET /__bxagents/sessions?source=web`) las distinga de las de la terminal y los gateways |
-| `x-bxagents-token` | La contraseña escrita en el formulario **Password** (se abre desde **Password** en el menú Settings, o solo cuando el servidor responde `401`), cuando hay una (ver [Proteger la API](#proteger-la-api)) |
+| `x-bxagents-token` | La contraseña escrita en el formulario **Password** (se abre con el botón de la llave de la cabecera, o solo cuando el servidor responde `401`), cuando hay una (ver [Proteger la API](#proteger-la-api)) |
 | `x-bxagents-csrf: 1` | Se envía en cada petición. Una petición hecha con la cookie de sesión que cambia algo debe llevarla, para que otro sitio no pueda hacer que tu navegador lo haga |
 
 La identidad es la de la API: sin `users` la página es el único usuario abierto `local`, compartido con el chat de terminal de esa máquina, y con `users` es la cuenta que inició sesión.
 
 ### Comandos con barra
 
-Escribe `/` en la caja de mensaje y aparece un menú de comandos (flechas, `Tab` para completar, `Esc` para cerrar). Son los mismos comandos que en [el chat de la terminal](../cli-reference.md#los-mismos-comandos-en-la-pagina-web-y-en-las-apps-de-chat): `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/context`, `/remember`, `/notes`, `/name`, `/fork` y `/export`. Al pulsar Enter la línea se ejecuta en el servidor con `POST /command` y se dibuja la respuesta: texto, una tabla o botones para elegir. `/new`, `/resume` y `/fork` llevan la página a la conversación que nombran, `/clear` recarga la transcripción, y `/export [archivo] [--format=md|html]` entrega la conversación al navegador para guardarla (los botones **Fork** y **Export** del encabezado ejecutan `/fork` y `/export`).
+Escribe `/` en la caja de mensaje, o pulsa el botón del rayo, y aparece un menú de comandos (flechas, `Tab` para completar, `Esc` para cerrar). Un comando que añade una [extensión](extensions.md#comandos) muestra el nombre de la extensión como distintivo. Son los mismos comandos que en [el chat de la terminal](../cli-reference.md#los-mismos-comandos-en-la-pagina-web-y-en-las-apps-de-chat): `/help`, `/new`, `/tools`, `/sessions`, `/resume`, `/clear`, `/compact`, `/model`, `/info`, `/context`, `/remember`, `/notes`, `/name`, `/fork` y `/export`. Al pulsar Enter la línea se ejecuta en el servidor con `POST /command` y se dibuja la respuesta: texto, una tabla o botones para elegir. `/new`, `/resume` y `/fork` llevan la página a la conversación que nombran, `/clear` recarga la transcripción, y `/export [archivo] [--format=md|html]` entrega la conversación al navegador para guardarla (los botones **Fork** y **Export** sobre la conversación ejecutan `/fork` y `/export`).
 
 La respuesta son datos, así que cualquier cliente puede usarla:
 
@@ -255,7 +261,7 @@ Los bloques son `text`, `table`, `choose` (opciones, cada una con la línea de c
 `/clear` y `/compact` ambos tienen cuidado con el scope. `/clear` pasa por el propio `clear( userId, conversationId )` de cada memoria en lugar de `AiAgent.clearMemory()`, que no toma argumentos y borraría el historial de cada visitante; `/compact` pasa por `summarize( config, userId, conversationId )` por la misma razón. La compactación reemplaza los mensajes más antiguos de esta conversación con un resumen escrito por IA y mantiene los pocos más recientes, sin tocar nada fuera del par `(userId, conversationId)` del llamador.
 
 !!! info
-    **`/compact` necesita un modelo de resumen, y reporta si tiene uno.** `summarize()` es un no-op silencioso a menos que la memoria tenga *tanto* `summaryProvider` como `summaryModel` configurados, y también cuando la conversación ya está en o por debajo de `keepRecent`. Ninguno de los dos es un error, así que `/compact` devuelve `{ compacted, before, after }` y deja que el llamador vea por sí mismo, y `capabilities.compact` de `/info` reporta si hay configurado un modelo de resumen en absoluto - así que una página puede ocultar un botón que no haría nada en lugar de parecer rota.
+    **`/compact` necesita un modelo de resumen, y reporta si tiene uno.** `summarize()` es un no-op silencioso a menos que la memoria tenga *tanto* `summaryProvider` como `summaryModel` configurados, y también cuando la conversación ya está en o por debajo de `keepRecent`. Ninguno de los dos es un error, así que `/compact` devuelve `{ compacted, before, after }` y deja que el llamador vea por sí mismo, y `capabilities.compact` de `GET /agent` reporta si hay configurado un modelo de resumen en absoluto - así que una página puede ocultar un botón que no haría nada en lugar de parecer rota.
 
     Solo `keepRecent` se toma del request. `summarize()` también honra los overrides `model`/`provider`, pero aceptarlos aquí permitiría a cualquier visitante apuntar una llamada de resumen a un proveedor y modelo de su elección con tus credenciales - la propia configuración de la memoria decide eso en su lugar.
 
@@ -270,7 +276,7 @@ memory:
 
 ## Elegir el modelo
 
-Por defecto la página habla con el modelo propio del agente y no ofrece elección. Lista [perfiles](models.md#perfiles) en la entrada y la cabecera tendrá un selector de modelo:
+Por defecto la página habla con el modelo propio del agente y no ofrece elección. Lista [perfiles](models.md#perfiles) en la entrada y la página Chat tendrá un selector de modelo:
 
 ```javascript
 // gateways/chat.bx
@@ -323,7 +329,7 @@ bxAgents hash-password --password="<tu-contraseña>"
 
 Todo lo delimitado por usuario se re-indexa a la cuenta real. La API del agente lee la cuenta que inició sesión desde cbsecurity (que envuelve cbauth) en un solo lugar (`models/api/Authenticator`), y la memoria del agente, el índice de conversaciones, las preferencias y la propiedad de ejecuciones pendientes se indexan por el id que entrega.
 
-Las cuentas también cierran la API: con `users`, una petición a `/__bxagents` necesita la cookie de sesión o un token, diga lo que diga `agentApi.access`. Una página con cuentas nunca debe estar delante de una API que cualquiera pueda llamar. Un visitante sin sesión es enviado a `<path>/login.html`.
+Las cuentas también cierran la API: con `users`, una petición a `/__bxagents` necesita la cookie de sesión o un token, diga lo que diga `agentApi.access`. Una página con cuentas nunca debe estar delante de una API que cualquiera pueda llamar. Un visitante sin sesión es enviado al formulario de inicio de sesión en `<path>/login.html`, y una llamada rechazada más tarde (la sesión terminó) lleva la página allí también. Cerrar sesión es `<path>/logout`. Sin cuentas, ambas direcciones responden `404`.
 
 Lee cbsecurity en lugar del ajuste `identifierProvider` de ColdBox deliberadamente: un closure declarado en el struct de configuración `coldbox` nunca llega a `configSettings` - verificado en un arranque real, tanto en la forma literal documentada como como asignación posterior - así que cualquier cosa que dependiera de ese ajuste estaba silenciosamente obteniendo un id de sesión en su lugar.
 
@@ -368,25 +374,25 @@ El transcript vive en el DOM; la conversación vive en la memoria del agente. Si
 
 ## Lo que hace la página
 
-La página enviada es un cliente de chat real, no una carcasa de demostración. Lee `GET /info` **primero** y se moldea a lo que el servidor realmente reporta, así que un control solo aparece donde existe la capacidad.
+La página Chat es un cliente de chat real, no una carcasa de demostración. La app lee `GET /agent` **primero** y se moldea a las capacidades que el servidor reporta, así que un control solo aparece donde existe la capacidad.
 
 | Área | Comportamiento |
 | --- | --- |
-| **Barra lateral de conversación** | Lista las conversaciones de este visitante más recientes primero, con conteos de mensajes. Cambia, renombra (✎), elimina (×), o inicia una nueva. Los títulos se renderizan a través de `textContent` - un título es lo que el usuario escribió primero, así que nunca se analiza como markup |
+| **Barra lateral de conversación** | Lista las conversaciones de este visitante más recientes primero, con conteos de mensajes. Cambia, renombra, elimina, o inicia una nueva con **New chat**. Los títulos se renderizan a través de `textContent` - un título es lo que el usuario escribió primero, así que nunca se analiza como markup |
 | **Dirigir mientras se transmite** | El compositor permanece activo durante un turno. **Send** se convierte en **Steer**, y el mensaje se empalma en la ejecución ya en curso en lugar de iniciar una nueva |
 | **Stop** | Publica `/cancel` *antes* de abortar el fetch, así que el servidor realmente deja de gastar tokens, luego mantiene lo que ya se transmitió |
-| **Clear / Compact** | Clear vacía esta conversación; Compact aparece solo cuando hay un modelo de resumen configurado, y reporta lo que realmente hizo (`Compacted 12 messages down to 3`, o `Nothing to compact yet`) |
+| **Clear / Compact** | `/clear` vacía esta conversación; **Compact** aparece solo cuando hay un modelo de resumen configurado, y reporta lo que realmente hizo (`Compacted 12 messages down to 3`, o `Nothing to compact yet`) |
 | **Razonamiento + llamadas de tool** | Divulgaciones colapsadas alimentadas desde `delta.reasoning` y `delta.tool_calls` en el mismo envelope |
 | **Aprobaciones** | Una pausa human-in-the-loop renderiza una tarjeta de Aprobar/Rechazar desde `GET /pending`, respondida vía `/resume`, que transmite la continuación del mismo turno |
-| **Tema** | Almacenado del lado del servidor en `preferences`, así que sigue a la identidad en lugar del navegador. `localStorage` mantiene una copia local para que la elección sobreviva a un request fallido |
-| **Modelo** | El nombre del modelo de `/info` se sitúa en el encabezado, así que siempre está claro qué respondió |
-| **Tamaño del contexto** | Un anillo en el encabezado que se llena a medida que lo hace el contexto (ámbar desde el 70 por ciento, rojo desde el 90), desde `GET /context`, actualizado tras cada turno, comando, borrado, compactación, cambio de conversación y cambio en las notas. Púlsalo para ver el desglose: el total, cada parte con su proporción (prompt del sistema, definiciones de herramientas, notas, mensajes), las herramientas y un botón para compactar la conversación. El anillo se llena solo si el [`contextWindow`](models.md#lo-que-el-proyecto-sabe-de-un-modelo) del modelo está definido; sin él, el panel sigue mostrando los tamaños |
-| **Adjuntos** | Un botón **Attach** (aparece cuando `/info` informa `capabilities.attachments`) elige imágenes y archivos de texto; también puedes pegar una imagen o soltar archivos en la página. Unas fichas muestran lo que espera, cada una con su botón de quitar. Las imágenes van como `attachments` en base64 en la petición de stream, los archivos de texto se incluyen en el mensaje. Como máximo 4 imágenes de 5 MB; `/info` informa también `vision`, y una imagen a un perfil sin ella se rechaza con el motivo |
+| **Tema** | El interruptor de claro u oscuro de la cabecera. Se guarda en este navegador (`localStorage`) y también como la preferencia `theme` |
+| **Modelo** | El selector de modelo sobre la conversación nombra el modelo de cada perfil, cuando el gateway lista `profiles` |
+| **Tamaño del contexto** | Un anillo sobre la conversación que se llena a medida que lo hace el contexto (ámbar desde el 70 por ciento, rojo desde el 90), desde `GET /context`, actualizado tras cada turno, comando, borrado, compactación, cambio de conversación y cambio en las notas. Púlsalo para ver el desglose: el total, cada parte con su proporción (prompt del sistema, definiciones de herramientas, notas, mensajes), las herramientas y un botón para compactar la conversación. El anillo se llena solo si el [`contextWindow`](models.md#lo-que-el-proyecto-sabe-de-un-modelo) del modelo está definido; sin él, el panel sigue mostrando los tamaños |
+| **Adjuntos** | Un botón **Attach** (aparece cuando `GET /agent` informa `capabilities.attachments`) elige imágenes y archivos de texto; también puedes pegar una imagen o soltar archivos en la página. Unas fichas muestran lo que espera, cada una con su botón de quitar. Las imágenes van como `attachments` en base64 en la petición de stream, los archivos de texto se incluyen en el mensaje. Como máximo 4 imágenes de 5 MB; `GET /agent` informa también `vision`, y una imagen a un perfil sin ella se rechaza con el motivo |
 | **Atajos** | Enter envía, Shift+Enter añade una línea. `?` solo (o `/keys`) los lista |
 
 **La recuperación importa más de lo que suena.** La última conversación abierta se recuerda en `localStorage`, pero las conversaciones mismas viven en el servidor. Si ese id ya no existe - eliminado en otra pestaña, o un almacén nuevo - la página recae en la conversación restante más reciente en lugar de rehidratar hacia una pantalla vacía sin fila activa.
 
-Las pantallas estrechas obtienen un layout real en lugar de uno exprimido: bajo `40rem` la barra lateral se superpone al transcript en lugar de robarle su ancho, y se honra `prefers-reduced-motion`.
+Las pantallas estrechas obtienen un layout real en lugar de uno exprimido: bajo `40rem` la barra lateral de conversaciones se superpone al transcript en lugar de robarle su ancho, el menú de la izquierda es un cajón, y se honra `prefers-reduced-motion`.
 
 ![La misma página en un viewport estrecho - el transcript conserva todo el ancho, la barra lateral se superpone en lugar de exprimirlo](../assets/webui-chat-mobile.png)
 
@@ -514,23 +520,22 @@ Para cualquier cosa que los tokens no cubran - fuentes personalizadas, layout, r
 ## Proteger la API
 
 !!! warning
-    **`apiKeyEnvVar` es un secreto compartido, no un sistema de inicio de sesión.** Es lo mismo que `agentApi.tokenEnvVar` de la API del agente (si ambos están, gana el nombre de `Agent.yaml`). Sin configurar, la API está abierta (bien en tu propia máquina, no para un despliegue público; `serve` avisa cuando una API abierta escucha en todas las interfaces). Configúralo, y cada llamada a `/__bxagents` debe llevar una cabecera `x-bxagents-token` que coincida, comparada en tiempo constante. **El shell estático (`<path>/index.html`) no está protegido**, porque la navegación de página simple de un navegador no puede enviar una cabecera personalizada; la página lo pide en un formulario: una caja **Contraseña** que se abre sola cuando el servidor responde `401` y de nuevo desde el botón de la llave arriba. La contraseña se guarda en `localStorage` y se envía en cada llamada; una incorrecta muestra "That password was not accepted." Para varias personas usa [tokens emitidos](agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) o `users`.
+    **`apiKeyEnvVar` es un secreto compartido, no un sistema de inicio de sesión.** Es lo mismo que `agentApi.tokenEnvVar` de la API del agente (si ambos están, gana el nombre de `Agent.yaml`). Sin configurar, la API está abierta (bien en tu propia máquina, no para un despliegue público; `serve` avisa cuando una API abierta escucha en todas las interfaces). Configúralo, y cada llamada a `/__bxagents` debe llevar una cabecera `x-bxagents-token` que coincida, comparada en tiempo constante. **Las páginas de la app (`<path>/`) no están protegidas por él**, porque la navegación de página simple de un navegador no puede enviar una cabecera personalizada; la página lo pide en un diálogo **Password**. Se abre solo la primera vez que una llamada se rechaza con `401` (una vez por carga de página, con "The server refused the password, or asks for one."), y en cualquier momento con el botón de la llave de la cabecera. **Save** guarda la contraseña en `localStorage` y vuelve a cargar la página; desde entonces se envía en cada llamada. **Forget it** la quita. Para varias personas usa [tokens emitidos](agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) o `users`.
 
 ## Ajustes y apariencia
 
-La cabecera conserva solo lo que usas cada minuto: el botón de menú, los selectores **Talk to** y de modelo, el anillo de contexto y un engranaje de **Settings**. El engranaje abre un menú rápido en tres grupos: **Conversation** (Fork this conversation, Export as Markdown, Clear messages, Compact older messages), **You** (Memory, Vault, Routines, Appearance, tema oscuro o claro) y **Server** (Password, Access tokens, Logs, Gateways). Un elemento solo aparece donde el servidor lo ofrece. La página completa de **Settings** también está en el menú.
+La cabecera lleva el icono y el título del agente, un interruptor de claro u oscuro, y **Password** o **Sign out**. Lo que actúa sobre una conversación (los selectores **Talk to** y de modelo, el anillo de contexto, **Fork**, **Export** y **Compact**) está en la barra sobre ella en la página Chat, y cada otra página está en el menú de la izquierda.
 
-
-**Ajustes**, y luego **Apariencia**, abre el panel donde cada visitante elige, solo para este navegador:
+La tarjeta **Appearance** de la página **Settings** es donde cada visitante elige, solo para este navegador:
 
 | Ajuste | Opciones |
 |---|---|
-| Modo | Sistema, Claro u Oscuro (la misma elección que el botón Theme, y sigue a la cuenta cuando la página tiene preferencias) |
+| Modo | Sistema, Claro u Oscuro (la misma elección que el interruptor de la cabecera) |
 | Color de acento | El acento del propio gateway (la muestra **Default**), ocho colores predefinidos o cualquier valor hexadecimal. El panel muestra el contraste del texto de los botones y avisa por debajo de 4,5 : 1 |
 | Tamaño de texto | Pequeño, Medio o Grande |
 | Densidad | Cómoda o Compacta |
 
-La elección se guarda en el navegador (`localStorage`, clave `bxagents_webui_appearance`) y **Reset to defaults** la borra. Nunca cambia lo que el operador escribió en `theme`: eso sigue siendo el punto de partida de todos. Un acento elegido también ajusta `--accent-fg` a blanco o casi negro, el que se lea mejor, y los tintes y el brillo de foco lo siguen. Los scripts y estilos de extensiones pueden apoyarse en `--accent`, `--accent-fg`, `--accent-soft`, `--accent-ink`, `--ring`, `--bg`, `--fg`, `--muted`, `--border` y `--surface`, y así siguen también la elección del visitante.
+La elección se guarda en el navegador (`localStorage`, clave `bxagents_webui_appearance`) y **Reset to defaults** la borra. Nunca cambia lo que el operador escribió en `theme`: eso sigue siendo el punto de partida de todos. Un acento elegido también ajusta `--accent-fg` a blanco o casi negro, el que se lea mejor, y los tintes y el brillo de foco lo siguen. Los estilos de extensiones que usan las variables de la página (`--accent`, `--accent-fg`, `--accent-soft`, `--accent-ink`, `--ring`, `--bg`, `--fg`, `--muted`, `--border`, `--surface` y las demás, ver [extensiones](extensions.md#temas)) siguen también la elección del visitante.
 
 ## Identidad de conversación
 
@@ -567,23 +572,37 @@ Las respuestas del asistente se renderizan a través de un subconjunto de markdo
 
 ## Notas
 
-Cuando el agente tiene un bloque [`notes`](agent-yaml.md#notas), la página **Memory** del menú (y **Memory** en el engranaje de Settings) muestra dos listas, *About you* y *About the agent*, cuánto llena cada una (caracteres del límite y unos tokens aproximados que añade a cada conversación) y las notas con sus id. Añadir, editar en el sitio y quitar funcionan con tus propias notas. La página y el chat de terminal comparten la misma base de datos, así que una nota añadida en uno aparece en el otro.
+Cuando el agente tiene un bloque [`notes`](agent-yaml.md#notas), la página **Memory** del menú (`<path>/memory`) muestra dos listas, *About you* y *About the agent*, cuánto llena cada una (caracteres del límite y unos tokens aproximados que añade a cada conversación) y las notas con sus id. Añadir, editar en el sitio y quitar funcionan con tus propias notas. La página y el chat de terminal comparten la misma base de datos, así que una nota añadida en uno aparece en el otro.
 
 - *About you* pertenece a la misma identidad que tus conversaciones: tu cuenta con [`users`](#usuarios-e-inicio-de-sesión), o el espacio compartido sin cuentas.
 - *About the agent* la comparte todo el que usa el agente, sea cual sea el agente o la persona que habla. Cualquiera puede añadir o editar una; quitar una (o vaciar la lista) requiere un admin, y `/notes/remove` responde `403` a los demás.
-- Sin bloque `notes` la página lo dice y las rutas responden `404`: `capabilities.notes` de `/info` lo indica.
+- Sin bloque `notes` el menú no tiene página Memory y las rutas responden `404`: `capabilities.notes` de `GET /agent` lo indica.
 
 La página Memory tiene además **Conversation memory**: los mensajes que guarda la memoria del agente para cada conversación. **Clear** olvida los mensajes de una conversación y conserva la conversación; un admin puede borrar todas las conversaciones o las de un agente (`POST /memory/clear`, `/clear` en la terminal, `bxAgents sessions clear`).
 
 ## Conexiones, código y qué falta
 
-Cuando una entrada de `mcpServers` tiene [`oauth`](connect.md), la página **Settings** tiene una sección **Connections**: una fila por servicio con *Connect* o *Disconnect*. La página nunca ve un token.
+Cuando una entrada de `mcpServers` tiene [`oauth`](connect.md), la página [Connectors](#connectors) tiene una pestaña **In Agent.yaml** (`<path>/connectors/agent`; solo aparece entonces, y `capabilities.connections` de `GET /agent` lo indica): una fila por servicio con *Connect* o *Disconnect*. La página nunca ve un token.
 
-![El panel Connections con el correo conectado](../assets/webui/connections.png)
+![Los servicios de Agent.yaml con el correo conectado](../assets/webui/connections.png)
 
 Las respuestas del asistente se renderizan como Markdown completo; cada bloque de código muestra su lenguaje y copia el código con el botón **Copy**.
 
 ![Un bloque de código con la etiqueta de lenguaje y el botón Copy](../assets/webui/code-block.png)
+
+## Trabajar en la app web
+
+El código de la app está en este repositorio: el módulo en `src/main/bx/bxagentsui` (handlers, rutas, layouts, vistas y parciales) y los scripts y estilos en `ui/resources/assets` (componentes y stores de Alpine.js, Sass). `ui/README.md` dice cómo arrancarla y `ui/AGENTS.md` lista sus convenciones y piezas.
+
+```bash
+cd ui
+npm install
+npm run dev     # un agente de desarrollo, un modelo con guion y el servidor de Vite: edita, guarda, míralo
+npm run build   # escribe src/main/bx/bxagentsui/includes/build, que se confirma
+npm run e2e     # las pruebas de navegador (Playwright)
+```
+
+El agente de desarrollo está en http://127.0.0.1:8780/chat (`ada` o `bob`, contraseña `demo-pass`). Un agente compilado recibe el build confirmado, así que un cambio en un script o un estilo solo se distribuye cuando `npm run build` se ha ejecutado y su salida está confirmada. [Trabajar en la app web](../guides/ui-development.md) es la guía completa: la estructura, las convenciones, añadir una página, los linters y las pruebas.
 
 ## What is not here yet
 

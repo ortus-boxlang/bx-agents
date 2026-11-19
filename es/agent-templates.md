@@ -73,7 +73,7 @@ class {
 }
 ```
 
-Después de `bxAgents build && bxAgents serve`, el agente está accesible en `http://localhost:8080/chat` - una página de chat estática real respaldada por un almacén de conversaciones generado sobre SQLite. De fábrica no se configura ningún `apiKeyEnvVar`/`users`, así que la página está abierta por defecto; consulta [La UI web de chat](conventions/web-ui.md) para protegerla.
+Después de `bxAgents build && bxAgents serve`, el agente está accesible en `http://localhost:8080/chat` - la app web (un chat y las páginas que lo rodean) respaldada por un almacén de conversaciones generado sobre SQLite. De fábrica no se configura ningún `apiKeyEnvVar`/`users`, así que la página está abierta por defecto; consulta [La UI web de chat](conventions/web-ui.md) para protegerla.
 
 ### `slack-bot`
 
