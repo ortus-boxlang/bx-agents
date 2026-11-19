@@ -71,3 +71,13 @@ test( "asks for a sign in first when nobody is signed in", async( { browser } ) 
 	await expect( page ).toHaveURL( /login\.html/ );
 	await context.close();
 } );
+
+test( "answers 404 for an address under the app that is none of its pages", async( { page } ) => {
+	for ( const missing of [
+		"/nope",
+		"/a/b/c"
+	] ) {
+		const res = await page.goto( APP + missing );
+		expect( res.status(), missing ).toBe( 404 );
+	}
+} );

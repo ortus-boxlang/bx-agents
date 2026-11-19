@@ -289,6 +289,8 @@ export function chatPage() {
 			this.messages = [];
 			if ( this.isLocalOnly() ) {
 				this.loading = false;
+				// nothing to read yet, but the extensions' slots and status still show
+				this.refreshExtensions();
 				return;
 			}
 			this.loading = true;

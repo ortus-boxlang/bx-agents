@@ -136,7 +136,7 @@ jobs:
           cache-dependency-path: ui/package-lock.json
 
       - name: Lint, build and test the web app
-        timeout-minutes: 20
+        timeout-minutes: 35
         working-directory: ui
         env:
           CI: "true"
@@ -152,6 +152,8 @@ jobs:
           git diff --exit-code -- ../src/main/bx/bxagentsui/includes/build
           npx playwright install --with-deps chromium
           npm run e2e
+          # every page over a real server for other project shapes (ui/dev/shapes): another path, a password, no accounts
+          npm run e2e:shapes
 
       - name: Keep the browser test report
         if: failure()
@@ -160,6 +162,7 @@ jobs:
           name: ui-e2e-report
           path: |
             ui/playwright-report
+            ui/playwright-report-shapes
             ui/test-results
           retention-days: 7
 

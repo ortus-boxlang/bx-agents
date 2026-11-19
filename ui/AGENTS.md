@@ -13,6 +13,7 @@ The web app is a ColdBox module, `bxagentsui`, built the cbGenesis way. Read thi
 | Vite output, committed so an agent build needs no Node | `src/main/bx/bxagentsui/includes/build/` |
 | The dev agent and its scripted model | `ui/dev/` |
 | Browser tests | `ui/tests/e2e/` |
+| Project shapes (other paths, a password, no accounts) | `ui/dev/shapes/`, `ui/tests/shapes/` |
 | Tours for screenshots and video | `ui/tests/media/` |
 
 A built agent copies the module to `modules/bxagentsui` and writes `config/bxagentsui.json` (see
@@ -124,4 +125,4 @@ pull request: the GIF and the screenshots show inline, the MP4 is a link.
 ## Commands (from `ui/`)
 
 `npm run dev` (agent, model and Vite), `npm run stack` (agent and model only), `npm run build`, `npm run lint`
-(ESLint), `npm run lint:scss` (Stylelint), `npm run lint:md` (markdownlint), `npm test` (unit), `npm run e2e` (browser). A change to a handler, a model or `ModuleConfig.bx` needs the stack restarted; views, Sass and JS do not.
+(ESLint), `npm run lint:scss` (Stylelint), `npm run lint:md` (markdownlint), `npm test` (unit), `npm run e2e` (browser), `npm run e2e:shapes` (every page under other project shapes, after a change to routes, paths or the frame). A change to a handler, a model or `ModuleConfig.bx` needs the stack restarted; views, Sass and JS do not.
