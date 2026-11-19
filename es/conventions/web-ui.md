@@ -135,7 +135,7 @@ Para admins. Cada [gateway](gateways/index.md) con su estado (connected, stopped
 
 ### Logs
 
-Para admins. Una pestaña por cada uno de los cinco [logs](logs.md) (agent, gateways, routines, heartbeat, API), un filtro de nivel, un cuadro de búsqueda, un número de líneas y **Refresh every 5 s** para seguir uno mientras crece. Un log nunca contiene secretos.
+Para admins. Una pestaña por cada uno de los cinco [logs](logs.md) (agent, gateways, routines, heartbeat, API), un filtro de nivel, un cuadro de búsqueda, un número de líneas y **Live**, que muestra cada línea nueva en cuanto el agente la escribe (con `GET /logs/stream` y los mismos filtros; en un servidor sin esa ruta, lee el log cada 5 segundos). Un log nunca contiene secretos.
 
 ![La página Logs](../assets/webui/webui-logs.png)
 
@@ -163,7 +163,7 @@ Para admins. Dónde guarda todo el agente (el [directorio de datos](data.md)) y 
 
 ### Móvil y accesibilidad
 
-En un teléfono el menú pasa a ser un cajón, la cabecera cede espacio y una tabla se convierte en lista. La página está pensada para usarse sin ratón: primero un enlace para saltar al contenido, el anillo de foco siempre visible, objetivos de al menos 44 por 44 píxeles, la página actual marcada con `aria-current`, el estado dicho con palabras e iconos además de color, contraste de texto de al menos 4,5 a 1, se respeta `prefers-reduced-motion` y los diálogos atrapan el foco y lo devuelven.
+En un teléfono el menú pasa a ser un cajón, la cabecera cede espacio y una tabla se convierte en lista. La página está pensada para usarse sin ratón: primero un enlace para saltar al contenido, el anillo de foco siempre visible, objetivos de al menos 44 por 44 píxeles, la página actual marcada con `aria-current`, el estado dicho con palabras e iconos además de color, contraste de texto de al menos 4,5 a 1, `prefers-reduced-motion` detiene toda animación y transición, los diálogos atrapan el foco y lo devuelven, y una fila de pestañas es una sola parada de Tab que se recorre con las flechas, Inicio y Fin. Cada página se revisa con [axe-core](https://github.com/dequelabs/axe-core) como admin y como miembro, en claro y oscuro, en escritorio y teléfono, con sus diálogos abiertos, contra WCAG 2.2 AA; un hallazgo grave o crítico hace fallar el build.
 
 ::: columns
 ::: column
