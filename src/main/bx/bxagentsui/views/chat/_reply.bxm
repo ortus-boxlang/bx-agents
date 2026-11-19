@@ -1,0 +1,30 @@
+<!--- What a slash command answered: text, a table, a file to save, or choices that run another command. Drawn as text
+      throughout (x-text), since a reply may hold what the project or an extension wrote. Inside chatPage, as `m`. --->
+<bx:output>
+<div class="bubble command">
+	<span class="ext-badge" x-show="m.reply.extension">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "puzzle-piece" } )# <span x-text="m.reply.extension"></span></span>
+	<template x-for="( block, b ) in m.reply.blocks" :key="b">
+		<div>
+			<template x-if="block.type === 'text'"><p :class="block.style || 'muted'" x-text="block.text"></p></template>
+			<template x-if="block.type === 'table'">
+				<table>
+					<template x-for="( row, r ) in block.rows || []" :key="r">
+						<tr><template x-for="( cell, c ) in row" :key="c"><td :class="{ label: block.layout === 'keyvalue' && c === 0 }" x-text="String( cell )"></td></template></tr>
+					</template>
+				</table>
+			</template>
+			<template x-if="block.type === 'file'"><p><a href="##" @click.prevent="saveFile( block )" x-text="'Download ' + block.name"></a></p></template>
+			<template x-if="block.type === 'choose'">
+				<div>
+					<p x-text="block.title"></p>
+					<div class="choices">
+						<template x-for="option in block.options || []" :key="option.line">
+							<button type="button" @click="runCommand( option.line )"><span x-text="option.label"></span><small x-show="option.hint" x-text="option.hint"></small></button>
+						</template>
+					</div>
+				</div>
+			</template>
+		</div>
+	</template>
+</div>
+</bx:output>

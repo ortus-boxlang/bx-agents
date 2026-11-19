@@ -1,9 +1,28 @@
-<!--- The composer: Enter sends, Shift+Enter is a new line. While a turn runs, Send steers it and Stop stops it. Inside
-      chatPage. --->
+<!--- The composer: Enter sends, Shift+Enter is a new line, "/" opens the commands. Pictures and text files can be chosen,
+      pasted or dropped. While a turn runs, Send steers it and Stop stops it. Inside chatPage. --->
 <bx:output>
-<form id="composer" autocomplete="off" @submit.prevent="send()">
+<ul id="slashMenu" role="listbox" aria-label="Commands" x-show="slashShown.length" x-cloak>
+	<template x-for="( c, i ) in slashShown" :key="c.name">
+		<li role="option" :aria-selected="( i === slashPick ).toString()" @mousedown.prevent="pickCommand( c )">
+			<span class="cmd" x-text="c.name"></span><span class="tip" x-text="c.hint"></span><span class="ext-badge" x-show="c.extension" x-text="c.extension"></span>
+		</li>
+	</template>
+</ul>
+<div id="attachChips" x-show="images.length || texts.length" x-cloak>
+	<template x-for="( image, i ) in images" :key="'i' + i">
+		<span class="chip-file"><img :src="image.url" alt=""><span x-text="image.name"></span><button type="button" title="Remove" :aria-label="'Remove ' + image.name" @click="images.splice( i, 1 )">&times;</button></span>
+	</template>
+	<template x-for="( file, i ) in texts" :key="'t' + i">
+		<span class="chip-file"><span x-text="file.name"></span><button type="button" title="Remove" :aria-label="'Remove ' + file.name" @click="texts.splice( i, 1 )">&times;</button></span>
+	</template>
+</div>
+<form id="composer" autocomplete="off" :class="{ dragging }" @submit.prevent="send()"
+	@dragover.prevent="dragging = $store.session.can( 'attachments' )" @dragleave="dragging = false" @drop.prevent="onDrop( $event )">
+	<input type="file" multiple hidden x-ref="files" @change="addFiles( $event.target.files ); $event.target.value = ''">
+	<button type="button" id="attachBtn" title="Attach a picture or a text file (you can also paste or drop them)" aria-label="Attach" x-show="$store.session.can( 'attachments' )" x-cloak @click="$refs.files.click()">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "paperclip" } )#</button>
+	<button type="button" id="commandsBtn" title="Commands: type / to search them" aria-label="Commands" x-show="commands.length" x-cloak @click="openCommands()">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "lightning" } )#</button>
 	<label class="visually-hidden" for="input">Message</label>
-	<textarea id="input" rows="1" placeholder="#encodeForHTML( prc.ui.placeholder )#" x-ref="input" x-model="draft" @keydown="onKey( $event )" @input="grow()"></textarea>
+	<textarea id="input" rows="1" placeholder="#encodeForHTML( prc.ui.placeholder )#" x-ref="input" x-model="draft" @keydown="onKey( $event )" @input="onInput()" @paste="onPaste( $event )" @blur="setTimeout( () => slashOpen = false, 120 )"></textarea>
 	<button type="submit" id="sendBtn" :aria-label="busy ? 'Steer' : 'Send'" :title="busy ? 'Steer: add a message to the turn already running' : 'Send'">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "arrow-up" } )#</button>
 	<button type="button" id="stopBtn" aria-label="Stop" title="Stop the agent" x-show="busy" x-cloak @click="stop()">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "stop" } )#</button>
 </form>

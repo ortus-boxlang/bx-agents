@@ -8,7 +8,10 @@ const NEXT = "/chat/next";
 
 test.describe( "Data and backups", () => {
 	test( "shows where everything is kept and makes a backup that shows in the list", async ( { page, errors } ) => {
+		// count the backups only once they have loaded
+		const listed = page.waitForResponse( r => r.url().endsWith( "/__bxagents/data/backups" ) );
 		await page.goto( NEXT + "/data" );
+		await listed;
 		await expect( page.getByText( "Data home:" ) ).toBeVisible();
 		await expect( page.getByRole( "table", { name: "Folders of the data home" } ).locator( "tbody tr" ).first() ).toBeVisible();
 		const before = await page.getByRole( "table", { name: "Backups" } ).locator( "tbody tr" ).count();
