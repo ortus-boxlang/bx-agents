@@ -10,8 +10,8 @@ test.describe( "Access", () => {
 	test( "opens People when this server does not manage tokens, and keeps the tab in the address", async( { page, errors } ) => {
 		await page.goto( APP + "/access" );
 		await expect( page.getByRole( "list", { name: "People" } ).getByText( "Ada Lovelace" ) ).toBeVisible();
-		await expect( page.getByRole( "button", { name: "Make bob an admin" } ) ).toBeVisible();
-		await page.locator( ".pg-tabs a", { hasText: "Tokens" } ).click();
+		await expect( page.getByRole( "button", { name: "Make an admin: bob" } ) ).toBeVisible();
+		await page.getByRole( "tab", { name: "Tokens" } ).click();
 		await expect( page ).toHaveURL( /\/access\/tokens$/ );
 		await expect( page.getByText( "This server does not manage tokens from here." ) ).toBeVisible();
 		expect( errors ).toEqual( [] );
@@ -63,7 +63,7 @@ test.describe( "Registry", () => {
 		await page.getByRole( "searchbox", { name: "Search the tools" } ).fill( "zz-no-tool-zz" );
 		await expect( page.getByText( "No tool matches that." ) ).toBeVisible();
 		await page.goto( APP + "/registry/volumes" );
-		await expect( page.locator( ".pg-tabs a[aria-current='page']" ) ).toContainText( "Volumes" );
+		await expect( page.getByRole( "tab", { selected: true } ) ).toContainText( "Volumes" );
 		expect( errors ).toEqual( [] );
 	} );
 
@@ -114,7 +114,7 @@ test.describe( "Vault", () => {
 
 	test( "a member cannot change the agent's secrets", async( { member } ) => {
 		await member.goto( APP + "/vault" );
-		await member.locator( ".pg-tabs a", { hasText: "The agent's" } ).click();
+		await member.getByRole( "tab", { name: "The agent's" } ).click();
 		await expect( member.getByText( "Changing them takes an admin." ) ).toBeVisible();
 		await expect( member.getByRole( "button", { name: "Add the secret" } ) ).toBeHidden();
 	} );

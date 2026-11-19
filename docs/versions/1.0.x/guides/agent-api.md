@@ -130,7 +130,7 @@ The same list, create and revoke are in the **Tokens** panel of the [web page](.
 
 Every path is under `/__bxagents` (or your `agentApi.path`). The table was written from the one list in `ApiContract.bx` that the build makes the routes and the OpenAPI document from; the document a running server hands out at `GET /openapi` is the authority, and it also has the request and answer shapes. **Admin** routes answer `403` to a caller who is not an admin; **Open** routes need no token even on a closed API.
 
-There are 81 routes (89 verb and path pairs); the token routes are there only with `manageTokens: true`.
+There are 82 routes (90 verb and path pairs); the token routes are there only with `manageTokens: true`.
 
 ### Turns
 
@@ -151,6 +151,7 @@ There are 81 routes (89 verb and path pairs); the token routes are there only wi
 | `GET /profiles` | Caller | The models a caller may ask for with options.profile. |
 | `GET /whoami` | Caller | Who the server takes the caller to be: id, scope and where the call came from. |
 | `GET /volumes` | Caller | The folders the agent may use, by name and mode. |
+| `GET /logs/stream` | Admin | One log, live: lines frames with what is written from now on, and reset when the file was rotated. Ends after ten minutes. |
 | `GET /logs` | Admin | The agent's logs: which there are, or the last lines of one. |
 | `POST /gateways/reconnect` | Admin | Stops and starts one gateway in place, so a fixed credential or a dropped connection does not need an app restart. |
 | `GET /gateways` | Admin | The gateways and the state of each: connected, which credentials are set (never their values), last activity, last error and the chats each has talked to (ids and when, never text). |

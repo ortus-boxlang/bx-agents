@@ -1,5 +1,6 @@
 <!--- Tabs Component
-    A row of tabs over a page's content. Each tab is a button bound to an Alpine variable of the page's component.
+    A row of tabs over a page's content (the WAI-ARIA tabs pattern). Each tab is a button bound to an Alpine variable of
+    the page's component; Left, Right, Home and End move between them ($tabKeys), and only the open one is in the Tab order.
 
     Usage:
         #view( view = "_components/ui/tabs", module = "bxagentsui", args = {
@@ -17,13 +18,13 @@
 <bx:param name="args.model" default="tab"/>
 <bx:param name="args.tabs" default="#[]#"/>
 <bx:output>
-<nav class="pg-tabs" aria-label="#encodeForHTML( args.label )#">
+<div class="pg-tabs" role="tablist" aria-label="#encodeForHTML( args.label )#">
 	<bx:loop array="#args.tabs#" item="tab">
-		<a href="##" role="tab" data-tab="#encodeForHTML( tab.id )#" @click.prevent="#args.model# = $el.dataset.tab" :aria-current="#args.model# === $el.dataset.tab ? 'page' : null" :aria-selected="( #args.model# === $el.dataset.tab ).toString()">
+		<button type="button" role="tab" data-tab="#encodeForHTML( tab.id )#" @click="#args.model# = $el.dataset.tab" @keydown="$tabKeys( $event )" :aria-selected="( #args.model# === $el.dataset.tab ).toString()" :tabindex="#args.model# === $el.dataset.tab ? 0 : -1">
 			<bx:if len( tab.icon ?: "" )>#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : tab.icon } )#</bx:if>
 			#encodeForHTML( tab.label )#
 			<bx:if len( tab.count ?: "" )><span class="tab-count" x-text="#tab.count#"></span></bx:if>
-		</a>
+		</button>
 	</bx:loop>
-</nav>
+</div>
 </bx:output>

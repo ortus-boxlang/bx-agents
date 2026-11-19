@@ -460,6 +460,58 @@ class {
 	}
 
 	/**
+	 * A GET that answers an event stream: logs/stream. Each event goes to onEvent( name, data ), its data parsed as JSON.
+	 *
+	 * @baseUrl The server root
+	 * @route The sub-route on the reserved path, for example "logs/stream"
+	 * @query Query string values
+	 * @timeoutSeconds How long the stream may run
+	 * @onEvent Called with each event's name and data
+	 *
+	 * @return { status }
+	 */
+	struct function getEvents( required string baseUrl, required string route, struct query = {}, numeric timeoutSeconds = 600, required any onEvent ) {
+		var url = queryUrl( arguments.baseUrl, arguments.route, arguments.query )
+		var sink = arguments.onEvent
+		var stopped = { value : nullValue() }
+		var call = http( url ).get().header( "Accept", "text/event-stream" )
+		for ( var headerName in clientHeaders() ) {
+			call = call.header( headerName, clientHeaders()[ headerName ] )
+		}
+		var httpResult = call
+			.timeout( arguments.timeoutSeconds )
+			.sse( true )
+			.onChunk( ( frame, lastEventId, result, client, response ) => {
+				var text = frame.data ?: ""
+				var name = frame.event ?: ""
+				// a keep-alive comment arrives as a frame with neither a name nor data
+				if ( ( !len( name ) || name == "message" ) && !len( trim( text ) ) ) {
+					return
+				}
+				var data = text
+				try {
+					data = len( trim( text ) ) ? jsonDeserialize( text ) : {}
+				} catch ( any e ) {
+					// not JSON: hand the text over as it is
+				}
+				try {
+					sink( len( name ) ? name : "message", data )
+				} catch ( any e ) {
+					// BoxLang ends the stream when this callback throws, but swallows the exception
+					stopped.value = { type : e.type, message : e.message }
+					rethrow
+				}
+			} )
+			.send()
+		if ( !isNull( stopped.value ) ) {
+			throw( type = stopped.value.type, message = stopped.value.message )
+		}
+		var status = httpResult.statusCode ?: httpResult.status_code ?: 0
+		checkStatus( status, url )
+		return { status : status }
+	}
+
+	/**
 	 * A GET that answers JSON: tools, pending, agent.
 	 *
 	 * @baseUrl The server root

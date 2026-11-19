@@ -37,6 +37,13 @@ A built agent copies the module to `modules/bxagentsui` and writes `config/bxage
   views, scripts, browser tests and extensions use them); markdownlint's `code-block-style` and `ul-indent` are off
   (the docs use indented code inside admonitions and four-space nested lists). A key the API sends in snake_case is
   written quoted (`"needs_attention"`), so `camelcase` lets it be.
+- **Accessible by default:** `tests/e2e/a11y.spec.js` runs axe-core (WCAG 2.2 AA) on every page, as an admin and a
+  member, light and dark, desktop and phone, and with the dialogs open; a serious or critical finding fails CI. A new
+  page goes in its `PAGES` list, a new dialog in its last test. `tests/e2e/keyboard.spec.js` checks the skip link, a
+  visible focus ring on every Tab stop, dialogs that hold and hand back the focus, and reduced motion. A row of tabs
+  that does not change the address uses the `tabs` partial (an ARIA tablist, arrow keys via `$tabKeys`); one that
+  does (Logs, Connectors) is a `nav` of links with `aria-current="page"`. Give an icon-only button an `aria-label`
+  that starts with its visible text, if it has any.
 - **A change needs a test:** a browser test in `ui/tests/e2e` for what a person sees, a TestBox spec for BoxLang code.
 
 ## The building blocks
@@ -46,7 +53,7 @@ Use these before writing markup or logic of your own; `/chat/_kit` (a dev build)
 | Partial (`views/_components/ui/`) | What it is | Main args |
 |---|---|---|
 | `page-head` | A page's title, a line under it, actions | `title`, `note`, `actions` |
-| `tabs` | A row of tabs bound to a component variable | `label`, `model`, `tabs: [ { id, label, icon, count } ]` |
+| `tabs` | A row of tabs (ARIA tablist) bound to a component variable | `label`, `model`, `tabs: [ { id, label, icon, count } ]` |
 | `search` | A search box with a debounce | `label`, `model`, `debounce` |
 | `chip` | A state or a count | `text`, `kind` (ok, warn, bad), `icon` |
 | `card` | A box holding another view | `title`, `contentView`, `contentArgs` |
@@ -70,6 +77,7 @@ The app partials (`views/_components/app/`) are `includes`, `sprite`, `sidebar` 
 | `$toast.success( text )`, `$toast.error( text )` | A short message |
 | `$md( text )` | Markdown as safe HTML: the only input `x-html` takes |
 | `$fmt.stampText`, `dayText`, `bytesText`, `countLabel` | Dates, sizes and counts, the same everywhere |
+| `$tabKeys( $event )` | The arrow, Home and End keys of a tab row (`utils/tabs.js`); the `tabs` partial uses it |
 | `$store.session` | `can( capability )`, `capabilities`, `agentName`, `agents`, `ready`; `await loaded()` before deciding by a capability in `init()` |
 | `$store.theme`, `$store.nav` | Light or dark; the folded menu and the phone drawer |
 | `$store.appearance` | Accent, text size, density (kept in this browser) |

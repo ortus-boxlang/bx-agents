@@ -125,6 +125,70 @@ class extends="testbox.system.BaseSpec" {
 				expect( reader.tail( "agent", 5000 ).lines ).toHaveLength( 30 );
 			} );
 
+			describe( "since, for a live view", function() {
+
+				it( "answers where the file ends now, then only the lines written after it", function() {
+					write( "gateways", "info", "before" );
+					var start = reader.since( "gateways", -1 );
+					expect( start.lines ).toBeEmpty();
+					expect( start.offset ).toBeGT( 0 );
+
+					write( "gateways", "warn", "after one" );
+					write( "gateways", "error", "after two" );
+					var next = reader.since( "gateways", start.offset );
+					expect( next.reset ).toBeFalse();
+					expect( next.lines.map( l => l.message ) ).toBe( [ "after one", "after two" ] );
+					expect( next.offset ).toBe( fileLen( folder & "/gateways.log" ) );
+
+					// nothing new: no lines, the same offset
+					var again = reader.since( "gateways", next.offset );
+					expect( again.lines ).toBeEmpty();
+					expect( again.offset ).toBe( next.offset );
+				} );
+
+				it( "keeps a line still being written for the next call", function() {
+					write( "gateways", "info", "one" );
+					var start = reader.since( "gateways", -1 );
+					fileAppend( folder & "/gateways.log", "[2026-11-09T21:32:04,197] [main] [INFO ] [GATEWAYS] [x] half" );
+					var partial = reader.since( "gateways", start.offset );
+					expect( partial.lines ).toBeEmpty();
+					expect( partial.offset ).toBe( start.offset );
+					fileAppend( folder & "/gateways.log", " done" & char( 10 ) );
+					expect( reader.since( "gateways", partial.offset ).lines[ 1 ].message ).toBe( "half done" );
+				} );
+
+				it( "filters by level and text like the tail", function() {
+					write( "gateways", "info", "start" );
+					var start = reader.since( "gateways", -1 );
+					write( "gateways", "info", "telegram ok" );
+					write( "gateways", "error", "telegram failed" );
+					write( "gateways", "error", "slack failed" );
+					var found = reader.since( "gateways", start.offset, "error", "TELEGRAM" );
+					expect( found.lines.map( l => l.message ) ).toBe( [ "telegram failed" ] );
+				} );
+
+				it( "says reset when the file got shorter, as after a rotation", function() {
+					write( "gateways", "info", "a long line before the rotation" );
+					var start = reader.since( "gateways", -1 );
+					fileWrite( folder & "/gateways.log", "" );
+					var found = reader.since( "gateways", start.offset );
+					expect( found.reset ).toBeTrue();
+					expect( found.offset ).toBe( 0 );
+				} );
+
+				it( "starts at 0 for a log with no file yet, and refuses an unknown area", function() {
+					expect( reader.since( "routines", -1 ).offset ).toBe( 0 );
+					expect( function() {
+						reader.since( "../chat", 0 );
+					} ).toThrow( "BxAgents.UnknownLog" );
+				} );
+
+			} );
+
+			private function fileLen( required string file ) {
+				return createObject( "java", "java.io.File" ).init( arguments.file ).length();
+			}
+
 			it( "refuses a name that is not one of the areas, so no other file can be read", function() {
 				expect( function() {
 					reader.tail( "../chat" );

@@ -80,7 +80,7 @@ async function routeCatalog( page ) {
 test( "shows the catalog: tabs with counts, the banner, states and what each person may do", async( { page, errors } ) => {
 	await routeCatalog( page );
 	await page.goto( APP + "/connectors" );
-	await expect( page.locator( ".pg-tabs a", { hasText: "Needs attention" } ) ).toContainText( "1" );
+	await expect( page.getByRole( "navigation", { name: "Connectors" } ).getByRole( "link", { name: /Needs attention/ } ) ).toContainText( "1" );
 	await expect( page.getByText( "Catalog: 3 of 4 connectors available." ) ).toBeVisible();
 	await expect( page.getByText( "Left out: stripe." ) ).toBeVisible();
 	await expect( page.getByText( "Models answer better with fewer than 40." ) ).toBeVisible();
@@ -92,7 +92,7 @@ test( "shows the catalog: tabs with counts, the banner, states and what each per
 	await expect( page.getByRole( "article", { name: "Notion" } ).getByRole( "button", { name: "Reconnect Notion" } ) ).toBeVisible();
 	await expect( page.getByRole( "article", { name: "Git", exact: true } ).getByRole( "button", { name: "Switch on Git" } ) ).toBeVisible();
 
-	await page.locator( ".pg-tabs a", { hasText: "Connected" } ).click();
+	await page.getByRole( "navigation", { name: "Connectors" } ).getByRole( "link", { name: /^Connected/ } ).click();
 	await expect( page ).toHaveURL( /\/connectors\/connected$/ );
 	await expect( page.getByRole( "article" ) ).toHaveCount( 1 );
 	await page.getByRole( "searchbox", { name: "Search the connectors" } ).fill( "zzz" );

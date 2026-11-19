@@ -757,6 +757,56 @@ class {
 	}
 
 	/**
+	 * One log, live: an event stream of the lines written to it from now on. Admin only, like /logs.
+	 *
+	 *   lines  { area, lines : [ { time, level, area, subject, message } ] }
+	 *   reset  {} when the file was rotated or emptied: read the tail again
+	 *
+	 * The file is looked at every second; the stream ends after ten minutes (a page opens it again). Query: area, level?, q?
+	 */
+	function logsStream( event, rc, prc ) {
+		if ( refused( event ) ) {
+			return
+		}
+		var caller = callerOf( event )
+		var area = toString( rc.area ?: "" )
+		var level = toString( rc.level ?: "" )
+		var q = toString( rc.q ?: "" )
+		var agent = service()
+		var opened = agent.logsSince( caller, area, -1, level, q )
+		if ( !opened.succeeded() ) {
+			answer( event, opened )
+			return
+		}
+		var start = opened.data().offset
+		SSE(
+			callback : ( emitter ) => {
+				var offset = start
+				var ends = getTickCount() + 600000
+				while ( !emitter.isClosed() && getTickCount() < ends ) {
+					sleep( 1000 )
+					var next = agent.logsSince( caller, area, offset, level, q )
+					if ( !next.succeeded() ) {
+						break
+					}
+					var found = next.data()
+					offset = found.offset
+					if ( found.reset ) {
+						emitter.send( {}, "reset" )
+					} else if ( found.lines.len() ) {
+						emitter.send( { "area" : found.area, "lines" : found.lines }, "lines" )
+					}
+				}
+				if ( !emitter.isClosed() ) {
+					emitter.close()
+				}
+			},
+			keepAliveInterval : 15000
+		)
+		return ""
+	}
+
+	/**
 	 * The chat apps and the state of each: { gateways : [ ... ] }. Admin only.
 	 */
 	function gateways( event, rc, prc ) {

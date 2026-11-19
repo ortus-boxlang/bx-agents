@@ -74,6 +74,66 @@ class {
 	}
 
 	/**
+	 * The lines written to one log after a point in its file, for a live view: call it with -1 to learn where the file
+	 * ends now, then again with the offset it answered to get what was written since.
+	 *
+	 * Only whole lines are read: a line still being written stays for the next call. More than the window at once
+	 * (a burst) keeps the end of it. A file shorter than the offset was rotated or emptied, which `reset` says.
+	 *
+	 * @area One of the areas
+	 * @offset Where the last call ended, in bytes; -1 for the end of the file now
+	 * @level Least serious level to show: debug, info, warn or error. Blank shows all
+	 * @query Text a line must contain (case does not matter). Blank shows all
+	 *
+	 * @return { area, offset, reset, lines : [ { time, level, area, subject, message } ] }, oldest first
+	 */
+	struct function since( required string area, numeric offset = -1, string level = "", string query = "" ) {
+		if ( !Logger::areas().findNoCase( arguments.area ) ) {
+			throw( type = "BxAgents.UnknownLog", message = "There is no log [#arguments.area#]. They are: #Logger::areas().toList( ', ' )#." )
+		}
+		var area = lCase( arguments.area )
+		var file = variables.folder & "/" & area & ".log"
+		var size = fileExists( file ) ? createObject( "java", "java.io.File" ).init( file ).length() : 0
+		if ( arguments.offset < 0 ) {
+			return { area : area, offset : size, reset : false, lines : [] }
+		}
+		if ( size < arguments.offset ) {
+			return { area : area, offset : size, reset : true, lines : [] }
+		}
+		if ( size == arguments.offset ) {
+			return { area : area, offset : size, reset : false, lines : [] }
+		}
+		var start = max( arguments.offset, size - static.WINDOW )
+		var raf = createObject( "java", "java.io.RandomAccessFile" ).init( file, "r" )
+		try {
+			raf.seek( start )
+			var bytes = createObject( "java", "java.lang.reflect.Array" ).newInstance( createObject( "java", "java.lang.Byte" ).TYPE, int( size - start ) )
+			raf.readFully( bytes )
+		} finally {
+			raf.close()
+		}
+		var whole = createObject( "java", "java.lang.String" ).init( bytes, "UTF-8" )
+		// up to the last line break only; the rest is still being written and stays for the next call
+		var lastBreak = whole.lastIndexOf( char( 10 ) )
+		if ( lastBreak == -1 ) {
+			return { area : area, offset : start, reset : false, lines : [] }
+		}
+		var text = whole.substring( 0, lastBreak + 1 )
+		var consumed = text.getBytes( "UTF-8" ).len()
+		var raw = replace( text, char( 13 ), "", "all" ).listToArray( char( 10 ), false, false )
+		// a burst bigger than the window starts in the middle of a line
+		if ( start > arguments.offset && raw.len() ) {
+			raw.deleteAt( 1 )
+		}
+		var floor = levelRank( arguments.level, 1 )
+		var needle = lCase( trim( arguments.query ) )
+		var kept = parse( raw.filter( l => len( trim( l ) ) ) ).filter( function( l ) {
+			return levelRank( l.level, 2 ) >= floor && ( !len( needle ) || lCase( l.message & " " & l.subject ).contains( needle ) )
+		} )
+		return { area : area, offset : start + consumed, reset : false, lines : kept }
+	}
+
+	/**
 	 * @return The rank of a level, 1 (debug) to 4 (error); the fallback for a blank or unknown one
 	 */
 	private numeric function levelRank( required string level, required numeric fallback ) {

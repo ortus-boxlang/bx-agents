@@ -9,6 +9,7 @@ import persist from "@alpinejs/persist";
 import { readConfig } from "./utils/config.js";
 import { createApi } from "./utils/api.js";
 import { streamEvents } from "./utils/sse.js";
+import { moveTab } from "./utils/tabs.js";
 import { renderMarkdown, listenForCodeCopy, useBoxLangWords } from "./utils/markdown.js";
 import * as format from "./utils/format.js";
 import { session } from "./stores/session.js";
@@ -73,6 +74,7 @@ window.addEventListener( "bxagents:refused", () => {
 //   $toast.success( text ) / $toast.error( text )
 //   $md( text )                                   Markdown as safe HTML, the only input x-html takes
 //   $fmt.stampText / dayText / bytesText / countLabel
+//   $tabKeys( $event )                            the arrow, Home and End keys of a tab row
 // ============================================================
 Alpine.magic( "api", () => api );
 Alpine.magic( "sse", () => ( path, options ) => streamEvents( api.url( path ), { ...options, headers: api.headers() } ) );
@@ -81,6 +83,7 @@ Alpine.magic( "prompt", () => question => Alpine.store( "confirm" ).prompt( ques
 Alpine.magic( "toast", () => Alpine.store( "toast" ) );
 Alpine.magic( "md", () => renderMarkdown );
 Alpine.magic( "fmt", () => format );
+Alpine.magic( "tabKeys", () => moveTab );
 
 // ============================================================
 // Components

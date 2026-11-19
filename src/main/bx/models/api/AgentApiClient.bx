@@ -211,6 +211,28 @@ class {
 		return get( "logs", query )
 	}
 
+	/**
+	 * Follows one log: calls onEvent( name, data ) for each "lines" event ({ area, lines }) and "reset" event (the file
+	 * was rotated) until the server ends the stream (after ten minutes) or onEvent throws. An admin token only.
+	 *
+	 * @area One of the log areas
+	 * @onEvent Called with each event's name and data
+	 * @level Least serious level to show
+	 * @q Text a line must contain
+	 *
+	 * @return { status }
+	 */
+	struct function logsStream( required string area, required any onEvent, string level = "", string q = "" ) {
+		var query = { "area" : arguments.area }
+		if ( len( arguments.level ) ) {
+			query[ "level" ] = arguments.level
+		}
+		if ( len( arguments.q ) ) {
+			query[ "q" ] = arguments.q
+		}
+		return variables.http.getEvents( variables.url, "logs/stream", query, 660, arguments.onEvent )
+	}
+
 	/** The chat apps and the state of each: { gateways : [ ... ] }. An admin token only. */
 	struct function gateways() {
 		return get( "gateways" )
