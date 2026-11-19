@@ -119,7 +119,12 @@ test( "the dialogs and drawers, open", async( { page }, info ) => {
 	await check( page, "connect dialog", info );
 
 	await open( page, "data" );
-	await page.getByRole( "button", { name: /^Restore / } ).first().click();
+	// a fresh server has no backup yet, and the test that makes one may run later: make one when none is listed
+	const restore = page.getByRole( "button", { name: /^Restore / } ).first();
+	if ( !await restore.isVisible() ) {
+		await page.getByRole( "button", { name: "Make a backup" } ).click();
+	}
+	await restore.click();
 	await expect( page.locator( "#confirmDialog" ) ).toBeVisible();
 	await check( page, "confirm dialog", info );
 	await page.keyboard.press( "Escape" );

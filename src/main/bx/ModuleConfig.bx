@@ -438,12 +438,12 @@ class {
 		}
 		var options = parseCliOptions( rawVerbArgs )
 		var root = resolveProjectRoot( options, false )
-		var service = new "models.extensions.ExtensionService"( projectRoot : root, transport : "tui" )
+		var service = new models.extensions.ExtensionService( projectRoot : root, transport : "tui" )
 		if ( !service.mayHaveExtensions() ) {
 			return { found : false, exitCode : 1 }
 		}
 		try {
-			var verbs = new "models.extensions.ExtensionVerbs"( root, static.verbs.keyArray(), service )
+			var verbs = new models.extensions.ExtensionVerbs( root, static.verbs.keyArray(), service )
 			var verb = verbs.find( arguments.verbName )
 			if ( isNull( verb ) ) {
 				return { found : false, exitCode : 1 }
@@ -478,9 +478,9 @@ class {
 	private array function extensionVerbLines() {
 		var lines = []
 		try {
-			var service = new "models.extensions.ExtensionService"( projectRoot : resolveProjectRoot( {} ), transport : "tui" )
+			var service = new models.extensions.ExtensionService( projectRoot : resolveProjectRoot( {} ), transport : "tui" )
 			if ( service.mayHaveExtensions() ) {
-				var verbs = new "models.extensions.ExtensionVerbs"( resolveProjectRoot( {} ), static.verbs.keyArray(), service )
+				var verbs = new models.extensions.ExtensionVerbs( resolveProjectRoot( {} ), static.verbs.keyArray(), service )
 				lines = verbs.verbs().map( v => "  #v.name().lJustify( 9 )# #v.hint()# (extension #v.extensionName()#)" )
 				service.unload()
 			}
@@ -507,7 +507,7 @@ class {
 	 * @verbDescriptions Struct mapping verb name -> one-line help text
 	 */
 	private void function printUsage( required struct verbs, required struct verbDescriptions ) {
-		var banner = new "models.cli.support.Banner@bxagents"()
+		var banner = new models.cli.support.Banner@bxagents()
 		if ( banner.show( {}, "v#this.version#" ) ) {
 			println( this.description )
 		} else {

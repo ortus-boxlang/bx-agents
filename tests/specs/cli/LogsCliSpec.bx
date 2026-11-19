@@ -5,6 +5,9 @@ import bxModules.bxagents.models.logs.Logger;
  */
 class extends="testbox.system.BaseSpec" {
 
+	/**
+	 * The specs.
+	 */
 	function run() {
 		describe( "cli.Logs", function() {
 
@@ -28,6 +31,13 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			/**
+			 * Runs `bxAgents logs` on the temporary project.
+			 *
+			 * @options The command's options, on top of the project root
+			 *
+			 * @return What the command returned
+			 */
 			function logs( struct options = {} ) {
 				var all = { projectRoot : dir };
 				all.append( arguments.options );
@@ -73,6 +83,12 @@ class extends="testbox.system.BaseSpec" {
 				expect( logs( { _positional : "api", grep : "nothing like this" } ).message ).toInclude( "that match" );
 			} );
 
+			/**
+			 * Writes one line to the gateways log, in the logger's own format.
+			 *
+			 * @level   The line's level
+			 * @message The line's message
+			 */
 			function rawLine( required string level, required string message ) {
 				fileAppend( dir & "/home/logs/gateways.log", "[2026-11-19T05:00:00,000] [main] [#arguments.level#] [GATEWAYS] [bxagents-root] [telegram] #arguments.message#" & char( 10 ) );
 			}

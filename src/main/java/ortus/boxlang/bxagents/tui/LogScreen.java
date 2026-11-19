@@ -37,6 +37,11 @@ public final class LogScreen implements AutoCloseable {
 	private final LogView		view;
 	private final ClassLoader	previousLoader;
 
+	/**
+	 * @param runner         the full-screen runner that owns the terminal
+	 * @param view           what is drawn
+	 * @param previousLoader the thread's class loader before {@link #open(List, String)} swapped it, put back by {@link #close()}
+	 */
 	private LogScreen( TuiRunner runner, LogView view, ClassLoader previousLoader ) {
 		this.runner			= runner;
 		this.view			= view;
@@ -86,6 +91,11 @@ public final class LogScreen implements AutoCloseable {
 		return view.takeChange() ? "changed" : "";
 	}
 
+	/**
+	 * Draws the view's rows on the whole frame.
+	 *
+	 * @param frame the frame of this draw
+	 */
 	private void paint( Frame frame ) {
 		int			w		= frame.area().width();
 		int			h		= frame.area().height();
@@ -128,6 +138,9 @@ public final class LogScreen implements AutoCloseable {
 		view.status( text );
 	}
 
+	/**
+	 * Leaves the full screen and puts the thread's class loader back.
+	 */
 	@Override
 	public void close() {
 		try {
