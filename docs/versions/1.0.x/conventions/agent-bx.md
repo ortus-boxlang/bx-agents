@@ -379,9 +379,9 @@ function production() {
 }
 ```
 
-### Who may stop a run
+### Stopping and steering a run
 
-`POST /cancel` and `POST /steer` take a `threadId`, which is not a secret (the first frame of every stream carries it). A run can only be stopped or steered by the caller who started it: anyone else gets `403` with `code: "not_your_run"`. A run no caller here started (one a chat platform's gateway runs) can only be touched by an `admin`; anyone else is told `cancelled: false`, the same answer an unknown thread id gets.
+`POST /cancel` and `POST /steer` take the `threadId` from the first frame of the run's stream, and that is all they need. A thread id that is not running here gets `cancelled: false` (or `steered: false`). Resuming a paused run is different: only the caller who started it may (`POST /resume`), anyone else gets `403` with `code: "not_your_run"`.
 
 ### Open or token
 

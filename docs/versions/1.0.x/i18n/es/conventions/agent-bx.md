@@ -339,9 +339,9 @@ function production() {
 }
 ```
 
-### Quién puede detener una ejecución
+### Detener y dirigir una ejecución
 
-`POST /cancel` y `POST /steer` reciben un `threadId`, que no es un secreto (el primer frame de cada stream lo lleva). Una ejecución solo la puede detener o dirigir quien la inició: cualquier otro recibe `403` con `code: "not_your_run"`. Una ejecución que ningún llamante de aquí inició (la que corre el gateway de una plataforma de chat) solo la puede tocar un `admin`; a cualquier otro se le dice `cancelled: false`, la misma respuesta que recibe un id de hilo desconocido.
+`POST /cancel` y `POST /steer` reciben el `threadId` del primer frame del stream de la ejecución, y no necesitan más. Un id de hilo que no está corriendo aquí recibe `cancelled: false` (o `steered: false`). Reanudar una ejecución en pausa es distinto: solo puede hacerlo quien la inició (`POST /resume`); cualquier otro recibe `403` con `code: "not_your_run"`.
 
 ### Abierta o con token
 

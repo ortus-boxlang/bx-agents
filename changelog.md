@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Stopping and steering a run** takes only its thread id: `POST /cancel` and `POST /steer` no longer check who started the run, and `RunOwners` (an in-memory record of run owners) is gone. Resuming a paused run is still only for the caller who started it.
 - **Linters from cbGenesis:** ESLint with cbGenesis' rules (now ESLint 10), Stylelint (`stylelint-config-standard-scss`) for the web app's Sass, markdownlint for the docs, and `.bxlint.json` for BoxLang editors. `npm run lint`, `lint:scss` and `lint:md` in `ui/`; CI runs all three.
 - **The web app is a ColdBox module** (`bxagentsui`), built with Vite, Sass and Alpine.js in `ui/` and mounted at the `webui` gateway's `path`. It replaces the single generated `index.html`, which is no longer written; the build ships inside BX Agents, so a project still needs no Node. Pages have their own addresses (`/chat/settings`, `/chat/connectors/connected`), the sign-in form is served at `<path>/login.html` as before, and a `webui` entry at the root path `/` is now a build error. See [the web chat UI](docs/conventions/web-ui.md#working-on-the-web-app).
 - BoxLang 1.19.0 is the runtime used for development and CI.

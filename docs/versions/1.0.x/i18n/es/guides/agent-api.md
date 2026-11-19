@@ -85,11 +85,11 @@ Construye el cliente con argumentos con nombre. Hay un método por cada ruta: `i
 
 ## Control de ejecuciones
 
-Una ejecución pertenece a quien la empezó.
+El id de hilo del primer frame de una ejecución es todo lo que piden `cancel` y `steer`. Una ejecución en pausa solo la puede reanudar quien la empezó.
 
 | Llamada | Hace |
 |---|---|
-| `cancel( threadId )` | La detiene. Solo su dueño, o un admin. |
+| `cancel( threadId )` | La detiene. |
 | `steer( threadId, input )` | Añade un mensaje a una ejecución en marcha. |
 | `pending( threadId )` y `resume( threadId, decision )` | Aprobar, rechazar o editar lo que quiere hacer una ejecución detenida. |
 

@@ -96,11 +96,11 @@ Build the client with named arguments. There is one method for each route: `invo
 
 ## Run control
 
-A run belongs to the caller who started it.
+The thread id from a run's first frame is all `cancel` and `steer` take. A paused run can only be resumed by the caller who started it.
 
 | Call | Does |
 |---|---|
-| `cancel( threadId )` | Stops it. Only its owner, or an admin. |
+| `cancel( threadId )` | Stops it. |
 | `steer( threadId, input )` | Adds a message to a run that is going. |
 | `pending( threadId )` and `resume( threadId, decision )` | Approve, reject or edit what a paused run wants to do. |
 
