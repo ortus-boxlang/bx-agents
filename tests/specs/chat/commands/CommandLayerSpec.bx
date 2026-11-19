@@ -67,7 +67,16 @@ class extends="testbox.system.BaseSpec" {
 					expect( registry.menu( "gateway" ).map( c => c.name ) ).toBe( [ "/help", "/new", "/tools", "/volumes", "/skills", "/routines", "/routine", "/sessions", "/resume", "/clear", "/compact", "/model", "/ping", "/info", "/remember", "/notes", "/vault", "/connect" ] );
 				} );
 
-				it( "finds a command by an alias", function() {
+				it( "builds every built-in the catalog lists, in its order, each named after its class", function() {
+					var builtins = new bxagents.models.chat.commands.CommandCatalog().builtins();
+					expect( builtins ).toHaveLength( 32 );
+					expect( registry.menu( "tui" ).map( c => c.name ) ).toBe( builtins.map( n => "/" & lCase( n ) ) );
+					// a copy: changing it leaves the catalog as it was
+					builtins.clear();
+					expect( new bxagents.models.chat.commands.CommandCatalog().builtins() ).toHaveLength( 32 );
+				} );
+
+								it( "finds a command by an alias", function() {
 					expect( registry.lookup( "quit" ).name() ).toBe( "exit" );
 					expect( registry.lookup( "EXIT" ).name() ).toBe( "exit" );
 					expect( isNull( registry.lookup( "nope" ) ) ).toBeTrue();
