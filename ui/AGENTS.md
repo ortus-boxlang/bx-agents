@@ -80,6 +80,7 @@ The app partials (`views/_components/app/`) are `includes`, `sprite`, `sidebar` 
 | Conversations (`?q=&agent=&source=`) | `Conversations.index` | `views/conversations/` | `components/conversations/ConversationsPage.js` |
 | Memory | `Memory.index` | `views/memory/` | `components/memory/MemoryPage.js` |
 | Agent (`/agent/:tab`) | `Agent.index` | `views/agent/` | `components/admin/AgentPage.js` |
+| Routines (editor and reports in `modal`) | `Routines.index` | `views/routines/` | `components/routines/RoutinesPage.js` |
 
 A page handler is one `index()` that calls `showPage( event, prc, id, view )` (BaseHandler): 404 for an unknown page,
 403 for an admin page to anybody else. Server values a component needs go in `data-*` attributes, read in `init()`.

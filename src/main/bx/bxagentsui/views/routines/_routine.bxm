@@ -1,0 +1,20 @@
+<!--- One routine: its state, schedule, owner (admin), what is next and last, and its actions. Inside routinesPage, as `r`. --->
+<bx:output>
+<div class="pg-actions">
+	<strong x-text="r.name"></strong>
+	<span class="chip" :class="state( r ).kind"><svg class="i" aria-hidden="true"><use :href="'##i-' + state( r ).icon"/></svg><span x-text="r.statusText"></span></span>
+	<span class="pg-note" x-text="r.scheduleText + ' (' + r.schedule + ')'"></span>
+	<span class="chip" x-show="othersRoutine( r )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "user" } )#<span x-text="'Owner ' + r.ownerId"></span></span>
+</div>
+<p class="pg-note" x-text="routineLine( r )"></p>
+<p class="pg-error" role="status" x-show="r.lastError">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "warning-circle" } )#<span x-text="'Last error: ' + r.lastError"></span></p>
+<div class="pg-actions">
+	<button type="button" class="btn" @click="run( r )" :aria-label="'Run routine ' + r.name + ' now'">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "play" } )# Run now</button>
+	<button type="button" class="btn" x-show="r.enabled" @click="pause( r )" :aria-label="'Pause routine ' + r.name">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "pause" } )# Pause</button>
+	<button type="button" class="btn" :class="{ primary: r.lastError }" x-show="!r.enabled" @click="resume( r )" :aria-label="'Resume routine ' + r.name">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "play-circle" } )# Resume</button>
+	<button type="button" class="btn" @click="edit( r )" :aria-label="'Edit routine ' + r.name">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "pencil-simple" } )# Edit</button>
+	<button type="button" class="btn" @click="openReports( r )" :aria-label="'Reports of routine ' + r.name">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "file-text" } )# Reports</button>
+	<button type="button" class="btn" x-show="!othersRoutine( r ) && r.conversationId" @click="openConversation( r )" :aria-label="'Open the conversation of routine ' + r.name">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "chat-circle-text" } )# Open conversation</button>
+	<button type="button" class="btn danger" @click="remove( r )" :aria-label="'Delete routine ' + r.name">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "trash" } )# Delete</button>
+</div>
+</bx:output>
