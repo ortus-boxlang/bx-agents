@@ -6,7 +6,12 @@
 		<button type="button" id="navBtn" class="ib" title="Menu" aria-label="Menu" aria-controls="mainNav" :aria-expanded="$store.nav.open.toString()" @click="$store.nav.toggleDrawer()">
 			#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "list" } )#
 		</button>
-		<bx:if prc.ui.icon.len()><span class="icon" aria-hidden="true">#encodeForHTML( prc.ui.icon )#</span></bx:if>
+		<span class="icon" aria-hidden="true"><bx:switch expression="#prc.ui.iconKind ?: ( prc.ui.icon.len() ? "text" : "none" )#">
+			<bx:case value="image"><img src="#encodeForHTML( prc.ui.icon )#" alt=""></bx:case>
+			<bx:case value="phosphor">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : prc.ui.iconName } )#</bx:case>
+			<bx:case value="text">#encodeForHTML( prc.ui.icon )#</bx:case>
+			<bx:defaultcase>#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "robot" } )#</bx:defaultcase>
+		</bx:switch></span>
 		<div>
 			<h1>#encodeForHTML( prc.ui.title )#</h1>
 			<bx:if prc.ui.subtitle.len()><p class="subtitle">#encodeForHTML( prc.ui.subtitle )#</p></bx:if>

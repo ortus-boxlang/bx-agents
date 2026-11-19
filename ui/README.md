@@ -21,8 +21,7 @@ npm run dev        # the agent, its model and the Vite dev server: edit, save, s
 npm run stack      # the agent and its model only, with the committed build of the scripts and styles
 ```
 
-The agent is at http://127.0.0.1:8780/chat (ada or bob, password demo-pass). The new web app, a ColdBox module, is at
-http://127.0.0.1:8780/chat/next while the pages move to it. Its source is `src/main/bx/bxagentsui` (handlers, views,
+The web app is at http://127.0.0.1:8780/chat (ada or bob, password demo-pass). It is a ColdBox module; its source is `src/main/bx/bxagentsui` (handlers, views,
 partials) and `resources/assets` here (Sass and Alpine); `AGENTS.md` has the conventions. In `npm run dev` a view, a
 Sass or a JS change shows on save; a handler or model change needs a restart.
 

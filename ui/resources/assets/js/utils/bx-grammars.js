@@ -1,6 +1,10 @@
-// highlight.js grammars for BoxLang and CFML. `words` holds the lists from
-// ortus.boxlang.bxagents.tui.Grammars.words() (the terminal's grammars use the same lists).
-function registerBoxLangGrammars( hljs, words ) {
+/**
+ * highlight.js grammars for BoxLang and CFML, ported from the earlier page's own. `words` holds
+ * the lists of ortus.boxlang.bxagents.tui.Grammars.words(), the same the terminal's grammars use; the generator writes
+ * them into the module settings and the chat page hands them over (see utils/markdown.js).
+ */
+/* eslint-disable */
+export function registerBoxLangGrammars( hljs, words ) {
 	function list( key ) {
 		return ( words[ key ] || "" ).trim().split( /\s+/ ).filter( Boolean ).join( " " );
 	}

@@ -33,15 +33,15 @@ class {
 }
 ```
 
-That generates a static `<path>/index.html` (served directly - no route needed). The page is a client of the [agent API](agent-bx.md#the-always-on-agent-route) at `/__bxagents`, the same one the terminal chat and the gateways use, so there is no second API under `<path>`. The agent API must stay enabled (`agentApi.enabled: false` with a `webui` entry is a build error).
+That installs the web app at `<path>`: a ColdBox module (`bxagentsui`) with its own handlers, routes, layouts and views, copied into the generated app. The app is a client of the [agent API](agent-bx.md#the-always-on-agent-route) at `/__bxagents`, the same one the terminal chat and the gateways use, so there is no second API under `<path>`. The agent API must stay enabled (`agentApi.enabled: false` with a `webui` entry is a build error).
 
 ![The generated web app: the left menu, a conversation with a tool call, and the model picker and context ring in the header](../assets/webui-chat-light.png)
 
-The screenshots on this page are the real, unmodified page this repo ships, from a demo project (Acme Support) with a scripted model, sub-agents, skills, notes, routines, vault entries and thirty conversations. Everything runs offline.
+The screenshots on this page are the real, unmodified web app this repo ships, from a demo project (Acme Support) with a scripted model, sub-agents, skills, notes, routines, vault entries and thirty conversations. Everything runs offline.
 
-The UI is dependency-free vanilla HTML/CSS/JS - no Bootstrap, AlpineJS or Vite build step - and is **pre-built and vendored inside BxAgents itself**: `bxAgents build` never runs `npm install`/`npm run build`, and a generated project never needs Node or npm installed at all. Everything the page needs is inlined into the single generated `index.html`.
+The app is written with [Alpine.js](https://alpinejs.dev) and Sass and built with Vite in this repository's `ui/` folder, and the build is **committed inside the module**: `bxAgents build` never runs `npm install`/`npm run build`, and a generated project never needs Node or npm installed at all. Its scripts and styles are served from `/modules/bxagentsui/includes`, and it loads nothing from a CDN. To change the app itself, see [Working on the web app](#working-on-the-web-app).
 
-That constraint is about the build, not about scope. The page is a full client: conversation sidebar, streaming with reasoning and tool calls, approvals, compaction, server-side theming. What is genuinely still missing is listed under [What is not here yet](#what-is-not-here-yet).
+That constraint is about the build, not about scope. The app is a full client: conversation sidebar, streaming with reasoning and tool calls, approvals, compaction, server-side theming. What is genuinely still missing is listed under [What is not here yet](#what-is-not-here-yet).
 
 The page talks to the agent API at `/__bxagents` via `POST /__bxagents/stream` (`Accept: text/event-stream`), using `fetch()` + a manual `ReadableStream` reader - not the browser's `EventSource`, which can't `POST` or set custom headers, both needed here.
 
@@ -198,7 +198,7 @@ The [trailer at the top](#the-web-app) covers every page. These are the details 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant B as browser (generated index.html)
+    participant B as browser (the web app)
     participant H as handlers/AgentApi.bx
     participant A as the agent
     participant D as the shared store (SQLite)
@@ -483,7 +483,7 @@ The entry needs only `exposes` and `path`. All the other keys are optional. Thes
 | Key | What it does |
 | --- | --- |
 | `exposes` | `"webui"`. |
-| `path` | Where the page is served, for example `/chat`. Rooted, plain segments, unique among the `gateways/` entries, and not under the agent API's path. |
+| `path` | Where the app is served, for example `/chat`. Rooted, plain segments, unique among the `gateways/` entries, not under the agent API's path, and not `/` itself (the app would answer every address, the agent API's too). |
 | `apiKeyEnvVar` | The name of the variable holding the API's shared secret, see [Securing the API](#securing-the-api). |
 | `users` | Named accounts, see [Users and sign-in](#users-and-sign-in). |
 | `profiles` | The profiles people may pick, see [Choosing the model](#choosing-the-model). |
@@ -529,7 +529,7 @@ For anything the tokens don't cover - custom fonts, layout, per-element rules - 
 ## Securing the API
 
 !!! warning
-    **`apiKeyEnvVar` is a shared secret, not a login system.** It is the same thing as the agent API's `agentApi.tokenEnvVar` (a name in `Agent.yaml` wins if both are set). Left unset, the API is open (fine on your own machine, not for a public deployment; `serve` warns when an open API listens on every interface). Set it, and every call to `/__bxagents` must carry a matching `x-bxagents-token` header, compared in constant time. **The static shell (`<path>/index.html`) is not gated**, because a browser's plain page navigation can't send a custom header; the page asks for it in a form: a **Password** box that opens by itself when the server answers `401` and again from **Password** in the Settings menu. The password is kept in `localStorage` and sent on every call; a wrong one shows "That password was not accepted." For several people use [issued tokens](agent-bx.md#access-tokens-for-a-deployed-agent) or `users`.
+    **`apiKeyEnvVar` is a shared secret, not a login system.** It is the same thing as the agent API's `agentApi.tokenEnvVar` (a name in `Agent.yaml` wins if both are set). Left unset, the API is open (fine on your own machine, not for a public deployment; `serve` warns when an open API listens on every interface). Set it, and every call to `/__bxagents` must carry a matching `x-bxagents-token` header, compared in constant time. **The app's pages (`<path>/`) are not gated by it**, because a browser's plain page navigation can't send a custom header; the page asks for it in a form: a **Password** box that opens by itself when the server answers `401` and again from **Password** in the Settings menu. The password is kept in `localStorage` and sent on every call; a wrong one shows "That password was not accepted." For several people use [issued tokens](agent-bx.md#access-tokens-for-a-deployed-agent) or `users`.
 
 ## Logs and gateways
 
@@ -601,6 +601,20 @@ The Memory page also has **Conversation memory**: the messages the agent's memor
 
 When an `mcpServers` entry has [`oauth`](connect.md), the [Connectors](#connectors) page has an **In Agent.yaml** tab (it shows only then; `/info`'s `capabilities.connections` says whether). It lists each service with its name, its address, *Connected* or *Not connected*, and a *Connect* or *Disconnect* button. *Connect* opens the provider's sign in in a new tab (a link is also shown, in case the browser blocks the tab) and the page checks again every two seconds until it works. The page never sees a token.
 
+
+## Working on the web app
+
+The app's source is in this repository: the module in `src/main/bx/bxagentsui` (handlers, routes, layouts, views and partials) and the scripts and styles in `ui/resources/assets` (Alpine.js components and stores, Sass). `ui/README.md` says how to run it and `ui/AGENTS.md` lists its conventions and building blocks.
+
+```bash
+cd ui
+npm install
+npm run dev     # a dev agent, a scripted model and the Vite dev server: edit, save, see it
+npm run build   # writes src/main/bx/bxagentsui/includes/build, which is committed
+npm run e2e     # the browser tests (Playwright)
+```
+
+The dev agent is at http://127.0.0.1:8780/chat (`ada` or `bob`, password `demo-pass`). A built agent gets the committed build, so a change to a script or a style ships only once `npm run build` has run and its output is committed.
 
 ## What is not here yet
 

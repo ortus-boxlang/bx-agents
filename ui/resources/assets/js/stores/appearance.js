@@ -1,6 +1,6 @@
 /**
- * The accent colour, text size and density a person picks, kept in this browser under the same key and shape as the
- * current page ({ accent, size, density }), so both apps share it while both run.
+ * The accent colour, text size and density a person picks, kept in this browser ({ accent, size, density }) under the
+ * key the earlier page used, so a choice made there carries over.
  *
  * @returns {object} The store
  */

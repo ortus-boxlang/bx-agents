@@ -4,11 +4,11 @@
  */
 import { test, expect } from "./support.js";
 
-const NEXT = "/chat/next";
+const APP = "/chat";
 
 test( "makes a routine, reads its schedule back, runs, pauses, resumes and deletes it", async ( { page, errors } ) => {
 	const name = "e2e-" + Date.now().toString( 36 );
-	await page.goto( NEXT + "/routines" );
+	await page.goto( APP + "/routines" );
 	await page.getByRole( "button", { name: "New routine" } ).click();
 	const editor = page.getByRole( "dialog", { name: "New routine" } );
 	await editor.getByRole( "textbox", { name: "Name" } ).fill( name );
@@ -53,7 +53,7 @@ test( "sends the answer to a gateway chat picked from the ones it has talked to"
 		}
 		return route.fallback();
 	} );
-	await page.goto( NEXT + "/routines" );
+	await page.goto( APP + "/routines" );
 	await page.getByRole( "button", { name: "New routine" } ).click();
 	const editor = page.getByRole( "dialog", { name: "New routine" } );
 	await editor.getByRole( "textbox", { name: "Name" } ).fill( "to-slack" );
@@ -77,7 +77,7 @@ test( "shows the reports, reads one, and asks before cleaning up", async ( { pag
 		cleans.push( route.request().postDataJSON() );
 		return route.fulfill( { json: { count: 3, bytes: 4096 } } );
 	} );
-	await page.goto( NEXT + "/routines" );
+	await page.goto( APP + "/routines" );
 	await page.getByRole( "button", { name: "Reports of routine daily" } ).click();
 	const reports = page.getByRole( "dialog", { name: "Reports of daily" } );
 	await expect( reports.getByText( "2 KB, 2026-11-18 09:00" ) ).toBeVisible();

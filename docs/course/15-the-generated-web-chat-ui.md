@@ -25,10 +25,10 @@ class {
 }
 ```
 
-This generates a static `<path>/index.html` (served directly, no route needed) that calls the agent API
-at `/__bxagents`. The page is dependency-free vanilla HTML/CSS/JS,
-pre-built and vendored inside BxAgents itself - `bxAgents build` never runs `npm
-install`, and a generated project never needs Node installed at all.
+This installs the web app at `<path>`: a ColdBox module that calls the agent API
+at `/__bxagents`. Its scripts and styles are built ahead of time and ship inside
+BxAgents itself - `bxAgents build` never runs `npm install`, and a generated
+project never needs Node installed at all.
 
 ![The generated web app with a conversation](../assets/webui-chat-light.png)
 

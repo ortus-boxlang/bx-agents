@@ -4,12 +4,12 @@
  */
 import { test, expect } from "./support.js";
 
-const NEXT = "/chat/next";
+const APP = "/chat";
 
 test.describe( "Memory", () => {
 	test( "adds, edits and removes a note about you", async ( { page, errors } ) => {
 		const text = "Prefers short answers " + Date.now();
-		await page.goto( NEXT + "/memory" );
+		await page.goto( APP + "/memory" );
 		const about = page.getByRole( "region", { name: "About you" } );
 		await about.getByRole( "textbox", { name: "Add a note: About you" } ).fill( text );
 		await about.getByRole( "button", { name: "Add" } ).click();
@@ -32,7 +32,7 @@ test.describe( "Memory", () => {
 
 	test( "Escape leaves a note unchanged", async ( { page } ) => {
 		const text = "Escape test " + Date.now();
-		await page.goto( NEXT + "/memory" );
+		await page.goto( APP + "/memory" );
 		const about = page.getByRole( "region", { name: "About you" } );
 		await about.getByRole( "textbox", { name: "Add a note: About you" } ).fill( text );
 		await about.getByRole( "button", { name: "Add" } ).click();
@@ -49,7 +49,7 @@ test.describe( "Memory", () => {
 		await member.route( "**/__bxagents/notes", route => route.fulfill( { json: { success: true,
 			user   : { notes: [], stats: { used: 0, limit: 2000 } },
 			agent  : { notes: [ { id: "a1", text: "Deploys go out on Fridays" } ], stats: { used: 25, limit: 2000 } } } } ) );
-		await member.goto( NEXT + "/memory" );
+		await member.goto( APP + "/memory" );
 		const notes = member.getByRole( "region", { name: "Notes of the agent" } );
 		await expect( notes.getByText( "Deploys go out on Fridays" ) ).toBeVisible();
 		await expect( notes.getByRole( "button", { name: "Remove the note a1" } ) ).toBeHidden();
@@ -63,7 +63,7 @@ test.describe( "Memory", () => {
 			cleared = route.request().postDataJSON();
 			return route.fulfill( { json: { success: true } } );
 		} );
-		await page.goto( NEXT + "/memory" );
+		await page.goto( APP + "/memory" );
 		const memory = page.getByRole( "list", { name: "Conversation memory" } );
 		await expect( memory.getByText( "6 messages" ) ).toBeVisible();
 		await expect( page.getByText( "Showing the newest 1 of 30." ) ).toBeVisible();
@@ -76,7 +76,7 @@ test.describe( "Memory", () => {
 
 test.describe( "Agent", () => {
 	test( "shows the composition and keeps the moving lines switch", async ( { page, errors } ) => {
-		await page.goto( NEXT + "/agent" );
+		await page.goto( APP + "/agent" );
 		await expect( page.getByRole( "region", { name: "The agent" } ).getByText( "ui-dev" ) ).toBeVisible();
 		await page.getByText( "Stop the moving lines" ).click();
 		await expect( page.locator( ".comp" ) ).toHaveClass( /still/ );
@@ -95,7 +95,7 @@ test.describe( "Agent", () => {
 			asked = route.request().postDataJSON();
 			return route.fulfill( { json: { success: true, conversationId: "sub-1" } } );
 		} );
-		await page.goto( NEXT + "/agent" );
+		await page.goto( APP + "/agent" );
 		await page.getByRole( "button", { name: "Talk to helper" } ).click();
 		await expect( page ).toHaveURL( /\/chat\/?$/ );
 		expect( asked ).toEqual( { agent: "helper" } );
@@ -103,7 +103,7 @@ test.describe( "Agent", () => {
 	} );
 
 	test( "reads a project file", async ( { page } ) => {
-		await page.goto( NEXT + "/agent/files" );
+		await page.goto( APP + "/agent/files" );
 		await page.getByRole( "button", { name: "Read Agent.yaml" } ).click();
 		await expect( page.getByRole( "region", { name: "File" } ).locator( "pre" ) ).toContainText( "name:" );
 	} );
@@ -115,7 +115,7 @@ test.describe( "Agent", () => {
 			return route.fulfill( { json: { enabled         : true, calls           : 3, totalTokens     : 90, promptTokens    : 60, completionTokens: 30,
 				byModel         : [ { name: "fast-model", calls: 3, promptTokens: 60, completionTokens: 30, totalTokens: 90 } ], byDay           : [] } } );
 		} );
-		await page.goto( NEXT + "/agent/usage" );
+		await page.goto( APP + "/agent/usage" );
 		await expect( page.getByRole( "table", { name: "By model" } ).getByRole( "cell", { name: "fast-model" } ) ).toBeVisible();
 		await expect( page.getByText( "60 in, 30 out" ) ).toBeVisible();
 		await page.getByRole( "combobox", { name: "Period" } ).selectOption( "7" );

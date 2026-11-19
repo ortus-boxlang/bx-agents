@@ -8,7 +8,7 @@ tags: [guides, examples, web-ui]
 
 # Example: Building a Web Chat Agent
 
-[`examples/webui-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent) generates a complete, themed browser chat page for an agent from a single `gateways/*` entry with `exposes: "webui"` - the [v1 web chat UI](../conventions/web-ui.md). No frontend code to write, no Node/npm in the build, no separate deploy step for a SPA - the page is a real file BxAgents writes into the generated app.
+[`examples/webui-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent) generates a complete, themed browser chat page for an agent from a single `gateways/*` entry with `exposes: "webui"` - the [v1 web chat UI](../conventions/web-ui.md). No frontend code to write, no Node/npm in the build, no separate deploy step for a SPA - the app is a ColdBox module BxAgents copies, already built, into the generated app.
 
 This is the one example in this guide series with real screenshots, because it's the one kind of BxAgents example whose output is actually a browser page. The images below show the current page layout, captured from a demo app (title "Acme Assistant", blue accent), so the title, tagline and colors differ from this example's own config. The page is the same: only the branding comes from the gateway file.
 
@@ -99,7 +99,7 @@ bxAgents build
 bxAgents serve --port=8080
 ```
 
-Open **http://localhost:8080/chat/index.html**. You get the left menu, the conversation sidebar, the streaming transcript, and a header and composer in the colors of your `theme`:
+Open **http://localhost:8080/chat/**. You get the left menu, the conversation sidebar, the streaming transcript, and a header and composer in the colors of your `theme`:
 
 ![The generated web app: the left menu, a conversation with a tool call, and a themed header and composer](../assets/webui-chat-light.png)
 
@@ -133,7 +133,7 @@ In the message box, the paperclip attaches a picture or a text file (you can als
 
 ## The optional API key
 
-This example ships `apiKeyEnvVar` **set**. It is the agent API's shared secret, so every call to `/__bxagents` must carry a matching `x-bxagents-token` header - the static shell (`/chat/index.html`) itself stays reachable regardless, since a browser's plain page navigation can't send a custom header, and the shell is exactly what prompts you for the key:
+This example ships `apiKeyEnvVar` **set**. It is the agent API's shared secret, so every call to `/__bxagents` must carry a matching `x-bxagents-token` header - the app's pages (`/chat/`) stay reachable regardless, since a browser's plain page navigation can't send a custom header, and the app is exactly what prompts you for the key:
 
 ```bash
 export CHAT_UI_API_KEY="a-real-secret"

@@ -12,7 +12,7 @@ export default async function tour( page, shot ) {
 	const say = text => ( { choices: [ { delta: { content: text } } ] } );
 	const idle = () => page.locator( "#stopBtn" ).waitFor( { state: "hidden", timeout: 30_000 } );
 
-	await page.goto( "next/" );
+	await page.goto( "./" );
 	await page.waitForLoadState( "networkidle" );
 	await page.click( "#newBtn" );
 	await page.waitForLoadState( "networkidle" );

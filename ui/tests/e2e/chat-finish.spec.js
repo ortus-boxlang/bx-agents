@@ -5,7 +5,7 @@
 import { test, expect, freshChat, ask } from "./support.js";
 
 test( "window.bxagents keeps the current page's shape, and a slot can go in each place", async ( { page, errors } ) => {
-	await page.goto( "next/" );
+	await page.goto( "./" );
 	await expect( page.locator( "#input" ) ).toBeVisible();
 	const shape = await page.evaluate( () => Object.fromEntries( Object.keys( window.bxagents ).sort().map( k => [ k, typeof window.bxagents[ k ] ] ) ) );
 	expect( shape ).toEqual( {
@@ -39,7 +39,7 @@ test( "window.bxagents keeps the current page's shape, and a slot can go in each
 } );
 
 test( "the dev agent's panel extension: its script adds Ping, its command runs, its slots are drawn", async ( { page } ) => {
-	await freshChat( page, "next/" );
+	await freshChat( page, "./" );
 	await expect( page.locator( "#slotSidebar .slot-server strong" ) ).toHaveText( "panel" );
 	const ping = page.locator( "#slotComposer .panel-button" );
 	await expect( ping ).toBeVisible();
@@ -64,7 +64,7 @@ test( "talks to a sub-agent from the picker, with a banner, and sends the chosen
 		}
 		return route.fallback();
 	} );
-	await freshChat( page, "next/" );
+	await freshChat( page, "./" );
 	await page.getByRole( "combobox", { name: "Talk to" } ).selectOption( "helper" );
 	await expect.poll( () => started ).toEqual( { agent: "helper" } );
 	await expect( page.locator( ".talk-banner" ) ).toContainText( "You are talking to helper directly (a sub-agent of ui-dev)" );
@@ -84,7 +84,7 @@ test( "asks for the password when the server refuses, keeps it and sends it", as
 	const context = await browser.newContext( { storageState: "tests/../.stack/auth/ada.json" } );
 	const page = await context.newPage();
 	// the dev agent has accounts: this page plays an agent without them
-	await page.route( "**/chat/next/settings", async route => {
+	await page.route( "**/chat/settings", async route => {
 		const res = await route.fetch();
 		const html = ( await res.text() ).replace( "\"signIn\":true", "\"signIn\":false" );
 		await route.fulfill( { response: res, body: html } );
@@ -95,7 +95,7 @@ test( "asks for the password when the server refuses, keeps it and sends it", as
 		}
 		return route.fallback();
 	} );
-	await page.goto( "next/settings" );
+	await page.goto( "settings" );
 	const dialog = page.locator( "#keyPanel" );
 	await expect( dialog ).toBeVisible();
 	await expect( dialog ).toContainText( "The server refused the password" );
@@ -112,21 +112,21 @@ test( "asks before leaving while the agent answers, and stays on Cancel", async 
 		await new Promise( done => setTimeout( done, 4000 ) );
 		return route.fulfill( { contentType: "text/event-stream", body: "data: [DONE]\n\n" } ).catch( () => {} );
 	} );
-	await freshChat( page, "next/" );
+	await freshChat( page, "./" );
 	await page.fill( "#input", "take your time" );
 	await page.click( "#sendBtn" );
 	await expect( page.locator( "#stopBtn" ) ).toBeVisible();
 	await page.locator( "a.nav-item[data-page='settings']" ).click();
 	await expect( page.locator( "#confirmTitle" ) ).toHaveText( "Leave while the agent answers?" );
 	await page.locator( "#confirmDialog" ).getByRole( "button", { name: "Cancel" } ).click();
-	await expect( page ).toHaveURL( /\/next\/$/ );
+	await expect( page ).toHaveURL( /\/chat\/$/ );
 	await page.locator( "a.nav-item[data-page='settings']" ).click();
 	await page.locator( "#confirmDialog" ).getByRole( "button", { name: "Leave" } ).click();
-	await expect( page ).toHaveURL( /\/next\/settings$/ );
+	await expect( page ).toHaveURL( /\/chat\/settings$/ );
 } );
 
 test( "an agent with accounts has no Password button", async ( { page } ) => {
-	await page.goto( "next/" );
+	await page.goto( "./" );
 	await expect( page.locator( "#keyBtn" ) ).toHaveCount( 0 );
 	await ask( page, "Show me a list", "Three things" );
 } );

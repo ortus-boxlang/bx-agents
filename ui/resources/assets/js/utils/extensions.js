@@ -10,7 +10,7 @@ export const SLOT_AREAS = { header: "slotHeader", sidebar: "slotSidebar", compos
 
 /**
  * @param {string} name An icon of the set
- * @returns {string} Its SVG, as the current page's icon() makes it
+ * @returns {string} Its SVG, as the chat's icon set draws it
  */
 export function iconMarkup( name ) {
 	return "<svg class=\"i\" aria-hidden=\"true\"><use href=\"#i-" + String( name ).replace( /[^a-z0-9-]/gi, "" ) + "\"/></svg>";
@@ -62,7 +62,7 @@ export function createBxagents( apiBase, doc ) {
 
 /**
  * Draws what the extensions' slots hold (GET /slots) into their places. A slot's text is shown as text; only a slot the
- * extension marked html has its string put in as markup (the extension's own, as on the current page). Each draw
+ * extension marked html has its string put in as markup (the extension's own). Each draw
  * replaces the slots the server drew and leaves what extension scripts added alone.
  *
  * @param {Document} doc The page

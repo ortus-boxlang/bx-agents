@@ -14,7 +14,7 @@ function sse( frames ) {
 const say = text => ( { choices: [ { delta: { content: text } } ] } );
 
 test( "the / menu lists the commands, Tab completes one, and a reply is drawn as text", async ( { page, errors } ) => {
-	await freshChat( page, "next/" );
+	await freshChat( page, "./" );
 	await page.locator( "#input" ).pressSequentially( "/he" );
 	await expect( page.locator( "#slashMenu li" ).first() ).toContainText( "/help" );
 	await page.keyboard.press( "Tab" );
@@ -27,7 +27,7 @@ test( "the / menu lists the commands, Tab completes one, and a reply is drawn as
 } );
 
 test( "a text file goes inside the message, and its chip can be removed", async ( { page } ) => {
-	await freshChat( page, "next/" );
+	await freshChat( page, "./" );
 	const files = page.locator( "#composer input[type=file]" );
 	await files.setInputFiles( [ { name: "notes.md", mimeType: "text/markdown", buffer: Buffer.from( "# Notes\nKeep it short." ) },
 		{ name: "drop.txt", mimeType: "text/plain", buffer: Buffer.from( "remove me" ) } ] );
@@ -45,7 +45,7 @@ test( "a text file goes inside the message, and its chip can be removed", async 
 } );
 
 test( "refuses a file that is neither a picture nor text", async ( { page } ) => {
-	await freshChat( page, "next/" );
+	await freshChat( page, "./" );
 	await page.locator( "#composer input[type=file]" ).setInputFiles( { name: "tool.exe", mimeType: "application/octet-stream", buffer: Buffer.from( "MZ" ) } );
 	await expect( page.locator( ".hint" ) ).toHaveText( "tool.exe is not a picture or a text file." );
 } );
@@ -58,7 +58,7 @@ test( "a paused tool call asks for approval, and Approve streams the rest of the
 		resumed = route.request().postDataJSON();
 		return route.fulfill( { contentType: "text/event-stream", body: sse( [ say( "Deleted /tmp/x." ), "[DONE]" ] ) } );
 	} );
-	await freshChat( page, "next/" );
+	await freshChat( page, "./" );
 	await page.fill( "#input", "delete it" );
 	await page.click( "#sendBtn" );
 	const card = page.getByRole( "group", { name: "Approval" } );
@@ -80,15 +80,15 @@ test( "a vault request opens the Vault page with the ask", async ( { page } ) =>
 	await page.route( "**/__bxagents/stream", route => route.fulfill( { contentType: "text/event-stream", body       : sse( [
 		{ choices: [ { delta: { tool_calls: [ { index: 0, function: { name: "vault_request", arguments: "{\"name\":\"GITHUB_TOKEN\",\"why\":\"To read your issues\"}" } } ] } } ] },
 		say( "I need a token." ), "[DONE]" ] ) } ) );
-	await freshChat( page, "next/" );
+	await freshChat( page, "./" );
 	await page.fill( "#input", "read my issues" );
 	await page.click( "#sendBtn" );
-	await expect( page ).toHaveURL( /\/next\/vault\?ask=GITHUB_TOKEN&scope=user&why=To\+read\+your\+issues/ );
+	await expect( page ).toHaveURL( /\/chat\/vault\?ask=GITHUB_TOKEN&scope=user&why=To\+read\+your\+issues/ );
 	await expect( page.getByText( "The agent asked for GITHUB_TOKEN." ) ).toBeVisible();
 } );
 
 test( "the context gauge opens the breakdown, and Compact says what it did", async ( { page } ) => {
-	await freshChat( page, "next/" );
+	await freshChat( page, "./" );
 	await ask( page, "Show me a list", "Three things" );
 	const ring = page.locator( ".chat-bar .ctx-ring" );
 	await expect( ring ).toBeVisible();
@@ -100,7 +100,7 @@ test( "the context gauge opens the breakdown, and Compact says what it did", asy
 } );
 
 test( "Fork copies the conversation through the prompt dialog, and Export saves a file", async ( { page } ) => {
-	await freshChat( page, "next/" );
+	await freshChat( page, "./" );
 	await ask( page, "Show me a list", "Three things" );
 	const before = await page.evaluate( () => localStorage.getItem( "bxagents_webui_conversation" ) );
 	await page.getByRole( "button", { name: "Fork", exact: true } ).click();

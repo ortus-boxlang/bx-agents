@@ -36,7 +36,7 @@ A built agent copies the module to `modules/bxagentsui` and writes `config/bxage
 
 ## The building blocks
 
-Use these before writing markup or logic of your own; `/chat/next/_kit` (a dev build) shows each one working.
+Use these before writing markup or logic of your own; `/chat/_kit` (a dev build) shows each one working.
 
 | Partial (`views/_components/ui/`) | What it is | Main args |
 |---|---|---|
@@ -67,7 +67,7 @@ The app partials (`views/_components/app/`) are `includes`, `sprite`, `sidebar` 
 | `$fmt.stampText`, `dayText`, `bytesText`, `countLabel` | Dates, sizes and counts, the same everywhere |
 | `$store.session` | `can( capability )`, `capabilities`, `agentName`, `agents`, `ready`; `await loaded()` before deciding by a capability in `init()` |
 | `$store.theme`, `$store.nav` | Light or dark; the folded menu and the phone drawer |
-| `$store.appearance` | Accent, text size, density (same key and format as the current page) |
+| `$store.appearance` | Accent, text size, density (kept in this browser) |
 | `$store.password` | The password of an agent without accounts: sent with every call (`utils/api.js`); a refusal asks once |
 | `window.bxagents` | The extensions' contract (`utils/extensions.js`): made at load, before their deferred scripts run |
 
@@ -90,8 +90,8 @@ The app partials (`views/_components/app/`) are `includes`, `sprite`, `sidebar` 
 A page handler is one `index()` that calls `showPage( event, prc, id, view )` (BaseHandler): 404 for an unknown page,
 403 for an admin page to anybody else. Server values a component needs go in `data-*` attributes, read in `init()`.
 A tab or filter the address should keep: `keepInAddress( path, query )` (`utils/address.js`). A file from the API:
-`downloadFile( $api, path, name )` (`utils/download.js`). Until the chat moves here, go to it with `openInChat` or
-`talkTo` (`utils/chat.js`), which use `config.chatUrl`.
+`downloadFile( $api, path, name )` (`utils/download.js`). To open a conversation or talk to an agent in the chat, use
+`openInChat` or `talkTo` (`utils/chat.js`), which use `config.chatUrl`.
 
 Bind `:disabled`, `:checked` and other boolean attributes to a real boolean (`!!t.locked`), never to a value that can be
 `undefined` or `null`: in a list rendered by `x-for` that once disabled every switch.

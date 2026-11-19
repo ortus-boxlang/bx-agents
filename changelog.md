@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The web app is a ColdBox module** (`bxagentsui`), built with Vite, Sass and Alpine.js in `ui/` and mounted at the `webui` gateway's `path`. It replaces the single generated `index.html`, which is no longer written; the build ships inside BX Agents, so a project still needs no Node. Pages have their own addresses (`/chat/settings`, `/chat/connectors/connected`), the sign-in form is served at `<path>/login.html` as before, and a `webui` entry at the root path `/` is now a build error. See [the web chat UI](docs/conventions/web-ui.md#working-on-the-web-app).
 - BoxLang 1.19.0 is the runtime used for development and CI.
 - Signing in to a served agent needs the bx-ai fix for web requests (the argument `form` is reserved in web requests, bx-ai issue 334). Tokens connected by hand do not depend on it.
 

@@ -231,14 +231,17 @@ class extends="testbox.system.BaseSpec" {
 				var projectRoot = newTempProject( "gateways-webui" );
 				var result = pipeline.build( projectRoot );
 
-				expect( fileExists( result.appDir & "/chat/index.html" ) ).toBeTrue();
+				expect( fileExists( result.appDir & "/modules/bxagentsui/ModuleConfig.bx" ) ).toBeTrue();
+				expect( fileExists( result.appDir & "/chat/index.html" ) ).toBeFalse();
 				expect( fileExists( result.appDir & "/interceptors/WebUiAuthGate.bx" ) ).toBeFalse();
 				expect( fileExists( result.appDir & "/handlers/ChatUi.bx" ) ).toBeFalse();
 				expect( fileExists( result.appDir & "/handlers/AgentApi.bx" ) ).toBeTrue();
 
 				var routerContent = fileRead( result.appDir & "/config/Router.bx" );
 				expect( routerContent ).toInclude( 'post( "/__bxagents/stream" )' );
-				expect( routerContent ).toInclude( "AgentApi.extensionFile" );
+				// the extension files are answered by the web app module's router, under the entry's path
+				expect( routerContent ).notToInclude( "AgentApi.extensionFile" );
+				expect( fileRead( result.appDir & "/modules/bxagentsui/config/Router.bx" ) ).toInclude( "Forward.extension" );
 
 				// the entry's apiKeyEnvVar is the API's secret now
 				expect( fileRead( result.appDir & "/config/Router.bx" ) ).toInclude( "CHAT_API_KEY" );

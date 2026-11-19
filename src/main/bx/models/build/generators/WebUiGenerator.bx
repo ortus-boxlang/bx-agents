@@ -1,29 +1,11 @@
 /**
- * Generates the web chat UI (Build Pipeline Phase 5, alongside
- * RouterGenerator): for every `gateways/*` entry with `exposes: "webui"`,
- * copies a small, dependency-free, PRE-BUILT static chat page
- * (`webui/index.html`, sitting next to this class - see the docblock on
- * `renderUiBundle()` for how its path is resolved) into the generated app
- * at `<appDir><path>/index.html`, and - when the entry configures an
- * `apiKeyEnvVar` - generates a `preProcess` interceptor gating just that
- * entry's own `<path>/api/*` route (never the static shell itself; see
- * below for why).
+ * Generates the web chat UI's app side (Build Pipeline Phase 5, alongside RouterGenerator): for every `gateways/*`
+ * entry with `exposes: "webui"`, installs the web app module (src/main/bx/bxagentsui, see WebAppModule) at the
+ * gateway's path, and, when the entry declares accounts, the sign-in pieces: the `<path>/login.html` form (served by the module), its
+ * handler, the login gate and the account store.
  *
- * Deliberately NOT a Vite/npm build: v1 is a single self-contained HTML
- * file (inline CSS/JS, no separate assets to serve or bundle), matching
- * the "small first, then we grow" v1 scope decision. There is nothing to
- * `npm install`/`npm run build` here or in a generated project - the page
- * ships as literal source, read via `fileRead()` and lightly templated
- * with plain string substitution (`.replace()`), never interpolated as
- * BoxLang - the file legitimately contains `#` (CSS hex colors), which
- * would collide with BoxLang's own `#expression#` string-interpolation
- * syntax if this content were ever embedded as a BoxLang string literal
- * instead of a real, separate, non-`.bx` file (confirmed empirically this
- * session - a bare `#fff` inside a BoxLang string literal fails to parse).
- *
- * Talks to the SAME `route(path & "/api").toAi("GeneratedAgent")` route
- * RouterGenerator already knows how to render for `exposes: "agent"` -
- * see RouterGenerator.renderExposureRoute()'s `webui` branch.
+ * The web app itself is a ColdBox module built with Vite (see ui/AGENTS.md); this generator writes no page of its own
+ * beyond the sign-in form.
  */
 import bxModules.bxagents.models.util.Strings;
 
@@ -50,11 +32,10 @@ class {
 		var apiBase = ApiPath::of( AgentApiConfig::effective( arguments.config.agentApi ?: {}, arguments.discovery ) )
 
 		for ( var entry in entries ) {
-			renderUiBundle( entry, arguments.appDir, new "models.extensions.ExtensionSettings@bxagents"().disableList( isStruct( arguments.config.extensions ?: "" ) ? arguments.config.extensions : {} ), apiBase )
+			renderLoginPage( entry, arguments.appDir )
 		}
 
-		// The web app as a ColdBox module (src/main/bx/bxagentsui), mounted next to the current page while the pages move
-		// to it. See plans/ui-migration.md.
+		// The web app as a ColdBox module (src/main/bx/bxagentsui), answering at the gateway's path
 		new "models.build.generators.WebAppModule@bxagents"().install(
 			entries[ 1 ],
 			arguments.appDir,
@@ -65,7 +46,7 @@ class {
 		)
 
 		// Accounts decide whether a sign-in is wired in, so they are resolved first. The page itself calls the agent API
-		// (see api.ApiPath); this generator only writes the shell, the sign-in pieces and the account store.
+		// (see api.ApiPath); this generator only writes the module, the sign-in pieces and the account store.
 		var users = collectWebUiUsers( entries )
 
 		// The SQLite store, shared with the agent API (conversations, preferences, notes, tokens) and holding the
@@ -200,100 +181,51 @@ class {
 	}
 
 	/**
-	 * The shell (left menu, router, page registry) and then one file per page, in name order,
-	 * as one block of script for the page's single closure. The files are read as they are:
-	 * they call the page's own helpers (apiGet, capabilities, icon) and use no placeholders.
-	 */
-	private string function renderShellScript( required string templateDir ) {
-		var script = fileRead( arguments.templateDir & "webui/shell.js" )
-		var pagesDir = arguments.templateDir & "webui/pages"
-		if ( directoryExists( pagesDir ) ) {
-			var files = directoryList( pagesDir, false, "name", "*.js", "name asc" )
-			for ( var file in files ) {
-				script &= char( 10 ) & fileRead( pagesDir & "/" & file )
-			}
-		}
-		return script
-	}
-
-	/**
-	 * Reads the vendored `webui/index.html` template sitting next to THIS
-	 * class - resolved via `getCurrentTemplatePath()` (an absolute
-	 * filesystem path to this .bx file itself, confirmed empirically this
-	 * session to resolve correctly whether this class is loaded via this
-	 * repo's own dev-time path mapping or a genuinely installed module's
-	 * `/bxmodules/bxagents` mapping - it doesn't depend on either prefix,
-	 * only on "where am I on disk"), so the template ships alongside this
-	 * generator with no separate resource-mapping/packaging step needed
-	 * beyond `createModuleStructure` also copying `**\/*.html` (see build.gradle).
+	 * Writes the sign-in form (webui/login.html, next to this class) to `<appDir>/config/bxagentsui-login.html`, which the
+	 * web app module serves at `<path>/login.html`. Nothing is written under `<appDir><path>`: a folder there would be
+	 * served as a folder by the web server instead of reaching the module. Only an entry that declares users gets a form,
+	 * so an ungated project serves no login page that gates nothing.
 	 *
 	 * @entry A webui exposure entry { name, config }, from collectWebUiEntries()
 	 * @appDir Absolute path to the generated ColdBox app dir
 	 */
-	private void function renderUiBundle( required struct entry, required string appDir, array disable = [], string apiBase = ApiPath::default() ) {
-		var templateDir = getDirectoryFromPath( getCurrentTemplatePath() )
-		var html = fileRead( templateDir & "webui/index.html" )
-
+	private void function renderLoginPage( required struct entry, required string appDir ) {
 		var config = arguments.entry.config
 		var path = Strings::normalizePath( config.path ?: "" )
-		var title = len( config.title ?: "" ) ? config.title : "BX Agents Chat"
-		var subtitle = config.subtitle ?: ""
-		var icon = config.icon ?: ""
-		var welcome = config.welcome ?: ""
-		var placeholder = len( config.placeholder ?: "" ) ? config.placeholder : "Message..."
-		var footer = config.footer ?: ""
+		var app = Strings::normalizePath( arguments.appDir )
+		removeOldPage( app & path )
+		var target = app & "/config/bxagentsui-login.html"
+		if ( !( config.users ?: [] ).len() ) {
+			if ( fileExists( target ) ) {
+				fileDelete( target )
+			}
+			return
+		}
+		directoryCreate( path : app & "/config", createPath : true, ignoreExists : true )
+		var login = fileRead( getDirectoryFromPath( getCurrentTemplatePath() ) & "webui/login.html" )
+		login = login.replace( "__TITLE__", encodeForHTML( config.title ?: "Chat" ), "all" )
+		login = login.replace( "__LOGIN_ACTION__", path & "/login", "all" )
+		login = login.replace( "__THEME_TOKENS__", renderThemeTokens( config.theme ?: {} ), "all" )
+		fileWrite( target, login )
+	}
 
-		// Both default ON: the whole point of surfacing them is that a turn's
-		// reasoning and tool activity are already on the wire and were being
-		// thrown away. Opt OUT per entry when the surface is user-facing.
-		var showReasoning = isNull( config.showReasoning ?: javacast( "null", "" ) ) ? true : !!config.showReasoning
-		var showTools = isNull( config.showToolCalls ?: javacast( "null", "" ) ) ? true : !!config.showToolCalls
-
-		html = html.replace( "__API_BASE__", arguments.apiBase, "all" )
-		// where a visitor without a sign-in is sent: only an entry with accounts has a form to send them to
-		html = html.replace( "__LOGIN_URL__", ( config.users ?: [] ).len() ? path & "/login.html" : "", "all" )
-		html = html.replace( "__APP_TITLE__", escapeHtml( title ), "all" )
-		html = html.replace( "__PLACEHOLDER__", escapeHtml( placeholder ), "all" )
-		html = html.replace( "__FAVICON__", renderFavicon( icon ), "all" )
-		html = html.replace( "__APP_ICON__", renderHeaderIcon( icon ), "all" )
-		html = html.replace(
-			"__APP_SUBTITLE__",
-			len( subtitle ) ? '<p class="subtitle">' & escapeHtml( subtitle ) & "</p>" : "",
-			"all"
-		)
-		html = html.replace(
-			"__FOOTER__",
-			len( footer ) ? '<footer class="note">' & escapeHtml( footer ) & "</footer>" : "",
-			"all"
-		)
-		html = html.replace( "__WELCOME__", escapeJs( welcome ), "all" )
-		html = html.replace( "__SUGGESTIONS__", escapeJs( jsonSerialize( new "models.build.generators.WebAppModule@bxagents"().suggestionsOf( config ) ) ), "all" )
-		html = html.replace( "__SHOW_REASONING__", showReasoning ? "true" : "false", "all" )
-		html = html.replace( "__SHOW_TOOLS__", showTools ? "true" : "false", "all" )
-		html = html.replace( "__THEME_TOKENS__", renderThemeTokens( config.theme ?: {} ), "all" )
-		html = html.replace( "__CUSTOM_CSS__", readCustomCss( arguments.entry ), "all" )
-		// Last, so none of the replacements above can touch the libraries' own text (they contain "__proto__" and the like)
-		html = html.replace( "__MARKDOWN_SCRIPTS__", renderMarkdownScripts( templateDir ), "all" )
-		html = html.replace( "__SHELL_STYLES__", fileRead( templateDir & "webui/shell.css" ), "all" )
-		html = html.replace( "__SHELL_SCRIPT__", renderShellScript( templateDir ), "all" )
-		html = html.replace( "__ICON_SPRITE__", fileRead( templateDir & "webui/vendor/icons.svg" ), "all" )
-
-		var mountDir = Strings::normalizePath( arguments.appDir ) & path
-		directoryCreate( path : mountDir, createPath : true, ignoreExists : true )
-		// The web/ folders of the project's folder extensions are served where they are (see ExtensionWebFiles); the page links them
-		var assets = new "models.build.generators.ExtensionWebAssets@bxagents"().links( arguments.entry.projectRoot, path, arguments.disable )
-		html = html.replace( "__EXTENSION_STYLES__", assets.styles, "all" )
-		html = html.replace( "__EXTENSION_SCRIPTS__", assets.scripts, "all" )
-		fileWrite( mountDir & "/index.html", html )
-
-		// The sign-in form ships only when the entry actually declares users -
-		// an ungated project should not serve a login page that gates nothing.
-		if ( ( arguments.entry.config.users ?: [] ).len() ) {
-			var login = fileRead( templateDir & "webui/login.html" )
-			login = login.replace( "__TITLE__", encodeForHTML( config.title ?: "Chat" ), "all" )
-			login = login.replace( "__LOGIN_ACTION__", path & "/login", "all" )
-			login = login.replace( "__THEME_TOKENS__", renderThemeTokens( config.theme ?: {} ), "all" )
-			fileWrite( mountDir & "/login.html", login )
+	/**
+	 * Removes what earlier versions wrote at the gateway's path (index.html, login.html), and the folder when that leaves
+	 * it empty, so a rebuilt app answers the path from the module.
+	 *
+	 * @mountDir <appDir><path>
+	 */
+	private void function removeOldPage( required string mountDir ) {
+		if ( !directoryExists( arguments.mountDir ) ) {
+			return
+		}
+		for ( var name in [ "index.html", "login.html" ] ) {
+			if ( fileExists( arguments.mountDir & "/" & name ) ) {
+				fileDelete( arguments.mountDir & "/" & name )
+			}
+		}
+		if ( !directoryList( arguments.mountDir ).len() ) {
+			directoryDelete( arguments.mountDir )
 		}
 	}
 
@@ -340,29 +272,6 @@ class {
 	 *
 	 * @return CSS text, or "" when nothing is themed
 	 */
-	/**
-	 * The script tags that turn an answer's Markdown into a page: marked, DOMPurify and highlight.js (bundled by
-	 * tools/webui-vendor, inlined so the UI works offline with no extra requests) and the BoxLang and CFML
-	 * grammars, built from the same word lists the terminal's highlighter reads.
-	 *
-	 * @templateDir The folder holding the webui template
-	 *
-	 * @return Script tags, ready to put in the page
-	 */
-	private string function renderMarkdownScripts( required string templateDir ) {
-		var words = {}
-		var props = createObject( "java", "ortus.boxlang.bxagents.tui.Grammars" ).words()
-		for ( var key in props.stringPropertyNames() ) {
-			words[ key ] = props.getProperty( key )
-		}
-		var vendor = arguments.templateDir & "webui/vendor/"
-		return [
-			"<script>" & fileRead( vendor & "libs.min.js" ) & "</script>",
-			"<script>" & fileRead( vendor & "bx-grammars.js" ),
-			"registerBoxLangGrammars( hljs, " & jsonSerialize( words ) & " );</script>"
-		].toList( char( 10 ) )
-	}
-
 	private string function renderThemeTokens( required struct theme ) {
 		var tokens = themeTokenMap()
 		var lightRules = []
@@ -466,84 +375,6 @@ class {
 		}
 
 		return css
-	}
-
-	/**
-	 * @icon The entry's `icon` config - an emoji/short text, or an image URL/path
-	 *
-	 * @return A <link rel="icon"> tag, or "" when no icon is configured
-	 */
-	private string function renderFavicon( required string icon ) {
-		if ( !len( arguments.icon ) ) {
-			return ""
-		}
-
-		if ( isIconUrl( arguments.icon ) ) {
-			return '<link rel="icon" href="' & escapeHtml( arguments.icon ) & '">'
-		}
-
-		var named = phosphorName( arguments.icon )
-		if ( len( named ) ) {
-			// the same drawing the header shows, from the page's own icon set
-			var drawing = iconSymbols()[ named ]
-			var vector = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="##3b5bdb">' & drawing & "</svg>"
-			return '<link rel="icon" href="data:image/svg+xml,' & urlEncodedFormat( vector ).replace( "+", "%20", "all" ) & '">'
-		}
-
-		// Emoji favicons have no image file to ship: render the glyph into an
-		// inline SVG data URI, which keeps the page self-contained. The glyph is
-		// percent-encoded rather than dropped in raw - it is almost always
-		// multi-byte, and raw non-ASCII in a data: URI is not reliably decoded.
-		// Attribute values are percent-encoded rather than quoted, so escapeHtml()
-		// below has no quotes to turn into entities and the href stays readable.
-		var svg = "data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%20100%20100%22%3E"
-			& "%3Ctext%20y=%22.9em%22%20font-size=%2290%22%3E" & urlEncodedFormat( arguments.icon ) & "%3C/text%3E%3C/svg%3E"
-		return '<link rel="icon" href="' & escapeHtml( svg ) & '">'
-	}
-
-	/**
-	 * @icon The entry's `icon` config
-	 *
-	 * @return The header brand mark markup: the configured emoji or image, else a robot
-	 */
-	private string function renderHeaderIcon( required string icon ) {
-		if ( !len( arguments.icon ) ) {
-			return '<span class="icon"><svg class="i" aria-hidden="true"><use href="##i-robot"/></svg></span>'
-		}
-
-		if ( isIconUrl( arguments.icon ) ) {
-			return '<span class="icon"><img src="' & escapeHtml( arguments.icon ) & '" alt=""></span>'
-		}
-
-		var named = phosphorName( arguments.icon )
-		if ( len( named ) ) {
-			return '<span class="icon"><svg class="i" aria-hidden="true"><use href="##i-' & named & '"/></svg></span>'
-		}
-
-		return '<span class="icon">' & escapeHtml( arguments.icon ) & "</span>"
-	}
-
-	/**
-	 * @icon The entry's `icon` config
-	 *
-	 * @return true when the value should be treated as an image reference rather than an emoji/glyph
-	 */
-	private boolean function isIconUrl( required string icon ) {
-		return arguments.icon.reFindNoCase( "^(https?:\/\/|\/|data:image\/)" ) > 0
-	}
-
-	/**
-	 * @value Text destined for HTML body/attribute content
-	 *
-	 * @return value with the five markup-significant characters escaped
-	 */
-	private string function escapeHtml( required string value ) {
-		return arguments.value
-			.replace( "&", "&amp;", "all" )
-			.replace( "<", "&lt;", "all" )
-			.replace( ">", "&gt;", "all" )
-			.replace( '"', "&quot;", "all" )
-			.replace( "'", "&##39;", "all" )
 	}
 
 	/**
@@ -724,8 +555,9 @@ class {
 	/**
 	 * Renders `handlers/ChatAuth.bx` - the sign-in endpoints.
 	 *
-	 * The form itself is a real static file (`<path>/login.html`, from
-	 * resources/webui/login.html), served like the chat shell is. This handler
+	 * The form itself is a fixed HTML file (webui/login.html, written to
+	 * config/bxagentsui-login.html), served by the web app module at
+	 * `<path>/login.html`. This handler
 	 * only verifies and redirects, which keeps HTML out of generated BoxLang
 	 * string arrays entirely - and means a failed attempt renders a fixed
 	 * message from a query flag rather than echoing anything a caller supplied.
@@ -1348,38 +1180,6 @@ class {
 	 */
 	private string function renderLiteral( required string value ) {
 		return '"' & arguments.value.replace( '"', '""', "all" ).replace( "##", "####", "all" ) & '"'
-	}
-
-
-	/**
-	 * @icon The entry's `icon` config
-	 *
-	 * @return The icon's name when it is written `phosphor:<name>` and the page's icon set has it, else blank (so an emoji, a URL
-	 *         or a name the set does not have are not taken for one)
-	 */
-	private string function phosphorName( required string icon ) {
-		var written = trim( arguments.icon )
-		if ( !written.lCase().startsWith( "phosphor:" ) ) {
-			return ""
-		}
-		var named = lCase( trim( written.mid( 10, written.len() ) ) )
-		return iconSymbols().keyExists( named ) ? named : ""
-	}
-
-	/**
-	 * @return The drawings of the page's icon set, by name: the inside of each <symbol> of webui/vendor/icons.svg
-	 */
-	private struct function iconSymbols() {
-		if ( !variables.keyExists( "symbols" ) ) {
-			var found = {}
-			var sprite = fileRead( getDirectoryFromPath( getCurrentTemplatePath() ) & "webui/vendor/icons.svg" )
-			for ( var match in sprite.reMatch( '<symbol id="i-[a-z0-9-]+"[^>]*>.*?</symbol>' ) ) {
-				var name = match.reReplace( '^<symbol id="i-([a-z0-9-]+)".*$', "\1" )
-				found[ name ] = match.reReplace( "^<symbol[^>]*>(.*)</symbol>$", "\1" )
-			}
-			variables.symbols = found
-		}
-		return variables.symbols
 	}
 
 }

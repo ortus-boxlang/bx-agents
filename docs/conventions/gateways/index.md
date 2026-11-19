@@ -20,7 +20,7 @@ flowchart TD
     Q -->|"no - it has a 'type' key instead"| C["CHANNEL ADAPTER<br/>a connection to a chat platform"]
     E --> E1["exposes: agent<br/>four routes of the agent API"]
     E --> E2["exposes: mcp<br/>route().toMCP()"]
-    E --> E3["exposes: webui<br/>generated index.html"]
+    E --> E3["exposes: webui<br/>the web app module"]
     C --> C1["mock / cli / http<br/>pull-driven: something calls US"]
     C --> C2["telegram, slack, discord, email, whatsapp-cloud,<br/>teams, twilio, github, signal<br/>push-style: holds its own connection"]
     C2 --> S["one GatewaySession<br/>bound to the root agent"]
@@ -89,7 +89,7 @@ class {
 }
 ```
 
-Generates a real static `<path>/index.html` file (served directly - no route needed for it) and the page calls the [agent API](../agent-bx.md#the-always-on-agent-route) at `/__bxagents`, the same one the terminal chat uses, so the entry adds no API of its own. It does bring the shared SQLite store with it.
+Installs the web app (a ColdBox module) at `<path>`, and the app calls the [agent API](../agent-bx.md#the-always-on-agent-route) at `/__bxagents`, the same one the terminal chat uses, so the entry adds no API of its own. It does bring the shared SQLite store with it.
 
 The web UI is a subsystem rather than a single exposure switch - the store, conversations and preferences, branding and theming, sign-in and how the page uses the agent API are all on its own page: **[The web chat UI](../web-ui.md)**.
 

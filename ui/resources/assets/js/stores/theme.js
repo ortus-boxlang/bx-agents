@@ -1,7 +1,7 @@
 /**
- * Light, dark or the system's. Kept in this browser under the key and the plain format the current page uses
- * ("dark", "light", or nothing), so a choice carries over both ways while both apps run. The layout sets the attribute
- * before the CSS loads (no flash); this keeps it in step afterwards and tells the server, as the current page does.
+ * Light, dark or the system's. Kept in this browser as "dark", "light" or nothing, under the key the earlier page used,
+ * so a choice made there carries over. The layout sets the attribute before the CSS loads (no flash); this keeps it in
+ * step afterwards and tells the server.
  *
  * @param {object} api The API client (utils/api.js), to save the choice as a preference
  * @returns {object} The store

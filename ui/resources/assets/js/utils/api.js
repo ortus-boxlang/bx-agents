@@ -6,7 +6,7 @@
 
 const HEADERS = { "x-bxagents-source": "web", "x-bxagents-csrf": "1" };
 
-/** Where this browser keeps the password (API key) of an agent without accounts: the same key as the current page */
+/** Where this browser keeps the password (API key) of an agent without accounts */
 export const KEY_STORAGE = "bxagents_webui_api_key";
 
 /**

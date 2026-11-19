@@ -73,16 +73,17 @@ class extends="testbox.system.BaseSpec" {
 				expect( schema.hasTable( name: "bxagents_schema_version", options: opts ) ).toBeTrue();
 			} );
 
-			it( "generated the static chat shell with every placeholder substituted", function() {
+			it( "installed the web app module at the gateway's path, with its settings", function() {
 				// Read from disk rather than fetched over HTTP - see this file's
 				// docblock on why loopback requests deadlock here.
-				var shell = expandPath( "/" ) & "chat/index.html";
-				expect( fileExists( shell ) ).toBeTrue();
+				var root = expandPath( "/" );
+				expect( fileExists( root & "chat/index.html" ) ).toBeFalse();
+				expect( fileExists( root & "modules/bxagentsui/ModuleConfig.bx" ) ).toBeTrue();
 
-				var html = fileRead( shell );
-				expect( html ).toInclude( "/__bxagents" );
-				expect( html ).notToInclude( "__API_BASE__" );
-				expect( html ).notToInclude( "__WELCOME__" );
+				var settings = controller.getSetting( "modules" ).bxagentsui.settings;
+				expect( settings.basePath ).toBe( "/chat" );
+				expect( settings.apiBase ).toBe( "/__bxagents" );
+				expect( controller.getSetting( "modules" ).bxagentsui.entryPoint ).toBe( "/chat" );
 			} );
 
 			/**

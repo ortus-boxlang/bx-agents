@@ -34,244 +34,104 @@ class extends="testbox.system.BaseSpec" {
 				expect( directoryExists( appDir & "/chat" ) ).toBeFalse();
 			} );
 
-			it( "writes a templated index.html at <appDir><path>/index.html for a webui exposure entry", function() {
+			private function moduleSettings( required string appDir ) {
+				return jsonDeserialize( fileRead( arguments.appDir & "/config/bxagentsui.json" ) );
+			}
+
+			private function webUiProject( string extra = "" ) {
+				var dir = createTempDirectory( prefix = "bxagents-webui-project-" );
+				tempDirs.append( dir );
+				var nl = char( 10 );
+				fileWrite( dir & "/Agent.yaml", "name: p" & nl & "model: mock/mock-model" & nl );
+				fileWrite( dir & "/instructions.md", "Be helpful." );
+				directoryCreate( dir & "/gateways" );
+				fileWrite( dir & "/gateways/chat.bx", "class {" & nl & "	function configure() {" & nl & "		return { exposes : ""webui"", path : ""/chat""" & arguments.extra & " };" & nl & "	}" & nl & "}" & nl );
+				return dir;
+			}
+
+			it( "installs the web app module at the gateway's path and writes no page of its own", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 				var appDir = newAppDir();
 				var result = generator.generate( discovery, appDir );
 
 				expect( result.hasWebUi ).toBeTrue();
+				expect( fileExists( appDir & "/modules/bxagentsui/ModuleConfig.bx" ) ).toBeTrue();
+				expect( fileExists( appDir & "/modules/bxagentsui/includes/icons.svg" ) ).toBeTrue();
+				expect( fileExists( appDir & "/chat/index.html" ) ).toBeFalse();
+				// no sign-in form without accounts
+				expect( directoryExists( appDir & "/chat" ) ).toBeFalse();
+				expect( fileExists( appDir & "/config/bxagentsui-login.html" ) ).toBeFalse();
 
-				var indexPath = appDir & "/chat/index.html";
-				expect( fileExists( indexPath ) ).toBeTrue();
-
-				var html = fileRead( indexPath );
-				expect( html ).toInclude( "/__bxagents" );
-				expect( html ).notToInclude( "__API_BASE__" );
-				expect( html ).notToInclude( "__APP_TITLE__" );
+				var settings = moduleSettings( appDir );
+				expect( settings.basePath ).toBe( "/chat" );
+				expect( settings.chatUrl ).toBe( "/chat/" );
+				expect( settings.apiBase ).toBe( "/__bxagents" );
+				expect( settings.signIn ).toBeFalse();
+				expect( settings.loginUrl ).toBe( "" );
 			} );
 
-			describe( "profiles", function() {
-
-				private function webUiProject( string profiles ) {
-					var dir = createTempDirectory( prefix = "bxagents-webui-profiles-" );
-					tempDirs.append( dir );
-					var nl = char( 10 );
-					fileWrite( dir & "/Agent.yaml", "name: p" & nl & "model: mock/mock-model" & nl );
-					fileWrite( dir & "/instructions.md", "Be helpful." );
-					directoryCreate( dir & "/gateways" );
-					fileWrite( dir & "/gateways/chat.bx", "class {" & nl & "	function configure() {" & nl & "		return { exposes : ""webui"", path : ""/chat""" & arguments.profiles & " };" & nl & "	}" & nl & "}" & nl );
-					return dir;
-				}
-
-				it( "gives the page a profile picker; the offer itself is the agent API's (agentApi.profiles)", function() {
-					var appDir = newAppDir();
-					generator.generate( discoverer.discover( webUiProject( ', profiles : [ "fast" ]' ) ), appDir );
-					var html = fileRead( appDir & "/chat/index.html" );
-
-					expect( html ).toInclude( 'id="profileSelect"' );
-					expect( html ).toInclude( "payload.options.profile = chosenProfile" );
-				} );
-
-				it( "writes no handler of its own: the page calls the agent API", function() {
-					var appDir = newAppDir();
-					generator.generate( discoverer.discover( webUiProject( "" ) ), appDir );
-
-					expect( fileExists( appDir & "/handlers/ChatUi.bx" ) ).toBeFalse();
-					expect( fileExists( appDir & "/interceptors/WebUiAuthGate.bx" ) ).toBeFalse();
-				} );
-
-			} );
-
-			it( "parses the REAL bx-ai chunk envelope, not a {token} wrapper", function() {
-				// ColdBox's toAi() /stream forwards each bx-ai chunk verbatim
-				// (Router.cfc: `emitter.send( chunk, "chunk" )`), so the page must read
-				// choices[].delta.*. Its published AI Routing docs show a {"token":"..."}
-				// shape that its own source never produces - the v1 page believed the
-				// docs and therefore rendered nothing at all against a live agent.
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
+			it( "writes no handler or key gate of its own: the app calls the agent API", function() {
 				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
+				generator.generate( discoverer.discover( webUiProject() ), appDir );
 
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( "delta.content" );
-				expect( html ).toInclude( "parsed.choices" );
-				expect( html ).notToInclude( "parsed.token" );
-			} );
-
-			it( "renders reasoning and tool-call handling from the same envelope", function() {
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( "delta.reasoning" );
-				expect( html ).toInclude( "delta.tool_calls" );
-				// Defaults are ON - both were already on the wire and being discarded
-				expect( html ).toInclude( "var SHOW_REASONING = true;" );
-				expect( html ).toInclude( "var SHOW_TOOLS = true;" );
-			} );
-
-			it( "renders branding: title, subtitle, icon, favicon, welcome, placeholder and footer", function() {
-				var discovery = discoverer.discover( fixtures & "/gateways-webui-themed" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				// Title is HTML-escaped, not injected raw
-				expect( html ).toInclude( "Acme &amp; Co &lt;Support&gt;" );
-				expect( html ).notToInclude( "Acme & Co <Support>" );
-				expect( html ).toInclude( "Orders and returns" );
-				expect( html ).toInclude( 'class="subtitle"' );
-				expect( html ).toInclude( 'rel="icon"' );
-				expect( html ).toInclude( "data:image/svg+xml" );
-				expect( html ).toInclude( "Ask away..." );
-				expect( html ).toInclude( "Generated answers may be wrong." );
-				expect( html ).notToInclude( "__PLACEHOLDER__" );
-				expect( html ).notToInclude( "__FOOTER__" );
-				expect( html ).notToInclude( "__FAVICON__" );
-			} );
-
-			it( "escapes the welcome text into a safe JavaScript string literal", function() {
-				var discovery = discoverer.discover( fixtures & "/gateways-webui-themed" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				// A raw newline or quote would terminate the literal and break the page.
-				// Backslash built via char( 92 ) so the assertion does not itself depend
-				// on whether BoxLang treats "\" as an escape character.
-				var slash = char( 92 );
-				expect( html ).toInclude( "var WELCOME = " );
-				expect( html ).toInclude( "Hi there!" & slash & "n" );
-				expect( html ).toInclude( slash & '"anything' & slash & '"' );
-				expect( html ).notToInclude( 'Ask "anything".' );
-			} );
-
-			it( "renders theme tokens, normalizing bare hex that BoxLang cannot express with a leading hash", function() {
-				var discovery = discoverer.discover( fixtures & "/gateways-webui-themed" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				// "0f766e" in config -> a real CSS color
-				expect( html ).toInclude( "--accent: ##0f766e;" );
-				expect( html ).toInclude( "--radius: 10px;" );
-				expect( html ).toInclude( "--font: Inter, system-ui, sans-serif;" );
-				// Dark overrides land on the data-theme rule, not :root
-				expect( html ).toInclude( '[data-theme="dark"]' );
-				expect( html ).toInclude( "--accent: rgb(45, 212, 191);" );
-				expect( html ).notToInclude( "__THEME_TOKENS__" );
-			} );
-
-			it( "honors showToolCalls:false while leaving reasoning on", function() {
-				var discovery = discoverer.discover( fixtures & "/gateways-webui-themed" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( "var SHOW_TOOLS = false;" );
-				expect( html ).toInclude( "var SHOW_REASONING = true;" );
-			} );
-
-			it( "inlines resources/webui/theme.css last so the project override wins", function() {
-				var discovery = discoverer.discover( fixtures & "/gateways-webui-themed" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( "Project override - must be inlined last and win." );
-				expect( html ).notToInclude( "__CUSTOM_CSS__" );
-
-				// It has to come after the generated tokens, or "wins" is a lie
-				expect( html.find( "Project override" ) ).toBeGT( html.find( "--accent: ##0f766e;" ) );
-			} );
-
-			it( "leaves the override placeholder empty when the project has no theme.css", function() {
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).notToInclude( "__CUSTOM_CSS__" );
-				expect( html ).notToInclude( "__THEME_TOKENS__" );
-			} );
-
-			it( "sends a per-visitor conversationId so visitors don't share one memory bucket", function() {
-				// Without options.conversationId, AiAgent.stream() falls back to "" for
-				// BOTH userId and conversationId, and loadMemoryMessages( "", "" ) then
-				// reads one bucket shared by every visitor to the page.
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( "conversationId: getConversationId()" );
-				expect( html ).toInclude( "bxagents_webui_conversation" );
-				expect( html ).toInclude( "randomUUID" );
-			} );
-
-			it( "renders markdown with marked, sanitized, with the model's own HTML escaped and no images", function() {
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).notToInclude( "__MARKDOWN_SCRIPTS__" );
-				// the libraries ship inside the page, so it works offline
-				expect( html ).toInclude( "globalThis.marked" );
-				expect( html ).toInclude( "DOMPurify" );
-				expect( html ).toInclude( "hljs" );
-				// raw HTML is escaped by the renderer, then the result is sanitized
-				expect( html ).toInclude( "DOMPurify.sanitize( marked.parse(" );
-				expect( html ).toInclude( "html: function ( token ) {" );
-				expect( html ).toInclude( 'FORBID_TAGS: [ "img"' );
-				expect( html ).toInclude( 'rel", "noopener noreferrer"' );
-				expect( html ).notToInclude( "https://cdn" );
-				expect( html ).notToInclude( "unpkg.com" );
+				expect( fileExists( appDir & "/handlers/ChatUi.bx" ) ).toBeFalse();
+				expect( fileExists( appDir & "/interceptors/WebUiAuthGate.bx" ) ).toBeFalse();
 			} );
 
 			it( "colours BoxLang and CFML code from the same word lists as the terminal", function() {
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
 				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
+				generator.generate( discoverer.discover( webUiProject() ), appDir );
+				var words = moduleSettings( appDir ).grammarWords;
 
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( "registerBoxLangGrammars( hljs, {" );
-				expect( html ).toInclude( '"boxlang.keywords":"' );
-				expect( html ).toInclude( '"cfml.scopes":"' );
-				expect( html ).toInclude( "cfscript" );
+				expect( words ).notToBeEmpty();
 			} );
 
-			it( "ships a real composer: textarea, stop control, and accessible transcript", function() {
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
+			describe( "icon", function() {
 
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( "<textarea" );
-				expect( html ).notToInclude( '<input type="text"' );
-				expect( html ).toInclude( "AbortController" );
-				expect( html ).toInclude( 'id="stopBtn"' );
-				expect( html ).toInclude( 'aria-live="polite"' );
-				expect( html ).toInclude( 'class="visually-hidden" for="input"' );
-				// Autoscroll must be conditional, or reading back mid-stream yanks you down
-				expect( html ).toInclude( "isPinnedToBottom" );
+				it( "draws a robot and sets no tab icon when none is configured", function() {
+					var appDir = newAppDir();
+					generator.generate( discoverer.discover( webUiProject() ), appDir );
+					var settings = moduleSettings( appDir );
+
+					expect( settings.iconKind ).toBe( "none" );
+					expect( settings.favicon ).toBe( "" );
+				} );
+
+				it( "takes an emoji as text, drawn into the tab's icon as an SVG", function() {
+					var appDir = newAppDir();
+					generator.generate( discoverer.discover( webUiProject( ', icon : "🦊"' ) ), appDir );
+					var settings = moduleSettings( appDir );
+
+					expect( settings.iconKind ).toBe( "text" );
+					expect( settings.icon ).toBe( "🦊" );
+					expect( settings.favicon ).toInclude( "data:image/svg+xml," );
+				} );
+
+				it( "takes an image address for the header and the tab", function() {
+					var appDir = newAppDir();
+					generator.generate( discoverer.discover( webUiProject( ', icon : "/logo.png"' ) ), appDir );
+					var settings = moduleSettings( appDir );
+
+					expect( settings.iconKind ).toBe( "image" );
+					expect( settings.favicon ).toBe( "/logo.png" );
+				} );
+
+				it( "takes a phosphor:<name> icon from the app's own set, and ignores a name the set does not have", function() {
+					var known = newAppDir();
+					generator.generate( discoverer.discover( webUiProject( ', icon : "phosphor:robot"' ) ), known );
+					var settings = moduleSettings( known );
+					expect( settings.iconKind ).toBe( "phosphor" );
+					expect( settings.iconName ).toBe( "robot" );
+					expect( settings.favicon ).toInclude( "data:image/svg+xml," );
+
+					var unknown = newAppDir();
+					generator.generate( discoverer.discover( webUiProject( ', icon : "phosphor:no-such-icon"' ) ), unknown );
+					expect( moduleSettings( unknown ).iconKind ).toBe( "text" );
+					expect( moduleSettings( unknown ).iconName ).toBe( "" );
+				} );
+
 			} );
 
-			it( "sends a threadId with every turn and cancels that same run server-side", function() {
-				// Aborting the fetch only stops the browser listening - the server
-				// keeps running the turn and spending tokens. Real cancellation needs
-				// the threadId to reach agent.cancelRun().
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( "threadId      : activeThreadId" );
-				expect( html ).toInclude( 'apiPost( "/cancel"' );
-				// And it must still abort locally, or Stop would not stop the UI
-				expect( html ).toInclude( "activeController.abort()" );
-			} );
 
 			it( "always generates the SQLite store, with no opt-in required", function() {
 				// The agent's own IAiMemory has no enumeration API, so anything
@@ -335,621 +195,6 @@ class extends="testbox.system.BaseSpec" {
 				expect( src ).toInclude( "mergeDefaultOptions( { datasource : static.DATASOURCE } )" );
 			} );
 
-			it( "ships a conversation sidebar wired to the conversations API", function() {
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( 'id="sidebar"' );
-				expect( html ).toInclude( 'id="convList"' );
-				expect( html ).toInclude( "function loadConversations()" );
-				expect( html ).toInclude( "function selectConversation(" );
-				expect( html ).toInclude( "function startConversation( agent )" );
-				expect( html ).toInclude( '"/sessions/rename"' );
-				expect( html ).toInclude( '"/sessions/delete"' );
-				// A title is whatever the user typed first, so it must never be
-				// parsed as markup
-				expect( html ).toInclude( "name.textContent = conv.title" );
-			} );
-
-			it( "shapes itself to GET /info instead of assuming every capability", function() {
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( "function loadInfo()" );
-				expect( html ).toInclude( "capabilities = payload.capabilities" );
-				// Compact is hidden unless a summary model is actually configured,
-				// or the button would do nothing at all
-				expect( html ).toInclude( "compactBtn.hidden = !capabilities.compact" );
-				expect( html ).toInclude( "modelMetaEl.textContent = payload.model" );
-			} );
-
-			it( "joins an SSE event's data: lines before parsing, because the native emitter pretty-prints each chunk over several of them", function() {
-				// Measured against a live /chat/api/stream: each chunk arrives as
-				//   event: chunk / data: { / data:   "choices" : [ { ... / data: }
-				// Parsing line by line JSON.parse'd `{` on its own, dropped every
-				// token, and left the live reply as "(no response)" until a reload.
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( "dataLines.push(" );
-				expect( html ).toInclude( 'dataLines.join( "\n" )' );
-				// One JSON.parse per EVENT, never per line
-				expect( html ).notToInclude( "var payload = line.slice( 5 ).trim()" );
-			} );
-
-			it( "keeps an SSE event that is split across network chunks buffered until its blank-line terminator arrives", function() {
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				// The old code handed the UNterminated tail to the parser and then
-				// threw it away, losing the first half of a split event
-				expect( html ).notToInclude( "var completeChunk = lastBreak >= 0 ? buffer.slice( 0, lastBreak ) : buffer" );
-				expect( html ).toInclude( "if ( lastBreak < 0 )" );
-				// CRLF framing is normalised, and a final unterminated event is flushed
-				expect( html ).toInclude( '.replace( /\r\n?/g, "\n" )' );
-				expect( html ).toInclude( "handleSseChunk( buffer, handlers )" );
-			} );
-
-			it( "starts with the sidebar closed on a phone, where it is a full-height overlay", function() {
-				// Measured at 390x844: open-by-default hid the composer and the
-				// Chats toggle behind the conversation list
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( "function isNarrowScreen()" );
-				expect( html ).toInclude( 'window.matchMedia( "(max-width: 40rem)" ).matches' );
-				expect( html ).toInclude( "if ( isNarrowScreen() ) {" );
-				// And the title block can shrink, so it truncates instead of running
-				// underneath the header buttons
-				expect( html ).toInclude( "header .brand > div { min-width: 0; }" );
-			} );
-
-			it( "turns Send into Steer while a turn is running, rather than disabling the composer", function() {
-				// Steering mid-run is the point of /steer - a disabled composer
-				// would make it unreachable
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( "if ( isBusy && activeThreadId )" );
-				expect( html ).toInclude( 'apiPost( "/steer"' );
-				expect( html ).toInclude( 'sendBtn.setAttribute( "aria-label", busy ? "Steer" : "Send" )' );
-				// isBusy must be a real variable - a disabled button could not be
-				// clicked to steer
-				expect( html ).notToInclude( "sendBtn.disabled = busy" );
-			} );
-
-			describe( "appearance", function() {
-
-				it( "has a panel for mode, accent, text size and density, kept in the browser", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-					var html = fileRead( appDir & "/chat/index.html" );
-
-					expect( html ).toInclude( 'id="appearanceBtn"' );
-					expect( html ).toInclude( 'id="appearancePanel"' );
-					expect( html ).toInclude( "bxagents_webui_appearance" );
-					expect( html ).toInclude( "function applyAppearance" );
-					expect( html ).toInclude( "function contrastRatio" );
-					// the operator's accent is only replaced while the visitor has picked one
-					expect( html ).toInclude( 'removeProperty( "--accent" )' );
-				} );
-
-			} );
-
-			describe( "icons", function() {
-
-				it( "inlines the Phosphor sprite, and every icon the page names is in it", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-					var html = fileRead( appDir & "/chat/index.html" );
-
-					expect( html ).notToInclude( "__ICON_SPRITE__" );
-					expect( html ).toInclude( "Phosphor Icons" );
-					var defined = {};
-					for ( var match in reMatch( 'id="i-([a-z0-9-]+)"', html ) ) {
-						defined[ reReplace( match, '^id="i-|"$', "", "all" ) ] = true;
-					}
-					expect( defined.count() ).toBeGT( 20 );
-					var used = {};
-					for ( var match in reMatch( 'href="##i-([a-z0-9-]+)"', html ) ) {
-						used[ reReplace( match, '^href="##i-|"$', "", "all" ) ] = true;
-					}
-					for ( var match in reMatch( 'icon\( "([a-z0-9-]+)" \)', html ) ) {
-						used[ reReplace( match, '^icon\( "|" \)$', "", "all" ) ] = true;
-					}
-					expect( used.count() ).toBeGT( 10 );
-					for ( var name in used ) {
-						expect( defined.keyExists( name ) ).toBeTrue( "the page uses the icon [#name#] but the sprite has no such symbol" );
-					}
-				} );
-
-				it( "labels every icon-only button, so it has a name for a screen reader", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-					var html = fileRead( appDir & "/chat/index.html" );
-
-					for ( var id in [ "sidebarBtn", "forkBtn", "exportBtn", "clearBtn", "compactBtn", "notesBtn", "keyBtn", "themeBtn", "attachBtn", "commandsBtn", "sendBtn", "stopBtn" ] ) {
-						var tag = reMatch( '<button[^>]*id="#id#"[^>]*>', html );
-						expect( tag ).toHaveLength( 1, id );
-						expect( tag[ 1 ] ).toInclude( "aria-label=", "#id# has no aria-label" );
-					}
-				} );
-
-				it( "offers up to four suggestions on the empty page, from the entry's suggestions", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var dir = newAppDir();
-					generator.generate( discovery, dir );
-					var page = fileRead( dir & "/chat/index.html" );
-					expect( page ).toInclude( 'var SUGGESTIONS = JSON.parse( "[]" )' );
-					expect( page ).toInclude( 'chips.className = "suggestions"' );
-				} );
-
-				it( "draws a code block with its language and a Copy button, and a tool card with a status", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var dir = newAppDir();
-					generator.generate( discovery, dir );
-					var page = fileRead( dir & "/chat/index.html" );
-					expect( page ).toInclude( 'class="copy-code"' );
-					expect( page ).toInclude( 'class="codehead"' );
-					expect( page ).toInclude( 'status.className = "status running"' );
-					expect( page ).toInclude( 'className = "ext-badge"' );
-				} );
-
-				it( "has a menu item for access tokens that shows only when the server offers them and opens the Access page", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-					var html = fileRead( appDir & "/chat/index.html" );
-
-					// the Settings menu item opens the Access page, where the tokens are listed, made and revoked
-					expect( html ).notToInclude( 'id="tokensPanel"' );
-					expect( reMatch( '<button[^>]*id="tokensBtn"[^>]*>', html )[ 1 ] ).toInclude( "aria-label=" );
-					expect( html ).toInclude( "tokensBtn.hidden = !capabilities.tokens" );
-					expect( html ).toInclude( '[ "tokensBtn", "access" ]' );
-					expect( html ).toInclude( 'apiPost( "/tokens/revoke"' );
-				} );
-
-				it( "asks for a shared password in the page, not in a browser prompt, and opens by itself when refused", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-					var html = fileRead( appDir & "/chat/index.html" );
-
-					expect( html ).toInclude( 'id="keyPanel"' );
-					expect( html ).toInclude( 'type="password"' );
-					expect( html ).notToInclude( "Token (sent as" );
-					expect( html ).toInclude( "askForPassword(" );
-					// a page with accounts goes to the sign-in form instead
-					expect( html ).toInclude( "window.location.href = LOGIN_URL" );
-				} );
-
-				it( "shows the context as a ring that fills, and opens the breakdown when it is clicked", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-					var html = fileRead( appDir & "/chat/index.html" );
-
-					expect( html ).toInclude( 'id="contextChip"' );
-					expect( html ).toInclude( 'aria-haspopup="dialog"' );
-					expect( html ).toInclude( 'id="contextPanel"' );
-					expect( html ).toInclude( 'class="fill"' );
-					expect( html ).toInclude( "function drawContextRing" );
-					expect( html ).toInclude( "function drawContextPanel" );
-					// the breakdown is drawn from the /context report, not by typing /context into the conversation
-					expect( html ).notToInclude( 'runCommand( "/context" )' );
-				} );
-
-				it( "takes a phosphor:<name> icon from the page's own icon set, for the header and the tab, and ignores a name it does not have", function() {
-					var discovery = discoverer.discover( fixtures & "/valid-minimal" );
-					var dir = createTempDirectory( prefix = "bxagents-webui-icon-" );
-					tempDirs.append( dir );
-					directoryCopy( fixtures & "/gateways-webui", dir, true );
-					var gateway = dir & "/gateways/chatUi.bx";
-					var written = fileRead( gateway );
-					fileWrite( gateway, written.replace( "path        : ""/chat"",", "path : ""/chat"", icon : ""phosphor:lightning"", suggestions : [ ""What can you do?"", ""Summarize my notes"" ]," ) );
-					var appDir = newAppDir();
-					generator.generate( discoverer.discover( dir ), appDir );
-					var html = fileRead( appDir & "/chat/index.html" );
-
-					expect( html ).toInclude( '<span class="icon"><svg class="i" aria-hidden="true"><use href="##i-lightning"/></svg></span>' );
-					expect( html ).toInclude( 'rel="icon" href="data:image/svg+xml,' );
-					expect( html ).toInclude( 'JSON.parse( "[\"What can you do?\",\"Summarize my notes\"]" )' );
-
-					fileWrite( gateway, written.replace( "path        : ""/chat"",", "path : ""/chat"", icon : ""phosphor:nope""," ) );
-					var other = newAppDir();
-					generator.generate( discoverer.discover( dir ), other );
-					expect( fileRead( other & "/chat/index.html" ) ).toInclude( "phosphor:nope" );
-				} );
-
-				it( "shows a robot as the brand mark when no icon is configured", function() {
-					var discovery = discoverer.discover( fixtures & "/valid-minimal" );
-					var dir = createTempDirectory( prefix = "bxagents-webui-icon-" );
-					tempDirs.append( dir );
-					directoryCopy( fixtures & "/gateways-webui", dir, true );
-					var gateway = dir & "/gateways/chatUi.bx";
-					var withoutIcon = fileRead( gateway ).reReplace( "icon\s*:\s*""[^""]*""\s*,?", "", "all" );
-					fileWrite( gateway, withoutIcon );
-					var appDir = newAppDir();
-					generator.generate( discoverer.discover( dir ), appDir );
-
-					expect( fileRead( appDir & "/chat/index.html" ) ).toInclude( '<span class="icon"><svg class="i" aria-hidden="true"><use href="##i-robot"/></svg></span>' );
-				} );
-
-			} );
-
-			it( "exposes Clear and Compact, and reports what compaction actually did", function() {
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( 'id="clearBtn"' );
-				expect( html ).toInclude( 'id="compactBtn"' );
-				expect( html ).toInclude( 'apiPost( "/clear"' );
-				expect( html ).toInclude( 'apiPost( "/compact"' );
-				// A no-op compaction is not an error - say so rather than claiming success
-				expect( html ).toInclude( "if ( !payload.compacted )" );
-			} );
-
-			it( "stores the theme server-side so it follows the identity, not the browser", function() {
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( "function loadPreferences()" );
-				expect( html ).toInclude( 'apiPost( "/preferences/set", { key: "theme"' );
-				// localStorage stays as the immediate/offline copy
-				expect( html ).toInclude( "localStorage.setItem( THEME_STORAGE, next )" );
-			} );
-
-			it( "lays out for narrow screens and honours reduced motion", function() {
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( "@media ( max-width: 40rem )" );
-				expect( html ).toInclude( "prefers-reduced-motion" );
-			} );
-
-			describe( "shell", function() {
-
-				it( "wraps the page in a skip link, a labelled left menu and a main region that holds the chat and the page host", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-
-					var html = fileRead( appDir & "/chat/index.html" );
-					expect( html ).toInclude( 'class="skip-link" href="##content"' );
-					expect( html ).toInclude( '<nav id="mainNav" aria-label="Main">' );
-					expect( html ).toInclude( '<main id="content" tabindex="-1">' );
-					expect( html ).toInclude( 'id="page-chat"' );
-					expect( html ).toInclude( 'id="pageView" hidden' );
-					// the hamburger drives the phone drawer
-					expect( html ).toInclude( 'id="navBtn"' );
-					expect( html ).toInclude( 'aria-controls="mainNav"' );
-				} );
-
-				it( "joins the shell styles and script in, leaving no placeholder behind", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-
-					var html = fileRead( appDir & "/chat/index.html" );
-					expect( html ).notToInclude( "__SHELL_STYLES__" );
-					expect( html ).notToInclude( "__SHELL_SCRIPT__" );
-					expect( html ).toInclude( "##mainNav a.nav-item[aria-current=""page""]" );
-					expect( html ).toInclude( "function registerPage(" );
-					expect( html ).toInclude( "function shellStart()" );
-				} );
-
-				it( "routes by hash, keeps the chat in the document, and sends a page the server does not offer to the chat", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-
-					var html = fileRead( appDir & "/chat/index.html" );
-					expect( html ).toInclude( "window.addEventListener( ""hashchange""" );
-					expect( html ).toInclude( "history.replaceState( null, """", ""##/chat"" )" );
-					// a member's menu is built from the capabilities, never from the address
-					expect( html ).toInclude( "function pageAvailable( def )" );
-					expect( html ).toInclude( "function buildNav()" );
-				} );
-
-				it( "folds the menu to icons, remembers it, and makes it a drawer on a phone", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-
-					var html = fileRead( appDir & "/chat/index.html" );
-					expect( html ).toInclude( "body[data-nav=""folded""]" );
-					expect( html ).toInclude( "body[data-drawer=""open""]" );
-					expect( html ).toInclude( "localStorage.setItem( NAV_STORAGE" );
-					// Escape closes the drawer and Tab stays inside it
-					expect( html ).toInclude( "function closeDrawer()" );
-					expect( html ).toInclude( "evt.key === ""Tab""" );
-				} );
-
-				it( "shows the count of logged errors on the Logs item", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-
-					var html = fileRead( appDir & "/chat/index.html" );
-					expect( html ).toInclude( "function shellBadge( id, count )" );
-					expect( html ).toInclude( "shellBadge( ""logs"", count )" );
-				} );
-
-			} );
-
-			describe( "pages", function() {
-
-				it( "registers a page per area, in the Main and Admin groups, each shown by a capability", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-
-					var html = fileRead( appDir & "/chat/index.html" );
-					for ( var id in [ "routines", "registry", "connectors", "memory", "vault", "settings", "gateways", "logs", "access" ] ) {
-						expect( html ).toInclude( "id: ""#id#""," );
-					}
-					expect( html ).toInclude( "group: ""admin""" );
-					// an admin page is not offered to a member: it needs a capability the server only grants an admin
-					expect( html ).toInclude( "cap: function ( caps ) { return !!caps.gateways; }" );
-					expect( html ).toInclude( "cap: function ( caps ) { return !!caps.logs; }" );
-				} );
-
-				it( "has a Connectors page that keeps the catalog connectors apart from the services written in Agent.yaml", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-
-					var html = fileRead( appDir & "/chat/index.html" );
-					expect( html ).toInclude( "id: ""connectors""," );
-					expect( html ).toInclude( "cap: function ( caps ) { return !!( caps.connectors || caps.connections ); }" );
-					// the catalog connectors and the Agent.yaml services come from different routes and have their own tabs
-					expect( html ).toInclude( "apiGet( ""/connectors"" )" );
-					expect( html ).toInclude( "apiGet( ""/connect"" )" );
-					expect( html ).toInclude( "In Agent.yaml" );
-					expect( html ).toInclude( "Needs attention" );
-				} );
-
-				it( "connects a connector from a dialog that asks for the risk, clears the token before it sends it and never keeps it", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-
-					var html = fileRead( appDir & "/chat/index.html" );
-					expect( html ).toInclude( "apiPost( ""/connectors/connect"", asked )" );
-					expect( html ).toInclude( "apiPost( ""/connectors/disconnect""" );
-					expect( html ).toInclude( "tokenInput.value = """";" );
-					expect( html ).toInclude( "I have read this and want to connect" );
-					// a person is told to tick the risk box before anything is sent
-					expect( html ).toInclude( "Tick the box to say you have read this." );
-				} );
-
-				it( "has a tools drawer that lists a connector's tools by name with a switch each", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-
-					var html = fileRead( appDir & "/chat/index.html" );
-					expect( html ).toInclude( "/connectors/tools?id=" );
-					expect( html ).toInclude( "Turned off by your admin" );
-					expect( html ).toInclude( "toLowerCase() < b.name.toLowerCase()" );
-					expect( html ).toInclude( "{ all: true }" );
-					expect( html ).toInclude( "{ readonly: true }" );
-				} );
-
-				it( "replaces the old Connections dialog with the Connectors page: Settings links to it and the Registry marks connector tools", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-
-					var html = fileRead( appDir & "/chat/index.html" );
-					expect( html ).notToInclude( "connectPanel" );
-					expect( html ).notToInclude( "connectBtn" );
-					expect( html ).toInclude( "shellGo( ""connectors"" )" );
-					expect( html ).toInclude( "From a connector" );
-					// the services written in Agent.yaml still sign in, from their own tab
-					expect( html ).toInclude( "/connect/remove" );
-				} );
-
-				it( "offers a member no switch for a local program, which only an admin turns on or off", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-
-					var html = fileRead( appDir & "/chat/index.html" );
-					expect( html ).toInclude( "program && !capabilities.admin" );
-					expect( html ).toInclude( "An admin switches it on for everyone who uses this agent." );
-				} );
-
-				it( "says gateways, not chat apps, and keeps every item of the Settings menu", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-
-					var html = fileRead( appDir & "/chat/index.html" );
-					expect( html ).toInclude( "title: ""Gateways""" );
-					// the old Gateways dialog is gone: the menu item opens the Gateways page
-					expect( html ).notToInclude( 'id="gatewaysPanel"' );
-					expect( html ).toInclude( '[ "gatewaysBtn", "gateways" ]' );
-					expect( html ).toInclude( 'aria-label="Gateways"' );
-					expect( html ).notToInclude( "Chat apps" );
-					// Notes, Vault, Routines, Access tokens, Logs and Gateways stay in the menu, next to their pages
-					for ( var buttonId in [ "notesBtn", "vaultBtn", "routinesBtn", "tokensBtn", "logsBtn", "gatewaysBtn", "appearanceBtn", "themeBtn", "keyBtn" ] ) {
-						expect( html ).toInclude( 'id="#buttonId#"' );
-					}
-					expect( html ).notToInclude( "legacy.hidden = true" );
-				} );
-
-				it( "keeps both routine dialogs and sends the agent's vault ask to the Vault page", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-
-					var html = fileRead( appDir & "/chat/index.html" );
-					expect( html ).toInclude( 'id="routineEditor"' );
-					expect( html ).toInclude( 'id="routineReports"' );
-					expect( html ).toInclude( "var routinesHook = null;" );
-					expect( html ).toInclude( "shellGo( ""vault"" )" );
-				} );
-
-				it( "has a Conversations page that asks the server for a page at a time with its filters and facets", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-
-					var html = fileRead( appDir & "/chat/index.html" );
-					expect( html ).toInclude( "id: ""conversations""," );
-					expect( html ).toInclude( """/sessions?limit="" + state.limit + ""&offset="" + state.offset + ""&facets=1""" );
-					for ( var param in [ "&q=", "&source=", "&agent=", "&since=", "&before=", "&all=1" ] ) {
-						expect( html ).toInclude( param );
-					}
-					// every row can be opened, renamed, forked, exported and deleted, and several deleted at once
-					expect( html ).toInclude( "/sessions/fork" );
-					expect( html ).toInclude( "Delete selected" );
-				} );
-
-				it( "shows 25 conversations in the sidebar, with Show more and a quick filter, and trusts a remembered one further down", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-
-					var html = fileRead( appDir & "/chat/index.html" );
-					expect( html ).toInclude( "var CONV_PAGE = 25;" );
-					expect( html ).toInclude( 'id="convFilter"' );
-					expect( html ).toInclude( 'id="convMoreBtn"' );
-					expect( html ).notToInclude( "/sessions?limit=100" );
-					expect( html ).toInclude( "conversationsTotal > conversations.length" );
-				} );
-
-				it( "asks for the vault activity only as an admin, and for no history of a conversation it just made up", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-
-					var html = fileRead( appDir & "/chat/index.html" );
-					expect( html ).toInclude( "if ( !capabilities.admin ) { return; }" );
-					expect( html ).toInclude( "function isLocalOnly( id )" );
-					expect( html ).toInclude( "if ( isLocalOnly( getConversationId() ) )" );
-				} );
-
-				it( "draws the Appearance controls in the Settings page as well as in the popup", function() {
-					var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-					var appDir = newAppDir();
-					generator.generate( discovery, appDir );
-
-					var html = fileRead( appDir & "/chat/index.html" );
-					expect( html ).toInclude( "function drawAppearanceInto( el, inPage )" );
-					expect( html ).toInclude( ".appearance-ui.in-page" );
-				} );
-
-			} );
-
-			it( "recovers when the remembered conversation no longer exists", function() {
-				// Deleted from another tab, or a fresh store - rehydrating to
-				// nothing would leave the sidebar with no active row
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( "if ( !known && conversations.length )" );
-			} );
-
-			it( "has a Notes menu item that only appears when the agent keeps notes and opens the Memory page", function() {
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( 'id="notesBtn"' );
-				expect( html ).notToInclude( 'id="notesPanel"' );
-				expect( html ).toInclude( "notesBtn.hidden = !capabilities.notes" );
-				// the menu item opens the Memory page, which reads and changes the notes
-				expect( html ).toInclude( '[ "notesBtn", "memory" ]' );
-				expect( html ).toInclude( 'apiGet( "/notes" )' );
-				expect( html ).toInclude( 'apiPost( "/notes"' );
-				expect( html ).toInclude( 'apiPost( "/notes/update"' );
-				expect( html ).toInclude( 'apiPost( "/notes/remove"' );
-				// text from a note goes in as text, never as markup
-				expect( html ).toInclude( "text: note.text" );
-			} );
-
-			it( "no longer claims the approval UI is missing", function() {
-				// The page shipped an approval card two revisions ago; the fallback
-				// notice still said v1 had none.
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).notToInclude( "no approval UI yet" );
-			} );
-
-			it( "rehydrates the transcript from /history on load", function() {
-				var discovery = discoverer.discover( fixtures & "/gateways-webui" );
-				var appDir = newAppDir();
-				generator.generate( discovery, appDir );
-
-				var html = fileRead( appDir & "/chat/index.html" );
-				expect( html ).toInclude( "function rehydrate()" );
-				expect( html ).toInclude( '"/history?conversationId="' );
-				// Boot order matters: capabilities decide which controls exist at
-				// all, so /info comes first, then preferences, then the list, then
-				// the transcript
-				expect( html ).toInclude( "loadInfo()" );
-				expect( html ).toInclude( ".then( loadPreferences )" );
-				expect( html ).toInclude( ".then( loadConversations )" );
-			} );
-
-			/**
-			 * The generator builds BoxLang source out of BoxLang string
-			 * literals, where a literal double quote is written "" - so an
-			 * empty-string literal needs FOUR quotes ( """" ), and writing the
-			 * natural-looking two emits a single stray quote that opens a
-			 * string and swallows the rest of the line.
-			 *
-			 * That shipped. `?: ""` in the ChatDb template emitted `?: "`, and
-			 * every generated project's ChatDb.bx failed to compile. No spec
-			 * here caught it because they all assert on substrings of the
-			 * output; only a real ColdBox boot in CI ever tried to compile it.
-			 *
-			 * A line of generated code with an odd number of double quotes is
-			 * always this bug (nothing here emits a string spanning lines), so
-			 * assert the invariant over the whole file rather than pinning the
-			 * two lines that happened to be wrong.
-			 */
-			/**
-			 * Every other action derives the caller from the session, but /pending
-			 * and /resume were addressed purely by threadId - so a visitor holding
-			 * another visitor's threadId could read their pending tool calls and
-			 * their arguments, and approve or reject on their behalf. Deriving
-			 * decidedBy server-side stopped a caller lying about WHO decided; it
-			 * did not stop them deciding on a run that was not theirs.
-			 *
-			 * Ownership needs no new storage: resolveOptions() stamps the
-			 * session-derived userId into the run options, and the agent
-			 * checkpoints those options alongside the suspension.
-			 */
 			it( "generates sign-in wiring only when a webui entry declares users", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-webui-users" );
 				var appDir = newAppDir();
@@ -968,7 +213,7 @@ class extends="testbox.system.BaseSpec" {
 				for ( var generated in [
 					"/models/PasswordHasher.bx", "/models/UserService.bx", "/models/User.bx",
 					"/models/UserSeeder.bx", "/handlers/ChatAuth.bx",
-					"/interceptors/WebUiLoginGate.bx", "/chat/login.html"
+					"/interceptors/WebUiLoginGate.bx", "/config/bxagentsui-login.html"
 				] ) {
 					expect( fileExists( appDir & generated ) ).toBeTrue( "expected #generated# to be generated" );
 				}
@@ -997,8 +242,9 @@ class extends="testbox.system.BaseSpec" {
 				var without = newAppDir();
 				generator.generate( discoverer.discover( fixtures & "/gateways-webui" ), without );
 
-				expect( fileRead( withUsers & "/chat/index.html" ) ).toInclude( 'var LOGIN_URL = "/chat/login.html";' );
-				expect( fileRead( without & "/chat/index.html" ) ).toInclude( 'var LOGIN_URL = "";' );
+				expect( moduleSettings( withUsers ).loginUrl ).toBe( "/chat/login.html" );
+				expect( moduleSettings( withUsers ).signIn ).toBeTrue();
+				expect( moduleSettings( without ).loginUrl ).toBe( "" );
 			} );
 
 			it( "gives the sign-in page the same theme tokens and mark as the chat page", function() {
@@ -1006,7 +252,7 @@ class extends="testbox.system.BaseSpec" {
 				var appDir = newAppDir();
 				generator.generate( discovery, appDir );
 
-				var login = fileRead( appDir & "/chat/login.html" );
+				var login = fileRead( appDir & "/config/bxagentsui-login.html" );
 				expect( login ).notToInclude( "__THEME_TOKENS__" );
 				expect( login ).toInclude( "--accent-soft" );
 				expect( login ).toInclude( 'class="mark"' );
@@ -1091,7 +337,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileExists( appDir & "/interceptors/WebUiLoginGate.bx" ) ).toBeFalse();
 				expect( fileExists( appDir & "/handlers/ChatAuth.bx" ) ).toBeFalse();
 				// No sign-in form for a project that gates nothing
-				expect( fileExists( appDir & "/chat/login.html" ) ).toBeFalse();
+				expect( fileExists( appDir & "/config/bxagentsui-login.html" ) ).toBeFalse();
 			} );
 
 		} );
