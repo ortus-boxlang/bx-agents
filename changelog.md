@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Live logs:** `GET /logs/stream?area=&level=&q=` (admin) streams the lines written to a log from now on (`lines` events, `reset` when the file was rotated; ends after ten minutes). The Logs page's **Live** switch uses it and falls back to reading every 5 seconds on an older server. The client has `logsStream()`.
 - **Connectors: seven ready-made connections** (GitHub, Stripe, Notion, Atlassian, Cloudflare, Supabase and Git), offered by every agent by default and connected by each person with their own token or sign in. Nothing is contacted until a person connects. Tokens are sealed in the vault, locked to the host of the service, and never shown to the model. Two people never share a token or a session. See [connectors](docs/conventions/connectors.md) and the generated [catalog](docs/conventions/connector-catalog.md).
 - **`connectors:` key in `Agent.yaml`**: `only`, `exclude`, `override` (`timeout`, `options`, `scopes`, `tools`), `toolWarning`, or `connectors: none`. Checked at build time and shown by `bxAgents inspect`.
 - **A Connectors page in the web app** with tabs for All, Connected, Needs attention and In Agent.yaml, connect and disconnect dialogs with a risk confirmation, and a drawer to turn single tools on or off (listed alphabetically, with a warning above `toolWarning`).

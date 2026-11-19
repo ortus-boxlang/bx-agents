@@ -295,7 +295,7 @@ POST /__bxagents/notes/update   # { scope, id, text }
 POST /__bxagents/notes/remove   # { scope, id }
 ```
 
-That list is the run-control and conversation core. Routines, the vault, notes and memory, skills, logs, gateways, backups, extensions, accounts and tokens have routes too: every one of the 81 is in [Every route](../guides/agent-api.md#every-route).
+That list is the run-control and conversation core. Routines, the vault, notes and memory, skills, logs, gateways, backups, extensions, accounts and tokens have routes too: every one of the 82 is in [Every route](../guides/agent-api.md#every-route).
 
 `/events` sends the frames of `/stream` (`thread` first, `chunk` for each piece of the answer, `done` last)
 and adds:

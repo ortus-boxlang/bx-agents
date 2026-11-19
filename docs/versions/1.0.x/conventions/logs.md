@@ -57,7 +57,7 @@ bxAgents logs api --json
 
 **In the web page**, for an admin, the menu has a **Logs** page and a **Gateways** page (see [the web UI](web-ui.md#logs-and-gateways)). A red count on the **Logs** item says how many sources logged an error since the app started.
 
-**Over the API**, for an admin: `GET /logs` lists the logs and how many sources logged an error since the app started, and `GET /logs?area=gateways&tail=200&level=warn&q=text` gives lines. The client has `logs()`. See [the agent API](agent-bx.md).
+**Over the API**, for an admin: `GET /logs` lists the logs and how many sources logged an error since the app started, and `GET /logs?area=gateways&tail=200&level=warn&q=text` gives lines. `GET /logs/stream?area=gateways&level=warn&q=text` follows one live: an event stream of `lines` frames (`{ area, lines }`, only lines written after it opened) and a `reset` frame when the file was rotated; the server looks at the file every second and ends the stream after ten minutes. The client has `logs()` and `logsStream( area, onEvent, level, q )`. See [the agent API](agent-bx.md).
 
 ## Gateways
 

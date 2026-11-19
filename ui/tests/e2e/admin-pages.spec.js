@@ -3,6 +3,12 @@
  * routed answer where a state cannot be made on demand (a failing gateway).
  */
 import { test, expect } from "./support.js";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// the dev agent's logs folder (ui/.stack/home/logs), where a test can write a line the way the agent does
+const LOGS = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "../../.stack/home/logs" );
 
 const APP = "/chat";
 
@@ -49,6 +55,37 @@ test.describe( "Logs", () => {
 		await expect( page ).toHaveURL( /\/logs\/heartbeat$/ );
 		await expect( page.getByRole( "list", { name: "Log lines" } ).locator( "li:not(.logs-empty)" ).first() ).toBeVisible();
 		expect( errors ).toEqual( [] );
+	} );
+
+	test( "Live shows a line the moment the agent writes it, and only the lines that match", async( { page, errors } ) => {
+		await page.goto( APP + "/logs/routines" );
+		const opened = page.waitForRequest( req => req.url().includes( "/__bxagents/logs/stream?" ) && req.url().includes( "area=routines" ) );
+		await page.getByRole( "switch", { name: "Live" } ).check();
+		await opened;
+		await expect( page.locator( ".pg-status" ) ).toHaveText( "Live: new lines appear as they are written." );
+		const stamp = Date.now();
+		const line = level => "[2026-11-19T05:00:00,000] [main] [" + level + "] [ROUTINES] [bxagents-root] [daily] live " + level + " " + stamp + "\n";
+		fs.mkdirSync( LOGS, { recursive: true } );
+		fs.appendFileSync( path.join( LOGS, "routines.log" ), line( "INFO " ) );
+		const lines = page.getByRole( "list", { name: "Log lines" } );
+		await expect( lines ).toContainText( "live INFO " + stamp );
+
+		// a filter reopens the stream with it: an info line no longer shows, an error does
+		await page.getByRole( "combobox", { name: "Level" } ).selectOption( "error" );
+		await expect( page.locator( ".pg-status" ) ).toHaveText( "Live: new lines appear as they are written." );
+		fs.appendFileSync( path.join( LOGS, "routines.log" ), line( "INFO " ) + line( "ERROR" ) );
+		await expect( lines ).toContainText( "live ERROR " + stamp );
+		await expect( lines.locator( "li", { hasText: "live INFO " + stamp } ) ).toHaveCount( 0 );
+		expect( errors ).toEqual( [] );
+	} );
+
+	test( "Live reads the log every 5 seconds on a server without the stream", async( { page } ) => {
+		await page.route( "**/__bxagents/logs/stream?*", route => route.fulfill( { status: 404, json: { success: false, error: "Not found" } } ) );
+		await page.goto( APP + "/logs/heartbeat" );
+		await page.getByRole( "switch", { name: "Live" } ).check();
+		await expect( page.locator( ".pg-status" ) ).toHaveText( "This server has no live log; reading it every 5 seconds." );
+		const polled = page.waitForRequest( req => req.url().includes( "/__bxagents/logs?area=heartbeat" ), { timeout: 8000 } );
+		await polled;
 	} );
 
 	test( "asks the API again with the level filter", async( { page } ) => {

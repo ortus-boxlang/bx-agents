@@ -141,7 +141,7 @@ For admins. Each [gateway](gateways/index.md) with its state (connected, stopped
 
 ### Logs
 
-For admins. A tab for each of the five [logs](logs.md) (agent, gateways, routines, heartbeat, API), a level filter, a search box, a line count and **Refresh every 5 s** to follow one as it grows. Secrets are never in a log.
+For admins. A tab for each of the five [logs](logs.md) (agent, gateways, routines, heartbeat, API), a level filter, a search box, a line count and **Live**, which shows each new line as the agent writes it (over `GET /logs/stream`, with the same filters; on a server without that route it reads the log every 5 seconds instead). New lines keep the view at the end unless you scrolled up. Secrets are never in a log.
 
 ![The Logs page](../assets/webui/webui-logs.png)
 
@@ -532,7 +532,7 @@ For anything the tokens don't cover - custom fonts, layout, per-element rules - 
 
 ## Logs and gateways
 
-For an admin, the **Logs** and **Gateways** pages of the Admin group (see [The pages](#the-pages)) show how the app is doing. The **Logs** page has a tab for each log that exists (agent, gateways, routines, heartbeat, API), a level filter, search, a line count and **Refresh every 5 s**. The **Gateways** page lists each gateway the project names with its state (connected, stopped, failing or not registered), which credentials are set (the names only, never a value), when it last had a conversation, its last error and a **Reconnect** button. Gateways are still set up in `gateways/` and `.env`: the page shows how they are doing and starts one again in place. See [logs](logs.md).
+For an admin, the **Logs** and **Gateways** pages of the Admin group (see [The pages](#the-pages)) show how the app is doing. The **Logs** page has a tab for each log that exists (agent, gateways, routines, heartbeat, API), a level filter, search, a line count and **Live**. The **Gateways** page lists each gateway the project names with its state (connected, stopped, failing or not registered), which credentials are set (the names only, never a value), when it last had a conversation, its last error and a **Reconnect** button. Gateways are still set up in `gateways/` and `.env`: the page shows how they are doing and starts one again in place. See [logs](logs.md).
 
 A small red count on the **Logs** item says how many sources logged an error since the app started.
 

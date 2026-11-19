@@ -57,6 +57,25 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			it( "follows a log: a GET event stream, each lines and reset event handed over parsed", function() {
+				reply.frames = [
+					frame( "lines", { area : "gateways", lines : [ { level : "error", message : "telegram failed" } ] } ),
+					": keep-alive",
+					frame( "reset", {} )
+				];
+				var got = [];
+				client.logsStream( "gateways", ( name, data ) => got.append( { name : name, data : data } ), "warn", "tele" );
+
+				expect( seen.methods[ 1 ] ).toBe( "GET" );
+				expect( seen.paths[ 1 ] ).toInclude( "/agent-api/logs/stream?" );
+				expect( seen.paths[ 1 ] ).toInclude( "area=gateways" );
+				expect( seen.paths[ 1 ] ).toInclude( "level=warn" );
+				expect( seen.paths[ 1 ] ).toInclude( "q=tele" );
+				expect( seen.tokens[ 1 ] ).toBe( "secret" );
+				expect( got.map( e => e.name ) ).toBe( [ "lines", "reset" ] );
+				expect( got[ 1 ].data.lines[ 1 ].message ).toBe( "telegram failed" );
+			} );
+
 			it( "reaches the clear and skill reading routes, and names the agent a turn is for", function() {
 				client.clearNotes( "agent" );
 				client.clearMemory( all = true, agent = "researcher" );

@@ -514,6 +514,32 @@ class {
 	}
 
 	/**
+	 * What one log gained since an offset, for the live view (GET /logs/stream). Admin only.
+	 *
+	 * @caller The Caller
+	 * @area One of the log areas
+	 * @offset Where the last call ended, in bytes; -1 for the end of the file now
+	 * @level Least serious level to show
+	 * @q Text a line must contain
+	 *
+	 * @return An Outcome: { area, offset, reset, lines } (see LogReader.since)
+	 */
+	any function logsSince( required any caller, required string area, numeric offset = -1, string level = "", string q = "" ) {
+		if ( !arguments.caller.isAdmin() ) {
+			return Outcome::failed( "forbidden", "Only an admin may read the logs" )
+		}
+		if ( isNull( variables.appData ) ) {
+			return Outcome::failed( "not_found", "This server does not know its data home, so it has no logs folder" )
+		}
+		try {
+			var reader = new "models.logs.LogReader@bxagents"( variables.appData.home().folder( "logs" ) )
+			return Outcome::done( reader.since( arguments.area, arguments.offset, arguments.level, arguments.q ) )
+		} catch ( "BxAgents.UnknownLog" e ) {
+			return Outcome::failed( "not_found", e.message )
+		}
+	}
+
+	/**
 	 * The chat apps the project names and the state of each. Their credentials are shown as set or not set, never as values.
 	 *
 	 * @caller The Caller; only an admin may see them

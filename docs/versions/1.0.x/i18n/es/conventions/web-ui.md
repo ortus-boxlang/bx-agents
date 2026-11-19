@@ -135,7 +135,7 @@ Para admins. Cada [gateway](gateways/index.md) con su estado (connected, stopped
 
 ### Logs
 
-Para admins. Una pestaña por cada uno de los cinco [logs](logs.md) (agent, gateways, routines, heartbeat, API), un filtro de nivel, un cuadro de búsqueda, un número de líneas y **Refresh every 5 s** para seguir uno mientras crece. Un log nunca contiene secretos.
+Para admins. Una pestaña por cada uno de los cinco [logs](logs.md) (agent, gateways, routines, heartbeat, API), un filtro de nivel, un cuadro de búsqueda, un número de líneas y **Live**, que muestra cada línea nueva en cuanto el agente la escribe (con `GET /logs/stream` y los mismos filtros; en un servidor sin esa ruta, lee el log cada 5 segundos). Un log nunca contiene secretos.
 
 ![La página Logs](../assets/webui/webui-logs.png)
 
