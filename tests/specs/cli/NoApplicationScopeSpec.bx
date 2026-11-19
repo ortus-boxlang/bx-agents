@@ -1,7 +1,7 @@
 /**
  * The in-process terminal chat runs as a plain CLI script, which has no `application` scope. Measured on
  * BoxLang 1.19.0 and the 1.18.0 snapshot, every message of the full-screen `chat` then failed with "The requested
- * key [application] was not located in any scope or it's undefined", thrown by RunOwners.table() on the turn path.
+ * key [application] was not located in any scope or it's undefined", thrown by code on the turn path that read it.
  *
  * Every other spec here runs under tests/Application.bx, so none of them could see it. These run a script in a
  * fresh BoxLang process with no Application.bx: one bare, one after ApplicationContext.start() as `chat` does it.
@@ -54,8 +54,6 @@ class extends="testbox.system.BaseSpec" {
 						}
 						out.applicationAfter = isDefined( ""application"" );
 						try {
-							out.claimed = bxagents.models.api.RunOwners::claim( ""t-1"", ""ada"" );
-							bxagents.models.api.RunOwners::release( ""t-1"" );
 							var agent = aiAgent( name : ""helper"", model : aiModel( provider : ""mock"" ) );
 							var session = new bxagents.models.cli.chat.InProcessSession( agent );
 							var hooks = { push : ( e ) => {}, cancelRequested : () => false, takeSteer : () => nullValue() };
@@ -84,7 +82,7 @@ class extends="testbox.system.BaseSpec" {
 				return jsonDeserialize( line[ 1 ].mid( 7 ) );
 			}
 
-			it( "has no application scope, and RunOwners and a whole in-process turn still work", function() {
+			it( "has no application scope, and a whole in-process turn still works", function() {
 				if ( !canRunChild() ) {
 					return;
 				}
@@ -92,7 +90,6 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( out.applicationBefore ).toBeFalse();
 				expect( out.keyExists( "error" ) ? out.error : "" ).toBe( "" );
-				expect( out.claimed ).toBeTrue();
 				expect( out.status ).toBe( "done" );
 				expect( out.answered ).toBeTrue();
 			} );
@@ -106,7 +103,6 @@ class extends="testbox.system.BaseSpec" {
 				expect( out.applicationBefore ).toBeFalse();
 				expect( out.applicationAfter ).toBeTrue();
 				expect( out.keyExists( "error" ) ? out.error : "" ).toBe( "" );
-				expect( out.claimed ).toBeTrue();
 				expect( out.status ).toBe( "done" );
 				expect( out.answered ).toBeTrue();
 			} );
