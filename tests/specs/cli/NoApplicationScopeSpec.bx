@@ -55,6 +55,12 @@ class extends="testbox.system.BaseSpec" {
 						out.applicationAfter = isDefined( ""application"" );
 						try {
 							out.claimed = bxagents.models.api.RunOwners::claim( ""t-1"", ""ada"" );
+							out.claimedAgain = bxagents.models.api.RunOwners::claim( ""t-1"", ""ada"" );
+							out.ownerKept = bxagents.models.api.RunOwners::of( ""t-1"" );
+							out.otherCase = bxagents.models.api.RunOwners::claim( ""T-1"", ""bob"" );
+							bxagents.models.api.RunOwners::release( ""t-1"" );
+							bxagents.models.api.RunOwners::release( ""T-1"" );
+							out.claimedAfterRelease = bxagents.models.api.RunOwners::claim( ""t-1"", ""bob"" );
 							bxagents.models.api.RunOwners::release( ""t-1"" );
 							var agent = aiAgent( name : ""helper"", model : aiModel( provider : ""mock"" ) );
 							var session = new bxagents.models.cli.chat.InProcessSession( agent );
@@ -93,6 +99,10 @@ class extends="testbox.system.BaseSpec" {
 				expect( out.applicationBefore ).toBeFalse();
 				expect( out.keyExists( "error" ) ? out.error : "" ).toBe( "" );
 				expect( out.claimed ).toBeTrue();
+				expect( out.claimedAgain ).toBeFalse();
+				expect( out.ownerKept ).toBe( "ada" );
+				expect( out.otherCase ).toBeTrue();
+				expect( out.claimedAfterRelease ).toBeTrue();
 				expect( out.status ).toBe( "done" );
 				expect( out.answered ).toBeTrue();
 			} );

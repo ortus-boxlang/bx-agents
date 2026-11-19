@@ -1,0 +1,79 @@
+/**
+ * RunOwners.claim() must be an atomic claim: when many threads name the same run, exactly one wins it. A struct's
+ * putIfAbsent is not atomic (measured on BoxLang 1.19.0: no single winner for any of 300 ids), so claim() uses a lock.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "RunOwners", function() {
+
+			afterEach( function() {
+				for ( var id in [ "r-1", "r-2", "r-case", "R-CASE" ] ) {
+					bxagents.models.api.RunOwners::release( id );
+				}
+			} );
+
+			it( "lets exactly one of many racing threads claim each run", function() {
+				var threadCount = 48;
+				var idCount = 300;
+				var winners = structNew( "casesensitive" );
+				for ( var i = 1; i <= idCount; i++ ) {
+					winners[ "race-" & i ] = createObject( "java", "java.util.concurrent.atomic.AtomicInteger" ).init( 0 );
+				}
+				var names = [];
+				for ( var t = 1; t <= threadCount; t++ ) {
+					var name = "runowners-race-" & createUUID();
+					names.append( name );
+					thread name=name action="run" threadNo=t winners=winners idCount=idCount {
+						for ( var k = 1; k <= attributes.idCount; k++ ) {
+							if ( bxagents.models.api.RunOwners::claim( "race-" & k, "owner-" & attributes.threadNo ) ) {
+								attributes.winners[ "race-" & k ].incrementAndGet();
+							}
+						}
+					}
+				}
+				thread action="join" name=names.toList() timeout=120000;
+
+				var notOne = [];
+				for ( var i = 1; i <= idCount; i++ ) {
+					if ( winners[ "race-" & i ].get() != 1 ) {
+						notOne.append( "race-" & i & "=" & winners[ "race-" & i ].get() );
+					}
+					bxagents.models.api.RunOwners::release( "race-" & i );
+				}
+				expect( notOne ).toBeEmpty( "ids without exactly one winner: " & notOne.toList() );
+			} );
+
+			it( "refuses a second claim, even by the same owner, and keeps the first owner", function() {
+				expect( bxagents.models.api.RunOwners::claim( "r-1", "ada" ) ).toBeTrue();
+				expect( bxagents.models.api.RunOwners::claim( "r-1", "ada" ) ).toBeFalse();
+				expect( bxagents.models.api.RunOwners::claim( "r-1", "bob" ) ).toBeFalse();
+				expect( bxagents.models.api.RunOwners::of( "r-1" ) ).toBe( "ada" );
+			} );
+
+			it( "can be claimed again once released", function() {
+				expect( bxagents.models.api.RunOwners::claim( "r-2", "ada" ) ).toBeTrue();
+				bxagents.models.api.RunOwners::release( "r-2" );
+				expect( bxagents.models.api.RunOwners::of( "r-2" ) ).toBe( "" );
+				expect( bxagents.models.api.RunOwners::claim( "r-2", "bob" ) ).toBeTrue();
+				expect( bxagents.models.api.RunOwners::of( "r-2" ) ).toBe( "bob" );
+			} );
+
+			it( "treats ids that differ only by case as different runs", function() {
+				expect( bxagents.models.api.RunOwners::claim( "r-case", "ada" ) ).toBeTrue();
+				expect( bxagents.models.api.RunOwners::claim( "R-CASE", "bob" ) ).toBeTrue();
+				expect( bxagents.models.api.RunOwners::of( "r-case" ) ).toBe( "ada" );
+				expect( bxagents.models.api.RunOwners::of( "R-CASE" ) ).toBe( "bob" );
+				bxagents.models.api.RunOwners::release( "r-case" );
+				expect( bxagents.models.api.RunOwners::of( "R-CASE" ) ).toBe( "bob" );
+			} );
+
+			it( "refuses an empty id or owner", function() {
+				expect( bxagents.models.api.RunOwners::claim( "", "ada" ) ).toBeFalse();
+				expect( bxagents.models.api.RunOwners::claim( "r-1", "" ) ).toBeFalse();
+			} );
+
+		} );
+	}
+
+}
