@@ -67,7 +67,8 @@ class {
 Ejecuta `bxAgents chat` y escribe `/hello Ada`; `/extensions` lista lo que se cargó. El mismo comando
 funciona en la página web y, si se permite, en las plataformas de chat. Una carpeta con un
 `Extension.bx` puede traer más: teclas (`@Key`), elementos de estado (`@Status`), fuentes `@` y
-prefijos de mensaje para la terminal, huecos en la página web, listeners de eventos de chat y de
+prefijos de mensaje para la terminal, huecos en la página web y los estilos y scripts de una
+carpeta `web/`, listeners de eventos de chat y de
 bx-ai, schedulers, tools, skills, un nuevo tipo de gateway o un verbo de `bxAgents`. Los valores de
 una extensión van bajo `extensions:` en `Agent.yaml`.
 

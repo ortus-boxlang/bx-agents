@@ -12,12 +12,15 @@ export function theme( api ) {
 		/** @type {string} "light", "dark" or "" (follow the system) */
 		mode : "",
 
+		/** @type {boolean} True while the system asks for dark: what "" follows */
+		systemDark : false,
+
 		/** @returns {boolean} True when the page is dark now */
 		get dark() {
 			if ( this.mode ) {
 				return this.mode === "dark";
 			}
-			return !!( window.matchMedia && window.matchMedia( "(prefers-color-scheme: dark)" ).matches );
+			return this.systemDark;
 		},
 
 		/** Reads the stored mode and applies it. */
@@ -29,6 +32,13 @@ export function theme( api ) {
 				stored = "";
 			}
 			this.mode = stored === "dark" || stored === "light" ? stored : "";
+			const query = window.matchMedia ? window.matchMedia( "(prefers-color-scheme: dark)" ) : null;
+			this.systemDark = !!( query && query.matches );
+			// following the system: a change there shows at once
+			query && query.addEventListener && query.addEventListener( "change", event => {
+				this.systemDark = event.matches;
+				this.apply();
+			} );
 			this.apply();
 		},
 
@@ -55,13 +65,12 @@ export function theme( api ) {
 			api.post( "/preferences/set", { key: "theme", value: this.mode || "system" } );
 		},
 
-		/** Writes the mode on the root element, where the tokens read it. */
+		/**
+		 * Writes the look on the root element, where the tokens read it: the chosen mode, or the system's when none is
+		 * chosen (the styles only know data-theme, so following the system must set it too).
+		 */
 		apply() {
-			if ( this.mode ) {
-				document.documentElement.setAttribute( "data-theme", this.mode );
-			} else {
-				document.documentElement.removeAttribute( "data-theme" );
-			}
+			document.documentElement.setAttribute( "data-theme", this.dark ? "dark" : "light" );
 		}
 	};
 }

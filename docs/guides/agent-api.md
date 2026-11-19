@@ -124,7 +124,7 @@ println( made.token );        // shown once; the server keeps only a fingerprint
 agentClient.revokeToken( "ci" );
 ```
 
-The same list, create and revoke are in the **Tokens** panel of the [web page](../conventions/web-ui.md) (shown to admins on a server that allows it). A `chat` token gets `403`. Leave `manageTokens` off and the routes do not exist.
+The same list, create and revoke are on the **Tokens** tab of the [web app](../conventions/web-ui.md)'s Access page (`<path>/access/tokens`, shown to admins on a server that allows it). A `chat` token gets `403`. Leave `manageTokens` off and the routes do not exist.
 
 ## Every route
 

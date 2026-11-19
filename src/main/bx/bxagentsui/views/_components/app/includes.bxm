@@ -26,7 +26,10 @@
 		var root = document.documentElement;
 		try {
 			var mode = localStorage.getItem( "bxagents_webui_theme" );
-			if ( mode === "dark" || mode === "light" ) { root.setAttribute( "data-theme", mode ); }
+			if ( mode !== "dark" && mode !== "light" ) {
+				mode = window.matchMedia && window.matchMedia( "(prefers-color-scheme: dark)" ).matches ? "dark" : "light";
+			}
+			root.setAttribute( "data-theme", mode );
 			var look = JSON.parse( localStorage.getItem( "bxagents_webui_appearance" ) || "{}" );
 			var sizes = { small: "0.85rem", large: "1.05rem" };
 			if ( sizes[ look.size ] ) { root.style.setProperty( "--font-size", sizes[ look.size ] ); }

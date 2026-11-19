@@ -73,7 +73,7 @@ class {
 }
 ```
 
-After `bxAgents build && bxAgents serve`, the agent is reachable at `http://localhost:8080/chat` - a real static chat page backed by a generated SQLite-based conversation store. No `apiKeyEnvVar`/`users` are configured out of the box, so the page is open by default; see [The web chat UI](conventions/web-ui.md) for locking it down.
+After `bxAgents build && bxAgents serve`, the agent is reachable at `http://localhost:8080/chat` - the web app (a chat and the pages around it) backed by a generated SQLite-based conversation store. No `apiKeyEnvVar`/`users` are configured out of the box, so the page is open by default; see [The web chat UI](conventions/web-ui.md) for locking it down.
 
 ### `slack-bot`
 

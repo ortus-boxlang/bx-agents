@@ -109,7 +109,7 @@ println( made.token );        // se muestra una vez; el servidor guarda solo una
 client.revokeToken( "ci" );
 ```
 
-La misma lista, creación y revocación están en el panel **Tokens** de la [página web](../conventions/web-ui.md) (se muestra a los admins en un servidor que lo permite). Un token `chat` recibe `403`. Sin `manageTokens`, las rutas no existen.
+La misma lista, creación y revocación están en la pestaña **Tokens** de la página Access de la [app web](../conventions/web-ui.md) (`<path>/access/tokens`, se muestra a los admins en un servidor que lo permite). Un token `chat` recibe `403`. Sin `manageTokens`, las rutas no existen.
 
 ## Todas las rutas
 

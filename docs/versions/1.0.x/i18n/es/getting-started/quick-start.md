@@ -139,7 +139,7 @@ Si creaste el andamiaje con `--template=webui-chat`, `bxAgents serve` sirve tamb
 
 ![La web app: el menú de la izquierda, una conversación con una llamada a una tool y una respuesta con formato, y el selector de modelo en la cabecera](../assets/webui/webui-chat.png)
 
-Cada página se describe en la [guía de la web app](../conventions/web-ui.md#las-páginas).
+Cada página tiene su propia dirección bajo `/chat` (`/chat/routines`, `/chat/settings`, ...), y una dirección allí que no es ninguna página responde `404`. Cada página se describe en la [guía de la web app](../conventions/web-ui.md#las-páginas).
 
 ## 6. Inspecciona, empaqueta, despliega
 

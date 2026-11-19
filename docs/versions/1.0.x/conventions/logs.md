@@ -60,7 +60,7 @@ bxAgents logs gateways --follow --connect=https://agent.example.com --token=$ADM
 
 `--follow` keeps printing new lines until Ctrl+C, and `--ui` opens a viewer with a tab per log, the level (`l`), a search (`/`), scrolling and live lines (keys in the [CLI reference](../cli-reference.md#logs)). `--connect=URL` reads a served agent's logs over its API with an admin token. In the terminal chat, `/logs` and `/logs <area>` print them too.
 
-**In the web page**, for an admin, the menu has a **Logs** page and a **Gateways** page (see [the web UI](web-ui.md#logs-and-gateways)). A red count on the **Logs** item says how many sources logged an error since the app started.
+**In the web page**, for an admin, the menu has a **Logs** page and a **Gateways** page (see [the web UI](web-ui.md#logs-and-gateways)). The Logs page has a tab for each log, with a red chip when it logged errors since the app started, a level filter, a search, a line count and a **Live** switch: with it on, new lines show as they are written (over `GET /logs/stream`). The tab and the search are in the address, `<path>/logs/gateways?q=telegram`, and **Open log** on the Gateways page links there.
 
 **Over the API**, for an admin: `GET /logs` lists the logs and how many sources logged an error since the app started, and `GET /logs?area=gateways&tail=200&level=warn&q=text` gives lines. `GET /logs/stream?area=gateways&level=warn&q=text` follows one live: an event stream of `lines` frames (`{ area, lines }`, only lines written after it opened) and a `reset` frame when the file was rotated; the server looks at the file every second and ends the stream after ten minutes. The client has `logs()` and `logsStream( area, onEvent, level, q )`. See [the agent API](agent-bx.md).
 

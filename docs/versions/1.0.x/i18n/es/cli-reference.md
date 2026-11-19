@@ -574,11 +574,11 @@ Cada comando con barra se escribe una sola vez, como una clase pequeña que resp
 | Dónde | Cómo se usan |
 |---|---|
 | Chat en la terminal | Escribe `/`, como arriba |
-| [Página web](conventions/web-ui.md#comandos-con-barra) | Escribe `/`: aparece un menú con los comandos y `Tab` completa uno |
+| [Página web](conventions/web-ui.md#comandos-con-barra) | Escribe `/` (o pulsa el botón del rayo): aparece un menú con los comandos y `Tab` completa uno |
 | [Plataformas de chat](conventions/gateways/index.md#comandos-en-un-gateway) (Telegram, Slack, ...) | Escribe el comando como un mensaje. Hay un conjunto seguro activado por defecto; un proyecto puede ampliarlo o apagarlo |
 | Un servidor por HTTP | `GET /__bxagents/commands` y `POST /__bxagents/command`, ver [Control de ejecuciones](conventions/agent-bx.md#control-de-ejecucion) |
 
-El tamaño del contexto también está siempre a la vista: la fila de ayuda bajo la caja de mensaje empieza con `ctx ~12.4k / 128k 9%` (solo `ctx ~12.4k` cuando el proyecto no indica la ventana), y se actualiza antes de cada prompt, es decir, tras cada mensaje, `/clear`, `/compact`, `/resume` y cualquier cambio en tus notas. La página web muestra lo mismo en su encabezado; púlsalo para ver el desglose. Las cifras son estimaciones, caracteres divididos entre cuatro (lo que hace `aiTokens()` de bx-ai), útiles para ver qué parte es grande y no para una factura exacta. Las herramientas de los servidores MCP se obtienen al empezar una ejecución y no se cuentan.
+El tamaño del contexto también está siempre a la vista: la fila de ayuda bajo la caja de mensaje empieza con `ctx ~12.4k / 128k 9%` (solo `ctx ~12.4k` cuando el proyecto no indica la ventana), y se actualiza antes de cada prompt, es decir, tras cada mensaje, `/clear`, `/compact`, `/resume` y cualquier cambio en tus notas. La página web muestra lo mismo en la barra sobre la conversación; pulsa el anillo para ver el desglose. Las cifras son estimaciones, caracteres divididos entre cuatro (lo que hace `aiTokens()` de bx-ai), útiles para ver qué parte es grande y no para una factura exacta. Las herramientas de los servidores MCP se obtienen al empezar una ejecución y no se cuentan.
 
 `/name`, `/fork` y `/export` funcionan en la terminal y en la página web (donde `/export` entrega el archivo al navegador para guardarlo, y la página tiene los botones **Fork** y **Export**). `/copy`, `/record`, `/profile`, `/default` y `/exit` actúan sobre tu propia máquina o sobre el modelo de tu propia sesión, así que se quedan en la terminal.
 
@@ -911,6 +911,7 @@ bxAgents logs [area] [--follow | --ui] --connect=URL [--token=TOKEN] [--api-path
 - `--ui` abre un visor a pantalla completa: una pestaña por log (Izquierda y Derecha, o Tab), `l` para el nivel (todos, warn, error), `/` para buscar (Enter lo guarda, Esc lo descarta), las flechas, Re Pág, Av Pág e Inicio para desplazarse (la vista se queda quieta mientras llegan líneas) y Fin para volver a seguir las más nuevas, `q` para salir. Sin terminal (una tubería, CI) sigue el log en su lugar.
 - `--connect` lee un agente servido por su [API](guides/agent-api.md) en vez de los archivos de este proyecto: `GET /logs`, y `GET /logs/stream` para `--follow`. Necesita un token de admin (`--token`, o `BXAGENTS_TOKEN`), y `--api-path` cuando el agente sirve su API en otra ruta. Con `--ui` lee el log de nuevo cada 2 segundos.
 - En el chat del terminal, `/logs` lista los logs y `/logs <área> [--tail=N] [--level=warn] [--grep=texto]` imprime las últimas líneas (30 salvo que `--tail` diga otra cosa); con `--connect` necesita un token de admin.
+- En la app web, un admin tiene los mismos logs en la [página Logs](conventions/web-ui.md#logs), con un interruptor **Live** que sigue las líneas nuevas.
 - Los secretos nunca están en un log, ni lo que dijo una persona.
 
 ### `routines`
