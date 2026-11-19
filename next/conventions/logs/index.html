@@ -279,8 +279,12 @@
 bxAgents logs gateways                            # the last 100 lines of the gateways log
 bxAgents logs gateways --tail=500 --level=warn --grep=telegram
 bxAgents logs api --json
+bxAgents logs gateways --follow --level=warn         # the last lines, then each new one as it is written
+bxAgents logs --ui                                # a full-screen viewer: a tab per log, level, search, live lines
+bxAgents logs gateways --follow --connect=https://agent.example.com --token=$ADMIN_TOKEN   # a deployed agent
 </code></pre>
 <p><code>--level</code> shows that level and anything more serious (<code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code>), <code>--grep</code> keeps the lines that contain the text (case does not matter), and <code>--tail</code> is how many lines, up to 1000. Only the end of a log is read, so a big log is as quick as a small one.</p>
+<p><code>--follow</code> keeps printing new lines until Ctrl+C, and <code>--ui</code> opens a viewer with a tab per log, the level (<code>l</code>), a search (<code>/</code>), scrolling and live lines (keys in the <a href="/next/cli-reference/index.html#logs">CLI reference</a>). <code>--connect=URL</code> reads a served agent's logs over its API with an admin token. In the terminal chat, <code>/logs</code> and <code>/logs &lt;area&gt;</code> print them too.</p>
 <p><strong>In the web page</strong>, for an admin, the menu has a <strong>Logs</strong> page and a <strong>Gateways</strong> page (see <a href="/next/conventions/web-ui/index.html#logs-and-gateways">the web UI</a>). A red count on the <strong>Logs</strong> item says how many sources logged an error since the app started.</p>
 <p><strong>Over the API</strong>, for an admin: <code>GET /logs</code> lists the logs and how many sources logged an error since the app started, and <code>GET /logs?area=gateways&amp;tail=200&amp;level=warn&amp;q=text</code> gives lines. <code>GET /logs/stream?area=gateways&amp;level=warn&amp;q=text</code> follows one live: an event stream of <code>lines</code> frames (<code>{ area, lines }</code>, only lines written after it opened) and a <code>reset</code> frame when the file was rotated; the server looks at the file every second and ends the stream after ten minutes. The client has <code>logs()</code> and <code>logsStream( area, onEvent, level, q )</code>. See <a href="/next/conventions/agent-bx/index.html">the agent API</a>.</p>
 <h2 id="gateways"><a href="#gateways" id="gateways" name="gateways" class="anchor"></a>Gateways</h2>

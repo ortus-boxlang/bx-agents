@@ -1079,10 +1079,17 @@ git          Git                               no sign in          medium  2026-
 <h3 id="logs"><a href="#logs" id="logs" name="logs" class="anchor"></a><code>logs</code></h3>
 <p>The agent's logs, kept in the <code>logs/</code> folder of the <a href="/next/conventions/data/index.html">data home</a>. See <a href="/next/conventions/logs/index.html">logs</a>.</p>
 <pre><code class="language-bash">bxAgents logs [area] [--tail=N] [--level=warn] [--grep=TEXT] [--json]
+bxAgents logs &lt;area&gt; --follow [--tail=N] [--level=warn] [--grep=TEXT]
+bxAgents logs --ui [area]
+bxAgents logs [area] [--follow | --ui] --connect=URL [--token=TOKEN] [--api-path=/where]
 </code></pre>
 <ul>
 <li>Without an area it lists the logs and their size. The areas are <code>agent</code>, <code>gateways</code>, <code>routines</code>, <code>heartbeat</code> and <code>api</code>.</li>
 <li>With one it prints the last lines: <code>--tail</code> is how many (default 100, up to 1000), <code>--level</code> the least serious level to show, and <code>--grep</code> a word a line must contain.</li>
+<li><code>--follow</code> prints the last lines (20 unless <code>--tail</code> says), then each new line as it is written, with the same filters, until Ctrl+C. It is flushed line by line, so it can be piped (<code>bxAgents logs gateways --follow | grep slack</code>), and it says when the file was rotated.</li>
+<li><code>--ui</code> opens a full-screen viewer: a tab per log (Left and Right, or Tab), <code>l</code> for the level (all, warn, error), <code>/</code> to search (Enter keeps it, Esc drops it), the arrows, Page Up, Page Down and Home to scroll back (the view stays put while new lines arrive) and End to follow the newest again, <code>q</code> to leave. New lines show as they are written. Without a terminal (a pipe, CI) it follows instead.</li>
+<li><code>--connect</code> reads a served agent over its <a href="/next/guides/agent-api/index.html">API</a> instead of this project's files: <code>GET /logs</code>, and <code>GET /logs/stream</code> for <code>--follow</code>. It needs an admin token (<code>--token</code>, or <code>BXAGENTS_TOKEN</code>), and <code>--api-path</code> when the agent serves its API elsewhere. With <code>--ui</code> it reads the log again every 2 seconds.</li>
+<li>In the terminal chat, <code>/logs</code> lists the logs and <code>/logs &lt;area&gt; [--tail=N] [--level=warn] [--grep=text]</code> prints the last lines (30 unless <code>--tail</code> says); over <code>--connect</code> it takes an admin token.</li>
 <li>Secrets are never in a log, and neither is what a person said.</li>
 </ul>
 <h3 id="models"><a href="#models" id="models" name="models" class="anchor"></a><code>models</code></h3>
