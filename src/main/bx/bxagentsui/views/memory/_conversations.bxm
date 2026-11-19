@@ -1,0 +1,29 @@
+<!--- The messages each agent keeps of each conversation: clear one, or (admin) all of an agent's. Inside memoryPage. --->
+<bx:output>
+<p class="pg-note">The messages each agent keeps of each conversation. Every agent has its own, so a sub-agent you talk to directly keeps its own thread.</p>
+<div class="pg-actions logs-controls">
+	<label x-show="agents.length > 1">Agent
+		<select aria-label="Agent whose conversation memory to show" x-model="agentKey">
+			<template x-for="a in agents" :key="a.value + a.label"><option :value="a.value" x-text="a.label" :selected="a.value === agentKey"></option></template>
+		</select>
+	</label>
+	<button type="button" class="btn danger" x-show="admin && convTotal" @click="clearAllConvs()" x-text="'Clear all conversation memory' + ( agents.length > 1 ? ' of this agent' : '' )"></button>
+</div>
+<p class="pg-error" role="alert" x-show="convFailed" x-text="convFailed" x-cloak></p>
+<p class="pg-note" x-show="!convFailed && !convs.length">No conversations with this agent yet.</p>
+<ul class="plain-list rows" aria-label="Conversation memory">
+	<template x-for="conv in convs" :key="conv.id">
+		<li class="pg-actions">
+			<span class="grow" x-text="conv.title || 'Untitled'"></span>
+			<span class="chip" x-text="( conv.messageCount || 0 ) + ' messages'"></span>
+			<span class="pg-note" x-text="$fmt.stampText( conv.updatedAt )"></span>
+			<button type="button" class="btn danger" @click="clearConv( conv )" :disabled="!conv.messageCount" :aria-label="'Clear the memory of ' + ( conv.title || 'Untitled' )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "broom" } )# Clear</button>
+		</li>
+	</template>
+</ul>
+<p class="pg-note" x-show="convTotal > convs.length" x-cloak>
+	<span x-text="'Showing the newest ' + convs.length + ' of ' + convTotal + '.'"></span>
+	<a :href="allConvsUrl">All of them in Conversations</a>
+</p>
+<p class="pg-note">Recall search over past conversations is planned.</p>
+</bx:output>

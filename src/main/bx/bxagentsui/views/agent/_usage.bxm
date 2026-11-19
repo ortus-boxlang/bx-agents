@@ -1,0 +1,36 @@
+<!--- Tokens and calls by model and by day, for a period, or how to turn usage on. Inside agentPage. --->
+<bx:output>
+<div class="pg-actions logs-controls">
+	<select aria-label="Period" x-model="days" :disabled="usage && !usage.enabled">
+		<option value="7">Last 7 days</option>
+		<option value="30">Last 30 days</option>
+		<option value="90">Last 90 days</option>
+	</select>
+</div>
+<template x-if="usage && !usage.enabled">
+	<div class="card">
+		<h2 class="card-title">Usage is off</h2>
+		<p x-text="usage.howTo || ''"></p>
+		<p class="pg-note">Only small counts are kept here. A longer history, with charts, comes with the cloud version.</p>
+	</div>
+</template>
+<template x-if="usage && usage.enabled">
+	<div>
+		<div class="pg-actions logs-controls">
+			<span class="chip" x-text="usage.calls + ' calls'"></span>
+			<span class="chip" x-text="usage.totalTokens + ' tokens'"></span>
+			<span class="chip" x-text="usage.promptTokens + ' in, ' + usage.completionTokens + ' out'"></span>
+		</div>
+		<h2>By model</h2>
+		<p class="pg-note" x-show="!( usage.byModel || [] ).length">Nothing recorded in this period.</p>
+		<div x-show="( usage.byModel || [] ).length">
+			#view( view = "_components/ui/table", module = "bxagentsui", args = { caption : "By model", columns : [ "Model", "Calls", "Prompt", "Reply", "Total" ], rows : "usage.byModel || []", item : "r", rowView : "agent/_usage-row" } )#
+		</div>
+		<h2>By day</h2>
+		<p class="pg-note" x-show="!( usage.byDay || [] ).length">Nothing recorded in this period.</p>
+		<div x-show="( usage.byDay || [] ).length">
+			#view( view = "_components/ui/table", module = "bxagentsui", args = { caption : "By day", columns : [ "Day", "Calls", "Prompt", "Reply", "Total" ], rows : "usage.byDay || []", item : "r", rowView : "agent/_usage-row" } )#
+		</div>
+	</div>
+</template>
+</bx:output>

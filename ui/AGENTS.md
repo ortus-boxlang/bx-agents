@@ -64,7 +64,7 @@ The app partials (`views/_components/app/`) are `includes`, `sprite`, `sidebar` 
 | `$toast.success( text )`, `$toast.error( text )` | A short message |
 | `$md( text )` | Markdown as safe HTML: the only input `x-html` takes |
 | `$fmt.stampText`, `dayText`, `bytesText`, `countLabel` | Dates, sizes and counts, the same everywhere |
-| `$store.session` | `can( capability )`, `capabilities`, `ready`; `await loaded()` before deciding by a capability in `init()` |
+| `$store.session` | `can( capability )`, `capabilities`, `agentName`, `agents`, `ready`; `await loaded()` before deciding by a capability in `init()` |
 | `$store.theme`, `$store.nav` | Light or dark; the folded menu and the phone drawer |
 | `$store.appearance` | Accent, text size, density (same key and format as the current page) |
 
@@ -78,11 +78,14 @@ The app partials (`views/_components/app/`) are `includes`, `sprite`, `sidebar` 
 | Registry (`/registry/:tab`) | `Registry.index` | `views/registry/` | `components/registry/RegistryPage.js` |
 | Vault (`?ask=&scope=&why=`) | `Vault.index` | `views/vault/` | `components/vault/VaultPage.js` |
 | Conversations (`?q=&agent=&source=`) | `Conversations.index` | `views/conversations/` | `components/conversations/ConversationsPage.js` |
+| Memory | `Memory.index` | `views/memory/` | `components/memory/MemoryPage.js` |
+| Agent (`/agent/:tab`) | `Agent.index` | `views/agent/` | `components/admin/AgentPage.js` |
 
 A page handler is one `index()` that calls `showPage( event, prc, id, view )` (BaseHandler): 404 for an unknown page,
 403 for an admin page to anybody else. Server values a component needs go in `data-*` attributes, read in `init()`.
 A tab or filter the address should keep: `keepInAddress( path, query )` (`utils/address.js`). A file from the API:
-`downloadFile( $api, path, name )` (`utils/download.js`). Until the chat moves here, links to it use `config.chatUrl`.
+`downloadFile( $api, path, name )` (`utils/download.js`). Until the chat moves here, go to it with `openInChat` or
+`talkTo` (`utils/chat.js`), which use `config.chatUrl`.
 
 ## Commands (from `ui/`)
 
