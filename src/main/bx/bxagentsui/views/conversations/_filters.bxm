@@ -1,0 +1,32 @@
+<!--- The filters: title, dates, owner (admin), page size, and chips per agent and source with their counts. Inside
+      conversationsPage. --->
+<bx:output>
+<div class="pg-actions logs-controls">
+	#view( view = "_components/ui/search", module = "bxagentsui", args = { label : "Search conversation titles", model : "state.q", debounce : 300 } )#
+	<label>From <input type="date" aria-label="From this day" x-model="state.since"></label>
+	<label>Until <input type="date" aria-label="Until this day" x-model="state.before"></label>
+	<select aria-label="Owner" x-show="admin" x-cloak @change="state.all = $event.target.value === 'all'">
+		<option value="">Mine</option>
+		<option value="all">Everyone's</option>
+	</select>
+	<select aria-label="Conversations per page" x-model.number="state.limit">
+		<option value="25">25 per page</option>
+		<option value="50">50 per page</option>
+		<option value="100">100 per page</option>
+	</select>
+</div>
+<div class="pg-actions logs-controls" aria-label="Filter by agent and source" x-show="agentChips.length || sourceChips.length" x-cloak>
+	<template x-if="agentChips.length">
+		<button type="button" class="chip pick" :class="{ ok: !state.agent }" :aria-pressed="( !state.agent ).toString()" @click="state.agent = ''; refilter()" title="Agent">Any agent</button>
+	</template>
+	<template x-for="chip in agentChips" :key="'a' + chip.name">
+		<button type="button" class="chip pick" :class="{ ok: state.agent === chip.name }" :aria-pressed="( state.agent === chip.name ).toString()" @click="pickAgent( chip.name )" title="Agent" x-text="chip.name + ' (' + chip.count + ')'"></button>
+	</template>
+	<template x-if="sourceChips.length">
+		<button type="button" class="chip pick" :class="{ ok: state.source === null }" :aria-pressed="( state.source === null ).toString()" @click="state.source = null; refilter()" title="Source">Any source</button>
+	</template>
+	<template x-for="chip in sourceChips" :key="'s' + chip.name">
+		<button type="button" class="chip pick" :class="{ ok: state.source === chip.name }" :aria-pressed="( state.source === chip.name ).toString()" @click="pickSource( chip.name )" title="Source" x-text="sourceName( chip.name ) + ' (' + chip.count + ')'"></button>
+	</template>
+</div>
+</bx:output>

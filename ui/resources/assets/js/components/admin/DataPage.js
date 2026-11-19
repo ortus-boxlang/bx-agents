@@ -1,3 +1,5 @@
+import { downloadFile } from "../../utils/download.js";
+
 /**
  * The Data and backups page (admin): where the agent keeps everything (GET /data), the backups (GET /data/backups), and
  * making, downloading and restoring one.
@@ -81,20 +83,7 @@ export function dataPage() {
 		 * @param {{ name: string }} backup The backup
 		 */
 		async download( backup ) {
-			try {
-				const res = await fetch( this.$api.url( "/data/backup?name=" + encodeURIComponent( backup.name ) ), { headers: this.$api.headers() } );
-				if ( !res.ok ) {
-					throw new Error( "download" );
-				}
-				const url = URL.createObjectURL( await res.blob() );
-				const link = document.createElement( "a" );
-				link.href = url;
-				link.download = backup.name;
-				document.body.appendChild( link );
-				link.click();
-				link.remove();
-				setTimeout( () => URL.revokeObjectURL( url ), 1000 );
-			} catch ( e ) {
+			if ( !await downloadFile( this.$api, "/data/backup?name=" + encodeURIComponent( backup.name ), backup.name ) ) {
 				this.$toast.error( "Could not download " + backup.name + "." );
 			}
 		},

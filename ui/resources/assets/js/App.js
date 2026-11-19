@@ -23,6 +23,10 @@ import { dataPage } from "./components/admin/DataPage.js";
 import { logsPage } from "./components/admin/LogsPage.js";
 import { gatewaysPage } from "./components/admin/GatewaysPage.js";
 import { settingsPage } from "./components/settings/SettingsPage.js";
+import { accessPage } from "./components/admin/AccessPage.js";
+import { registryPage } from "./components/registry/RegistryPage.js";
+import { vaultPage } from "./components/vault/VaultPage.js";
+import { conversationsPage } from "./components/conversations/ConversationsPage.js";
 
 // ============================================================
 // Plugins
@@ -47,6 +51,7 @@ Alpine.store( "confirm", confirm() );
 //   $api.get( path ) / $api.post( path, body )   { ok, status, data, error }, never throws
 //   $sse( path, { body, onEvent, signal } )       a stream of the agent API (POST /stream, /events, /resume)
 //   $confirm( { title, body, danger } )           Promise<boolean>
+//   $prompt( { title, label, value } )            Promise<string|null>, null on Cancel
 //   $toast.success( text ) / $toast.error( text )
 //   $md( text )                                   Markdown as safe HTML, the only input x-html takes
 //   $fmt.stampText / dayText / bytesText / countLabel
@@ -54,6 +59,7 @@ Alpine.store( "confirm", confirm() );
 Alpine.magic( "api", () => api );
 Alpine.magic( "sse", () => ( path, options ) => streamEvents( api.url( path ), { ...options, headers: api.headers() } ) );
 Alpine.magic( "confirm", () => question => Alpine.store( "confirm" ).ask( question ) );
+Alpine.magic( "prompt", () => question => Alpine.store( "confirm" ).prompt( question ) );
 Alpine.magic( "toast", () => Alpine.store( "toast" ) );
 Alpine.magic( "md", () => renderMarkdown );
 Alpine.magic( "fmt", () => format );
@@ -66,6 +72,10 @@ Alpine.data( "dataPage", dataPage );
 Alpine.data( "logsPage", logsPage );
 Alpine.data( "gatewaysPage", gatewaysPage );
 Alpine.data( "settingsPage", settingsPage );
+Alpine.data( "accessPage", accessPage );
+Alpine.data( "registryPage", registryPage );
+Alpine.data( "vaultPage", vaultPage );
+Alpine.data( "conversationsPage", conversationsPage );
 Alpine.data( "kitPage", kitPage );
 
 window.Alpine = Alpine;

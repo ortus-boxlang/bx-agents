@@ -1,3 +1,5 @@
+import { keepInAddress } from "../../utils/address.js";
+
 /**
  * The Logs page (admin): one tab per area (GET /logs), the lines of one (GET /logs?area&tail&level&q), a level filter, a
  * search and a refresh every 5 seconds when asked. The area and a search to start with come from the address
@@ -96,7 +98,7 @@ export function logsPage() {
 		 */
 		open( id ) {
 			this.area = id;
-			history.replaceState( null, "", this.$store.session.config.basePath + "/logs/" + id );
+			keepInAddress( this.$store.session.config.basePath + "/logs/" + id );
 			this.loadLines();
 		},
 

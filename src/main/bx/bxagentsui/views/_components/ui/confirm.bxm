@@ -1,6 +1,7 @@
 <!--- Confirm Component
-    The one question dialog of the app: $confirm( { title, body, danger } ) opens it and answers true or false. In the
-    layout once. Escape and Cancel answer false.
+    The one question dialog of the app: $confirm( { title, body, danger } ) answers true or false, and
+    $prompt( { title, label, value } ) asks for a line of text (null on Cancel). In the layout once. Escape and Cancel
+    answer no.
 
     Usage:
         #view( view = "_components/ui/confirm", module = "bxagentsui" )#
@@ -9,13 +10,18 @@
 <dialog class="dlg" id="confirmDialog" aria-labelledby="confirmTitle" aria-describedby="confirmBody" x-data
 	x-effect="$store.confirm.open ? ( $el.open || $el.showModal() ) : ( $el.open && $el.close() )"
 	@close="$store.confirm.open && $store.confirm.answer( false )">
-	<div class="dlg-form">
+	<form class="dlg-form" method="dialog" @submit.prevent="$store.confirm.answer( true )">
 		<div class="dlg-head"><h2 id="confirmTitle" x-text="$store.confirm.title"></h2></div>
 		<p id="confirmBody" class="pg-note" x-text="$store.confirm.body" x-show="$store.confirm.body"></p>
+		<template x-if="$store.confirm.input">
+			<label class="field"><span x-text="$store.confirm.label"></span>
+				<input type="text" id="confirmInput" x-model="$store.confirm.value" maxlength="200" autocomplete="off" x-init="$nextTick( () => $el.select() )">
+			</label>
+		</template>
 		<div class="pg-actions">
-			<button type="button" class="btn" :class="$store.confirm.danger ? 'danger' : 'primary'" id="confirmYes" @click="$store.confirm.answer( true )" x-text="$store.confirm.yes"></button>
+			<button type="submit" class="btn" :class="$store.confirm.danger ? 'danger' : 'primary'" id="confirmYes" x-text="$store.confirm.yes"></button>
 			<button type="button" class="btn" id="confirmNo" @click="$store.confirm.answer( false )">Cancel</button>
 		</div>
-	</div>
+	</form>
 </dialog>
 </bx:output>

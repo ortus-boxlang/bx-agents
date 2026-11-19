@@ -1,0 +1,34 @@
+<!--- Conversations: the whole list, paged and filtered by the server. State and actions: conversationsPage
+      (resources/assets/js/components/conversations/ConversationsPage.js). Filters come from the address as data. --->
+<bx:output>
+<div class="pg" x-data="conversationsPage" data-q="#encodeForHTML( prc.conversations.q )#" data-source="#encodeForHTML( prc.conversations.source )#"
+	data-has-source="#prc.conversations.hasSource ? "true" : "false"#" data-agent="#encodeForHTML( prc.conversations.agent )#">
+	#view( view = "_components/ui/page-head", module = "bxagentsui", args = {
+		title   : "Conversations",
+		note    : "Your conversations, newest first. Filter by title, agent, source and date.",
+		actions : '<button type="button" class="btn primary" @click="newChat()">' & view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "plus" } ) & ' New chat</button>'
+	} )#
+	#view( view = "conversations/_filters", module = "bxagentsui" )#
+	<div class="card bulk" role="status" x-show="selected.length" x-cloak>
+		<div class="pg-actions">
+			<strong x-text="selected.length + ' selected'"></strong>
+			<button type="button" class="btn danger" @click="remove( selected )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "trash" } )# Delete selected</button>
+			<button type="button" class="btn" @click="selected = []">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "x" } )# Clear selection</button>
+		</div>
+	</div>
+	<p class="pg-error" role="alert" x-show="failed" x-text="failed" x-cloak></p>
+	<div x-show="!loading && !failed && !rows.length" x-cloak>
+		<p class="pg-note" x-text="filtered ? 'No conversation matches those filters.' : 'No conversations yet. Start one from Chat.'"></p>
+	</div>
+	<div x-show="rows.length" x-cloak>
+		#view( view = "conversations/_table", module = "bxagentsui" )#
+		<div class="pg-actions pager">
+			<span class="pg-note" role="status" x-text="showing"></span>
+			<div class="pg-actions">
+				<button type="button" class="btn" @click="page( -1 )" :disabled="state.offset === 0">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "caret-left" } )# Previous</button>
+				<button type="button" class="btn" @click="page( 1 )" :disabled="state.offset + rows.length >= total">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "caret-right" } )# Next</button>
+			</div>
+		</div>
+	</div>
+</div>
+</bx:output>

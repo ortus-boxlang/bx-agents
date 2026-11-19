@@ -1,0 +1,34 @@
+<!--- Vault: secrets the agent can use. State and actions: vaultPage (resources/assets/js/components/vault/VaultPage.js).
+      An ask from the agent comes from the address as data. --->
+<bx:output>
+<div class="pg" x-data="vaultPage" data-ask="#encodeForHTML( prc.vault.ask )#" data-scope="#encodeForHTML( prc.vault.scope )#" data-why="#encodeForHTML( prc.vault.why )#">
+	#view( view = "_components/ui/page-head", module = "bxagentsui", args = { title : "Vault", note : "Secrets the agent can use, such as API keys. Values are sealed and never shown again. Each secret says what it is for and which hosts it may go to." } )#
+	<template x-if="ask">
+		<div class="card ask" role="status">
+			<p>#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "key" } )#
+				<strong x-text="'The agent asked for ' + ask.name + '.'"></strong>
+				<span x-text="( ask.why ? ask.why.replace( /[.\s]+$/, '' ) + '. ' : '' ) + 'Type it below; it is not sent through the chat.'"></span>
+			</p>
+		</div>
+	</template>
+	#view( view = "_components/ui/tabs", module = "bxagentsui", args = {
+		label : "Whose secrets",
+		model : "scope",
+		tabs  : [ { id : "user", label : "Yours", icon : "user" }, { id : "agent", label : "The agent's", icon : "robot" } ]
+	} )#
+	<p class="pg-error" role="alert" x-show="failed" x-text="failed" x-cloak></p>
+	<p class="pg-note" x-show="!loading && !failed" x-cloak>
+		<span x-text="$fmt.countLabel( rows.length, 'secret' ) + '.'"></span>
+		<span x-show="keySource === 'file'">The key is a file beside the database: set BXAGENTS_VAULT_KEY for more protection.</span>
+	</p>
+	<p class="pg-note" x-show="!loading && !failed && !rows.length" x-cloak>No secrets yet.</p>
+	<ul class="plain-list" aria-label="Secrets">
+		<template x-for="secret in rows" :key="secret.scope + secret.name">
+			<li class="card">#view( view = "vault/_secret", module = "bxagentsui" )#</li>
+		</template>
+	</ul>
+	<p class="pg-note" x-show="!canWrite" x-cloak>The agent's secrets are shared by everyone. Changing them takes an admin.</p>
+	<div x-show="canWrite">#view( view = "vault/_add", module = "bxagentsui" )#</div>
+	<template x-if="activity">#view( view = "vault/_activity", module = "bxagentsui" )#</template>
+</div>
+</bx:output>

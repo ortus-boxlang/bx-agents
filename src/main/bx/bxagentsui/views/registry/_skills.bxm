@@ -1,0 +1,28 @@
+<!--- The skills, each with a reader. Inside registryPage. --->
+<bx:output>
+<div x-show="loaded.skills && !failed && !skills.length" x-cloak>
+	#view( view = "_components/ui/empty", module = "bxagentsui", args = { icon : "lightbulb", title : "No skills yet", text : "Ask the agent to save one after a task worth repeating, or add a SKILL.md under skills/ in the project." } )#
+</div>
+<div class="grid">
+	<template x-for="skill in skills" :key="skill.name">
+		<article class="card">
+			<div class="pg-actions">
+				<strong x-text="skill.name"></strong>
+				<span class="chip" x-show="skill.origin"><svg class="i" aria-hidden="true"><use :href="skill.origin === 'agent' ? '##i-robot' : '##i-folder'"/></svg><span x-text="skill.origin === 'agent' ? 'Written by the agent' : 'In the project'"></span></span>
+			</div>
+			<p class="pg-note" x-text="skill.description || ''"></p>
+			<button type="button" class="btn" @click="read( skill )" :aria-label="'Read the skill ' + skill.name">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "book-open" } )# Read</button>
+		</article>
+	</template>
+</div>
+<template x-if="reading">
+	<section class="card reader" aria-label="Skill reader" tabindex="-1" x-init="$nextTick( () => { $el.scrollIntoView( { block: 'nearest' } ); $el.focus( { preventScroll: true } ) } )">
+		<div class="card-head">
+			<h2 x-text="reading.name"></h2>
+			<button type="button" class="btn" @click="reading = null">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "x" } )# Close</button>
+		</div>
+		<p class="pg-note" x-show="reading.note" x-text="reading.note"></p>
+		<pre x-text="reading.text"></pre>
+	</section>
+</template>
+</bx:output>
