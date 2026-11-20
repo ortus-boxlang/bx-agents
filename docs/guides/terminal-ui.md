@@ -10,6 +10,14 @@ tags: [guides, cli, tui]
 
 Two commands draw a full terminal screen: [`bxAgents chat`](../cli-reference.md#chat), where you talk to your agent, and [`bxAgents new`](new-wizard.md), where you answer questions and get a project. This page is the tour. Every command and flag is in the [CLI reference](../cli-reference.md); every slash command is in [Slash commands](slash-commands.md); a guided first session is in [Chat walkthroughs](chat-walkthrough.md).
 
+<video controls preload="metadata" poster="/assets/video/terminal-trailer-poster.png" style="max-width:100%">
+  <source src="/assets/video/terminal-trailer.mp4" type="video/mp4">
+  <source src="/assets/video/terminal-trailer.webm" type="video/webm">
+  <track kind="captions" src="/assets/video/terminal-trailer.vtt" srclang="en" label="English" default>
+</video>
+
+*The trailer, under two minutes, narrated, with captions: the chat, the commands, the keys, conversations, files, models, prompt styles, notes and the vault, export and record, and the wizard. The answers come from a scripted demo model, so they are canned.*
+
 <video controls preload="metadata" poster="/assets/video/chat-terminal-poster.png" style="max-width:100%">
   <source src="/assets/video/chat-terminal.mp4" type="video/mp4">
   <source src="/assets/video/chat-terminal.webm" type="video/webm">

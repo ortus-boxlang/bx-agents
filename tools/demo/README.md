@@ -17,6 +17,7 @@ from the system.
 | `demos/chat-tour.json` | The keystrokes of the chat tour: `/keys`, `/prompt`, `/context`, `/name`, `/fork`, `/sessions` |
 | `demos/wizard.json` | The keystrokes of the `bxAgents new` wizard: a single agent on OpenAI with web search, saved memory and a web chat |
 | `demos/model.json` | The canned answers of the scripted model |
+| `terminal/trailer/` | The narrated trailer of the terminal chat and the `new` wizard: scenes, recorder, voice, cards, compose and mix. See its README |
 | `webui/` | The web UI walkthrough video and doc screenshots: a demo app (`project/`), `narrate.py` (voice, Kokoro) and `mix.bxs` (music and mix, [bx-audio](https://github.com/ortus-boxlang/bx-audio)), `capture.js` (Playwright). See `webui/README.md` |
 
 ## What you need

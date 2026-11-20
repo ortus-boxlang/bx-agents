@@ -1,0 +1,77 @@
+/**
+ * Makes the voice-over of the trailer. The voice is the one every demo video uses, Kokoro af_heart (../../narration/voice.json), made by the
+ * shared ../../narration/narrate.py, which writes one wav per name. So each sentence of each scene goes in as its own name, and this script
+ * joins them with a short pause and works out the caption cues, which the mix and the captions need:
+ *
+ *   boxlang voice.bxs --out=out/voice --kokoro=<folder with the model and voices files> [--python=<python with kokoro-onnx>] [--only=hook,chat]
+ *
+ * Writes out/voice/<id>.wav   the scene's line, mono
+ *        out/voice/<id>.json  { id, seconds, cues : [ { start, end, text } ] }
+ *
+ * The one piece that is not BoxLang is the speech engine itself: Kokoro only exists for Python. bx-audio has audioSpeak, with Piper voices,
+ * which is a different voice. Needs bx-audio. The python, `pip install kokoro-onnx soundfile`, is in ../../narration/narrate.py's header.
+ */
+opts = server.cli.parsed.options
+here = getDirectoryFromPath( getCurrentTemplatePath() )
+out = expandPath( opts.out ?: "out/voice" )
+python = opts.python ?: "python3"
+kokoro = expandPath( opts.kokoro ?: "." )
+only = len( opts.only ?: "" ) ? opts.only.listToArray() : []
+narrate = expandPath( here & "../../narration/narrate.py" )
+gap = 0.32
+
+function run( required array command ) {
+	var pb = new java.lang.ProcessBuilder( arguments.command.map( a => javaCast( "string", a ) ) )
+	pb.redirectErrorStream( true )
+	pb.environment().remove( "JAVA_TOOL_OPTIONS" )
+	var process = pb.start()
+	var output = toString( process.getInputStream().readAllBytes(), "UTF-8" )
+	return { exit : process.waitFor(), output : output }
+}
+
+function sentences( required string text ) {
+	return arguments.text.reReplace( "([.!?])\s+", "\1" & char( 10 ), "all" ).listToArray( char( 10 ) ).map( s => trim( s ) ).filter( s => len( s ) )
+}
+
+function speak() {
+	directoryCreate( out & "/sentences", true, true )
+	var scenes = jsonDeserialize( fileRead( here & "scenes.json" ) ).filter( s => len( s.text ?: "" ) && ( !only.len() || only.contains( s.id ) ) )
+	var narration = {}
+	for ( var scene in scenes ) {
+		var n = 0
+		for ( var sentence in sentences( scene.text ) ) {
+			narration[ scene.id & "-" & ++n ] = sentence
+		}
+	}
+	fileWrite( out & "/narration.json", jsonSerialize( narration ) )
+	var result = run( [ python, "-I", narrate, kokoro, out & "/narration.json", out & "/sentences" ] )
+	if ( result.exit != 0 ) {
+		println( result.output )
+		java.lang.System::exit( 1 )
+	}
+
+	for ( var scene in scenes ) {
+		var pieces = []
+		var cues = []
+		var at = 0
+		var n = 0
+		var info = {}
+		for ( var sentence in sentences( scene.text ) ) {
+			var audio = audioLoad( out & "/sentences/" & scene.id & "-" & ++n & ".wav" )
+			info = audioInfo( audio )
+			if ( pieces.len() ) {
+				pieces.append( audioSilence( scene.gap ?: gap, info.channels, info.sampleRate ) )
+				at += scene.gap ?: gap
+			}
+			cues.append( { start : round( at * 1000 ) / 1000, end : round( ( at + info.seconds ) * 1000 ) / 1000, text : sentence } )
+			pieces.append( audio )
+			at += info.seconds
+		}
+		var line = audioConcat( pieces )
+		audioSave( line, out & "/" & scene.id & ".wav" )
+		fileWrite( out & "/" & scene.id & ".json", jsonSerialize( { id : scene.id, seconds : audioInfo( line ).seconds, cues : cues } ) )
+		println( scene.id & ": " & numberFormat( audioInfo( line ).seconds, "0.0" ) & " s" )
+	}
+}
+speak()
+java.lang.System::exit( 0 )
