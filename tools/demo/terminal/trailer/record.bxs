@@ -1,0 +1,162 @@
+/**
+ * Records every terminal scene of scenes.json, each in its own pseudo terminal so the screen starts clean, and renders it to out/scenes/<id>.mp4.
+ *
+ *   boxlang record.bxs --boxlang-jar=<boxlang.jar> --module=<built module folder> --out=out [--home=<the "user's" home>] [--work=<scratch>] [--only=hook,chat] [--fps=24] [--fresh]
+ *
+ * It needs the demo agent from ../../webui/trailer/project, the scripted model (../../fakellm.bxs with model.json), `script` for the pseudo
+ * terminal (drive.bxs) and ffmpeg (render.bxs). Port 8080 must be free: the demo agent's profiles use the `openai-compatible` provider.
+ * `--home` is the folder the agent runs as the home of the user: a short one such as /home/dev keeps the paths in /export and /record short,
+ * and the folder in the prompt reads ~/acme-support. Clear <home>/.bxagents before recording again, or the notes and the vault already hold
+ * what the scene adds.
+ */
+opts = server.cli.parsed.options
+here = getDirectoryFromPath( getCurrentTemplatePath() )
+demo = expandPath( here & "../../" )
+jar = expandPath( opts[ "boxlang-jar" ] )
+moduleDir = expandPath( opts.module )
+out = expandPath( opts.out ?: "out" )
+work = expandPath( opts.work ?: ( out & "/work" ) )
+home = len( opts.home ?: "" ) ? expandPath( opts.home ) : work & "/home"
+only = len( opts.only ?: "" ) ? opts.only.listToArray() : []
+fps = opts.fps ?: "24"
+cols = 120
+rows = 28
+project = home & "/acme-support"
+binDir = home & "/bin"
+bxHome = work & "/boxlang-home"
+// The BoxLang that runs the module: its own JVM per command, so nothing leaks from this script's runtime
+bl = [ "java", "-Duser.name=dev", "-Duser.home=" & home, "-cp", jar, "ortus.boxlang.runtime.BoxRunner" ]
+env = { "BOXLANG_HOME" : bxHome, "HOME" : home }
+
+function start( required array command, string cwd = "", struct extraEnv = {}, string logFile = "" ) {
+	var pb = new java.lang.ProcessBuilder( arguments.command.map( a => javaCast( "string", a ) ) )
+	if ( len( arguments.cwd ) ) {
+		pb.directory( createObject( "java", "java.io.File" ).init( arguments.cwd ) )
+	}
+	pb.redirectErrorStream( true )
+	pb.environment().remove( "JAVA_TOOL_OPTIONS" )
+	for ( var name in env ) {
+		pb.environment().put( javaCast( "string", name ), javaCast( "string", env[ name ] ) )
+	}
+	for ( var name in arguments.extraEnv ) {
+		pb.environment().put( javaCast( "string", name ), javaCast( "string", arguments.extraEnv[ name ] ) )
+	}
+	if ( len( arguments.logFile ) ) {
+		pb.redirectOutput( createObject( "java", "java.io.File" ).init( arguments.logFile ) )
+	}
+	return pb.start()
+}
+
+function run( required array command, string cwd = "" ) {
+	var process = start( arguments.command, arguments.cwd )
+	var output = toString( process.getInputStream().readAllBytes(), "UTF-8" )
+	return { exit : process.waitFor(), output : output }
+}
+
+function lastLines( required string text, numeric count = 1 ) {
+	var lines = arguments.text.trim().listToArray( char( 10 ) )
+	return lines.slice( max( lines.len() - arguments.count + 1, 1 ), min( arguments.count, lines.len() ) ).toList( " | " )
+}
+
+/**
+ * The module installed for a fresh BoxLang home, the demo agent built, a git repository for the git widget, and a `bxAgents` command
+ */
+function setup() {
+	if ( directoryExists( work ) && ( opts.keyExists( "fresh" ) ) ) {
+		directoryDelete( work, true )
+	}
+	directoryCreate( bxHome & "/modules", true, true )
+	if ( !directoryExists( bxHome & "/modules/bxagents" ) ) {
+		directoryCopy( moduleDir, bxHome & "/modules/bxagents", true )
+	}
+	fileWrite( bxHome & "/boxlang.json", '{ "whitespaceCompressionEnabled": false }' )
+	if ( !directoryExists( project ) ) {
+		directoryCopy( demo & "webui/trailer/project", project, true )
+		run( bl.merge( [ "module:bxagents", "build", "--projectRoot=" & project ] ) )
+		run( [ "git", "init", "-q", "-b", "main" ], project )
+		run( [ "git", "add", "-A" ], project )
+		run( [ "git", "-c", "user.name=dev", "-c", "user.email=dev@acme.test", "commit", "-qm", "Add the support agent" ], project )
+	}
+	directoryCreate( binDir, true, true )
+	fileWrite(
+		binDir & "/bxAgents",
+		"##!/bin/sh" & char( 10 ) & 'exec env -u JAVA_TOOL_OPTIONS BOXLANG_HOME="' & bxHome & '" HOME="' & home & '" ' & bl.toList( " " ) & ' module:bxagents "$@"' & char( 10 )
+	)
+	run( [ "chmod", "755", binDir & "/bxAgents" ] )
+}
+
+/**
+ * Drives one scene in a pseudo terminal with drive.bxs and saves what the terminal showed as <id>.cast
+ */
+function drive( required struct scene ) {
+	var kind = arguments.scene.start ?: "chat"
+	var steps = []
+	var command = []
+	var cwd = project
+	if ( kind == "chat" ) {
+		command = bl.merge( [ "module:bxagents", "chat", "--projectRoot=" & project ] )
+		steps = [ { "expect" : "enter send", "max" : 120, "then" : 1.2 } ]
+	} else if ( kind == "wizard" ) {
+		directoryDelete( home & "/new", true )
+		directoryCreate( home & "/new", true, true )
+		command = bl.merge( [ "module:bxagents", "new", "support-bot", "--skipInstall" ] )
+		cwd = home & "/new"
+		steps = [ { "expect" : "What do you want to call", "max" : 90, "then" : 1.0 } ]
+	} else {
+		// A shell prompt, then the scene types the command
+		var rc = work & "/bashrc-" & kind
+		fileWrite( rc, "PS1='\[\e[32m\]dev@acme\[\e[0m\] \[\e[34m\]~/acme-support\[\e[0m\] $ '" & char( 10 ) )
+		command = [ "bash", "--rcfile", rc, "-i" ]
+		steps = [ { "expect" : "$ ", "max" : 20, "then" : 0.6 } ]
+	}
+	steps.append( arguments.scene.steps ?: [], true )
+	var spec = {
+		"title"  : arguments.scene.id,
+		"cols"   : cols,
+		"rows"   : rows,
+		"typeMs" : arguments.scene.typeMs ?: 48,
+		"command": command,
+		"cwd"    : cwd,
+		"env"    : { "BOXLANG_HOME" : bxHome, "HOME" : home, "PATH" : binDir & ":" & createObject( "java", "java.lang.System" ).getenv( "PATH" ) },
+		"output" : out & "/scenes/" & arguments.scene.id & ".cast",
+		"steps"  : steps
+	}
+	var specFile = out & "/scenes/" & arguments.scene.id & ".json"
+	fileWrite( specFile, jsonSerialize( spec ) )
+	var result = run( bl.merge( [ demo & "drive.bxs", specFile ] ) )
+	return lastLines( result.output )
+}
+
+/**
+ * Draws the cast to out/scenes/<id>.mp4 with render.bxs
+ */
+function render( required struct scene ) {
+	var folder = out & "/scenes/" & arguments.scene.id
+	if ( directoryExists( folder ) ) {
+		directoryDelete( folder, true )
+	}
+	directoryCreate( folder, true, true )
+	var result = run( bl.merge( [ demo & "render.bxs", out & "/scenes/" & arguments.scene.id & ".cast", folder, "--size=16", "--fps=" & fps, "--max-idle=1.2", "--hold=0", "--formats=mp4" ] ) )
+	fileMove( folder & "/demo.mp4", out & "/scenes/" & arguments.scene.id & ".mp4" )
+	directoryDelete( folder, true )
+	return lastLines( result.output, 2 )
+}
+
+function record() {
+	directoryCreate( out & "/scenes", true, true )
+	setup()
+	var scenes = jsonDeserialize( fileRead( here & "scenes.json" ) ).filter( s => len( s.start ?: "" ) && ( !only.len() || only.contains( s.id ) ) )
+	var model = start( bl.merge( [ demo & "fakellm.bxs", "--port=8080", "--script=" & here & "model.json" ] ), out, {}, out & "/fakellm.log" )
+	try {
+		sleep( 10000 )
+		for ( var scene in scenes ) {
+			println( scene.id & " recording" )
+			println( "   " & drive( scene ) )
+			println( "   " & render( scene ) )
+		}
+	} finally {
+		model.destroy()
+	}
+}
+record()
+java.lang.System::exit( 0 )

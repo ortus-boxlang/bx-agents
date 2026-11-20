@@ -1,0 +1,59 @@
+/**
+ * Draws the pictures the trailer puts around the terminal with bx-playwright: the intro card, the closing card, and one caption strip
+ * (a transparent 1280x720 PNG) for each scene that has a caption in scenes.json.
+ *
+ *   boxlang cards.bxs --out=out
+ *
+ * Needs the bx-playwright module and its browser (`bxplaywright install`). The HTML is in templates/: CSS colours start with a hash, which
+ * a BoxLang string would read as an expression, so the markup stays out of the script and only the {{placeholders}} are filled in.
+ */
+opts = server.cli.parsed.options
+here = getDirectoryFromPath( getCurrentTemplatePath() )
+docsAssets = expandPath( here & "../../../../docs/assets/" )
+out = expandPath( opts.out ?: "out" )
+directoryCreate( out & "/cards", true, true )
+
+function svgData( required string file ) {
+	return "data:image/svg+xml;base64," & toBase64( fileReadBinary( docsAssets & arguments.file ) )
+}
+
+function fill( required string template, required struct values ) {
+	var html = fileRead( here & "templates/" & arguments.template )
+	for ( var key in arguments.values ) {
+		html = html.replace( "{{" & key & "}}", arguments.values[ key ], "all" )
+	}
+	return html
+}
+
+function draw( required string html, required string file ) {
+	playwright().render( arguments.html, { type : "png", viewport : "1280x720", omitBackground : true, path : out & "/cards/" & arguments.file } )
+}
+
+common = { logo : svgData( "bxagents-logo-full-dark.svg" ), boxlang : svgData( "ecosystem/boxlang.svg" ) }
+
+function cards() {
+	var intro = duplicate( common )
+	intro.append( {
+		headline : 'Your agent, <span class="teal">in your terminal</span>',
+		command  : "",
+		sub      : "AI agents without the plumbing"
+	} )
+	draw( fill( "card.html", intro ), "intro.png" )
+
+	var outro = duplicate( common )
+	outro.append( {
+		headline : 'Build it. <span class="teal">Then talk to it.</span>',
+		command  : "<code>$ bxAgents new</code>",
+		sub      : "bxagents.ai &nbsp;&middot;&nbsp; github.com/ortus-boxlang/bx-agents"
+	} )
+	draw( fill( "card.html", outro ), "outro.png" )
+
+	for ( var scene in jsonDeserialize( fileRead( here & "scenes.json" ) ) ) {
+		if ( len( scene.caption ?: "" ) && !( scene.card ?: false ) ) {
+			draw( fill( "caption.html", { text : encodeForHTML( scene.caption ) } ), "caption-" & scene.id & ".png" )
+		}
+	}
+	println( "cards: " & directoryList( out & "/cards" ).len() )
+}
+cards()
+java.lang.System::exit( 0 )

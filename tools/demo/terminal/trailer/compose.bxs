@@ -1,0 +1,126 @@
+/**
+ * Joins the recorded terminal scenes into the silent picture of the trailer, each scene as long as its narration needs, and writes the
+ * timeline the mix reads.
+ *
+ *   boxlang compose.bxs --out=out --voice=out/voice
+ *
+ * Reads   out/scenes/<id>.mp4     the rendered terminal (record.bxs)
+ *         <voice>/<id>.json       how long each line takes (voice.bxs)
+ *         out/cards/*.png         the cards and caption strips (cards.bxs)
+ * Writes  out/picture.mp4         1280x720, 30 fps, no sound
+ *         out/timeline.json       [ { id, startMs, seconds, lead, card } ] for mix.bxs (also copied into the voice folder, where it looks)
+ *
+ * A scene lasts lead + the voice + tail seconds. A recording longer than that is sped up to fit (a scene with "speed": true any amount, any
+ * other up to 2.2 times, and it says so when it needs more); a shorter one holds its last picture.
+ */
+opts = server.cli.parsed.options
+here = getDirectoryFromPath( getCurrentTemplatePath() )
+out = expandPath( opts.out ?: "out" )
+voiceDir = expandPath( opts.voice ?: ( out & "/voice" ) )
+bg = "0x181a21"           // the terminal's own background (themeBg in ../../render.bxs)
+width = 1280
+height = 720
+fps = 30
+termWidth = 1228
+leadDefault = 0.6
+tailDefault = 0.7
+segDir = out & "/segments"
+directoryCreate( segDir, true, true )
+encode = [ "-c:v", "libx264", "-preset", "veryfast", "-crf", "17", "-pix_fmt", "yuv420p", "-r", "" & fps, "-an" ]
+
+function run( required array command ) {
+	var pb = new java.lang.ProcessBuilder( arguments.command.map( a => javaCast( "string", a ) ) )
+	pb.redirectErrorStream( true )
+	pb.environment().remove( "JAVA_TOOL_OPTIONS" )
+	var process = pb.start()
+	var output = toString( process.getInputStream().readAllBytes(), "UTF-8" )
+	var exit = process.waitFor()
+	if ( exit != 0 ) {
+		println( arguments.command.toList( " " ) & char( 10 ) & output.right( 800 ) )
+		java.lang.System::exit( 1 )
+	}
+	return output
+}
+
+function num( required numeric value, numeric places = 3 ) {
+	return numberFormat( arguments.value, "0." & repeatString( "0", arguments.places ) )
+}
+
+function duration( required string file ) {
+	return val( run( [ "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", arguments.file ] ).trim() )
+}
+
+/**
+ * When the program's own screen first appears: a recording starts with a blank terminal while the program loads (up to the render's --max-idle)
+ */
+function firstContent( required string clip ) {
+	var text = run( [ "ffmpeg", "-loglevel", "error", "-t", "4", "-i", arguments.clip, "-vf", "signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-", "-an", "-f", "null", "-" ] )
+	var levels = text.listToArray( char( 10 ) ).filter( l => l.find( "YAVG" ) ).map( l => val( l.listLast( "=" ) ) )
+	for ( var i = 1; i <= levels.len(); i++ ) {
+		if ( abs( levels[ i ] - levels[ 1 ] ) > 0.3 ) {
+			return max( ( i - 1 ) / 24 - 0.08, 0 )
+		}
+	}
+	return 0
+}
+
+function compose() {
+	var timeline = []
+	var segments = []
+	var at = 0
+	var padX = int( ( width - termWidth ) / 2 )
+	for ( var scene in jsonDeserialize( fileRead( here & "scenes.json" ) ) ) {
+		var id = scene.id
+		var isCard = scene.card ?: false
+		var voiceFile = voiceDir & "/" & id & ".json"
+		var narr = fileExists( voiceFile ) ? jsonDeserialize( fileRead( voiceFile ) ).seconds : 0
+		var card = isCard && narr == 0
+		var lead = scene.lead ?: ( card ? 0 : leadDefault )
+		var tail = scene.tail ?: ( card ? 0 : tailDefault )
+		var want = card ? scene.seconds : lead + narr + tail
+		var seg = segDir & "/" & id & ".mp4"
+		var total = want
+		if ( len( scene.start ?: "" ) ) {
+			var clip = out & "/scenes/" & id & ".mp4"
+			var trim = [ "chat", "wizard" ].contains( scene.start ) ? firstContent( clip ) : 0
+			var have = duration( clip ) - trim
+			// Long enough to show what is being done: hold up to a second past the voice, then speed the rest up
+			total = ( scene.speed ?: false ) ? want : max( want, min( have, want + 1 ) )
+			var factor = max( 1, have / total )
+			if ( factor > ( ( scene.speed ?: false ) ? 4 : 2.2 ) ) {
+				println( "! " & id & ": recording is " & num( have, 1 ) & " s for " & num( total, 1 ) & " s, a speed-up of " & num( factor, 1 ) & "x; shorten its steps" )
+			}
+			var caption = out & "/cards/caption-" & id & ".png"
+			var hasCaption = fileExists( caption )
+			var graph = "[0:v]setpts=PTS/" & num( factor, 4 ) & ",fps=" & fps & ",pad=" & width & ":" & height & ":" & padX & ":14:" & bg & ",tpad=stop_mode=clone:stop_duration=60[v0];"
+				& ( hasCaption ? "[v0][1:v]overlay=0:0:enable='gte(t,0.5)'[v]" : "[v0]null[v]" )
+			var command = [ "ffmpeg", "-loglevel", "error", "-y", "-ss", num( trim ), "-i", clip ]
+			if ( hasCaption ) {
+				command.append( [ "-loop", "1", "-framerate", "" & fps, "-i", caption ], true )
+			}
+			command.append( [ "-filter_complex", graph, "-map", "[v]", "-t", num( total ) ], true )
+			command.append( encode, true )
+			command.append( seg )
+			run( command )
+		} else {
+			var fade = id == "intro" ? "fade=t=in:st=0:d=0.6,fade=t=out:st=" & num( max( total - 0.6, 0 ), 2 ) & ":d=0.6" : "fade=t=in:st=0:d=0.8"
+			var command = [ "ffmpeg", "-loglevel", "error", "-y", "-loop", "1", "-framerate", "" & fps, "-i", out & "/cards/" & id & ".png", "-vf", fade, "-t", num( total ) ]
+			command.append( encode, true )
+			command.append( seg )
+			run( command )
+		}
+		segments.append( seg )
+		timeline.append( { "id" : id, "startMs" : round( at * 1000 ), "seconds" : round( total * 1000 ) / 1000, "lead" : lead, "card" : card } )
+		println( lJustify( id, 9 ) & " start " & rJustify( num( at, 1 ), 6 ) & "  length " & rJustify( num( total, 1 ), 5 ) & "  (voice " & num( narr, 1 ) & ")" )
+		at += total
+	}
+	fileWrite( out & "/segments.txt", segments.map( s => "file '" & s & "'" & char( 10 ) ).toList( "" ) )
+	run( [ "ffmpeg", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", out & "/segments.txt", "-c", "copy", out & "/picture.mp4" ] )
+	fileWrite( out & "/timeline.json", jsonSerialize( timeline ) )
+	if ( directoryExists( voiceDir ) ) {
+		fileWrite( voiceDir & "/timeline.json", jsonSerialize( timeline ) )
+	}
+	println( "picture.mp4: " & num( at, 1 ) & " s" )
+}
+compose()
+java.lang.System::exit( 0 )
