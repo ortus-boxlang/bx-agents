@@ -195,9 +195,9 @@ Details and limits: [CLI reference](../cli-reference.md#files-and-pictures-in-th
 
 How the chat looks and behaves is a short list of settings, the same in every file that can hold them. The chat opens full screen by default: it clears the screen, draws the header at the top and keeps the message box and the footer at the bottom. Your scrollback is kept, and finished turns still go into it.
 
-![The header: the bxAgents mark, the version, the agent and the keys, with the message box at the bottom](../assets/tui/chat-header.png)
+![The header: bxAgents in big block letters, the version, the agent and the keys, with the message box at the bottom](../assets/tui/chat-header.png)
 
-*The header at the top, the message box and the footer at the bottom. The footer has the folder and branch, the context and the model on the right, so the top bar of the box only says who is writing.*
+*The header at the top, in the same block letters the BoxLang runtime prints when it starts, and the message box and the footer at the bottom. On a terminal too narrow for the big name, the header is one line. The footer has the folder and branch, the context and the model on the right, so the top bar of the box only says who is writing.*
 
 | Setting | Values (default first) | What it does |
 |---|---|---|

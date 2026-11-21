@@ -28,15 +28,16 @@ import org.junit.jupiter.api.Test;
 class LogoTest {
 
 	@Test
-	@DisplayName( "the mark has a row for each line of the drawing, every row as wide as the mark, and only block characters and spaces" )
+	@DisplayName( "the name has a row for each line of the drawing, every row as wide as the drawing, and only full blocks and spaces, like the runtime's banner" )
 	void shape() {
 		List<Row> rows = Logo.rows( Theme.detect( null, "xterm-256color", "truecolor" ) );
 		assertThat( rows ).hasSize( Logo.height() );
 		for ( Row r : rows ) {
 			assertThat( r.width() ).isEqualTo( Logo.width() );
-			assertThat( r.plainText().chars().allMatch( c -> c == ' ' || c == '▀' || c == '▄' || c == '█' ) ).isTrue();
+			assertThat( r.plainText().chars().allMatch( c -> c == ' ' || c == '█' ) ).isTrue();
 		}
-		assertThat( Logo.height() ).isAtMost( 10 );
+		assertThat( Logo.height() ).isEqualTo( 5 );
+		assertThat( Logo.width() ).isAtMost( 72 );
 	}
 
 	@Test

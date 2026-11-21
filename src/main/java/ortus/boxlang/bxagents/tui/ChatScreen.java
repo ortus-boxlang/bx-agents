@@ -294,39 +294,20 @@ public final class ChatScreen implements AutoCloseable {
 		    + " clears the box · "
 		    + lower( keys.first( KeyMap.Action.CLEAR_SCREEN ) ) + " clears the screen";
 		String		name	= " bxAgents";
+		// the big name needs the width; a narrow terminal gets the one line instead
+		if ( "full".equals( how ) && runner.width() < Logo.width() + 4 ) {
+			how = "compact";
+		}
 		if ( "full".equals( how ) ) {
-			List<Row>	mark	= Logo.rows( theme );
-			String		gapText	= "   ";
-			// the text goes beside the middle rows of the mark
-			String[]	beside	= new String[ mark.size() ];
-			int			first	= Math.max( 0, ( mark.size() - 5 ) / 2 );
-			beside[ first ]		= "name";
-			beside[ first + 1 ]	= "who";
-			beside[ first + 3 ]	= "hints";
-			beside[ first + 4 ]	= "more";
 			lines.add( Line.from( Span.raw( "" ) ) );
-			for ( int i = 0; i < mark.size(); i++ ) {
-				Row row = Row.of().add( "  ", theme.plain );
-				row.addPadded( mark.get( i ), Logo.width() );
-				row.add( gapText, theme.plain );
-				if ( beside[ i ] != null ) {
-					switch ( beside[ i ] ) {
-						case "name" :
-							row.add( "bxAgents", theme.accentBold ).add( version.isEmpty() ? "" : "  v" + version, theme.muted );
-							break;
-						case "who" :
-							row.add( agent, theme.bold ).add( " · " + model + " · " + mode, theme.muted );
-							break;
-						case "hints" :
-							row.add( hints, theme.muted );
-							break;
-						default :
-							row.add( more, theme.muted );
-							break;
-					}
-				}
-				lines.add( row.toLine() );
+			for ( Row mark : Logo.rows( theme ) ) {
+				lines.add( Row.of( "  ", theme.plain ).addPadded( mark, Logo.width() ).toLine() );
 			}
+			lines.add( Line.from( Span.raw( "" ) ) );
+			lines.add( Row.of().add( "  " + ( version.isEmpty() ? "" : "v" + version + " · " ), theme.muted ).add( agent, theme.bold )
+			    .add( " · " + model + " · " + mode, theme.muted ).toLine() );
+			lines.add( Row.of( "  " + hints, theme.muted ).toLine() );
+			lines.add( Row.of( "  " + more, theme.muted ).toLine() );
 			lines.add( Line.from( Span.raw( "" ) ) );
 		} else if ( "compact".equals( how ) ) {
 			lines.add( Row.of().add( name, theme.accentBold ).add( version.isEmpty() ? "" : " v" + version, theme.muted ).add( "   " + agent, theme.bold )

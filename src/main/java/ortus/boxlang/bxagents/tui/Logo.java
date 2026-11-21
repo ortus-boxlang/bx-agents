@@ -21,9 +21,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The bxAgents mark in block characters: three nodes on a ring, as in the icon of the project. Half blocks give square pixels, so the
- * 22 by 18 pixel drawing takes 22 columns and 9 rows. The colour goes from the accent to the ok colour across the width, the way the icon's
- * gradient goes from cyan to green, and is one colour where the terminal has no more.
+ * The name of the project in big block letters, in the style of the banner the BoxLang runtime prints when it starts: five rows of full
+ * blocks. The colour goes from the accent to the ok colour across the width, the way the project's icon goes from cyan to green, and is one
+ * colour where the terminal has no more.
  */
 final class Logo {
 
@@ -31,15 +31,11 @@ final class Logo {
 	 * The drawing, one string per row of text
 	 */
 	private static final List<String> ART = List.of(
-	    "         ▄██▄",
-	    "       ▄██████▄",
-	    "     ▄▀▀ ▀▀▀▀ ▀▀▄",
-	    "    █▀          ▀█",
-	    "    █            █",
-	    "   ▄██▄        ▄██▄",
-	    "   █████      █████",
-	    "   ▀██▀▄▄    ▄▄▀██▀",
-	    "        ▀▀▀▀▀▀" );
+	    "██████  ██   ██  █████   ██████  ███████ ███    ██ ████████ ███████",
+	    "██   ██  ██ ██  ██   ██ ██       ██      ████   ██    ██    ██",
+	    "██████    ███   ███████ ██   ███ █████   ██ ██  ██    ██    ███████",
+	    "██   ██  ██ ██  ██   ██ ██    ██ ██      ██  ██ ██    ██         ██",
+	    "██████  ██   ██ ██   ██  ██████  ███████ ██   ████    ██    ███████" );
 
 	/**
 	 * Nothing to create: the methods are static
