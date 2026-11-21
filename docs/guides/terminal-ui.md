@@ -71,7 +71,7 @@ Finished turns are printed as ordinary terminal text, so **your scrollback, sear
 | Esc | While the agent works, stop it at its next step (not mid-word) |
 | Enter while the agent works | **Steer**: your message is added to the run |
 | `?` alone, or `/keys` | Show the keys as bound right now |
-| Up / Down, Tab, Enter, Esc while the `/` menu is open | Move, fill, run or fill, close: see [Commands](#commands-type) below. The `@` menu takes Up / Down and Tab |
+| Up / Down, Tab, Enter, Esc while the `/` menu is open | Move, fill, run or fill, close: the menu keys are in the Commands section below. The `@` menu takes Up / Down and Tab |
 
 ![The output of /keys, listing every key with its action name](../assets/tui/chat-keys.png)
 
@@ -101,7 +101,7 @@ A `/` at the start of the box opens a menu of every command, under a heading for
 | Up / Down | Move the pick, wrapping at both ends |
 | Type | Narrow the list. Names that start with what you typed come first, then names that contain it, then, from three letters on, descriptions that contain it: `/ctx` finds nothing, `/text` finds `/context` |
 | Tab | Fill the picked command into the box, followed by a space |
-| Enter | Run the picked command when it takes nothing (`/new`), or fill it in when it takes something (`/resume `) so you can add the rest. Text you typed in full is sent as it is |
+| Enter | Run the picked command when it takes nothing (`/new`), or fill it in, with a space after the name, when it takes something (`/resume`) so you can add the rest. Text you typed in full is sent as it is |
 | Esc | Close the menu until you type something else |
 
 ![The slash menu after typing /, with the commands grouped and the first group in view](../assets/tui/chat-slash-menu.png)
