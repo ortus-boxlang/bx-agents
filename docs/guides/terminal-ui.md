@@ -66,6 +66,7 @@ Finished turns are printed as ordinary terminal text, so **your scrollback, sear
 | Ctrl+A / Home, Ctrl+E / End | Start and end of the line |
 | Ctrl+U, Ctrl+W | Delete to the start of the line, delete the word before the cursor |
 | Ctrl+V | Add the picture on the clipboard |
+| Ctrl+L, or `/cls` | Clear the screen above the box and the scrollback. The conversation and what you typed stay |
 | Ctrl+C | Clear the box. On an empty box, leave. While the agent works, stop it |
 | Ctrl+D | Leave, on an empty box (otherwise delete the character under the cursor) |
 | Esc | While the agent works, stop it at its next step (not mid-word) |
@@ -109,9 +110,17 @@ chat:
     stop: ctrl+x
 ```
 
-Actions you can change: `submit`, `newline`, `historyPrevious`, `historyNext`, `clear`, `exit`, `deleteToStart`, `deleteWord`, `lineStart`, `lineEnd`, `complete`, `pasteImage` and `stop`. Keys are written the way people say them: `enter`, `alt+enter`, `shift+enter`, `ctrl+j`, `esc`, `tab`, `up`, `down`, `home`, `end`, or a letter with `ctrl` or `alt`.
+Actions you can change: `submit`, `newline`, `historyPrevious`, `historyNext`, `clear`, `exit`, `deleteToStart`, `deleteWord`, `lineStart`, `lineEnd`, `complete`, `pasteImage`, `clearScreen` and `stop`. Keys are written the way people say them: `enter`, `alt+enter`, `shift+enter`, `ctrl+j`, `esc`, `tab`, `up`, `down`, `home`, `end`, or a letter with `ctrl` or `alt`.
 
 A typo never leaves you stuck. An unknown action, an unreadable key, or a key another action in the same place already uses is reported when the chat starts, and that action keeps its default keys.
+
+## Clear the screen
+
+Ctrl+L (the `clearScreen` action) or `/cls` clears the screen above the message box and the terminal's scrollback. The conversation, the agent's memory and what you typed in the box stay as they were. `/clear` is different: it forgets the conversation's messages.
+
+![The chat after Ctrl+L: an empty screen, and the message box with the draft still in it](../assets/tui/chat-clear-screen.png)
+
+*After Ctrl+L the screen above the box is empty and the half typed message is still there. The box stays at the bottom of the terminal.*
 
 ## Commands: type `/`
 

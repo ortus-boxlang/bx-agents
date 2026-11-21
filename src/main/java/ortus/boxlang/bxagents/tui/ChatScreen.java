@@ -503,6 +503,10 @@ public final class ChatScreen implements AutoCloseable {
 					pasteImage();
 					continue;
 				}
+				if ( keys.is( KeyMap.Action.CLEAR_SCREEN, k ) ) {
+					clearScreen();
+					continue;
+				}
 				String action = keys.extension( k );
 				if ( action != null ) {
 					// what is typed stays in the box; the caller runs the action and reads again
@@ -834,6 +838,21 @@ public final class ChatScreen implements AutoCloseable {
 		rows.addAll( promptRows( false, "you", picture + lower( keys.first( KeyMap.Action.SUBMIT ) ) + " send · " + lower( keys.first( KeyMap.Action.NEWLINE ) )
 		    + " new line · ? keys" + ( slash.isOpen() || !files.isEmpty() ? " · tab completes" : "" ) ) );
 		return rows;
+	}
+
+	/**
+	 * Clears the screen above the message box and the terminal's scrollback, so the next output starts on an empty screen. Only what is drawn
+	 * goes: the conversation, the agent's memory and what is typed in the box are left as they were. The screen is cleared by printing as many
+	 * empty lines as the terminal has rows, which scrolls everything off without moving the area the box lives in, and then the scrollback is
+	 * erased with {@code ESC [ 3 J}.
+	 */
+	public void clearScreen() {
+		int rows = terminal.getSize().getRows() > 0 ? terminal.getSize().getRows() : 24;
+		for ( int i = 0; i < rows; i++ ) {
+			runner.println( "" );
+		}
+		terminal.writer().print( "\u001b[3J" );
+		terminal.writer().flush();
 	}
 
 	/**

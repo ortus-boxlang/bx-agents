@@ -62,6 +62,7 @@ public final class KeyMap {
 		LINE_END( "lineEnd", Place.BOX, "Cursor to the end of the line", "ctrl+e", "end" ),
 		COMPLETE( "complete", Place.BOX, "Complete the command or file name", "tab" ),
 		PASTE_IMAGE( "pasteImage", Place.BOX, "Add the picture on the clipboard", "ctrl+v" ),
+		CLEAR_SCREEN( "clearScreen", Place.BOX, "Clear the screen above the box; the conversation and what you typed stay", "ctrl+l" ),
 		STOP( "stop", Place.RUN, "Stop the agent at its next step", "esc", "ctrl+c" );
 
 		private final String	id;
