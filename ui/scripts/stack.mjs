@@ -33,7 +33,7 @@ function newestJar( prefix ) {
 	const dir = path.join( repo, "src/test/resources/libs" );
 	const found = fs.existsSync( dir ) ? fs.readdirSync( dir ).filter( f => new RegExp( "^" + prefix + "-\\d.*\\.jar$" ).test( f ) ).sort() : [];
 	if ( !found.length ) {
-		throw new Error( "No " + prefix + " jar in " + dir + ". Run ./gradlew downloadBoxLang downloadMiniServer first." );
+		throw new Error( "No " + prefix + " jar in " + dir + ". Run ./gradlew downloadBoxLang first." );
 	}
 	return path.join( dir, found[ found.length - 1 ] );
 }

@@ -56,14 +56,10 @@ jobs:
           distribution: "temurin"
           java-version: ${{ matrix.jdkVersion }}
 
-      # - name: Setup Database and Fixtures
-      #   run: |
-      #     sudo systemctl start mysql.service
-      #     mysql -u${{ env.DB_USER }} -p${{ env.DB_PASSWORD }} -e 'CREATE DATABASE mementifier;'
-      #     mysql -u${{ env.DB_USER }} -p${{ env.DB_PASSWORD }} < test-harness/tests/resources/coolblog.sql
-
       - name: Setup CommandBox CLI
-        uses: Ortus-Solutions/setup-commandbox@v2.0.1
+        uses: ortus-boxlang/setup-boxlang@main
+        with:
+          modules: bx-cli
 
       # CommandBox falls back to this local artifacts cache when ForgeBox times
       # out, so a ForgeBox blip does not fail the build. Keyed on the one
@@ -75,25 +71,6 @@ jobs:
           key: commandbox-artifacts-${{ hashFiles('src/main/lib/box.json') }}
           restore-keys: |
             commandbox-artifacts-
-
-      # TestBox, ColdBox, qb, cbsecurity, ... all come from ONE manifest,
-      # src/main/lib/box.json, installed by the Gradle `installLibs` / `installDevLibs` tasks
-      # (CommandBox, set up above). Nothing else installs dependencies.
-
-      # Not Needed in this module
-      #- name: Setup Environment For Testing Process
-      #  run: |
-      #    # Setup .env
-      #    touch .env
-      #    # ENV
-      #    printf "DB_HOST=localhost\n" >> .env
-      #    printf "DB_DATABASE=mydatabase\n" >> .env
-      #    printf "DB_DRIVER=MySQL\n" >> .env
-      #    printf "DB_USER=${{ env.DB_USER }}\n" >> .env
-      #    printf "DB_PASSWORD=${{ env.DB_PASSWORD }}\n" >> .env
-      #    printf "DB_CLASS=com.mysql.cj.jdbc.Driver\n" >> .env
-      #    printf "DB_BUNDLEVERSION=8.0.19\n" >> .env
-      #    printf "DB_BUNDLENAME=com.mysql.cj\n" >> .env
 
       - name: Test Module
         run: |
@@ -107,11 +84,6 @@ jobs:
           # at all). bx-ai has since cut a real, stable 3.4.0 release carrying
           # all of it - confirmed directly against the published ForgeBox
           # artifact - so build.gradle's boxlangModules now pins that release
-          # and downloadModules alone is enough.
-          ./gradlew downloadModules
-          # boxlang-miniserver jar - lets integration tests boot a real
-          # MiniServer instead of skipping when the binary isn't on PATH.
-          ./gradlew downloadMiniServer
           # this is done in order to build the module structure before testing
           ./gradlew shadowJar test --stacktrace --console=plain
 
