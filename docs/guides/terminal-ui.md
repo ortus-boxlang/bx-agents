@@ -71,6 +71,7 @@ Finished turns are printed as ordinary terminal text, so **your scrollback, sear
 | Esc | While the agent works, stop it at its next step (not mid-word) |
 | Enter while the agent works | **Steer**: your message is added to the run |
 | `?` alone, or `/keys` | Show the keys as bound right now |
+| Up / Down, Tab, Enter, Esc while the `/` menu is open | Move, fill, run or fill, close: the menu keys are in the Commands section below. The `@` menu takes Up / Down and Tab |
 
 ![The output of /keys, listing every key with its action name](../assets/tui/chat-keys.png)
 
@@ -93,7 +94,27 @@ A typo never leaves you stuck. An unknown action, an unreadable key, or a key an
 
 ## Commands: type `/`
 
-A `/` at the start of the box opens a menu of commands. Keep typing to narrow it, Tab or Enter to take one. All of them are listed in [Slash commands](slash-commands.md); the ones you will use first are `/help`, `/new`, `/sessions`, `/resume`, `/context`, `/model` and `/exit`. `/stats` shows the tokens the model calls used, once `usage: true` is set in `Agent.yaml`.
+A `/` at the start of the box opens a menu of every command, under a heading for each group: Conversation, Agent, Model, Screen and Memory, and one for each extension. It shows eight at a time and scrolls, with a counter such as `10/34`.
+
+| Key | Does in the menu |
+|---|---|
+| Up / Down | Move the pick, wrapping at both ends |
+| Type | Narrow the list. Names that start with what you typed come first, then names that contain it, then, from three letters on, descriptions that contain it: `/ctx` finds nothing, `/text` finds `/context` |
+| Tab | Fill the picked command into the box, followed by a space |
+| Enter | Run the picked command when it takes nothing (`/new`), or fill it in, with a space after the name, when it takes something (`/resume`) so you can add the rest. Text you typed in full is sent as it is |
+| Esc | Close the menu until you type something else |
+
+![The slash menu after typing /, with the commands grouped and the first group in view](../assets/tui/chat-slash-menu.png)
+
+*Type `/` and every command is there, grouped. The picked row is marked, and the last line gives the position and the keys.*
+
+<video controls preload="metadata" poster="/assets/video/slash-menu-poster.png" style="max-width:100%">
+  <source src="/assets/video/slash-menu.mp4" type="video/mp4">
+</video>
+
+*Browsing the menu, narrowing it with `ses`, filling `/sessions`, then running `/new`.*
+
+Each row shows what the command takes after its name, such as `/resume [n|id]`, and a short description. Up and Down walk your earlier messages again once the menu is closed. All of the commands are listed in [Slash commands](slash-commands.md); the ones you will use first are `/help`, `/new`, `/sessions`, `/resume`, `/context`, `/model` and `/exit`. `/stats` shows the tokens the model calls used, once `usage: true` is set in `Agent.yaml`.
 
 ## Conversations
 

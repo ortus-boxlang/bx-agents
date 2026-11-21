@@ -77,7 +77,7 @@ public final class ChatScreen implements AutoCloseable {
 	private final RecordingTerminal			tap;
 	private final Theme						theme;
 	private final ClassLoader				previousLoader;
-	private final List<Map<?, ?>>			commands;
+	private final SlashMenu					slash;
 	private final Composer					composer		= new Composer();
 	private KeyMap							keys			= KeyMap.defaults();
 	private String							pendingKey;
@@ -120,7 +120,7 @@ public final class ChatScreen implements AutoCloseable {
 		this.tap			= tap;
 		this.theme			= theme;
 		this.previousLoader	= previousLoader;
-		this.commands		= commands;
+		this.slash			= new SlashMenu( commands );
 	}
 
 	/**
@@ -455,6 +455,32 @@ public final class ChatScreen implements AutoCloseable {
 			if ( ev instanceof PasteEvent p ) {
 				composer.paste( p.text() );
 			} else if ( ev instanceof KeyEvent k ) {
+				slash.sync( composer.text(), composer.rowCount() );
+				if ( slash.isOpen() ) {
+					if ( k.isKey( KeyCode.UP ) || k.isKey( KeyCode.DOWN ) ) {
+						slash.move( k.isKey( KeyCode.DOWN ) ? 1 : -1 );
+						continue;
+					}
+					if ( k.isKey( KeyCode.ESCAPE ) ) {
+						slash.dismiss();
+						continue;
+					}
+					if ( keys.is( KeyMap.Action.COMPLETE, k ) ) {
+						composer.setText( slash.picked().name() + " " );
+						continue;
+					}
+					if ( keys.is( KeyMap.Action.SUBMIT, k ) ) {
+						SlashMenu.Item picked = slash.picked();
+						// what was typed in full is sent as it is; otherwise Enter takes the pick: a command that needs nothing runs, one
+						// that takes something is filled in so the rest can be typed
+						if ( !composer.text().equals( picked.name() ) ) {
+							composer.setText( picked.fill() );
+							if ( !picked.runsAtOnce() ) {
+								continue;
+							}
+						}
+					}
+				}
 				List<String> files = atMatches();
 				if ( !files.isEmpty() ) {
 					if ( k.isKey( KeyCode.UP ) || k.isKey( KeyCode.DOWN ) ) {
@@ -466,9 +492,6 @@ public final class ChatScreen implements AutoCloseable {
 						atPick = 0;
 						continue;
 					}
-				}
-				if ( keys.is( KeyMap.Action.COMPLETE, k ) && completeSlash() ) {
-					continue;
 				}
 				if ( keys.is( KeyMap.Action.PASTE_IMAGE, k ) ) {
 					pasteImage();
@@ -537,29 +560,6 @@ public final class ChatScreen implements AutoCloseable {
 		}
 		images.add( saved.get().toString() );
 		print( "ok", "Added the picture from the clipboard (" + images.size() + " to send)." );
-	}
-
-	private boolean completeSlash() {
-		List<Map<?, ?>> matches = slashMatches();
-		if ( matches.isEmpty() ) {
-			return false;
-		}
-		composer.setText( String.valueOf( get( matches.get( 0 ), "name" ) ) + " " );
-		return true;
-	}
-
-	private List<Map<?, ?>> slashMatches() {
-		List<Map<?, ?>>	out	= new ArrayList<>();
-		String			t	= composer.text();
-		if ( composer.rowCount() != 1 || !t.startsWith( "/" ) || t.contains( " " ) ) {
-			return out;
-		}
-		for ( Map<?, ?> c : commands ) {
-			if ( String.valueOf( get( c, "name" ) ).startsWith( t ) ) {
-				out.add( c );
-			}
-		}
-		return out;
 	}
 
 	// ----------------------------------------------------------------------------------
@@ -817,19 +817,55 @@ public final class ChatScreen implements AutoCloseable {
 	// ----------------------------------------------------------------------------------
 
 	private List<Row> idleRows() {
-		List<Row>		rows	= new ArrayList<>();
-		List<Map<?, ?>>	menu	= slashMatches();
-		for ( int i = 0; i < Math.min( MAX_MENU, menu.size() ); i++ ) {
-			Map<?, ?> c = menu.get( i );
-			rows.add( Row.of().add( "   " + get( c, "name" ), i == 0 ? theme.selected : theme.plain ).add( "  " + get( c, "hint" ), theme.muted ) );
-		}
+		List<Row> rows = new ArrayList<>();
+		slash.sync( composer.text(), composer.rowCount() );
+		rows.addAll( slashRows() );
 		List<String> files = atMatches();
 		for ( int i = 0; i < files.size(); i++ ) {
 			rows.add( Row.of().add( "   @" + files.get( i ), i == Math.min( atPick, files.size() - 1 ) ? theme.selected : theme.plain ) );
 		}
 		String picture = images.isEmpty() ? "" : images.size() + ( images.size() == 1 ? " picture" : " pictures" ) + " attached · ";
 		rows.addAll( promptRows( false, "you", picture + lower( keys.first( KeyMap.Action.SUBMIT ) ) + " send · " + lower( keys.first( KeyMap.Action.NEWLINE ) )
-		    + " new line · ? keys" + ( menu.isEmpty() && files.isEmpty() ? "" : " · tab completes" ) ) );
+		    + " new line · ? keys" + ( slash.isOpen() || !files.isEmpty() ? " · tab completes" : "" ) ) );
+		return rows;
+	}
+
+	/**
+	 * The rows of the slash menu: the commands in view, the picked one marked, a heading above each group when nothing has been typed after
+	 * the slash, and a line with the position and the keys
+	 *
+	 * @return The rows, none when the menu is closed
+	 */
+	private List<Row> slashRows() {
+		List<Row> rows = new ArrayList<>();
+		if ( !slash.isOpen() ) {
+			return rows;
+		}
+		List<SlashMenu.Item>	view	= slash.window();
+		int						name	= 0;
+		for ( SlashMenu.Item item : view ) {
+			name = Math.max( name, ( item.name() + ( item.usage().isEmpty() ? "" : " " + item.usage() ) ).length() );
+		}
+		name = Math.min( name, Math.max( 12, runner.width() / 2 ) );
+		String group = null;
+		for ( int i = 0; i < view.size(); i++ ) {
+			SlashMenu.Item item = view.get( i );
+			if ( slash.isGrouped() && !item.group().equals( group ) ) {
+				group = item.group();
+				rows.add( Row.of( "  " + group, theme.muted ) );
+			}
+			boolean	on		= i == slash.pickInWindow();
+			String	label	= item.name() + ( item.usage().isEmpty() ? "" : " " + item.usage() );
+			String	padded	= label + " ".repeat( Math.max( 0, name - label.length() ) );
+			int		room	= Math.max( 10, runner.width() - name - 8 );
+			rows.add( Row.of().add( on ? " ❯ " : "   ", theme.accent ).add( clip( padded, name ), on ? theme.selected : theme.plain ).add(
+			    "  " + clip( item.description(), room ),
+			    theme.muted ) );
+		}
+		rows.add( Row.of(
+		    "   " + slash.position() + "/" + slash.size() + " · ↑↓ move · tab fills · enter " + ( slash.picked().runsAtOnce() ? "runs" : "fills" )
+		        + " · esc closes",
+		    theme.muted ) );
 		return rows;
 	}
 
@@ -901,7 +937,10 @@ public final class ChatScreen implements AutoCloseable {
 	}
 
 	private void draw( List<Row> rows ) {
-		int			height	= Math.min( rows.size(), Math.max( 4, runner.height() - 2 ) );
+		// The most the area may take is what the terminal has, not what the area has now (runner.height() is the area), or it could never
+		// grow past its first rows and the slash menu and the @ menu would be cut off above the box
+		int			room	= terminal.getSize().getRows() > 0 ? terminal.getSize().getRows() : 24;
+		int			height	= Math.min( rows.size(), Math.max( 4, room - 2 ) );
 		List<Row>	shown	= rows.subList( rows.size() - height, rows.size() );
 		if ( height < drawnHeight ) {
 			// The area gives up rows when it shrinks (the slash menu closing) and the terminal keeps whatever was
