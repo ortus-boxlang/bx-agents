@@ -41,6 +41,8 @@ class KeyMapTest {
 		assertThat( map.is( Action.SUBMIT, KeyEvent.ofKey( KeyCode.ENTER, KeyModifiers.ALT ) ) ).isFalse();
 		assertThat( map.is( Action.NEWLINE, KeyEvent.ofKey( KeyCode.ENTER, KeyModifiers.ALT ) ) ).isTrue();
 		assertThat( map.is( Action.NEWLINE, KeyEvent.ofChar( 'j', KeyModifiers.CTRL ) ) ).isTrue();
+		assertThat( map.is( Action.CLEAR_SCREEN, KeyEvent.ofChar( 'l', KeyModifiers.CTRL ) ) ).isTrue();
+		assertThat( map.is( Action.CLEAR, KeyEvent.ofChar( 'l', KeyModifiers.CTRL ) ) ).isFalse();
 		assertThat( map.is( Action.STOP, KeyEvent.ofKey( KeyCode.ESCAPE ) ) ).isTrue();
 		assertThat( map.is( Action.STOP, KeyEvent.ofChar( 'c', KeyModifiers.CTRL ) ) ).isTrue();
 		assertThat( map.is( Action.CLEAR, KeyEvent.ofChar( 'c', KeyModifiers.CTRL ) ) ).isTrue();

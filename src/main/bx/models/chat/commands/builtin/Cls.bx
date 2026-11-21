@@ -1,0 +1,36 @@
+/**
+ * /cls: clears the screen of the terminal chat, the output above the message box and the scrollback. Only what is drawn goes: the
+ * conversation, the agent's memory and what is typed in the box stay, which is what /clear, that forgets the messages, does not do. The key
+ * for it is Ctrl+L (the clearScreen action).
+ */
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "cls"
+	}
+
+	string function usage() {
+		return ""
+	}
+
+	string function group() {
+		return "Screen"
+	}
+
+	string function hint() {
+		return "clear the screen, not the conversation (Ctrl+L)"
+	}
+
+	array function transports() {
+		return [ "tui" ]
+	}
+
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		if ( !arguments.context.hasTerminal() ) {
+			return reply.warn( "There is no terminal screen to clear here." )
+		}
+		return reply.screen( "clearscreen" )
+	}
+
+}

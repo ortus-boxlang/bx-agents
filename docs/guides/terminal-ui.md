@@ -66,16 +66,38 @@ Finished turns are printed as ordinary terminal text, so **your scrollback, sear
 | Ctrl+A / Home, Ctrl+E / End | Start and end of the line |
 | Ctrl+U, Ctrl+W | Delete to the start of the line, delete the word before the cursor |
 | Ctrl+V | Add the picture on the clipboard |
+| Ctrl+L, or `/cls` | Clear the screen above the box and the scrollback. The conversation and what you typed stay |
 | Ctrl+C | Clear the box. On an empty box, leave. While the agent works, stop it |
 | Ctrl+D | Leave, on an empty box (otherwise delete the character under the cursor) |
 | Esc | While the agent works, stop it at its next step (not mid-word) |
 | Enter while the agent works | **Steer**: your message is added to the run |
-| `?` alone, or `/keys` | Show the keys as bound right now |
+| F1, Ctrl+/, or `?` alone, or `/keys` | Open the shortcuts panel: every key as bound right now. F1 and Ctrl+/ work while you type, and what you typed stays in the box |
 | Up / Down, Tab, Enter, Esc while the `/` menu is open | Move, fill, run or fill, close: the menu keys are in the Commands section below. The `@` menu takes Up / Down and Tab |
 
-![The output of /keys, listing every key with its action name](../assets/tui/chat-keys.png)
+### The shortcuts panel
 
-*`/keys` lists every key, the action name to use in `bxAgents.yml`, and what it does.*
+![The keyboard shortcuts panel, with the keys in sections](../assets/tui/chat-keys.png)
+
+*F1 opens a panel in place of the message box. Everything you can press is in it, in sections: writing a message, the menus, while the agent works, the prefixes and the keys your extensions add. The grey word after a key is the name to use for it in `bxAgents.yml`.*
+
+Type to narrow the list: `ctrl` shows the keys with Ctrl, `newline` the key that adds a line.
+
+![The panel narrowed by typing ctrl](../assets/tui/chat-keys-filter.png)
+
+| Key | Does in the panel |
+|---|---|
+| Type, Backspace | Narrow the list by the keys, by what they do, by their name or by the section |
+| Up, Down, PgUp, PgDn | Scroll |
+| Esc | Clear the filter; with no filter, close the panel |
+| F1, Ctrl+/ | Close it |
+
+A key you changed in `bxAgents.yml` shows what it was, as `(was Alt+Enter)`. Some terminals do not pass Ctrl+/ through, which is why F1 is the one to count on.
+
+<video controls preload="metadata" poster="/assets/video/keys-panel-poster.png" style="max-width:100%">
+  <source src="/assets/video/keys-panel.mp4" type="video/mp4">
+</video>
+
+*Opening the panel over a half typed message, narrowing it, scrolling, closing it, and opening it again with `/keys`.*
 
 ### Change a key
 
@@ -88,9 +110,17 @@ chat:
     stop: ctrl+x
 ```
 
-Actions you can change: `submit`, `newline`, `historyPrevious`, `historyNext`, `clear`, `exit`, `deleteToStart`, `deleteWord`, `lineStart`, `lineEnd`, `complete`, `pasteImage` and `stop`. Keys are written the way people say them: `enter`, `alt+enter`, `shift+enter`, `ctrl+j`, `esc`, `tab`, `up`, `down`, `home`, `end`, or a letter with `ctrl` or `alt`.
+Actions you can change: `submit`, `newline`, `historyPrevious`, `historyNext`, `clear`, `exit`, `deleteToStart`, `deleteWord`, `lineStart`, `lineEnd`, `complete`, `pasteImage`, `clearScreen` and `stop`. Keys are written the way people say them: `enter`, `alt+enter`, `shift+enter`, `ctrl+j`, `esc`, `tab`, `up`, `down`, `home`, `end`, or a letter with `ctrl` or `alt`.
 
 A typo never leaves you stuck. An unknown action, an unreadable key, or a key another action in the same place already uses is reported when the chat starts, and that action keeps its default keys.
+
+## Clear the screen
+
+Ctrl+L (the `clearScreen` action) or `/cls` clears the screen above the message box and the terminal's scrollback. The conversation, the agent's memory and what you typed in the box stay as they were. `/clear` is different: it forgets the conversation's messages.
+
+![The chat after Ctrl+L: an empty screen, and the message box with the draft still in it](../assets/tui/chat-clear-screen.png)
+
+*After Ctrl+L the screen above the box is empty and the half typed message is still there. The box stays at the bottom of the terminal.*
 
 ## Commands: type `/`
 
