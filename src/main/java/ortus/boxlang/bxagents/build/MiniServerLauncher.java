@@ -67,7 +67,7 @@ public class MiniServerLauncher {
 	 * {@code executablePath} ends in {@code .jar}, it's launched as
 	 * {@code java -jar <jar> <configPath>} instead of executed directly - the
 	 * same jar-distribution form BoxLang core itself ships in (see
-	 * {@code downloadMiniServer}/{@code downloadBoxLang} in build.gradle),
+	 * {@code downloadBoxLang} in build.gradle),
 	 * used by this module's own integration tests since no native
 	 * `boxlang-miniserver` binary is installed in CI/sandboxes.
 	 *

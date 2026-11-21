@@ -54,7 +54,7 @@ public class MiniServerLauncherTest {
 	}
 
 	/**
-	 * Finds the boxlang-miniserver jar fetched by the `downloadMiniServer`
+	 * Finds the boxlang-miniserver jar fetched by the `downloadBoxLang`
 	 * Gradle task into src/test/resources/libs/boxlang-miniserver-*.jar.
 	 */
 	private static Path findMiniServerJar() throws IOException {
@@ -74,7 +74,7 @@ public class MiniServerLauncherTest {
 	@Test
 	public void testLaunchJar() throws Exception {
 		Path jarPath = findMiniServerJar();
-		assumeTrue( jarPath != null, "boxlang-miniserver jar not found - run `./gradlew downloadMiniServer` first" );
+		assumeTrue( jarPath != null, "boxlang-miniserver jar not found - run `./gradlew downloadBoxLang` first" );
 
 		Path tempDir = Files.createTempDirectory( "bxagents-miniserver-launch-test-" );
 		Path webRoot = tempDir.resolve( "webroot" );

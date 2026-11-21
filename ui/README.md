@@ -8,7 +8,7 @@ is scripted (`dev/model.json`, served by `tools/demo/fakellm.bxs`). No key, no n
 From the repository root:
 
 ```bash
-./gradlew downloadBoxLang downloadMiniServer shadowJar
+./gradlew downloadBoxLang shadowJar
 cd ui && npm install
 ```
 

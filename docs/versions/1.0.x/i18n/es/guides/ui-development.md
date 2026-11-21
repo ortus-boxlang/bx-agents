@@ -41,7 +41,7 @@ Con `BXAGENTS_UI_LINK=true` el build enlaza el módulo en lugar de copiarlo, as�
 Desde la raíz del repositorio:
 
 ```bash
-./gradlew downloadBoxLang downloadMiniServer shadowJar
+./gradlew downloadBoxLang shadowJar
 cd ui && npm install
 npx playwright install chromium     # si aún no tienes un navegador de Playwright
 ```
