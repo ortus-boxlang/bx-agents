@@ -42,7 +42,7 @@ document, twelve kinds of gateway, routines, a vault, backups, and tests that ne
 | | |
 |---|---|
 | **Build** | [Folders are the API](conventions/agent-yaml.md). A [wizard](guides/new-wizard.md) and eight starters. [Sub-agents](conventions/subagents.md) you can also talk to directly. [Skills](conventions/skills.md) from a registry, or saved by the agent with your approval. Tests with no tokens. |
-| **Run** | A [web app](conventions/web-ui.md) with a left menu and thirteen pages. A [terminal chat](guides/terminal-ui.md) with 33 slash commands. [Routines](conventions/routines.md) people make by asking. [Schedules](conventions/schedules.md), approvals, a packaged `.bxa` and six deploy targets. |
+| **Run** | A [web app](conventions/web-ui.md) with a left menu and thirteen pages. A [terminal chat](guides/terminal-ui.md) with 34 slash commands. [Routines](conventions/routines.md) people make by asking. [Schedules](conventions/schedules.md), approvals, a packaged `.bxa` and six deploy targets. |
 | **Remember** | Memory in the chat database for every agent, per person, the same in the terminal, the web app and the API. Per-person notes and shared notes about the agent's work. A [data home](conventions/data.md) with volumes, and backups with restore. |
 | **Connect** | [Twelve gateway types](conventions/gateways/index.md), and routines that deliver to them. An [API](guides/agent-api.md) with 82 routes, OpenAPI and a BoxLang client. [MCP](conventions/mcp.md) in both directions, with [per-person sign-in](conventions/connect.md) and seven built-in [connectors](conventions/connectors.md). A [vault](conventions/vault.md) with an activity log. |
 | **Operate** | Admin and member roles, tokens and people, `allowedIPs` and a rate limit. Five [logs](conventions/logs.md). The agent tree, its files and its token usage. Gateway state with a reconnect button. `bxAgents doctor`. |
@@ -95,7 +95,7 @@ gateways, logs, access and data.
 :::
 ::: card title="A full-screen terminal chat" icon="phosphor-duotone:terminal-window" href="guides/terminal-ui.md"
 `bxAgents chat` keeps your scrollback and has sessions, routines, notes, `@file` and picture attachments,
-33 slash commands, a context meter and recording. It can start its own server or connect to a deployed one.
+34 slash commands, a context meter and recording. It can start its own server or connect to a deployed one.
 :::
 :::
 
