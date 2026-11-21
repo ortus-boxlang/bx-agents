@@ -41,7 +41,18 @@ public class MiniServerLauncher {
 	 * @return The absolute path to the executable, or {@code null} if not found on PATH
 	 */
 	public static String findExecutable() {
-		String pathEnv = System.getenv( "PATH" );
+		return findExecutable( System.getenv( "PATH" ) );
+	}
+
+	/**
+	 * Searches the given folders for a `boxlang-miniserver` executable. The folders are a parameter so that a test can say where to look:
+	 * a machine that has the binary on its real PATH, such as a CI runner, would otherwise change the answer.
+	 *
+	 * @param pathEnv The folders to search, joined the way the platform joins PATH
+	 *
+	 * @return The absolute path to the executable, or {@code null} if not found
+	 */
+	public static String findExecutable( String pathEnv ) {
 		if ( pathEnv == null || pathEnv.isBlank() ) {
 			return null;
 		}
