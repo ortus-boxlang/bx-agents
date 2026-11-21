@@ -1,0 +1,108 @@
+/**
+ * Decides the settings of the terminal chat (see TuiSettings in the tui package) from the places that can hold them. The first of these
+ * that has a value for a setting wins:
+ *
+ *   1. a flag of this run: --inline or --fullscreen
+ *   2. the agent's own file in its data home: <data home>/settings.yml, `tui:`
+ *   3. the person's file for every agent: ~/.bxagents/bxAgents.yml, `tui:`
+ *   4. the project's Agent.yaml, `tui:`
+ *   5. the default of the registry
+ *
+ * The same `tui:` block, with the same names, is read in all three files. The message box's look (`prompt:` and `widgets:`) is layered
+ * the same way, a place of the widgets at a time.
+ */
+class {
+
+	/**
+	 * @projectRoot The project's folder, to find Agent.yaml and the agent's data home; blank when the chat talks to a server somewhere else
+	 * @userConfig The person's file (UserConfig); the usual one when not given
+	 * @flags The options of the run: inline and fullscreen
+	 */
+	function init( string projectRoot = "", any userConfig, struct flags = {} ) {
+		variables.root = trim( arguments.projectRoot )
+		variables.userConfig = isNull( arguments.userConfig ) ? new "models.cli.UserConfig@bxagents"() : arguments.userConfig
+		variables.flags = arguments.flags
+		return this
+	}
+
+	/**
+	 * @return The path of the agent's own settings file, or blank when there is no local project to have one
+	 */
+	string function agentFile() {
+		if ( !len( variables.root ) ) {
+			return ""
+		}
+		try {
+			return new "models.data.ProjectData@bxagents"().of( variables.root ).home.path() & "/settings.yml"
+		} catch ( any e ) {
+			return ""
+		}
+	}
+
+	/**
+	 * @return The person's file for every agent
+	 */
+	string function userFile() {
+		return variables.userConfig.path()
+	}
+
+	/**
+	 * Reads the layers and decides.
+	 *
+	 * @return { settings, look, layers, problems }: settings is the TuiSettings.Resolved the screen uses, look the merged `prompt:` and
+	 *         `widgets:`, layers the { name, values } of each place from the lowest, and problems what is wrong with the files read here
+	 */
+	struct function load() {
+		var problems = []
+		var layers = []
+		if ( len( variables.root ) ) {
+			layers.append( { name : "Agent.yaml", values : new "models.tui.TuiLook@bxagents"().forProject( variables.root ) } )
+		}
+		layers.append( { name : "your file", values : variables.userConfig.tui() } )
+		var agent = agentFile()
+		if ( len( agent ) ) {
+			var fromAgent = new "models.tui.TuiSettingsFile@bxagents"( agent ).read()
+			problems.append( new "models.tui.TuiLook@bxagents"().problems( fromAgent, agent ), true )
+			layers.append( { name : "this agent", values : fromAgent } )
+		}
+		var flagged = {}
+		if ( variables.flags.inline ?: false ) {
+			flagged.fullscreen = false
+		}
+		if ( variables.flags.fullscreen ?: false ) {
+			flagged.fullscreen = true
+		}
+		layers.append( { name : "the flag", values : flagged } )
+		return {
+			settings : createObject( "java", "ortus.boxlang.bxagents.tui.TuiSettings" ).resolveMaps( layers ),
+			look     : mergedLook( layers ),
+			layers   : layers,
+			problems : problems
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @layers The layers, from the lowest
+	 *
+	 * @return { prompt, widgets : { top, bottom } } with what the highest layer that has it says; a key none has is left out
+	 */
+	private struct function mergedLook( required array layers ) {
+		var look = {}
+		for ( var layer in arguments.layers ) {
+			var values = layer.values
+			if ( values.keyExists( "prompt" ) ) {
+				look.prompt = values.prompt
+			}
+			if ( isStruct( values.widgets ?: "" ) ) {
+				look.widgets = look.widgets ?: {}
+				for ( var place in values.widgets ) {
+					look.widgets[ place ] = values.widgets[ place ]
+				}
+			}
+		}
+		return look
+	}
+
+}

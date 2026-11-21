@@ -26,6 +26,7 @@ Type `/` in the terminal chat (a menu you move through with the arrow keys, see 
 | `/name <name>` | T W | Name this conversation | `/name Quarterly plan` |
 | `/fork [name]` | T W | Copy this conversation, messages and all, and carry on in the copy | `/fork Other approach` |
 | `/clear` | T W G | Forget this conversation's messages, keep the conversation | `/clear` |
+| `/settings [name] [value\|reset] [--global]` | T | Terminal only. Open the settings panel, or show, change or reset one setting. A change is saved for this agent in its data home, or for every agent with `--global` | `/settings header compact` |
 | `/cls` | T | Terminal only. Clear the screen above the message box and the scrollback. The conversation stays, while `/clear` forgets its messages. Ctrl+L does the same | `/cls` |
 | `/compact` | T W G | Replace older messages with a summary and keep the latest few (`keepRecent`). The agent's own model writes the summary, unless its memory names a summary model | `/compact` |
 | `/export [file] [--format=md\|html]` | T W | Save the conversation. The file name decides the format unless `--format` says | `/export plan.html` |

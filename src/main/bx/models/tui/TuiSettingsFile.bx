@@ -1,0 +1,77 @@
+/**
+ * A YAML file that holds a `tui:` block of settings (see TuiSettings): an agent's own `settings.yml` in its data home, or the person's
+ * `~/.bxagents/bxAgents.yml`. Reading goes through the YAML parser. Writing is done by TuiSettingsWriter on the lines of the file, so what
+ * the person wrote (other sections, comments, the order) is left as it was and only the line of the one setting changes.
+ *
+ *   tui:
+ *     fullscreen: false      # a comment on the line goes with the line
+ *     header: compact
+ *
+ * A file that does not exist is made when a setting is first written to it.
+ */
+class {
+
+	/**
+	 * @file The path of the file
+	 */
+	function init( required string file ) {
+		variables.file = arguments.file
+		return this
+	}
+
+	/**
+	 * @return The path of the file
+	 */
+	string function path() {
+		return variables.file
+	}
+
+	/**
+	 * @return The `tui:` mapping of the file as a struct: empty when the file or the block is missing or cannot be read
+	 */
+	struct function read() {
+		if ( !fileExists( variables.file ) ) {
+			return {}
+		}
+		try {
+			var parsed = yamlDeserialize( fileRead( variables.file ) )
+			return isStruct( parsed ) && isStruct( parsed.tui ?: "" ) ? parsed.tui : {}
+		} catch ( any e ) {
+			return {}
+		}
+	}
+
+	/**
+	 * Sets one setting, adding the `tui:` block and the file when they are not there. Nothing else in the file is touched.
+	 *
+	 * @name The setting
+	 * @value The value, as the text a file holds: true, a word or a number
+	 *
+	 * @throws BxAgents.SettingsFile When the file cannot be written, or holds `tui:` on one line
+	 */
+	void function set( required string name, required string value ) {
+		try {
+			createObject( "java", "ortus.boxlang.bxagents.tui.TuiSettingsWriter" ).set( variables.file, arguments.name, arguments.value )
+		} catch ( any e ) {
+			throw( type = "BxAgents.SettingsFile", message = e.message )
+		}
+	}
+
+	/**
+	 * Takes one setting out of the file, so the layer below it applies again. The `tui:` line goes too when nothing is left under it.
+	 *
+	 * @name The setting
+	 *
+	 * @return True when there was a line to take out
+	 *
+	 * @throws BxAgents.SettingsFile When the file cannot be written
+	 */
+	boolean function remove( required string name ) {
+		try {
+			return createObject( "java", "ortus.boxlang.bxagents.tui.TuiSettingsWriter" ).remove( variables.file, arguments.name )
+		} catch ( any e ) {
+			throw( type = "BxAgents.SettingsFile", message = e.message )
+		}
+	}
+
+}

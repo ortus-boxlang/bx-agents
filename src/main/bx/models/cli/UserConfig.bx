@@ -13,6 +13,8 @@
  *       sql:run: "%"
  *     sources:           # the name of an extension's @name:query source, by id
  *       jira:ticket: issue
+ *   tui:                 # how the chat looks and behaves, for every agent (see TuiSettings); an agent's own settings.yml wins over it
+ *     fullscreen: true
  *   extensions:          # values for extensions, by name, and what to turn off (see ExtensionSettings)
  *     disable: [ roll ]
  *     hello: { greeting: Hi }
@@ -77,6 +79,14 @@ class {
 	}
 
 	/**
+	 * @return The `tui:` mapping: the settings of how the chat looks and behaves for every agent (see TuiSettings); empty when there is none
+	 */
+	struct function tui() {
+		load()
+		return isStruct( variables.data.tui ?: "" ) ? variables.data.tui : {}
+	}
+
+	/**
 	 * @return { "extension:method" : "prefix" } the prefixes the person chose for extensions' prefixes
 	 */
 	struct function prefixes() {
@@ -138,15 +148,18 @@ class {
 		}
 		if ( !isStruct( parsed ) ) {
 			if ( !isSimpleValue( parsed ) || len( trim( parsed ) ) ) {
-				variables.problems.append( "#variables.file# must be a mapping with a chat: or extensions: section" )
+				variables.problems.append( "#variables.file# must be a mapping with a chat:, tui: or extensions: section" )
 			}
 			return
 		}
 		variables.data = parsed
 		for ( var key in parsed ) {
-			if ( ![ "chat", "extensions" ].contains( lCase( key ) ) ) {
-				variables.problems.append( "#variables.file# has an unknown setting [#key#]; the sections are: chat, extensions" )
+			if ( ![ "chat", "tui", "extensions" ].contains( lCase( key ) ) ) {
+				variables.problems.append( "#variables.file# has an unknown setting [#key#]; the sections are: chat, tui, extensions" )
 			}
+		}
+		if ( parsed.keyExists( "tui" ) ) {
+			variables.problems.append( new "models.tui.TuiLook@bxagents"().problems( parsed.tui, variables.file ), true )
 		}
 		if ( parsed.keyExists( "extensions" ) && !isStruct( parsed.extensions ) ) {
 			variables.problems.append( "#variables.file#: extensions must be a mapping of extension name to its values, with an optional disable list" )

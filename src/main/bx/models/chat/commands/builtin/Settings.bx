@@ -1,0 +1,58 @@
+/**
+ * /settings: how the terminal chat looks and behaves (see TuiSettings in the tui package). With nothing after it, it opens the settings
+ * panel. `/settings header` shows one setting, `/settings header compact` changes it and saves it for this agent in its data home, and
+ * `/settings header compact --global` saves it for every agent in the person's own file. `/settings header reset` takes the agent's own
+ * value out, so the global one, then the project's, then the default applies.
+ */
+class extends="models.chat.commands.BaseCommand@bxagents" {
+
+	string function name() {
+		return "settings"
+	}
+
+	string function usage() {
+		return "[name] [value|reset] [--global]"
+	}
+
+	string function group() {
+		return "Screen"
+	}
+
+	string function hint() {
+		return "see and change how the chat looks and behaves: /settings, /settings header compact, /settings header reset --global"
+	}
+
+	array function transports() {
+		return [ "tui" ]
+	}
+
+	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
+		if ( !arguments.context.hasTerminal() ) {
+			return reply.warn( "The settings are a terminal thing." )
+		}
+		var words = listToArray( trim( replace( arguments.args, "--global", "", "all" ) ), " " )
+		var scope = findNoCase( "--global", arguments.args ) ? "global" : "agent"
+		if ( !words.len() ) {
+			return reply.screen( "settings" )
+		}
+		var terminal = arguments.context.terminal()
+		var found = terminal.settingsTable().filter( s => s.name == words[ 1 ] )
+		if ( words.len() == 1 ) {
+			if ( !found.len() ) {
+				return reply.warn( "There is no setting [#words[ 1 ]#]. Type /settings to see them." )
+			}
+			var s = found[ 1 ]
+			return reply.text( "#s.name# is #s.value# (#s.source#). It takes #s.allowed#. #s.does#." )
+		}
+		try {
+			if ( lCase( words[ 2 ] ) == "reset" ) {
+				return reply.ok( terminal.resetSetting( words[ 1 ], scope ) )
+			}
+			return reply.ok( terminal.changeSetting( words[ 1 ], words[ 2 ], scope ) )
+		} catch ( any e ) {
+			return reply.warn( e.message )
+		}
+	}
+
+}

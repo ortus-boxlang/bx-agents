@@ -66,8 +66,8 @@ class extends="testbox.system.BaseSpec" {
 				expect( questions ).toHaveLength( 3 );
 				expect( questions[ 1 ].choices.map( c => c.value ) ).toBe( [ "bars", "bars-hints", "rule", "box", "panel" ] );
 				expect( questions[ 2 ].choices.map( c => c.value ) ).toInclude( "git" );
-				expect( questions[ 2 ].choices.filter( c => c.selected ).map( c => c.value ) ).toBe( [ "agent", "folder", "user", "clock" ] );
-				expect( questions[ 3 ].choices.filter( c => c.selected ).map( c => c.value ) ).toBe( [ "profile", "ctx" ] );
+				expect( questions[ 2 ].choices.filter( c => c.selected ).map( c => c.value ) ).toBe( [] );
+				expect( questions[ 3 ].choices.filter( c => c.selected ).map( c => c.value ) ).toBe( [ "profile", "folder", "git", "ctx" ] );
 				expect( plan.look ).toBe( { prompt : "panel", top : [ "clock" ], bottom : [] } );
 				expect( result.command ).toInclude( "--prompt=panel --widgets=clock --widgets-bottom=none" );
 			} );
@@ -75,7 +75,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "never keeps a plain password", function() {
 				var wizard = wizardFor( [
 					"bot", "", "minimal", "openai", "", false, [], "cache", [], [ "web" ],
-					"users", "ada", "s3cret-pw", "s3cret-pw", "", false, "off", "bars", [ "agent", "folder", "user", "clock" ], [ "ctx", "profile" ], "none", "create"
+					"users", "ada", "s3cret-pw", "s3cret-pw", "", false, "off", "bars", [], [ "folder", "git", "ctx", "profile" ], "none", "create"
 				] );
 
 				var plan = wizard.run().plan;
@@ -86,7 +86,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "puts a failed password confirmation back to the same question", function() {
 				var wizard = wizardFor( [
 					"bot", "", "minimal", "openai", "", false, [], "cache", [], [ "web" ],
-					"users", "ada", "one", "two", "ok", "pw", "pw", "", false, "off", "bars", [ "agent", "folder", "user", "clock" ], [ "ctx", "profile" ], "none", "create"
+					"users", "ada", "one", "two", "ok", "pw", "pw", "", false, "off", "bars", [], [ "folder", "git", "ctx", "profile" ], "none", "create"
 				] );
 
 				var plan = wizard.run().plan;
@@ -112,7 +112,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "goes back to the previous question on Esc and asks it again", function() {
 				var wizard = wizardFor( [
-					"first", "<back>", "second", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "bars", [ "agent", "folder", "user", "clock" ], [ "ctx", "profile" ], "none", "create"
+					"first", "<back>", "second", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "bars", [], [ "folder", "git", "ctx", "profile" ], "none", "create"
 				] );
 
 				var plan = wizard.run().plan;
@@ -124,7 +124,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "stays on the first question when there is nothing to go back to", function() {
 				var wizard = wizardFor( [
-					"<back>", "bot", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "bars", [ "agent", "folder", "user", "clock" ], [ "ctx", "profile" ], "none", "create"
+					"<back>", "bot", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "bars", [], [ "folder", "git", "ctx", "profile" ], "none", "create"
 				] );
 
 				expect( wizard.run().plan.name ).toBe( "bot" );
@@ -140,8 +140,8 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "starts over when the review says so", function() {
 				var wizard = wizardFor( [
-					"one", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "bars", [ "agent", "folder", "user", "clock" ], [ "ctx", "profile" ], "none", "restart",
-					"two", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "bars", [ "agent", "folder", "user", "clock" ], [ "ctx", "profile" ], "none", "create"
+					"one", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "bars", [], [ "folder", "git", "ctx", "profile" ], "none", "restart",
+					"two", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "bars", [], [ "folder", "git", "ctx", "profile" ], "none", "create"
 				] );
 
 				expect( wizard.run().plan.name ).toBe( "two" );
@@ -149,7 +149,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "refuses a bad name and asks again", function() {
 				var wizard = wizardFor( [
-					"1bad name", "ok", "good", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "bars", [ "agent", "folder", "user", "clock" ], [ "ctx", "profile" ], "none", "create"
+					"1bad name", "ok", "good", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "bars", [], [ "folder", "git", "ctx", "profile" ], "none", "create"
 				] );
 
 				expect( wizard.run().plan.name ).toBe( "good" );
@@ -158,7 +158,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "asks the tuning questions again until a number is given, and leaves empty answers empty", function() {
 				var wizard = wizardFor( [
 					"bot", "", "minimal", "openai", "", true, "hot", "2.5", "0.5", "", "ten", "45",
-					[], "cache", [], [], "off", "bars", [ "agent", "folder", "user", "clock" ], [ "ctx", "profile" ], "none", "create"
+					[], "cache", [], [], "off", "bars", [], [ "folder", "git", "ctx", "profile" ], "none", "create"
 				] );
 
 				var plan = wizard.run().plan;
@@ -167,7 +167,7 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "does not ask about tuning when a flag gave it, and shows it as answered", function() {
-				var wizard = wizardFor( [ "bot", "", "minimal", "openai", "", [], "cache", [], [], "off", "bars", [ "agent", "folder", "user", "clock" ], [ "ctx", "profile" ], "none", "create" ] );
+				var wizard = wizardFor( [ "bot", "", "minimal", "openai", "", [], "cache", [], [], "off", "bars", [], [ "folder", "git", "ctx", "profile" ], "none", "create" ] );
 
 				var plan = wizard.run( { temperature : "0.1" } ).plan;
 
@@ -179,7 +179,7 @@ class extends="testbox.system.BaseSpec" {
 				var wizard = wizardFor( [
 					"bot", "", "minimal", "openai", "", false, [ "files" ],
 					"read", [], [ "tmp" ],
-					"cache", [], [], "off", "bars", [ "agent", "folder", "user", "clock" ], [ "ctx", "profile" ], "none", "create"
+					"cache", [], [], "off", "bars", [], [ "folder", "git", "ctx", "profile" ], "none", "create"
 				] );
 
 				var plan = wizard.run().plan;
@@ -189,7 +189,7 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "writes the connectors that were left out into the features, and offers none when every one was left out", function() {
-				var some = wizardFor( [ "bot", "", "minimal", "openai", "", false, [], "cache", [ "stripe", "cloudflare" ], [], "off", "bars", [ "agent", "folder", "user", "clock" ], [ "ctx", "profile" ], "none", "create" ] );
+				var some = wizardFor( [ "bot", "", "minimal", "openai", "", false, [], "cache", [ "stripe", "cloudflare" ], [], "off", "bars", [], [ "folder", "git", "ctx", "profile" ], "none", "create" ] );
 				var plan = some.run().plan;
 				var planner = new bxagents.models.wizard.ProjectPlan( new bxagents.models.wizard.WizardCatalog() );
 
@@ -198,12 +198,12 @@ class extends="testbox.system.BaseSpec" {
 				expect( planner.toCommand( plan ) ).toInclude( "--connectors=exclude:stripe,cloudflare" );
 
 				var all = new bxagents.models.wizard.WizardCatalog().mcpServers().map( e => e.id );
-				var none = wizardFor( [ "bot", "", "minimal", "openai", "", false, [], "cache", all, [], "off", "bars", [ "agent", "folder", "user", "clock" ], [ "ctx", "profile" ], "none", "create" ] );
+				var none = wizardFor( [ "bot", "", "minimal", "openai", "", false, [], "cache", all, [], "off", "bars", [], [ "folder", "git", "ctx", "profile" ], "none", "create" ] );
 				expect( planner.toFeatures( none.run().plan ).connectors ).toBe( "none" );
 			} );
 
 			it( "offers every connector and asks which to leave out", function() {
-				var wizard = wizardFor( [ "bot", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "bars", [ "agent", "folder", "user", "clock" ], [ "ctx", "profile" ], "none", "create" ] );
+				var wizard = wizardFor( [ "bot", "", "minimal", "openai", "", false, [], "cache", [], [], "off", "bars", [], [ "folder", "git", "ctx", "profile" ], "none", "create" ] );
 				var plan = wizard.run().plan;
 				var mcp = prompter.asked().filter( q => q.title == "Leave out any connectors?" )[ 1 ];
 

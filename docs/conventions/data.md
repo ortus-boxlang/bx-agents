@@ -21,6 +21,7 @@ An agent keeps its state in one place, the **data home**, and reaches the rest o
   routines/      reports saved by routines, one folder each (see routines)
   logs/          what the agent logs, one file per area (see logs)
   backups/       written by bxAgents backup
+  settings.yml   your own settings for how the terminal chat looks, for this agent (see Settings), made when you first save one
 ```
 
 There is always a home. Where it is, first match wins:
