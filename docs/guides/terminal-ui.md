@@ -70,12 +70,33 @@ Finished turns are printed as ordinary terminal text, so **your scrollback, sear
 | Ctrl+D | Leave, on an empty box (otherwise delete the character under the cursor) |
 | Esc | While the agent works, stop it at its next step (not mid-word) |
 | Enter while the agent works | **Steer**: your message is added to the run |
-| `?` alone, or `/keys` | Show the keys as bound right now |
+| F1, Ctrl+/, or `?` alone, or `/keys` | Open the shortcuts panel: every key as bound right now. F1 and Ctrl+/ work while you type, and what you typed stays in the box |
 | Up / Down, Tab, Enter, Esc while the `/` menu is open | Move, fill, run or fill, close: the menu keys are in the Commands section below. The `@` menu takes Up / Down and Tab |
 
-![The output of /keys, listing every key with its action name](../assets/tui/chat-keys.png)
+### The shortcuts panel
 
-*`/keys` lists every key, the action name to use in `bxAgents.yml`, and what it does.*
+![The keyboard shortcuts panel, with the keys in sections](../assets/tui/chat-keys.png)
+
+*F1 opens a panel in place of the message box. Everything you can press is in it, in sections: writing a message, the menus, while the agent works, the prefixes and the keys your extensions add. The grey word after a key is the name to use for it in `bxAgents.yml`.*
+
+Type to narrow the list: `ctrl` shows the keys with Ctrl, `newline` the key that adds a line.
+
+![The panel narrowed by typing ctrl](../assets/tui/chat-keys-filter.png)
+
+| Key | Does in the panel |
+|---|---|
+| Type, Backspace | Narrow the list by the keys, by what they do, by their name or by the section |
+| Up, Down, PgUp, PgDn | Scroll |
+| Esc | Clear the filter; with no filter, close the panel |
+| F1, Ctrl+/ | Close it |
+
+A key you changed in `bxAgents.yml` shows what it was, as `(was Alt+Enter)`. Some terminals do not pass Ctrl+/ through, which is why F1 is the one to count on.
+
+<video controls preload="metadata" poster="/assets/video/keys-panel-poster.png" style="max-width:100%">
+  <source src="/assets/video/keys-panel.mp4" type="video/mp4">
+</video>
+
+*Opening the panel over a half typed message, narrowing it, scrolling, closing it, and opening it again with `/keys`.*
 
 ### Change a key
 

@@ -576,7 +576,7 @@ In the screen:
 | Esc | Stop the agent. It stops at its next step, not mid-word |
 | Enter while the agent works | Steer it: your message is added to the run |
 | Ctrl+C | Clear the box; on an empty box, leave; while the agent works, stop it. Ctrl+D leaves on an empty box |
-| `?` alone, or `/keys` | List the keys as they are bound now, with the action name of each |
+| `?` alone, F1, Ctrl+/, or `/keys` | Open the shortcuts panel: the keys as they are bound now, with the action name of each, narrowed by typing |
 
 Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/volumes` (the folders the agent may use), `/agent` (pick a sub-agent to talk to), `/skills` (the skills the agent can load, and from which level), `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/keys` (which key does what), `/prompt` (how the message box looks, see below), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
 

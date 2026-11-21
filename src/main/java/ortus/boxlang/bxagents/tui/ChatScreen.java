@@ -455,6 +455,12 @@ public final class ChatScreen implements AutoCloseable {
 			if ( ev instanceof PasteEvent p ) {
 				composer.paste( p.text() );
 			} else if ( ev instanceof KeyEvent k ) {
+				// the shortcuts panel: F1 or Ctrl+/ at any time, or ? on an empty box. What is typed stays in the box.
+				if ( k.isKey( KeyCode.F1 ) || k.hasCtrl() && ( k.isChar( '/' ) || k.isChar( '_' ) )
+				    || composer.text().isEmpty() && k.isKey( KeyCode.CHAR ) && k.isChar( '?' ) && !k.hasCtrl() ) {
+					showKeys();
+					continue;
+				}
 				slash.sync( composer.text(), composer.rowCount() );
 				if ( slash.isOpen() ) {
 					if ( k.isKey( KeyCode.UP ) || k.isKey( KeyCode.DOWN ) ) {
@@ -828,6 +834,22 @@ public final class ChatScreen implements AutoCloseable {
 		rows.addAll( promptRows( false, "you", picture + lower( keys.first( KeyMap.Action.SUBMIT ) ) + " send · " + lower( keys.first( KeyMap.Action.NEWLINE ) )
 		    + " new line · ? keys" + ( slash.isOpen() || !files.isEmpty() ? " · tab completes" : "" ) ) );
 		return rows;
+	}
+
+	/**
+	 * Shows the keyboard shortcuts as a panel in the live area and waits until it is closed (Esc, F1 or Ctrl+/). The keys are the ones bound
+	 * now, so a person's own changes show, marked with what they were. The message box and what is typed in it are left as they were.
+	 */
+	public void showKeys() {
+		KeysPanel panel = new KeysPanel( keys.table() );
+		while ( true ) {
+			int room = terminal.getSize().getRows() > 0 ? terminal.getSize().getRows() : 24;
+			draw( panel.rows( theme, runner.width(), Math.min( 24, room - 2 ) ) );
+			Event ev = runner.pollEvent( Duration.ofMillis( 150 ) );
+			if ( ev instanceof KeyEvent k && panel.key( k ) ) {
+				return;
+			}
+		}
 	}
 
 	/**
