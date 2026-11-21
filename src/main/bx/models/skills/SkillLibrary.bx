@@ -57,6 +57,28 @@ class {
 	}
 
 	/**
+	 * @return The folder of the skills bxAgents itself ships, inside the module, with forward slashes. 
+	 */
+	string function builtinFolder() {
+		// this file is <module>/models/skills/SkillLibrary.bx, and the shipped skills are <module>/skills. Going by where the file is,
+		// not by getModuleInfo(), keeps it right when the module is mapped from the source folder, as the specs do.
+		var here = replace( getDirectoryFromPath( getCurrentTemplatePath() ), "\\", "/", "all" ).reReplace( "/+$", "" )
+		return here.reReplace( "/[^/]+/[^/]+$", "" ) & "/skills"
+	}
+
+	/**
+	 * Puts the skills bxAgents ships in bx-ai's global list. bx-ai gives every agent the global list as skills that are
+	 * available on request: only a name and a description are in the context until the model asks for one. These go in
+	 * after the project's and the extensions' skills, so any of those with the same name wins, and before the agent's own,
+	 * which cannot take a name they have. Safe to run more than once.
+	 *
+	 * @return The names that were added
+	 */
+	array function loadBuiltin() {
+		return len( builtinFolder() ) ? loadFolder( builtinFolder() ) : []
+	}
+
+	/**
 	 * Puts the skills of the app's skills/ folder (the project's own and the installed ones, as the build copied
 	 * them) in bx-ai's global list. bx-ai reads its skills folder once, when the runtime starts, which is before an
 	 * app's settings are applied, so a built app has to add them itself. A skill already in the list keeps its place,
@@ -108,7 +130,7 @@ class {
 	}
 
 	/**
-	 * @return [ { name, description, origin } ] sorted by name; origin is installed, project or agent
+	 * @return [ { name, description, origin } ] sorted by name; origin is installed, project, bxagents or agent
 	 */
 	array function listing() {
 		return aiGlobalSkills()
@@ -147,11 +169,14 @@ class {
 	/**
 	 * @skill An AiSkill
 	 *
-	 * @return agent when the skill is one the agent saved, installed when the build copied it from .agents/skills, otherwise project
+	 * @return agent when the skill is one the agent saved, bxagents when it is one bxAgents ships, installed when the build copied it from .agents/skills, otherwise project
 	 */
 	string function originOf( required any skill ) {
 		if ( isAgents( arguments.skill ) ) {
 			return "agent"
+		}
+		if ( isBuiltin( arguments.skill ) ) {
+			return "bxagents"
 		}
 		return isInstalled( arguments.skill ) ? "installed" : "project"
 	}
@@ -204,7 +229,7 @@ class {
 		var global = aiGlobalSkills()
 		var at = positionOf( global, skillName )
 		if ( at > 0 && !isAgents( global[ at ] ) ) {
-			return { ok : false, reason : "[#global[ at ].getName()#] is a skill that came with the agent (shipped or installed) and cannot be replaced. Choose another name." }
+			return { ok : false, reason : "[#global[ at ].getName()#] is a skill that came with the agent (shipped, installed or from bxAgents) and cannot be replaced. Choose another name." }
 		}
 		var existing = directoryExists( folder() & "/" & skillName )
 		if ( !existing && at == 0 && saved().len() >= static.MAX_SKILLS ) {
@@ -268,6 +293,11 @@ class {
 		} catch ( any e ) {
 			return false
 		}
+	}
+
+	private boolean function isBuiltin( required any skill ) {
+		var path = replace( arguments.skill.getFilePath() ?: "", "\", "/", "all" )
+		return len( path ) && len( builtinFolder() ) && path.startsWith( builtinFolder() & "/" )
 	}
 
 	private boolean function isAgents( required any skill ) {

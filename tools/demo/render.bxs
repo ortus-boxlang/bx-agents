@@ -108,7 +108,7 @@ function dimmed( required any fg, required any bg ) {
 
 /**
  * Draws a box drawing or block character as lines that fill the cell, so that a vertical line joins the one above and below it (the font's
- * glyph is as tall as the text, and the cell is taller). Light lines, the rounded corners (drawn square) and the thin left bars are drawn here.
+ * glyph is as tall as the text, and the cell is taller). Light lines, the rounded corners (drawn square), the thin left bars and the half and full blocks are drawn here.
  *
  * @g The graphics, already set to the colour of the character
  * @ch The character
@@ -136,8 +136,39 @@ function drawLineCell( required any g, required string ch, required numeric px, 
 		if ( a[ 4 ] ) { g.fillRect( midX, midY, px + cellW - midX, 1 ) }
 		return true
 	}
+	// the half and the full block, which the logo is drawn with: the top half, the bottom half or the whole cell
+	if ( arguments.ch == "▀" ) {
+		g.fillRect( px, py, cellW, int( cellH / 2 ) )
+		return true
+	}
+	if ( arguments.ch == "▄" ) {
+		g.fillRect( px, py + int( cellH / 2 ), cellW, cellH - int( cellH / 2 ) )
+		return true
+	}
+	if ( arguments.ch == "█" ) {
+		g.fillRect( px, py, cellW, cellH )
+		return true
+	}
 	if ( bars.keyExists( arguments.ch ) ) {
 		g.fillRect( px, py, max( 2, int( cellW * bars[ arguments.ch ] / 8 ) ), cellH )
+		return true
+	}
+	// braille: a block of 2 by 4 dots, one bit for each. The font draws them small and faint, a terminal draws them as round dots that
+	// fill the cell, which is how the mark in the header is meant to look.
+	var code = arguments.ch.codePointAt( 0 )
+	if ( code >= 10240 && code <= 10495 ) {
+		var bits = code - 10240
+		// which bit is which dot: [ column, row ], in the order braille numbers them
+		var dots = [ [ 0, 0 ], [ 0, 1 ], [ 0, 2 ], [ 1, 0 ], [ 1, 1 ], [ 1, 2 ], [ 0, 3 ], [ 1, 3 ] ]
+		var dotW = cellW / 2
+		var dotH = cellH / 4
+		var size = max( 2, int( min( dotW, dotH ) * 0.78 ) )
+		for ( var i = 1; i <= 8; i++ ) {
+			if ( bitAnd( bits, bitSHLN( 1, i - 1 ) ) ) {
+				var d = dots[ i ]
+				g.fillOval( int( px + d[ 1 ] * dotW + ( dotW - size ) / 2 ), int( py + d[ 2 ] * dotH + ( dotH - size ) / 2 ), size, size )
+			}
+		}
 		return true
 	}
 	return false

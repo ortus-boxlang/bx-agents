@@ -280,6 +280,19 @@ class {
 	}
 
 	/**
+	 * @return The names of the MCP servers the agent talks to, from its configuration; empty when it has none
+	 */
+	array function mcpServers() {
+		try {
+			return ( variables.agent.getConfig().mcpServers ?: [] )
+				.map( s => isStruct( s ) ? ( s.name ?: "" ) : "" )
+				.filter( n => len( n ) )
+		} catch ( any e ) {
+			return []
+		}
+	}
+
+	/**
 	 * @return The skills the agent can load, as [ { name, description, origin } ] and never a folder on the machine
 	 */
 	array function skills() {

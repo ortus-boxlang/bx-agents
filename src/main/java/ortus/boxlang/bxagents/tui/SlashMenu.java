@@ -37,6 +37,11 @@ final class SlashMenu {
 	static final int					WINDOW		= 8;
 
 	/**
+	 * How many commands are in view in this menu: {@link #WINDOW} unless {@link #setWindow} says otherwise
+	 */
+	private int							window		= WINDOW;
+
+	/**
 	 * How many characters must be typed before the descriptions are searched too: one or two letters would match nearly every sentence
 	 */
 	private static final int			HINT_MATCH	= 3;
@@ -245,9 +250,17 @@ final class SlashMenu {
 		pick = Math.floorMod( pick + delta, matches.size() );
 		if ( pick < top ) {
 			top = pick;
-		} else if ( pick >= top + WINDOW ) {
-			top = pick - WINDOW + 1;
+		} else if ( pick >= top + window ) {
+			top = pick - window + 1;
 		}
+	}
+
+	/**
+	 * @param rows How many commands to show at once
+	 */
+	void setWindow( int rows ) {
+		this.window	= Math.max( 1, rows );
+		this.top	= Math.max( 0, Math.min( top, Math.max( 0, matches.size() - window ) ) );
 	}
 
 	/**
@@ -261,7 +274,7 @@ final class SlashMenu {
 	 * @return The commands in view, from the first one that is not scrolled past
 	 */
 	List<Item> window() {
-		return matches.subList( top, Math.min( matches.size(), top + WINDOW ) );
+		return matches.subList( top, Math.min( matches.size(), top + window ) );
 	}
 
 	/**

@@ -6,6 +6,7 @@
  *     widgets:
  *       top: [ agent, folder, user, clock ]  # in the top bar
  *       bottom: [ ctx, profile ]             # at the bottom
+ *     fullscreen: true                      # and the other settings of TuiSettings: header, spacing, theme, ...
  *
  * The styles and widgets are the Java classes' to name (PromptStyles and Widgets), so this checks the block against
  * them and a new style or widget needs no change here. Nothing in the block is required: what is missing keeps its
@@ -52,10 +53,9 @@ class {
 		if ( !isStruct( arguments.tui ) ) {
 			return [ "#arguments.label#: 'tui' must be a mapping (prompt:, widgets:)" ]
 		}
-		for ( var key in arguments.tui ) {
-			if ( !listFindNoCase( "prompt,widgets", key ) ) {
-				out.append( "#arguments.label#: tui has no setting '#key#'. The settings are prompt and widgets" )
-			}
+		// the settings of the registry (fullscreen, header, spacing and the rest) are checked by TuiSettings; prompt and widgets are below
+		for ( var problem in createObject( "java", "ortus.boxlang.bxagents.tui.TuiSettings" ).problems( arguments.tui, arguments.label ) ) {
+			out.append( problem )
 		}
 		if ( arguments.tui.keyExists( "prompt" ) ) {
 			var styles = styleNames()

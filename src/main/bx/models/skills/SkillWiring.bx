@@ -4,6 +4,7 @@
  *   skills:
  *     agentCanSave: true     # the root agent has the skill_save tool (default true; subagents never get it)
  *     autoApprove: false     # a person approves each save (default false)
+ *     builtin: true          # the skills bxAgents ships are available to the agent (default true)
  *
  * The generated agent factory calls load() once before any agent is built, so the skills the agent saved earlier
  * are in every agent's list, and attach() on the root agent for the tool.
@@ -13,7 +14,7 @@ import bxModules.bxagents.models.util.ToolNames;
 class {
 
 	static {
-		KNOWN_KEYS = [ "agentCanSave", "autoApprove" ]
+		KNOWN_KEYS = [ "agentCanSave", "autoApprove", "builtin" ]
 	}
 
 	/**
@@ -27,7 +28,7 @@ class {
 		var found = []
 		for ( var key in arguments.settings ) {
 			if ( !static.KNOWN_KEYS.findNoCase( key ) ) {
-				found.append( "skills.#key# is not a setting. The settings are agentCanSave and autoApprove." )
+				found.append( "skills.#key# is not a setting. The settings are agentCanSave, autoApprove and builtin." )
 			} else if ( !isTrueBoolean( arguments.settings[ key ] ) ) {
 				found.append( "skills.#key# must be true or false." )
 			}
@@ -45,6 +46,26 @@ class {
 	 */
 	array function loadShipped( required string folder ) {
 		return new "models.skills.SkillLibrary@bxagents"().loadFolder( arguments.folder )
+	}
+
+	/**
+	 * Puts the skills bxAgents ships (the module's own skills/ folder) in the list every agent is given, as skills that are
+	 * available on request and not in the context. Run after loadShipped() and the extensions' skills, so a skill of the
+	 * project with the same name wins, and before load(), so one the agent saved cannot take a name.
+	 *
+	 * @return The names that were added
+	 */
+	array function loadBuiltin() {
+		return new "models.skills.SkillLibrary@bxagents"().loadBuiltin()
+	}
+
+	/**
+	 * @settings The `skills` block
+	 *
+	 * @return False when `skills.builtin` is false, which turns the skills bxAgents ships off; true otherwise
+	 */
+	boolean function wantsBuiltin( struct settings = {} ) {
+		return !structKeyExists( arguments.settings, "builtin" ) || isTrueBoolean( arguments.settings.builtin ) && arguments.settings.builtin
 	}
 
 	/**

@@ -825,6 +825,14 @@ class {
 		if ( len( skillsLine ) ) {
 			lines.insertAt( lines.findNoCase( "		// usage recording is off unless Agent.yaml says usage: true" ), skillsLine )
 		}
+		// then the skills bxAgents itself ships, available on request and not in the context: after the project's and the
+		// extensions' so theirs win a name, before the agent's own so it cannot take one. skills.builtin: false leaves them out.
+		if ( new "models.skills.SkillWiring@bxagents"().wantsBuiltin( isStruct( arguments.resolvedConfig.skills ?: "" ) ? arguments.resolvedConfig.skills : {} ) ) {
+			lines.insertAt(
+				lines.findNoCase( "		// usage recording is off unless Agent.yaml says usage: true" ),
+				'		new "models.skills.SkillWiring@bxagents"().loadBuiltin()'
+			)
+		}
 		// then the skills the agent saved in its data home, after the project's and the extensions' so theirs win
 		lines.insertAt(
 			lines.findNoCase( "		// usage recording is off unless Agent.yaml says usage: true" ),

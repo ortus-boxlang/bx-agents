@@ -36,6 +36,48 @@ class extends="testbox.system.BaseSpec" {
 				return skill;
 			}
 
+			describe( "the skills bxAgents ships", function() {
+
+				it( "adds the six of the module to the list, with the origin bxagents, and reads one without a folder", function() {
+					var added = library.loadBuiltin();
+
+					expect( added.sort( "text" ) ).toBe( [
+						"bxagents-build-agent", "bxagents-chat", "bxagents-gateways-connectors", "bxagents-operate", "bxagents-subagents-routines",
+						"bxagents-tools-and-skills"
+					] );
+					var listed = library.listing().filter( s => s.origin == "bxagents" );
+					expect( listed ).toHaveLength( 6 );
+					expect( listed.every( s => len( s.description ) > 20 ) ).toBeTrue();
+					var found = library.read( "bxagents-chat" );
+					expect( found.origin ).toBe( "bxagents" );
+					expect( found.body ).toInclude( "/settings" );
+					expect( jsonSerialize( found ) ).notToInclude( library.builtinFolder() );
+				} );
+
+				it( "leaves a skill of the project with the same name alone, and is safe to run twice", function() {
+					projectSkill( "bxagents-chat" );
+
+					library.loadBuiltin();
+					library.loadBuiltin();
+
+					expect( library.listing().filter( s => s.name == "bxagents-chat" ) ).toHaveLength( 1 );
+					expect( library.read( "bxagents-chat" ).origin ).toBe( "project" );
+					expect( library.listing().filter( s => s.origin == "bxagents" ) ).toHaveLength( 5 );
+				} );
+
+				it( "cannot be replaced by the agent's own skill, which can still add others", function() {
+					library.loadBuiltin();
+
+					var refused = library.save( "bxagents-operate", "Mine.", "Mine." );
+					var fine = library.save( "my-own", "Mine.", "Mine." );
+
+					expect( refused.ok ).toBeFalse();
+					expect( refused.reason ).toInclude( "cannot be replaced" );
+					expect( fine.ok ).toBeTrue();
+				} );
+
+			} );
+
 			describe( "reading one skill", function() {
 
 				it( "gives the text with its origin, size and when it was saved, and never a folder", function() {

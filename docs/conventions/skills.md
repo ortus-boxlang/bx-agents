@@ -40,7 +40,7 @@ A folder without a `SKILL.md` inside it is not discovered as a skill at all - it
 
 ## The three levels
 
-An agent's skill list is made from three levels. The first two are built into the app; the third is written by the agent while it runs.
+An agent's skill list is made from three levels, and a fourth that bxAgents brings itself. The first two are built into the app; the third is written by the agent while it runs.
 
 ```mermaid
 flowchart TB
@@ -77,11 +77,13 @@ flowchart TB
 | 1. Installed | `.agents/skills/` in the project. A skills tool links a skill from its global folder into it, or `bxAgents skills install` copies one there. It stays out of source control and is restored at build time | A skills tool or the registry | `installed` |
 | 2. Ships with the agent | `skills/` in the project, and the skills [extensions](extensions.md) carry | You | `project` |
 | 3. The agent's own | `skills/` in the [data home](data.md#skills-the-agent-saves) | The agent, with its `skill_save` tool | `agent` |
+| bxAgents' own | `skills/` inside the bxAgents module: how to build, operate and chat with an agent | bxAgents | `bxagents` |
 
 The rules between the levels:
 
 - **Yours wins over installed.** A skill in `skills/` and an installed one with the same name or folder: the one in `skills/` is used.
 - **The agent never replaces the first two.** `skill_save` refuses the name of an installed skill or one that ships with the agent. It can save over a skill it wrote itself, to improve it.
+- **bxAgents' own come last.** A skill of yours with the same name as one of the six that bxAgents ships wins, and `skill_save` cannot take their names. They are available on request like every skill: only a name and a description are in the context until the model asks for one. `skills.builtin: false` in `Agent.yaml` leaves them out.
 - **A link is followed.** The app gets a copy of what the link points at, so a deployed app does not depend on the global folder.
 - **The app tells levels 1 and 2 apart** by `skills/.installed.json`, which the build writes beside the skills. `/skills` and `GET /skills` use it to show each skill's level.
 

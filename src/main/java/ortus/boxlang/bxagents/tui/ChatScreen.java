@@ -69,15 +69,36 @@ public final class ChatScreen implements AutoCloseable {
 
 	private static final String[]			SPINNER			= { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
 	private static final int				MAX_TAIL		= 8;
-	private static final int				MAX_MENU		= 6;
+
+	/**
+	 * How long a turn must take, in milliseconds, before the {@code notify} setting tells the person it is over
+	 */
+	private static final long				NOTIFY_AFTER_MS	= 10_000;
 	private static final int				MAX_COMPOSER	= 6;
 
 	private final InlineTuiRunner			runner;
 	private final Terminal					terminal;
 	private final RecordingTerminal			tap;
-	private final Theme						theme;
+	private Theme							theme;
 	private final ClassLoader				previousLoader;
 	private final SlashMenu					slash;
+
+	/**
+	 * What the chat runs with, decided from the layers, and where the files are that hold the person's own choices
+	 */
+	private TuiSettings.Resolved			settings		= TuiSettings.defaults();
+	private String							agentFile		= "";
+	private String							userFile		= "";
+	private String							version			= "";
+	private String							agentName		= "";
+
+	/**
+	 * What the heading lists as loaded, a line for each label in the order the lines were set
+	 */
+	private final Map<String, Header.Group>	loaded			= new java.util.LinkedHashMap<>();
+	/** the files the person agreed to write to in this chat: false for the agent\'s file, true for the file for every agent */
+	private final java.util.Set<Boolean>	savedTo			= new java.util.HashSet<>();
+	private boolean							titleSet;
 	private final Composer					composer		= new Composer();
 	private KeyMap							keys			= KeyMap.defaults();
 	private String							pendingKey;
@@ -133,6 +154,20 @@ public final class ChatScreen implements AutoCloseable {
 	 * @throws Exception when the terminal cannot be put in raw mode
 	 */
 	public static ChatScreen open( List<?> slashCommands ) throws Exception {
+		return open( slashCommands, false );
+	}
+
+	/**
+	 * Opens the chat area at the bottom of the terminal, after clearing the screen when asked to, so the header can be drawn at the top
+	 *
+	 * @param slashCommands maps with "name" (such as /new) and "hint", offered when the message starts with /
+	 * @param clear         true to clear the visible screen first (the terminal's scrollback is kept)
+	 *
+	 * @return the screen
+	 *
+	 * @throws Exception when the terminal cannot be opened
+	 */
+	public static ChatScreen open( List<?> slashCommands, boolean clear ) throws Exception {
 		// see TuiScreen.open(): JLine finds its terminal providers through this loader
 		ClassLoader	own		= ChatScreen.class.getClassLoader();
 		ClassLoader	before	= Thread.currentThread().getContextClassLoader();
@@ -148,6 +183,10 @@ public final class ChatScreen implements AutoCloseable {
 			// the terminal is made here, the way the backend would make it, so a recording can be started on it
 			Terminal			terminal	= TerminalBuilder.builder().system( true ).jansi( true ).build();
 			RecordingTerminal	tap			= RecordingTerminal.wrap( terminal );
+			if ( clear ) {
+				terminal.writer().print( "\u001b[2J\u001b[H" );
+				terminal.writer().flush();
+			}
 			try {
 				return new ChatScreen( InlineTuiRunner.create( new JLineBackend( tap.terminal() ), cfg ), terminal, tap, Theme.detect(), before, cmds );
 			} catch ( Exception | Error e ) {
@@ -233,17 +272,104 @@ public final class ChatScreen implements AutoCloseable {
 	// ----------------------------------------------------------------------------------
 
 	/**
-	 * Prints the heading: what the agent is, how it is reached, and the keys.
+	 * Sets the version the header shows beside the name; without one the header shows none
+	 *
+	 * @param version the version of the module, such as {@code 1.2.0}
+	 */
+	public void setVersion( String version ) {
+		this.version = version == null ? "" : version;
+	}
+
+	/**
+	 * Sets one line of what the heading lists as loaded. Call it once for each line before {@link #banner}, in the order the lines are to
+	 * be shown; without any call the heading lists nothing. A line with nothing in it is left out.
+	 *
+	 * @param label The word the line starts with: {@code skills}, {@code extensions}, {@code connectors}, {@code gateways} or {@code mcp}
+	 * @param names What is there
+	 * @param bad   What is there but is not working, shown last in the warning colour
+	 */
+	public void setLoaded( String label, List<String> names, List<String> bad ) {
+		loaded.put( label, new Header.Group( label, names == null ? List.of() : List.copyOf( names ), bad == null ? List.of() : List.copyOf( bad ) ) );
+	}
+
+	/**
+	 * Prints the heading, as the {@code header} setting says: the mark with the name and the agent, the version, the model, the skills and extensions
+	 * loaded, and the keys; or one line;
+	 * or nothing. With {@code fullscreen} on, the lines that follow push the message box down to the bottom of the screen, so the box does
+	 * not sit right under the header. Also puts the agent's name in the terminal's title when {@code terminalTitle} is on.
+	 *
+	 * @param agent the agent's name
+	 * @param model the model in use
+	 * @param mode  how the chat reaches the agent
 	 */
 	public void banner( String agent, String model, String mode ) {
-		out( Row.of().add( " bxAgents", theme.accentBold ).add( "  chat", theme.muted ).add( "   " + agent, theme.bold )
-		    .add( " · " + model + " · " + mode, theme.muted ).toLine() );
-		out( Row
-		    .of( " " + lower( keys.first( KeyMap.Action.SUBMIT ) ) + " send · " + lower( keys.first( KeyMap.Action.NEWLINE ) )
-		        + " new line · / commands · ? keys · "
-		        + lower( keys.first( KeyMap.Action.STOP ) ) + " stops the agent · " + lower( keys.first( KeyMap.Action.CLEAR ) ) + " leaves", theme.muted )
-		    .toLine() );
-		out( Text.from( "" ) );
+		this.agentName = agent;
+		String		how		= settings.get( "header" );
+		List<Line>	lines	= new ArrayList<>();
+		String		hints	= lower( keys.first( KeyMap.Action.SUBMIT ) ) + " send · " + lower( keys.first( KeyMap.Action.NEWLINE ) )
+		    + " new line · / commands · ? keys";
+		String		more	= lower( keys.first( KeyMap.Action.STOP ) ) + " stops · " + lower( keys.first( KeyMap.Action.CLEAR ) )
+		    + " clears the box · "
+		    + lower( keys.first( KeyMap.Action.CLEAR_SCREEN ) ) + " clears the screen";
+		String		name	= " bxAgents";
+		int			cols	= runner.width();
+		int			tall	= terminal.getSize().getRows() > 0 ? terminal.getSize().getRows() : 24;
+		// the mark with the text beside it needs the room; a small terminal gets the one line instead
+		if ( "full".equals( how ) && !Header.fits( cols, tall ) ) {
+			how = "compact";
+		}
+		if ( "full".equals( how ) ) {
+			Header.Facts facts = new Header.Facts( agent, version, model, mode, List.of( hints, more ),
+			    List.copyOf( loaded.values() ) );
+			for ( Row row : Header.rows( theme, facts, cols ) ) {
+				lines.add( row.toLine() );
+			}
+		} else if ( "compact".equals( how ) ) {
+			lines.add( Row.of().add( name, theme.accentBold ).add( version.isEmpty() ? "" : " v" + version, theme.muted ).add( "   " + agent, theme.bold )
+			    .add( " · " + model + " · " + mode, theme.muted ).toLine() );
+			lines.add( Row.of( " " + hints + " · " + more, theme.muted ).toLine() );
+			lines.add( Line.from( Span.raw( "" ) ) );
+		}
+		for ( Line l : lines ) {
+			out( l );
+		}
+		if ( settings.bool( "fullscreen" ) ) {
+			// the box is drawn right under the header; empty lines push it down to the bottom of the screen
+			int	rows	= terminal.getSize().getRows() > 0 ? terminal.getSize().getRows() : 24;
+			int	fill	= rows - lines.size() - 5;
+			for ( int i = 0; i < fill; i++ ) {
+				out( Text.from( "" ) );
+			}
+		}
+		if ( settings.bool( "terminalTitle" ) ) {
+			// save the title the terminal had, to put it back when the chat closes, and name the agent
+			terminal.writer().print( "\u001b[22;0t\u001b]2;bxAgents · " + agent + "\u0007" );
+			terminal.writer().flush();
+			titleSet = true;
+		}
+	}
+
+	/**
+	 * A blank line between two turns, unless the spacing setting is {@code compact}
+	 */
+	private void gap() {
+		if ( !"compact".equals( settings.get( "spacing" ) ) ) {
+			out( Text.from( "" ) );
+		}
+	}
+
+	/**
+	 * @return How many commands or files the menus show at once: the {@code menuRows} setting
+	 */
+	private int menuRows() {
+		return settings.integer( "menuRows" );
+	}
+
+	/**
+	 * @return The marker of work in progress: the frame of the spinner now, or a still dot when the {@code animations} setting is off
+	 */
+	private String spinner() {
+		return settings.bool( "animations" ) ? SPINNER[ frame % SPINNER.length ] : "●";
 	}
 
 	private void out( Line line ) {
@@ -268,7 +394,30 @@ public final class ChatScreen implements AutoCloseable {
 	// ----------------------------------------------------------------------------------
 
 	/**
-	 * Sets the look from the {@code tui:} block of Agent.yaml: a map with {@code prompt} and {@code widgets}
+	 * Sets the settings the chat runs with and where the files that can change them are
+	 *
+	 * @param resolved  What {@link TuiSettings#resolve} decided: the value of every setting and the layer it came from
+	 * @param agentFile The agent's own settings file in its data home, empty when there is none
+	 * @param userFile  The person's file for every agent
+	 */
+	public void useSettings( TuiSettings.Resolved resolved, String agentFile, String userFile ) {
+		this.settings	= resolved;
+		this.agentFile	= agentFile == null ? "" : agentFile;
+		this.userFile	= userFile == null ? "" : userFile;
+		this.theme		= Theme.detect( resolved.get( "theme" ) );
+		this.slash.setWindow( resolved.integer( "menuRows" ) );
+	}
+
+	/**
+	 * @return The settings the chat runs with
+	 */
+	public TuiSettings.Resolved settings() {
+		return settings;
+	}
+
+	/**
+	 * Sets the look from the {@code tui:} block, as the layers of Agent.yaml and the settings files decided: a map with {@code prompt} and
+	 * {@code widgets}
 	 * ({@code top} and {@code bottom} lists). What is missing keeps its default; a name that is not known is left out.
 	 */
 	public void useLook( Map<?, ?> tui ) {
@@ -384,7 +533,7 @@ public final class ChatScreen implements AutoCloseable {
 			r.add( lines.get( i ), theme.plain );
 			out( r.toLine() );
 		}
-		out( Text.from( "" ) );
+		gap();
 	}
 
 	/**
@@ -408,10 +557,17 @@ public final class ChatScreen implements AutoCloseable {
 		if ( markdown == null || markdown.isBlank() ) {
 			return;
 		}
-		for ( Line l : MarkdownLines.render( markdown.strip(), runner.width() - 3, theme ) ) {
-			out( Line.from( Span.raw( "  " ) ).append( l ) );
+		if ( "source".equals( settings.get( "markdown" ) ) ) {
+			// the text as the model wrote it, wrapped to the screen
+			for ( String l : Wrap.wrap( markdown.strip(), Math.max( 20, runner.width() - 4 ) ) ) {
+				out( Row.of( "  " + l, theme.plain ).toLine() );
+			}
+		} else {
+			for ( Line l : MarkdownLines.render( markdown.strip(), runner.width() - 3, theme ) ) {
+				out( Line.from( Span.raw( "  " ) ).append( l ) );
+			}
 		}
-		out( Text.from( "" ) );
+		gap();
 	}
 
 	private dev.tamboui.style.Style styleOf( String name ) {
@@ -490,7 +646,7 @@ public final class ChatScreen implements AutoCloseable {
 				List<String> files = atMatches();
 				if ( !files.isEmpty() ) {
 					if ( k.isKey( KeyCode.UP ) || k.isKey( KeyCode.DOWN ) ) {
-						atPick = Math.floorMod( atPick + ( k.isKey( KeyCode.DOWN ) ? 1 : -1 ), Math.min( MAX_MENU, files.size() ) );
+						atPick = Math.floorMod( atPick + ( k.isKey( KeyCode.DOWN ) ? 1 : -1 ), Math.min( menuRows(), files.size() ) );
 						continue;
 					}
 					if ( keys.is( KeyMap.Action.COMPLETE, k ) ) {
@@ -540,8 +696,8 @@ public final class ChatScreen implements AutoCloseable {
 			fileIndex.refresh();
 			indexed = true;
 		}
-		List<String> files = fileIndex.match( query, MAX_MENU );
-		return sources.isEmpty() ? files : sources.matches( query, files, MAX_MENU );
+		List<String> files = fileIndex.match( query, menuRows() );
+		return sources.isEmpty() ? files : sources.matches( query, files, menuRows() );
 	}
 
 	/** Ctrl+V: adds the picture on the clipboard to the next message, or says why it cannot. */
@@ -737,6 +893,22 @@ public final class ChatScreen implements AutoCloseable {
 		drain();
 		flushSegment();
 		running.clear();
+		notifyDone( facts.lastTurnMs );
+	}
+
+	/**
+	 * Tells the person a long turn is over, as the {@code notify} setting says: the terminal bell, or a desktop notification through the
+	 * escape that iTerm2, Kitty, WezTerm and Windows Terminal take. A turn shorter than {@value #NOTIFY_AFTER_MS} milliseconds is not worth it.
+	 *
+	 * @param turnMs How long the turn took
+	 */
+	private void notifyDone( long turnMs ) {
+		String how = settings.get( "notify" );
+		if ( "off".equals( how ) || turnMs < NOTIFY_AFTER_MS ) {
+			return;
+		}
+		terminal.writer().print( "system".equals( how ) ? "\u001b]9;bxAgents: the answer is ready\u0007" : "\u0007" );
+		terminal.writer().flush();
 	}
 
 	private void turnLoop() {
@@ -796,18 +968,24 @@ public final class ChatScreen implements AutoCloseable {
 	private void tool( Map<?, ?> e ) {
 		String	id		= String.valueOf( get( e, "id" ) );
 		String	status	= String.valueOf( get( e, "status" ) );
+		boolean	hidden	= "hidden".equals( settings.get( "tools" ) );
 		if ( status.equals( "running" ) ) {
 			flushSegment();
-			running.put( id, e );
+			if ( !hidden ) {
+				running.put( id, e );
+			}
 			return;
 		}
 		running.remove( id );
+		if ( hidden ) {
+			return;
+		}
 		boolean	ok		= status.equals( "ok" );
 		Object	ms		= get( e, "ms" );
 		String	took	= ms == null ? "" : String.format( "  %.1fs", Double.parseDouble( String.valueOf( ms ) ) / 1000.0 );
 		Row		r		= Row.of().add( " ⚙ ", theme.muted ).add( String.valueOf( get( e, "name" ) ), theme.bold );
 		String	summary	= String.valueOf( get( e, "summary" ) );
-		if ( !summary.isEmpty() && !summary.equals( "null" ) ) {
+		if ( !summary.isEmpty() && !summary.equals( "null" ) && "detail".equals( settings.get( "tools" ) ) ) {
 			r.add( "  " + clip( summary, Math.max( 10, runner.width() - 30 ) ), theme.muted );
 		}
 		r.add( ok ? "  ✔" : "  ✖", ok ? theme.ok : theme.error ).add( took, theme.muted );
@@ -853,6 +1031,169 @@ public final class ChatScreen implements AutoCloseable {
 		}
 		terminal.writer().print( "\u001b[3J" );
 		terminal.writer().flush();
+	}
+
+	/**
+	 * Shows the settings as a panel in the live area and waits until it is closed. A value is changed with the arrow keys and saved, after
+	 * asking once for each file, for this agent or for every agent. The chat uses the new value from then on where it can: the header and
+	 * {@code fullscreen} are about how the chat opens, so they apply the next time.
+	 */
+	public void showSettings() {
+		SettingsPanel panel = new SettingsPanel( settings, agentFile, userFile, savedTo );
+		while ( true ) {
+			int room = terminal.getSize().getRows() > 0 ? terminal.getSize().getRows() : 24;
+			draw( panel.rows( theme, runner.width(), Math.min( TuiSettings.ALL.size() + 12, room - 2 ) ) );
+			Event ev = runner.pollEvent( Duration.ofMillis( 150 ) );
+			if ( ev instanceof KeyEvent k ) {
+				SettingsPanel.Outcome outcome = panel.key( k );
+				if ( outcome == SettingsPanel.Outcome.CLOSE ) {
+					return;
+				}
+				if ( outcome == SettingsPanel.Outcome.CHANGE || outcome == SettingsPanel.Outcome.RESET ) {
+					SettingsPanel.Change	c	= panel.pending();
+					String					said;
+					try {
+						said = c.value() == null ? resetSetting( c.setting().name(), c.global() ? "global" : "agent" )
+						    : changeSetting( c.setting().name(), c.value(), c.global() ? "global" : "agent" );
+					} catch ( IllegalArgumentException e ) {
+						said = e.getMessage();
+					}
+					panel.refresh( settings, said );
+				}
+			}
+		}
+	}
+
+	/**
+	 * Changes one setting and saves it, for this agent or for every agent, and uses the new value from now on where the chat can
+	 *
+	 * @param name  the setting
+	 * @param value the new value, as it would be written in a file
+	 * @param scope {@code agent} for this agent's own file, {@code global} for the person's file for every agent
+	 *
+	 * @return a sentence for the person: what was saved, where, and whether it applies now
+	 *
+	 * @throws IllegalArgumentException when the setting is not known, the value is not one it takes, or there is no file to save to
+	 */
+	public String changeSetting( String name, String value, String scope ) {
+		TuiSettings.Setting setting = TuiSettings.find( name );
+		if ( setting == null ) {
+			throw new IllegalArgumentException( "There is no setting [" + name + "]. The settings are " + TuiSettings.names() );
+		}
+		String normal = TuiSettings.normalize( setting, value );
+		if ( normal == null ) {
+			throw new IllegalArgumentException( setting.name() + " takes " + setting.allowed() + ", not [" + value + "]" );
+		}
+		boolean	global	= "global".equals( scope );
+		String	file	= global ? userFile : agentFile;
+		if ( file.isEmpty() ) {
+			throw new IllegalArgumentException( "There is no agent file here, so use the global scope to save for every agent" );
+		}
+		try {
+			TuiSettingsWriter.set( Path.of( file ), setting.name(), normal );
+		} catch ( IOException e ) {
+			throw new IllegalArgumentException( e.getMessage() );
+		}
+		settings = settings.with( global ? TuiSettings.USER : TuiSettings.AGENT, setting.name(), normal );
+		return applied( setting, normal, global, file );
+	}
+
+	/**
+	 * Takes one setting out of a settings file, so the layer below it applies again
+	 *
+	 * @param name  the setting
+	 * @param scope {@code agent} or {@code global}
+	 *
+	 * @return a sentence for the person
+	 *
+	 * @throws IllegalArgumentException when the setting is not known or there is no file
+	 */
+	public String resetSetting( String name, String scope ) {
+		TuiSettings.Setting setting = TuiSettings.find( name );
+		if ( setting == null ) {
+			throw new IllegalArgumentException( "There is no setting [" + name + "]. The settings are " + TuiSettings.names() );
+		}
+		boolean	global	= "global".equals( scope );
+		String	file	= global ? userFile : agentFile;
+		if ( file.isEmpty() ) {
+			throw new IllegalArgumentException( "There is no agent file here, so use the global scope" );
+		}
+		boolean removed;
+		try {
+			removed = TuiSettingsWriter.remove( Path.of( file ), setting.name() );
+		} catch ( IOException e ) {
+			throw new IllegalArgumentException( e.getMessage() );
+		}
+		settings = settings.with( global ? TuiSettings.USER : TuiSettings.AGENT, setting.name(), null );
+		applyNow( setting.name() );
+		String now = setting.name() + " is " + settings.get( setting.name() ) + " (" + settings.source( setting.name() ) + ")";
+		return removed ? setting.name() + " is no longer set in " + file + ", so it is " + now.substring( setting.name().length() + 4 )
+		    : setting.name() + " was not set in " + file + ". " + now;
+	}
+
+	/**
+	 * Uses a setting's new value where the chat can, and says what happened
+	 *
+	 * @param setting the setting
+	 * @param value   its new value in the file
+	 * @param global  whether it was saved for every agent
+	 * @param file    the file it was saved in
+	 *
+	 * @return a sentence for the person
+	 */
+	private String applied( TuiSettings.Setting setting, String value, boolean global, String file ) {
+		applyNow( setting.name() );
+		String	now		= settings.get( setting.name() );
+		String	saved	= "Saved " + setting.name() + ": " + value + " for " + ( global ? "every agent" : "this agent" ) + " in " + file + ".";
+		if ( !now.equals( value ) ) {
+			return saved + " This run keeps " + now + ", from " + settings.source( setting.name() ) + ".";
+		}
+		return saved + ( List.of( "fullscreen", "header" ).contains( setting.name() ) ? " It applies the next time the chat opens." : "" );
+	}
+
+	/**
+	 * Makes the chat use the current value of a setting that is not read each time it is needed
+	 *
+	 * @param name the setting
+	 */
+	private void applyNow( String name ) {
+		switch ( name ) {
+			case "theme" :
+				theme = Theme.detect( settings.get( "theme" ) );
+				break;
+			case "menuRows" :
+				slash.setWindow( settings.integer( "menuRows" ) );
+				break;
+			case "terminalTitle" :
+				if ( settings.bool( "terminalTitle" ) && !titleSet && !agentName.isEmpty() ) {
+					terminal.writer().print( "\u001b[22;0t\u001b]2;bxAgents · " + agentName + "\u0007" );
+					titleSet = true;
+				} else if ( !settings.bool( "terminalTitle" ) && titleSet ) {
+					terminal.writer().print( "\u001b[23;0t" );
+					titleSet = false;
+				}
+				terminal.writer().flush();
+				break;
+			default :
+				break;
+		}
+	}
+
+	/**
+	 * @return a row per setting for a listing: name, value, the layer it came from, what it may be, and what it does
+	 */
+	public List<Map<String, String>> settingsTable() {
+		List<Map<String, String>> rows = new ArrayList<>();
+		for ( TuiSettings.Setting s : TuiSettings.ALL ) {
+			Map<String, String> row = new LinkedHashMap<>();
+			row.put( "name", s.name() );
+			row.put( "value", settings.get( s.name() ) );
+			row.put( "source", settings.source( s.name() ) );
+			row.put( "allowed", s.allowed() );
+			row.put( "does", s.does() );
+			rows.add( row );
+		}
+		return rows;
 	}
 
 	/**
@@ -917,11 +1258,11 @@ public final class ChatScreen implements AutoCloseable {
 			for ( String l : Wrap.tail( segment.toString(), width, MAX_TAIL ) ) {
 				rows.add( Row.of( "  " + l, theme.plain ) );
 			}
-		} else if ( reasoning.length() > 0 && running.isEmpty() ) {
+		} else if ( reasoning.length() > 0 && running.isEmpty() && "show".equals( settings.get( "thinking" ) ) ) {
 			List<String> t = Wrap.tail( reasoning.toString().replace( '\n', ' ' ), width - 12, 1 );
 			rows.add( Row.of().add( "  thinking  ", theme.muted ).add( t.get( 0 ), theme.muted ) );
 		}
-		String spin = SPINNER[ frame % SPINNER.length ];
+		String spin = spinner();
 		for ( Map<?, ?> t : running.values() ) {
 			Row		r		= Row.of().add( " " + spin + " ", theme.accent ).add( String.valueOf( get( t, "name" ) ), theme.bold );
 			String	summary	= String.valueOf( get( t, "summary" ) );
@@ -1073,6 +1414,10 @@ public final class ChatScreen implements AutoCloseable {
 	public void close() {
 		turnOver = true;
 		forgetPastedPictures();
+		if ( titleSet ) {
+			terminal.writer().print( "\u001b[23;0t" );
+			terminal.writer().flush();
+		}
 		try {
 			runner.close();
 		} finally {

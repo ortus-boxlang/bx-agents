@@ -122,17 +122,23 @@ class {
 		var commands = new "models.chat.commands.CommandCatalog@bxagents"().standard()
 		var extensions = arguments.options._extensions ?: new "models.extensions.ExtensionService@bxagents"( projectRoot : trim( arguments.options.projectRoot ?: "" ), transport : "tui" )
 		extensions.install( commands )
-		var controller = new "models.cli.chat.ChatController@bxagents"( session : arguments.session, registry : commands ).withNotices( extensions.problems() )
+		// how the chat looks and behaves: the flags, the agent's own settings, yours, the project's, then the defaults
+		var loader = new "models.tui.TuiSettingsLoader@bxagents"( projectRoot : len( trim( arguments.options.connect ?: "" ) ) ? "" : trim( arguments.options.projectRoot ?: "" ), flags : arguments.options )
+		var tuiSettings = loader.load()
+		var notices = extensions.problems()
+		notices.append( tuiSettings.problems, true )
+		var controller = new "models.cli.chat.ChatController@bxagents"( session : arguments.session, registry : commands ).withNotices( notices ).withProject( len( trim( arguments.options.connect ?: "" ) ) ? "" : trim( arguments.options.projectRoot ?: "" ) )
 		if ( structKeyExists( extensions, "keys" ) ) {
 			controller.withExtensions( extensions )
 		}
 		if ( structKeyExists( extensions, "events" ) ) {
 			controller.withEvents( extensions.events() )
 		}
-		var screen = arguments.options._screen ?: createObject( "java", "ortus.boxlang.bxagents.tui.ChatScreen" ).open( controller.commands() )
+		var screen = arguments.options._screen ?: createObject( "java", "ortus.boxlang.bxagents.tui.ChatScreen" ).open( controller.commands(), tuiSettings.settings.bool( "fullscreen" ) )
 		if ( !arguments.options.keyExists( "_screen" ) ) {
 			// the tui: block of Agent.yaml: the prompt style and widgets (a project without one gets the defaults)
-			screen.useLook( new "models.tui.TuiLook@bxagents"().forProject( trim( arguments.options.projectRoot ?: "" ) ) )
+			screen.useLook( tuiSettings.look )
+			screen.useSettings( tuiSettings.settings, loader.agentFile(), loader.userFile() )
 		}
 		var saved = ""
 		try {

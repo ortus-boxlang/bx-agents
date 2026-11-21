@@ -33,9 +33,9 @@ import java.util.Map;
 public record PromptLook( String style, List<String> top, List<String> bottom ) {
 
 	/** the widgets in the top bar when nothing says otherwise */
-	public static final List<String> DEFAULT_TOP = List.of( "agent", "folder", "user", "clock" );
+	public static final List<String> DEFAULT_TOP = List.of();
 	/** the widgets at the bottom when nothing says otherwise */
-	public static final List<String> DEFAULT_BOTTOM = List.of( "ctx", "profile" );
+	public static final List<String> DEFAULT_BOTTOM = List.of( "folder", "git", "ctx", "profile" );
 
 	public PromptLook {
 		top		= List.copyOf( top );

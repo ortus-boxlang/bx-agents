@@ -557,6 +557,7 @@ A chat with the built agent, in a terminal screen that keeps your scrollback: fi
 ```bash
 bxAgents chat                                  # fast, in-process
 bxAgents chat --no-tui                         # plain line-by-line REPL
+bxAgents chat --inline                         # the box under the last line, not pinned to the bottom of a cleared screen
 bxAgents chat --server [--port=<port>]         # full app, own throwaway server
 bxAgents chat --connect=http://127.0.0.1:8080  # full app, server you already run
 bxAgents chat --connect=https://agent.example.com --token=<token>   # a server that wants one
@@ -636,8 +637,8 @@ Set the start in [`Agent.yaml`](conventions/agent-yaml.md#settings) or with `bxA
 tui:
   prompt: bars
   widgets:
-    top: [ agent, folder, user, clock ]
-    bottom: [ ctx, profile ]
+    top: []
+    bottom: [ folder, git, ctx, profile ]
 ```
 
 Tables in an answer are drawn with rounded borders in the accent colour, a bold header and the column alignment of the table; cells wrap on a narrow terminal. Code blocks are coloured by language.

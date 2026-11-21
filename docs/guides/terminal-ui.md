@@ -39,7 +39,7 @@ bxAgents chat
 | `bxAgents chat --connect=<url> [--token=<t>]` | A server that is already running | You want to talk to a deployment |
 | `bxAgents chat --no-tui` | Same as the first, in a plain line-by-line prompt | A terminal that cannot draw, or you just prefer it |
 
-`--continue` reopens your latest conversation, `--session=<number or id>` a particular one, `--user=<name>` chooses whose conversations and notes you see.
+`--continue` reopens your latest conversation, `--session=<number or id>` a particular one, `--user=<name>` chooses whose conversations and notes you see. `--inline` keeps the message box right under the last line instead of at the bottom of a cleared screen, and `--fullscreen` does the opposite of a saved choice, for one run. Every other way to choose is in [Settings](#settings).
 
 ## The screen
 
@@ -191,6 +191,76 @@ chat:
 
 Details and limits: [CLI reference](../cli-reference.md#files-and-pictures-in-the-message).
 
+## Settings
+
+How the chat looks and behaves is a short list of settings, the same in every file that can hold them. The chat opens full screen by default: it clears the screen, draws the header at the top and keeps the message box and the footer at the bottom. Your scrollback is kept, and finished turns still go into it.
+
+![The header: the bxAgents icon, the name and the agent, the version, the skills, connectors and gateways, and the keys, with the message box at the bottom](../assets/tui/chat-header.png)
+
+*The header at the top: the bxAgents icon drawn in braille characters, the way the BoxLang installers draw the BoxLang mark, with the name and the agent beside it, the version and model, a line each for what the agent has: `skills`, `extensions`, `connectors`, `gateways` and `mcp` (a line with nothing in it is left out, a list that does not fit ends with how many more there are, an extension that failed to load is marked, and a connector that is signed in has a check mark), and the keys. The skills that bxAgents ships are counted as `6 from bxAgents`, so yours come first. The message box and the footer are at the bottom. On a terminal too small for the icon (under about 80 columns or 21 rows), the header is one line. The footer has the folder and branch, the context and the model on the right, so the top bar of the box only says who is writing.*
+
+| Setting | Values (default first) | What it does |
+|---|---|---|
+| `fullscreen` | `true`, `false` | Clear the screen when the chat opens and keep the message box at the bottom. `false` keeps the box right under the last line |
+| `header` | `full`, `compact`, `hidden` | What is printed when the chat opens: the icon with the agent, what it loaded and the hints, one line, or nothing |
+| `spacing` | `normal`, `compact` | A blank line between the turns of the conversation, or none |
+| `theme` | `auto`, `dark`, `light` | The colours: for a dark or a light terminal, or by what the terminal says it supports (`COLORFGBG`) |
+| `animations` | `true`, `false` | The spinner and the other motion while the agent works. `false` shows a still marker |
+| `thinking` | `show`, `hide` | Show the model's thinking while it works, or only that it is working |
+| `tools` | `detail`, `summary`, `hidden` | Tool calls with their arguments and time, with only the name and result, or not at all |
+| `markdown` | `rendered`, `source` | Answers drawn with headings, lists, tables and coloured code, or as the text the model wrote |
+| `menuRows` | `8` (3 to 20) | How many commands or files the `/` and `@` menus show at once |
+| `notify` | `off`, `bell`, `system` | Tell you when an answer that took more than ten seconds is done: nothing, the terminal bell, or a desktop notification |
+| `terminalTitle` | `true`, `false` | Put the agent's name in the terminal's title while the chat is open |
+
+The message box's own look, `prompt` and `widgets`, is set in the same block, see [The look of the message box](#the-look-of-the-message-box).
+
+<video controls preload="metadata" poster="/assets/video/tui-settings-poster.png" style="max-width:100%">
+  <source src="/assets/video/tui-settings.mp4" type="video/mp4">
+</video>
+
+*The chat opens with the header at the top and the box at the bottom, then `/settings` changes `tools`, `thinking` and the rest, and the next answer follows them.*
+
+### Where a setting comes from
+
+The first of these that has a value for a setting wins:
+
+1. **The flag of one run:** `--inline` (same as `fullscreen: false`) or `--fullscreen`.
+2. **The agent's own file**, in its data home: `~/.bxagents/<agent name>/settings.yml` (see [the data home](../conventions/data.md#the-data-home)). It is yours, for that agent on this machine.
+3. **Your file for every agent**, `~/.bxagents/bxAgents.yml`. This is the fallback for an agent that has no setting of its own.
+4. **The project's `Agent.yaml`**, which is the author's suggestion.
+5. **The default** in the table above.
+
+The same block, with the same names, goes in all three files:
+
+```yaml
+# ~/.bxagents/support-bot/settings.yml, or ~/.bxagents/bxAgents.yml, or Agent.yaml
+tui:
+  fullscreen: false
+  header: compact
+  tools: summary
+```
+
+A value a setting does not take is reported when the chat starts, and the layer below it applies. A chat over `--connect` talks to an agent somewhere else, so it has no agent file: only the flag, your file and the defaults apply.
+
+### Change them with /settings
+
+`/settings` opens a panel with every setting, its value, and which layer the value comes from.
+
+![The settings panel: every setting with its value and where the value comes from](../assets/tui/chat-settings.png)
+
+| Key | Does |
+|---|---|
+| Up, Down | Choose a setting |
+| Left, Right, Enter | Change the value. It is saved at once, and the chat uses it from then on |
+| `r` | Take this agent's value out, so the layer below applies again |
+| `g` | Switch between saving for this agent and for every agent |
+| Esc | Close |
+
+The first time you save to a file in a chat, the panel asks. `fullscreen` and `header` are about how the chat opens, so they apply the next time.
+
+From the message box: `/settings header` shows one setting, `/settings header compact` saves it for this agent, `/settings header compact --global` saves it for every agent, and `/settings header reset` takes the agent's own value out. Only the `tui:` lines of the file change, so everything else in it stays as you wrote it.
+
 ## The look of the message box
 
 Five styles, each with a top bar that carries a label and small facts (widgets):
@@ -203,7 +273,7 @@ Five styles, each with a top bar that carries a label and small facts (widgets):
 | `box` | A rounded box |
 | `panel` | A tinted panel with a thick left bar. Drawn as `rule` without 256 or true colour |
 
-Widgets: `agent`, `profile`, `folder`, `user`, `clock`, `machine`, `git`, `date`, `session`, `elapsed`, `ctx`. A widget with nothing to show (`git` outside a repository) is left out, and the last ones drop off when the line is too narrow.
+The default is no widget in the top bar and `folder`, `git`, `ctx` and `profile` at the bottom, so the top bar only says who is writing. Widgets: `agent`, `profile`, `folder`, `user`, `clock`, `machine`, `git`, `date`, `session`, `elapsed`, `ctx`. A widget with nothing to show (`git` outside a repository) is left out, and the last ones drop off when the line is too narrow.
 
 Set the start for the project in `Agent.yaml`:
 
@@ -211,8 +281,8 @@ Set the start for the project in `Agent.yaml`:
 tui:
   prompt: bars
   widgets:
-    top: [ agent, folder, user, clock ]
-    bottom: [ ctx, profile ]
+    top: []
+    bottom: [ folder, git, ctx, profile ]
 ```
 
 Or change it for one chat: `/prompt box`, `/prompt top +git -clock`, `/prompt bottom none`.

@@ -111,6 +111,40 @@ class {
 	/**
 	 * @return [ { id, keys, does, place } ] the keys of the chat screen as they are now bound
 	 */
+	/**
+	 * @return One struct per setting of the chat: name, value, source (the layer the value comes from), allowed and does
+	 */
+	array function settingsTable() {
+		return variables.screen.settingsTable().map( r => { name : r.name, value : r.value, source : r.source, allowed : r.allowed, does : r.does } )
+	}
+
+	/**
+	 * Changes a setting of the chat and saves it, for this agent or for every agent.
+	 *
+	 * @name The setting
+	 * @value The new value
+	 * @scope "agent" or "global"
+	 *
+	 * @return A sentence about what was saved and where
+	 *
+	 * @throws any When the setting or the value is not known, or there is no file to save to
+	 */
+	string function changeSetting( required string name, required string value, string scope = "agent" ) {
+		return variables.screen.changeSetting( arguments.name, arguments.value, arguments.scope )
+	}
+
+	/**
+	 * Takes a setting out of a settings file, so the layer below it applies again.
+	 *
+	 * @name The setting
+	 * @scope "agent" or "global"
+	 *
+	 * @return A sentence about what happened
+	 */
+	string function resetSetting( required string name, string scope = "agent" ) {
+		return variables.screen.resetSetting( arguments.name, arguments.scope )
+	}
+
 	array function keyRows() {
 		return variables.screen.keyTable().map( r => { id : r.id, keys : r.keys, does : r.does, place : r.place } )
 	}

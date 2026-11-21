@@ -1,0 +1,158 @@
+/**
+ * The settings of the terminal chat, decided from the flag, the agent's own file in its data home, the person's file, the project's
+ * Agent.yaml and the defaults, and the files that hold them.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "TuiSettings", function() {
+
+			beforeEach( function() {
+				variables.nl = char( 10 )
+				variables.dirs = []
+				variables.look = new bxagents.models.tui.TuiLook()
+			} );
+
+			afterEach( function() {
+				for ( var dir in variables.dirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			/**
+			 * A project folder that is a scratch one, with no Agent.yaml unless the text is given.
+			 *
+			 * @agentYaml The text of its Agent.yaml, or blank for none
+			 *
+			 * @return The folder
+			 */
+			function project( string agentYaml = "" ) {
+				var dir = createTempDirectory( prefix = "bxagents-settings-" )
+				variables.dirs.append( dir )
+				if ( len( arguments.agentYaml ) ) {
+					fileWrite( dir & "/Agent.yaml", arguments.agentYaml )
+					fileWrite( dir & "/instructions.md", "Be helpful." )
+				}
+				return dir
+			}
+
+			/**
+			 * The person's file, with the text given, as a UserConfig.
+			 *
+			 * @text What the file holds, blank for no file
+			 *
+			 * @return { config, file }
+			 */
+			function person( string text = "" ) {
+				var dir = createTempDirectory( prefix = "bxagents-person-" )
+				variables.dirs.append( dir )
+				var file = dir & "/bxAgents.yml"
+				if ( len( arguments.text ) ) {
+					fileWrite( file, arguments.text )
+				}
+				return { config : new bxagents.models.cli.UserConfig( file ), file : file }
+			}
+
+			it( "checks the settings of a tui: block, names what is wrong, and leaves prompt and widgets to their own check", function() {
+				expect( look.problems( { fullscreen : true, header : "compact", spacing : "normal", theme : "light", animations : false, thinking : "hide", tools : "summary", markdown : "source", menuRows : 12, notify : "bell", terminalTitle : false }, "Agent.yaml" ) ).toBeEmpty();
+				var found = look.problems( { fullscreen : "sometimes", menuRows : 99, header : "big" }, "settings.yml" );
+				expect( found ).toHaveLength( 3 );
+				expect( found.toList( "|" ) ).toInclude( "settings.yml: tui.fullscreen 'sometimes' is not valid. Use one of: true, false" );
+				expect( found.toList( "|" ) ).toInclude( "tui.menuRows '99' is not valid. Use one of: 3 to 20" );
+				expect( look.problems( { colour : "red" }, "x" )[ 1 ] ).toInclude( "The settings are fullscreen, header" );
+			} );
+
+			it( "takes the person's tui: section, reports what is wrong with it, and still knows the section is a section", function() {
+				var good = person( "tui:" & nl & "  fullscreen: false" & nl & "  header: compact" & nl & "chat:" & nl & "  shell: false" & nl );
+				expect( good.config.tui() ).toBe( { fullscreen : false, header : "compact" } );
+				expect( good.config.problems() ).toBeEmpty();
+
+				var bad = person( "tui:" & nl & "  fullscreen: maybe" & nl );
+				expect( bad.config.problems().toList( "|" ) ).toInclude( "tui.fullscreen 'maybe' is not valid" );
+
+				var none = person();
+				expect( none.config.tui() ).toBeEmpty();
+				expect( person( "tui: 3" & nl ).config.problems().toList( "|" ) ).toInclude( "'tui' must be a mapping" );
+			} );
+
+			it( "decides from the layers: the flag, the agent's file, the person's file, Agent.yaml, then the default", function() {
+				var root = project( "name: looks" & nl & "model: mock/mock-model" & nl & "tui:" & nl & "  fullscreen: false" & nl & "  header: compact" & nl & "  spacing: compact" & nl & "  theme: light" & nl );
+				var mine = person( "tui:" & nl & "  header: hidden" & nl & "  spacing: normal" & nl );
+				var loader = new bxagents.models.tui.TuiSettingsLoader( root, mine.config, { inline : false } );
+				directoryCreate( getDirectoryFromPath( loader.agentFile() ), true );
+				fileWrite( loader.agentFile(), "tui:" & nl & "  spacing: compact" & nl );
+				var decided = loader.load().settings;
+
+				expect( decided.get( "theme" ) ).toBe( "light" );
+				expect( decided.source( "theme" ) ).toBe( "Agent.yaml" );
+				expect( decided.get( "header" ) ).toBe( "hidden" );
+				expect( decided.source( "header" ) ).toBe( "your file" );
+				expect( decided.get( "spacing" ) ).toBe( "compact" );
+				expect( decided.source( "spacing" ) ).toBe( "this agent" );
+				expect( decided.get( "fullscreen" ) ).toBe( "false" );
+				expect( decided.source( "animations" ) ).toBe( "default" );
+
+				var flagged = new bxagents.models.tui.TuiSettingsLoader( root, mine.config, { fullscreen : true } ).load().settings;
+				expect( flagged.get( "fullscreen" ) ).toBe( "true" );
+				expect( flagged.source( "fullscreen" ) ).toBe( "the flag" );
+				var inline = new bxagents.models.tui.TuiSettingsLoader( root, mine.config, { inline : true } ).load().settings;
+				expect( inline.get( "fullscreen" ) ).toBe( "false" );
+			} );
+
+			it( "has no agent file when the chat talks to a server somewhere else, and the person's file is then the nearest", function() {
+				var mine = person( "tui:" & nl & "  header: compact" & nl );
+				var loader = new bxagents.models.tui.TuiSettingsLoader( "", mine.config );
+				expect( loader.agentFile() ).toBe( "" );
+				var decided = loader.load();
+				expect( decided.settings.get( "header" ) ).toBe( "compact" );
+				expect( decided.settings.source( "header" ) ).toBe( "your file" );
+				expect( decided.settings.get( "fullscreen" ) ).toBe( "true" );
+			} );
+
+			it( "reports what is wrong with the agent's file and goes on with the layers below it", function() {
+				var root = project();
+				var mine = person();
+				var loader = new bxagents.models.tui.TuiSettingsLoader( root, mine.config );
+				directoryCreate( getDirectoryFromPath( loader.agentFile() ), true );
+				fileWrite( loader.agentFile(), "tui:" & nl & "  header: giant" & nl & "  spacing: compact" & nl );
+				var decided = loader.load();
+				expect( decided.problems ).toHaveLength( 1 );
+				expect( decided.problems[ 1 ] ).toInclude( "tui.header 'giant' is not valid" );
+				expect( decided.settings.get( "header" ) ).toBe( "full" );
+				expect( decided.settings.get( "spacing" ) ).toBe( "compact" );
+			} );
+
+			it( "lays the message box's look the same way: the highest layer with a prompt wins, and the widgets one place at a time", function() {
+				var root = project( "name: looks" & nl & "model: mock/mock-model" & nl & "tui:" & nl & "  prompt: rule" & nl & "  widgets:" & nl & "    top: [ agent ]" & nl & "    bottom: [ ctx ]" & nl );
+				var mine = person( "tui:" & nl & "  widgets:" & nl & "    bottom: [ clock ]" & nl );
+				var found = new bxagents.models.tui.TuiSettingsLoader( root, mine.config ).load().look;
+				expect( found.prompt ).toBe( "rule" );
+				expect( found.widgets.top ).toBe( [ "agent" ] );
+				expect( found.widgets.bottom ).toBe( [ "clock" ] );
+			} );
+
+			it( "writes one setting into a file, keeps the rest of it, and takes the setting out again", function() {
+				var dir = createTempDirectory( prefix = "bxagents-file-" )
+				variables.dirs.append( dir )
+				var file = new bxagents.models.tui.TuiSettingsFile( dir & "/home/settings.yml" );
+				expect( file.read() ).toBeEmpty();
+				file.set( "fullscreen", "false" );
+				file.set( "header", "compact" );
+				expect( file.read() ).toBe( { fullscreen : false, header : "compact" } );
+				fileAppend( dir & "/home/settings.yml", "chat:" & nl & "  shell: true" & nl );
+				file.set( "header", "hidden" );
+				expect( fileRead( dir & "/home/settings.yml" ) ).toInclude( "chat:" & nl & "  shell: true" );
+				expect( file.read().header ).toBe( "hidden" );
+				expect( file.remove( "header" ) ).toBeTrue();
+				expect( file.remove( "header" ) ).toBeFalse();
+				expect( file.read() ).toBe( { fullscreen : false } );
+				fileWrite( dir & "/one-line.yml", "tui: { fullscreen: false }" & nl );
+				expect( function() { new bxagents.models.tui.TuiSettingsFile( dir & "/one-line.yml" ).set( "header", "compact" ) } ).toThrow( "BxAgents.SettingsFile" );
+			} );
+
+		} );
+	}
+
+}

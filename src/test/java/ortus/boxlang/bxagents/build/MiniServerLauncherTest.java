@@ -20,16 +20,30 @@ import org.junit.jupiter.api.Test;
 
 public class MiniServerLauncherTest {
 
-	@DisplayName( "findExecutable() returns null when boxlang-miniserver is not on PATH" )
+	@DisplayName( "findExecutable() returns null when boxlang-miniserver is in none of the folders it is given" )
 	@Test
-	public void testFindExecutableNotFound() {
-		// This sandbox environment does not have a native boxlang-miniserver
-		// binary installed - confirmed absent this session (no
-		// forgebox/download artifact for the binary, and building it from
-		// source requires a BoxLang 1.17.0 jar not otherwise needed by this
-		// module). The jar form (see testLaunchJar below) is what this
-		// module's own integration tests use instead.
-		assertNull( MiniServerLauncher.findExecutable() );
+	public void testFindExecutableNotFound( @org.junit.jupiter.api.io.TempDir Path empty ) {
+		// The folders are given, not read from the machine's PATH: a runner that has the binary installed (the CI one has
+		// /usr/local/bin/boxlang-miniserver) would otherwise make this fail.
+		assertNull( MiniServerLauncher.findExecutable( empty.toString() ) );
+		assertNull( MiniServerLauncher.findExecutable( "" ) );
+		assertNull( MiniServerLauncher.findExecutable( null ) );
+	}
+
+	@DisplayName( "findExecutable() finds an executable boxlang-miniserver in one of the folders, and skips a file that is not executable" )
+	@Test
+	public void testFindExecutableFound( @org.junit.jupiter.api.io.TempDir Path dir ) throws Exception {
+		assumeTrue( !System.getProperty( "os.name", "" ).toLowerCase().contains( "win" ), "needs the executable bit" );
+		Path	plain	= Files.createDirectory( dir.resolve( "plain" ) );
+		Path	bin		= Files.createDirectory( dir.resolve( "bin" ) );
+		Files.writeString( plain.resolve( "boxlang-miniserver" ), "not executable\n" );
+		Path exe = bin.resolve( "boxlang-miniserver" );
+		Files.writeString( exe, "#!/bin/sh\n" );
+		exe.toFile().setExecutable( true );
+
+		String found = MiniServerLauncher.findExecutable( plain + java.io.File.pathSeparator + bin );
+
+		assertEquals( exe.toAbsolutePath().toString(), found );
 	}
 
 	@DisplayName( "launch() throws a clear error when the executable path does not exist" )
