@@ -160,6 +160,21 @@ class extends="testbox.system.BaseSpec" {
 				expect( commands.extensionOf( commands.lookup( "solo" ) ) ).toBe( "solo" );
 			} );
 
+			it( "gives every menu entry a usage and a group: a built-in's own, and the extension's name for an extension's command", function() {
+				write( "extensions/solo.bx", "class { @Command( 'solo' ) function go( agentContext, commandArguments ) { return 'x' } }" );
+				load();
+				var menu = commands.menu( "tui" );
+				var entry = ( name ) => menu.filter( c => c.name == name )[ 1 ];
+
+				expect( entry( "/resume" ).usage ).toBe( "[n|id]" );
+				expect( entry( "/resume" ).group ).toBe( "Conversation" );
+				expect( entry( "/new" ).usage ).toBe( "" );
+				expect( entry( "/keys" ).group ).toBe( "Screen" );
+				expect( entry( "/solo" ).usage ).toBe( "" );
+				expect( entry( "/solo" ).group ).toBe( "solo" );
+				menu.each( c => expect( c.group ).notToBeEmpty() );
+			} );
+
 			it( "names a bare @Command after the method, and takes aliases, transports and admin from a struct or shorthands", function() {
 				write( "extensions/many.bx", "class {
 					@Command function ping2( agentContext ) { return 'pong' }

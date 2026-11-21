@@ -8,7 +8,7 @@ tags: [guides, cli, tui, reference]
 
 # Slash commands
 
-Type `/` in the terminal chat or the [web chat](../conventions/web-ui.md#slash-commands) to see the commands (on the web page the lightning button opens the same menu, and an extension's command carries the extension's name). Each one is written once, as a small class that answers with data, and every surface draws that answer its own way. In [chat platforms](../conventions/gateways/index.md#commands-in-a-gateway) type the command as a message; the default prefix is `/` and a gateway can change it.
+Type `/` in the terminal chat (a menu you move through with the arrow keys, see [the terminal UI](terminal-ui.md#commands-type)) or the [web chat](../conventions/web-ui.md#slash-commands) to see the commands (on the web page the lightning button opens the same menu, and an extension's command carries the extension's name). Each one is written once, as a small class that answers with data, and every surface draws that answer its own way. In [chat platforms](../conventions/gateways/index.md#commands-in-a-gateway) type the command as a message; the default prefix is `/` and a gateway can change it.
 
 **Where** is `T` terminal, `W` web page, `G` chat platforms. A command marked `G` still needs to be in the gateway's `allow` list; the default list is `help`, `info`, `tools`, `model`, `ping`, `notes` and `remember`.
 

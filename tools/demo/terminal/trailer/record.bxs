@@ -1,7 +1,7 @@
 /**
  * Records every terminal scene of scenes.json, each in its own pseudo terminal so the screen starts clean, and renders it to out/scenes/<id>.mp4.
  *
- *   boxlang record.bxs --boxlang-jar=<boxlang.jar> --module=<built module folder> --out=out [--home=<the "user's" home>] [--work=<scratch>] [--only=hook,chat] [--fps=24] [--fresh]
+ *   boxlang record.bxs --boxlang-jar=<boxlang.jar> --module=<built module folder> --out=out [--home=<the "user's" home>] [--work=<scratch>] [--only=hook,chat] [--scenes=<another scenes file>] [--fps=24] [--fresh]
  *
  * It needs the demo agent from ../../webui/trailer/project, the scripted model (../../fakellm.bxs with model.json), `script` for the pseudo
  * terminal (drive.bxs) and ffmpeg (render.bxs). Port 8080 must be free: the demo agent's profiles use the `openai-compatible` provider.
@@ -145,7 +145,7 @@ function render( required struct scene ) {
 function record() {
 	directoryCreate( out & "/scenes", true, true )
 	setup()
-	var scenes = jsonDeserialize( fileRead( here & "scenes.json" ) ).filter( s => len( s.start ?: "" ) && ( !only.len() || only.contains( s.id ) ) )
+	var scenes = jsonDeserialize( fileRead( len( opts.scenes ?: "" ) ? expandPath( opts.scenes ) : here & "scenes.json" ) ).filter( s => len( s.start ?: "" ) && ( !only.len() || only.contains( s.id ) ) )
 	var model = start( bl.merge( [ demo & "fakellm.bxs", "--port=8080", "--script=" & here & "model.json" ] ), out, {}, out & "/fakellm.log" )
 	try {
 		sleep( 10000 )
