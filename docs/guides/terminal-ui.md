@@ -195,14 +195,14 @@ Details and limits: [CLI reference](../cli-reference.md#files-and-pictures-in-th
 
 How the chat looks and behaves is a short list of settings, the same in every file that can hold them. The chat opens full screen by default: it clears the screen, draws the header at the top and keeps the message box and the footer at the bottom. Your scrollback is kept, and finished turns still go into it.
 
-![The header: bxAgents in big block letters, the version, the agent and the keys, with the message box at the bottom](../assets/tui/chat-header.png)
+![The header: the bxAgents icon, the name and the agent, the version, the skills loaded and the keys, with the message box at the bottom](../assets/tui/chat-header.png)
 
-*The header at the top, in the same block letters the BoxLang runtime prints when it starts, and the message box and the footer at the bottom. On a terminal too narrow for the big name, the header is one line. The footer has the folder and branch, the context and the model on the right, so the top bar of the box only says who is writing.*
+*The header at the top: the bxAgents icon drawn in braille characters, the way the BoxLang installers draw the BoxLang mark, with the name and the agent beside it, the version and model, the skills and extensions that loaded (a list that does not fit ends with how many more there are, and an extension that failed to load is marked), and the keys. The message box and the footer are at the bottom. On a terminal too small for the icon (under about 80 columns or 21 rows), the header is one line. The footer has the folder and branch, the context and the model on the right, so the top bar of the box only says who is writing.*
 
 | Setting | Values (default first) | What it does |
 |---|---|---|
 | `fullscreen` | `true`, `false` | Clear the screen when the chat opens and keep the message box at the bottom. `false` keeps the box right under the last line |
-| `header` | `full`, `compact`, `hidden` | What is printed when the chat opens: the logo and the hints, one line, or nothing |
+| `header` | `full`, `compact`, `hidden` | What is printed when the chat opens: the icon with the agent, what it loaded and the hints, one line, or nothing |
 | `spacing` | `normal`, `compact` | A blank line between the turns of the conversation, or none |
 | `theme` | `auto`, `dark`, `light` | The colours: for a dark or a light terminal, or by what the terminal says it supports (`COLORFGBG`) |
 | `animations` | `true`, `false` | The spinner and the other motion while the agent works. `false` shows a still marker |

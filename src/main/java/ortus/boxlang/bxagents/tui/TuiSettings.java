@@ -89,7 +89,8 @@ public final class TuiSettings {
 	public static final List<Setting>	ALL		= List.of(
 	    choice( "fullscreen", List.of( "true", "false" ), "true",
 	        "Clear the screen when the chat opens and keep the message box at the bottom. false keeps the box right under the last line" ),
-	    choice( "header", List.of( "full", "compact", "hidden" ), "full", "What is printed when the chat opens: the logo and the hints, one line, or nothing" ),
+	    choice( "header", List.of( "full", "compact", "hidden" ), "full",
+	        "What is printed when the chat opens: the icon with the agent, what it loaded and the hints, one line, or nothing" ),
 	    choice( "spacing", List.of( "normal", "compact" ), "normal", "A blank line between the turns of the conversation, or none" ),
 	    choice( "theme", List.of( "auto", "dark", "light" ), "auto", "The colours: for a dark or a light terminal, or by what the terminal says it supports" ),
 	    choice( "animations", List.of( "true", "false" ), "true", "The spinner and the other motion while the agent works. false shows a still marker" ),

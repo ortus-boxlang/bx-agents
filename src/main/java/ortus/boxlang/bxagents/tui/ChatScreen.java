@@ -67,14 +67,14 @@ import org.jline.terminal.TerminalBuilder;
  */
 public final class ChatScreen implements AutoCloseable {
 
-	private static final String[]			SPINNER			= { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
-	private static final int				MAX_TAIL		= 8;
+	private static final String[]			SPINNER				= { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
+	private static final int				MAX_TAIL			= 8;
 
 	/**
 	 * How long a turn must take, in milliseconds, before the {@code notify} setting tells the person it is over
 	 */
-	private static final long				NOTIFY_AFTER_MS	= 10_000;
-	private static final int				MAX_COMPOSER	= 6;
+	private static final long				NOTIFY_AFTER_MS		= 10_000;
+	private static final int				MAX_COMPOSER		= 6;
 
 	private final InlineTuiRunner			runner;
 	private final Terminal					terminal;
@@ -86,45 +86,52 @@ public final class ChatScreen implements AutoCloseable {
 	/**
 	 * What the chat runs with, decided from the layers, and where the files are that hold the person's own choices
 	 */
-	private TuiSettings.Resolved			settings		= TuiSettings.defaults();
-	private String							agentFile		= "";
-	private String							userFile		= "";
-	private String							version			= "";
-	private String							agentName		= "";
-	/** the files the person agreed to write to in this chat: false for the agent\'s file, true for the file for every agent */
-	private final java.util.Set<Boolean>	savedTo			= new java.util.HashSet<>();
-	private boolean							titleSet;
-	private final Composer					composer		= new Composer();
-	private KeyMap							keys			= KeyMap.defaults();
-	private String							pendingKey;
-	private AtSources						sources			= new AtSources( List.of(), ( name, query ) -> List.of() );
+	private TuiSettings.Resolved			settings			= TuiSettings.defaults();
+	private String							agentFile			= "";
+	private String							userFile			= "";
+	private String							version				= "";
+	private String							agentName			= "";
 
-	private final Queue<Map<?, ?>>			events			= new ConcurrentLinkedQueue<>();
-	private final Queue<String>				steer			= new ConcurrentLinkedQueue<>();
+	/**
+	 * What the heading lists as loaded: the skills, the extensions that loaded, and those that did not
+	 */
+	private List<String>					loadedSkills		= List.of();
+	private List<String>					loadedExtensions	= List.of();
+	private List<String>					failedExtensions	= List.of();
+	/** the files the person agreed to write to in this chat: false for the agent\'s file, true for the file for every agent */
+	private final java.util.Set<Boolean>	savedTo				= new java.util.HashSet<>();
+	private boolean							titleSet;
+	private final Composer					composer			= new Composer();
+	private KeyMap							keys				= KeyMap.defaults();
+	private String							pendingKey;
+	private AtSources						sources				= new AtSources( List.of(), ( name, query ) -> List.of() );
+
+	private final Queue<Map<?, ?>>			events				= new ConcurrentLinkedQueue<>();
+	private final Queue<String>				steer				= new ConcurrentLinkedQueue<>();
 	private volatile boolean				cancel;
 	/** a short note at the front of the hint row, such as the size of the context; empty for none */
-	private volatile String					status			= "";
+	private volatile String					status				= "";
 	private volatile boolean				turnOver;
 	/** the look of the message box: its style and widgets; /prompt and Agent.yaml's tui: block change it */
-	private volatile PromptLook				look			= PromptLook.defaults();
-	private final WidgetContext				facts			= new WidgetContext();
+	private volatile PromptLook				look				= PromptLook.defaults();
+	private final WidgetContext				facts				= new WidgetContext();
 	private Thread							turnThread;
 
 	// pictures and file mentions in the message box
-	private static final int				MAX_IMAGES		= 4;
-	private final FileIndex					fileIndex		= new FileIndex( Path.of( System.getProperty( "user.dir" ) ) );
-	private final ClipboardImage			clipboard		= ClipboardImage.ofThisMachine();
-	private final List<String>				images			= new ArrayList<>();
+	private static final int				MAX_IMAGES			= 4;
+	private final FileIndex					fileIndex			= new FileIndex( Path.of( System.getProperty( "user.dir" ) ) );
+	private final ClipboardImage			clipboard			= ClipboardImage.ofThisMachine();
+	private final List<String>				images				= new ArrayList<>();
 	private Path							pasteFolder;
-	private boolean							imagesAllowed	= true;
-	private String							imagesRefusal	= "";
+	private boolean							imagesAllowed		= true;
+	private String							imagesRefusal		= "";
 	private int								atPick;
 	private boolean							indexed;
 
 	// turn state, touched only by whichever thread is drawing
-	private final StringBuilder				segment			= new StringBuilder();
-	private final StringBuilder				reasoning		= new StringBuilder();
-	private final Map<String, Map<?, ?>>	running			= new LinkedHashMap<>();
+	private final StringBuilder				segment				= new StringBuilder();
+	private final StringBuilder				reasoning			= new StringBuilder();
+	private final Map<String, Map<?, ?>>	running				= new LinkedHashMap<>();
 	private long							turnStarted;
 	private int								frame;
 	private int								drawnHeight;
@@ -276,7 +283,21 @@ public final class ChatScreen implements AutoCloseable {
 	}
 
 	/**
-	 * Prints the heading, as the {@code header} setting says: the mark with the name, the version, who the agent is and the keys; or one line;
+	 * Sets what the heading lists as loaded. Call it before {@link #banner}; without it the heading lists nothing.
+	 *
+	 * @param skills     The names of the skills the agent can load
+	 * @param extensions The names of the extensions that loaded
+	 * @param failed     The names of the extensions that did not load
+	 */
+	public void setLoaded( List<String> skills, List<String> extensions, List<String> failed ) {
+		this.loadedSkills		= skills == null ? List.of() : List.copyOf( skills );
+		this.loadedExtensions	= extensions == null ? List.of() : List.copyOf( extensions );
+		this.failedExtensions	= failed == null ? List.of() : List.copyOf( failed );
+	}
+
+	/**
+	 * Prints the heading, as the {@code header} setting says: the mark with the name and the agent, the version, the model, the skills and extensions
+	 * loaded, and the keys; or one line;
 	 * or nothing. With {@code fullscreen} on, the lines that follow push the message box down to the bottom of the screen, so the box does
 	 * not sit right under the header. Also puts the agent's name in the terminal's title when {@code terminalTitle} is on.
 	 *
@@ -290,25 +311,22 @@ public final class ChatScreen implements AutoCloseable {
 		List<Line>	lines	= new ArrayList<>();
 		String		hints	= lower( keys.first( KeyMap.Action.SUBMIT ) ) + " send · " + lower( keys.first( KeyMap.Action.NEWLINE ) )
 		    + " new line · / commands · ? keys";
-		String		more	= lower( keys.first( KeyMap.Action.STOP ) ) + " stops the agent · " + lower( keys.first( KeyMap.Action.CLEAR ) )
+		String		more	= lower( keys.first( KeyMap.Action.STOP ) ) + " stops · " + lower( keys.first( KeyMap.Action.CLEAR ) )
 		    + " clears the box · "
 		    + lower( keys.first( KeyMap.Action.CLEAR_SCREEN ) ) + " clears the screen";
 		String		name	= " bxAgents";
-		// the big name needs the width; a narrow terminal gets the one line instead
-		if ( "full".equals( how ) && runner.width() < Logo.width() + 4 ) {
+		int			cols	= runner.width();
+		int			tall	= terminal.getSize().getRows() > 0 ? terminal.getSize().getRows() : 24;
+		// the mark with the text beside it needs the room; a small terminal gets the one line instead
+		if ( "full".equals( how ) && !Header.fits( cols, tall ) ) {
 			how = "compact";
 		}
 		if ( "full".equals( how ) ) {
-			lines.add( Line.from( Span.raw( "" ) ) );
-			for ( Row mark : Logo.rows( theme ) ) {
-				lines.add( Row.of( "  ", theme.plain ).addPadded( mark, Logo.width() ).toLine() );
+			Header.Facts facts = new Header.Facts( agent, version, model, mode, List.of( hints, more ), loadedSkills, loadedExtensions,
+			    failedExtensions );
+			for ( Row row : Header.rows( theme, facts, cols ) ) {
+				lines.add( row.toLine() );
 			}
-			lines.add( Line.from( Span.raw( "" ) ) );
-			lines.add( Row.of().add( "  " + ( version.isEmpty() ? "" : "v" + version + " · " ), theme.muted ).add( agent, theme.bold )
-			    .add( " · " + model + " · " + mode, theme.muted ).toLine() );
-			lines.add( Row.of( "  " + hints, theme.muted ).toLine() );
-			lines.add( Row.of( "  " + more, theme.muted ).toLine() );
-			lines.add( Line.from( Span.raw( "" ) ) );
 		} else if ( "compact".equals( how ) ) {
 			lines.add( Row.of().add( name, theme.accentBold ).add( version.isEmpty() ? "" : " v" + version, theme.muted ).add( "   " + agent, theme.bold )
 			    .add( " · " + model + " · " + mode, theme.muted ).toLine() );

@@ -140,6 +140,7 @@ class {
 		} catch ( any e ) {
 			// no version to show
 		}
+		showLoaded()
 		variables.screen.banner( variables.session.agentName(), variables.session.modelName(), variables.session.mode() )
 		var agent = variables.session.agentName()
 		announce( "onChatSessionStart", { agent : agent, transport : "tui" } )
@@ -151,6 +152,30 @@ class {
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Tells the screen which skills the agent has and which extensions loaded, for the header to list. A session that cannot say, or a
+	 * screen that has no place for it (a test's), simply goes without.
+	 */
+	private void function showLoaded() {
+		try {
+			var skills = variables.session.skills().map( s => s.name )
+			var loaded = []
+			var failed = []
+			if ( !isNull( variables.extensions ) && structKeyExists( variables.extensions, "report" ) ) {
+				for ( var extension in variables.extensions.report() ) {
+					if ( extension.state == "failed" ) {
+						failed.append( extension.name )
+					} else if ( extension.state == "loaded" ) {
+						loaded.append( extension.name )
+					}
+				}
+			}
+			variables.screen.setLoaded( skills, loaded, failed )
+		} catch ( any e ) {
+			// nothing to list
+		}
+	}
 
 	/**
 	 * Gives the screen the person's keys and the keys extensions bind, and shows what is wrong with them.

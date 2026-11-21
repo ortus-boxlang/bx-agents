@@ -153,6 +153,24 @@ function drawLineCell( required any g, required string ch, required numeric px, 
 		g.fillRect( px, py, max( 2, int( cellW * bars[ arguments.ch ] / 8 ) ), cellH )
 		return true
 	}
+	// braille: a block of 2 by 4 dots, one bit for each. The font draws them small and faint, a terminal draws them as round dots that
+	// fill the cell, which is how the mark in the header is meant to look.
+	var code = arguments.ch.codePointAt( 0 )
+	if ( code >= 10240 && code <= 10495 ) {
+		var bits = code - 10240
+		// which bit is which dot: [ column, row ], in the order braille numbers them
+		var dots = [ [ 0, 0 ], [ 0, 1 ], [ 0, 2 ], [ 1, 0 ], [ 1, 1 ], [ 1, 2 ], [ 0, 3 ], [ 1, 3 ] ]
+		var dotW = cellW / 2
+		var dotH = cellH / 4
+		var size = max( 2, int( min( dotW, dotH ) * 0.78 ) )
+		for ( var i = 1; i <= 8; i++ ) {
+			if ( bitAnd( bits, bitSHLN( 1, i - 1 ) ) ) {
+				var d = dots[ i ]
+				g.fillOval( int( px + d[ 1 ] * dotW + ( dotW - size ) / 2 ), int( py + d[ 2 ] * dotH + ( dotH - size ) / 2 ), size, size )
+			}
+		}
+		return true
+	}
 	return false
 }
 

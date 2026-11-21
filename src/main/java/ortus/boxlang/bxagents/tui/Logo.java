@@ -21,21 +21,30 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The name of the project in big block letters, in the style of the banner the BoxLang runtime prints when it starts: five rows of full
- * blocks. The colour goes from the accent to the ok colour across the width, the way the project's icon goes from cyan to green, and is one
- * colour where the terminal has no more.
+ * The project's icon, the three dots and the swirl, drawn in braille characters the way the BoxLang installers draw the BoxLang mark: each
+ * character holds a block of 2 by 4 dots, so thirteen rows and twenty-six columns hold the whole icon. The colour goes from the accent to
+ * the ok colour from left to right and a little from top to bottom, the way the icon goes from cyan to green, and is one colour where the
+ * terminal has no more. Every braille character is one cell wide, so the width counts are exact.
  */
 final class Logo {
 
 	/**
-	 * The drawing, one string per row of text
+	 * The drawing, one string per row of text. It was made from {@code docs/assets/bxagents-icon-full.svg}.
 	 */
 	private static final List<String> ART = List.of(
-	    "██████  ██   ██  █████   ██████  ███████ ███    ██ ████████ ███████",
-	    "██   ██  ██ ██  ██   ██ ██       ██      ████   ██    ██    ██",
-	    "██████    ███   ███████ ██   ███ █████   ██ ██  ██    ██    ███████",
-	    "██   ██  ██ ██  ██   ██ ██    ██ ██      ██  ██ ██    ██         ██",
-	    "██████  ██   ██ ██   ██  ██████  ███████ ██   ████    ██    ███████" );
+	    "            ⣠⣤⣤⡀",
+	    "           ⣾⣿⣿⣿⣿⡆",
+	    "        ⢀⣴⣆⠙⢿⣿⣿⠟⢡⣤⣀",
+	    "     ⢀⡴⢠⣿⣿⣿⠗⢀⣠⣤⣶⣿⣿⣿⣷⣄",
+	    "    ⣴⣿⢁⣿⣿⠟⠁ ⠋⠉⠉⠉⠙⠛⠻⢿⣿⣷⡄",
+	    "   ⣸⣿⡏⢸⣿⠏        ⠙⢷⣦⣌⠛⢿⡄",
+	    "   ⣿⣿⣧⠈⡿          ⠈⢻⣿⣷⣄⠃",
+	    "   ⣿⣿⣿⣆           ⢀⡀⢿⣿⣿⣆",
+	    " ⣀⣀⣉⠙⢻⣿⣦⡀         ⣸⣧⠸⠟⢛⣛⡀",
+	    "⣼⣿⣿⣿⣷⡀⢉⠛⠛⠦    ⣀⣠ ⣰⣿⣿ ⣾⣿⣿⣿⣦",
+	    "⢻⣿⣿⣿⡿⢁⣾⣿⣿⣶⣶⣶⣾⡿⠟⣁⣼⣿⣿⣿⠈⣿⣿⣿⣿⡿",
+	    " ⠉⠉⠉ ⠚⠻⠿⠿⠟⠛⣋⣩⣴⣾⣿⣿⡿⠟⠁ ⠈⠙⠛⠉",
+	    "        ⠈⠙⠛⠛⠛⠛⠛⠉⠁" );
 
 	/**
 	 * Nothing to create: the methods are static
@@ -71,15 +80,32 @@ final class Logo {
 	static List<Row> rows( Theme theme ) {
 		int			width	= width();
 		List<Row>	rows	= new ArrayList<>();
-		for ( String line : ART ) {
-			Row row = Row.of();
+		for ( int y = 0; y < ART.size(); y++ ) {
+			String	line	= ART.get( y );
+			Row		row		= Row.of();
 			for ( int x = 0; x < width; x++ ) {
 				char c = x < line.length() ? line.charAt( x ) : ' ';
-				row.add( String.valueOf( c ), c == ' ' ? theme.plain : theme.gradient( width <= 1 ? 0 : x / ( double ) ( width - 1 ) ) );
+				row.add( String.valueOf( c ), c == ' ' ? theme.plain : theme.gradient( shade( x, y, width, ART.size() ) ) );
 			}
 			rows.add( row );
 		}
 		return rows;
+	}
+
+	/**
+	 * Where a cell is on the way from the accent colour to the ok colour: mostly by how far right it is, a little by how far down
+	 *
+	 * @param x      The column
+	 * @param y      The row
+	 * @param width  How many columns the mark has
+	 * @param height How many rows the mark has
+	 *
+	 * @return A number from 0, the accent, to 1, the ok colour
+	 */
+	private static double shade( int x, int y, int width, int height ) {
+		double	across	= width <= 1 ? 0 : x / ( double ) ( width - 1 );
+		double	down	= height <= 1 ? 0 : y / ( double ) ( height - 1 );
+		return 0.7 * across + 0.3 * down;
 	}
 
 }
