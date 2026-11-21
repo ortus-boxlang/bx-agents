@@ -43,7 +43,7 @@ On a gateway, `/new`, `/clear`, `/compact`, `/sessions` and `/resume` are off un
 | `/tools` | T W G | List the agent's tools | `/tools` |
 | `/volumes` | T W G | List the folders the agent may use, by name, mode and description. Never a folder on the machine | `/volumes` |
 | `/agent [name]` | T | Terminal only. List the agent and its sub-agents, or switch to one and start a new conversation with it. Every agent keeps its own memory. The web page has the **Talk to** menu for this, and a gateway always talks to the main agent | `/agent researcher` |
-| `/skills` | T W G | List the skills the agent can load, and its level: installed, project or agent | `/skills` |
+| `/skills` | T W G | List the skills the agent can load, and its level: installed, project, bxagents or agent | `/skills` |
 | `/routines [all]` | T W | List your [routines](../conventions/routines.md): schedule in words, status and next run (an admin adds `all`). | `/routines` |
 | `/routine <name> [run\|pause\|resume\|delete confirm\|reports\|report <file>]` | T W | Show one routine, or act on it. `delete` needs `confirm`, and no command removes a report | `/routine check-build pause` |
 | `/context` | T W | How big the context is and what it is made of, and how many of the messages its memory keeps this conversation has (a warning near the limit). Worked out locally, no model call | `/context` |

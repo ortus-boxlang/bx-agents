@@ -30,8 +30,8 @@ class HeaderTest {
 	private static final Theme THEME = Theme.detect( null, "xterm-256color", "truecolor" );
 
 	private static Header.Facts facts( List<String> skills, List<String> extensions, List<String> failed ) {
-		return new Header.Facts( "acme-support", "1.0.0", "fast-model", "in-process", List.of( "enter send · / commands", "esc stops" ), skills, extensions,
-		    failed );
+		return new Header.Facts( "acme-support", "1.0.0", "fast-model", "in-process", List.of( "enter send · / commands", "esc stops" ),
+		    List.of( new Header.Group( "skills", skills, List.of() ), new Header.Group( "extensions", extensions, failed ) ) );
 	}
 
 	private static String text( List<Row> rows ) {
@@ -76,20 +76,34 @@ class HeaderTest {
 		assertThat( row.width() ).isAtMost( 60 );
 		assertThat( row.plainText() ).contains( "more" );
 		assertThat( row.plainText() ).startsWith( "skills      skill-number-0, " );
-		Row bad = Header.loaded( THEME, "extensions", List.of( "git" ), List.of( "broken" ), 60 );
+		Row bad = Header.loaded( THEME, "extensions", List.of( "git" ), List.of( "broken (failed)" ), 60 );
 		assertThat( bad.plainText() ).contains( "broken (failed)" );
 	}
 
 	@Test
 	@DisplayName( "a long agent name is cut so the title fits, and a small terminal does not get the full heading" )
 	void narrow() {
-		Header.Facts f = new Header.Facts( "a-very-long-agent-name-that-will-not-fit-anywhere", "", "m", "x", List.of(), List.of(), List.of(), List.of() );
+		Header.Facts f = new Header.Facts( "a-very-long-agent-name-that-will-not-fit-anywhere", "", "m", "x", List.of(), List.of() );
 		for ( Row r : Header.rows( THEME, f, Logo.width() + 2 + Header.GAP + Header.MIN_TEXT ) ) {
 			assertThat( r.width() ).isAtMost( Logo.width() + 2 + Header.GAP + Header.MIN_TEXT );
 		}
 		assertThat( Header.fits( 80, 24 ) ).isTrue();
 		assertThat( Header.fits( 60, 40 ) ).isFalse();
 		assertThat( Header.fits( 120, 18 ) ).isFalse();
+	}
+
+	@Test
+	@DisplayName( "all five lines of what is loaded and both lines of keys fit beside the mark, and a line with nothing in it is left out" )
+	void everyLine() {
+		Header.Facts	f		= new Header.Facts( "acme-support", "1.0.0", "fast-model", "in-process", List.of( "enter send", "esc stops" ),
+		    List.of( new Header.Group( "skills", List.of( "a" ), List.of() ), new Header.Group( "extensions", List.of( "b" ), List.of() ),
+		        new Header.Group( "connectors", List.of( "github ✓" ), List.of( "slack (sign in)" ) ), new Header.Group( "gateways", List.of(), List.of() ),
+		        new Header.Group( "mcp", List.of( "docs" ), List.of() ) ) );
+		String			shown	= text( Header.rows( THEME, f, 100 ) );
+		for ( String want : List.of( "skills", "extensions", "connectors  github ✓, slack (sign in)", "mcp", "enter send", "esc stops" ) ) {
+			assertThat( shown ).contains( want );
+		}
+		assertThat( shown ).doesNotContain( "gateways" );
 	}
 
 }

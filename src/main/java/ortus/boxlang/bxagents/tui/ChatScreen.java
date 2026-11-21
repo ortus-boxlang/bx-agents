@@ -67,14 +67,14 @@ import org.jline.terminal.TerminalBuilder;
  */
 public final class ChatScreen implements AutoCloseable {
 
-	private static final String[]			SPINNER				= { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
-	private static final int				MAX_TAIL			= 8;
+	private static final String[]			SPINNER			= { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
+	private static final int				MAX_TAIL		= 8;
 
 	/**
 	 * How long a turn must take, in milliseconds, before the {@code notify} setting tells the person it is over
 	 */
-	private static final long				NOTIFY_AFTER_MS		= 10_000;
-	private static final int				MAX_COMPOSER		= 6;
+	private static final long				NOTIFY_AFTER_MS	= 10_000;
+	private static final int				MAX_COMPOSER	= 6;
 
 	private final InlineTuiRunner			runner;
 	private final Terminal					terminal;
@@ -86,52 +86,50 @@ public final class ChatScreen implements AutoCloseable {
 	/**
 	 * What the chat runs with, decided from the layers, and where the files are that hold the person's own choices
 	 */
-	private TuiSettings.Resolved			settings			= TuiSettings.defaults();
-	private String							agentFile			= "";
-	private String							userFile			= "";
-	private String							version				= "";
-	private String							agentName			= "";
+	private TuiSettings.Resolved			settings		= TuiSettings.defaults();
+	private String							agentFile		= "";
+	private String							userFile		= "";
+	private String							version			= "";
+	private String							agentName		= "";
 
 	/**
-	 * What the heading lists as loaded: the skills, the extensions that loaded, and those that did not
+	 * What the heading lists as loaded, a line for each label in the order the lines were set
 	 */
-	private List<String>					loadedSkills		= List.of();
-	private List<String>					loadedExtensions	= List.of();
-	private List<String>					failedExtensions	= List.of();
+	private final Map<String, Header.Group>	loaded			= new java.util.LinkedHashMap<>();
 	/** the files the person agreed to write to in this chat: false for the agent\'s file, true for the file for every agent */
-	private final java.util.Set<Boolean>	savedTo				= new java.util.HashSet<>();
+	private final java.util.Set<Boolean>	savedTo			= new java.util.HashSet<>();
 	private boolean							titleSet;
-	private final Composer					composer			= new Composer();
-	private KeyMap							keys				= KeyMap.defaults();
+	private final Composer					composer		= new Composer();
+	private KeyMap							keys			= KeyMap.defaults();
 	private String							pendingKey;
-	private AtSources						sources				= new AtSources( List.of(), ( name, query ) -> List.of() );
+	private AtSources						sources			= new AtSources( List.of(), ( name, query ) -> List.of() );
 
-	private final Queue<Map<?, ?>>			events				= new ConcurrentLinkedQueue<>();
-	private final Queue<String>				steer				= new ConcurrentLinkedQueue<>();
+	private final Queue<Map<?, ?>>			events			= new ConcurrentLinkedQueue<>();
+	private final Queue<String>				steer			= new ConcurrentLinkedQueue<>();
 	private volatile boolean				cancel;
 	/** a short note at the front of the hint row, such as the size of the context; empty for none */
-	private volatile String					status				= "";
+	private volatile String					status			= "";
 	private volatile boolean				turnOver;
 	/** the look of the message box: its style and widgets; /prompt and Agent.yaml's tui: block change it */
-	private volatile PromptLook				look				= PromptLook.defaults();
-	private final WidgetContext				facts				= new WidgetContext();
+	private volatile PromptLook				look			= PromptLook.defaults();
+	private final WidgetContext				facts			= new WidgetContext();
 	private Thread							turnThread;
 
 	// pictures and file mentions in the message box
-	private static final int				MAX_IMAGES			= 4;
-	private final FileIndex					fileIndex			= new FileIndex( Path.of( System.getProperty( "user.dir" ) ) );
-	private final ClipboardImage			clipboard			= ClipboardImage.ofThisMachine();
-	private final List<String>				images				= new ArrayList<>();
+	private static final int				MAX_IMAGES		= 4;
+	private final FileIndex					fileIndex		= new FileIndex( Path.of( System.getProperty( "user.dir" ) ) );
+	private final ClipboardImage			clipboard		= ClipboardImage.ofThisMachine();
+	private final List<String>				images			= new ArrayList<>();
 	private Path							pasteFolder;
-	private boolean							imagesAllowed		= true;
-	private String							imagesRefusal		= "";
+	private boolean							imagesAllowed	= true;
+	private String							imagesRefusal	= "";
 	private int								atPick;
 	private boolean							indexed;
 
 	// turn state, touched only by whichever thread is drawing
-	private final StringBuilder				segment				= new StringBuilder();
-	private final StringBuilder				reasoning			= new StringBuilder();
-	private final Map<String, Map<?, ?>>	running				= new LinkedHashMap<>();
+	private final StringBuilder				segment			= new StringBuilder();
+	private final StringBuilder				reasoning		= new StringBuilder();
+	private final Map<String, Map<?, ?>>	running			= new LinkedHashMap<>();
 	private long							turnStarted;
 	private int								frame;
 	private int								drawnHeight;
@@ -283,16 +281,15 @@ public final class ChatScreen implements AutoCloseable {
 	}
 
 	/**
-	 * Sets what the heading lists as loaded. Call it before {@link #banner}; without it the heading lists nothing.
+	 * Sets one line of what the heading lists as loaded. Call it once for each line before {@link #banner}, in the order the lines are to
+	 * be shown; without any call the heading lists nothing. A line with nothing in it is left out.
 	 *
-	 * @param skills     The names of the skills the agent can load
-	 * @param extensions The names of the extensions that loaded
-	 * @param failed     The names of the extensions that did not load
+	 * @param label The word the line starts with: {@code skills}, {@code extensions}, {@code connectors}, {@code gateways} or {@code mcp}
+	 * @param names What is there
+	 * @param bad   What is there but is not working, shown last in the warning colour
 	 */
-	public void setLoaded( List<String> skills, List<String> extensions, List<String> failed ) {
-		this.loadedSkills		= skills == null ? List.of() : List.copyOf( skills );
-		this.loadedExtensions	= extensions == null ? List.of() : List.copyOf( extensions );
-		this.failedExtensions	= failed == null ? List.of() : List.copyOf( failed );
+	public void setLoaded( String label, List<String> names, List<String> bad ) {
+		loaded.put( label, new Header.Group( label, names == null ? List.of() : List.copyOf( names ), bad == null ? List.of() : List.copyOf( bad ) ) );
 	}
 
 	/**
@@ -322,8 +319,8 @@ public final class ChatScreen implements AutoCloseable {
 			how = "compact";
 		}
 		if ( "full".equals( how ) ) {
-			Header.Facts facts = new Header.Facts( agent, version, model, mode, List.of( hints, more ), loadedSkills, loadedExtensions,
-			    failedExtensions );
+			Header.Facts facts = new Header.Facts( agent, version, model, mode, List.of( hints, more ),
+			    List.copyOf( loaded.values() ) );
 			for ( Row row : Header.rows( theme, facts, cols ) ) {
 				lines.add( row.toLine() );
 			}

@@ -47,19 +47,26 @@ final class Header {
 	private static final int	LABEL		= 12;
 
 	/**
+	 * One line of what is loaded
+	 *
+	 * @param label The word the line starts with, such as {@code skills}
+	 * @param names What is there
+	 * @param bad   What is there but is not working, such as an extension that did not load: shown last, in the warning colour
+	 */
+	record Group( String label, List<String> names, List<String> bad ) {
+	}
+
+	/**
 	 * What the heading says
 	 *
-	 * @param agent      The agent's name
-	 * @param version    The module's version, empty for none
-	 * @param model      The model in use
-	 * @param mode       How the chat reaches the agent
-	 * @param hints      The lines of keys, each on its own row
-	 * @param skills     The names of the skills the agent can load
-	 * @param extensions The names of the extensions that loaded
-	 * @param failed     The names of the extensions that did not load
+	 * @param agent   The agent's name
+	 * @param version The module's version, empty for none
+	 * @param model   The model in use
+	 * @param mode    How the chat reaches the agent
+	 * @param hints   The lines of keys, each on its own row
+	 * @param groups  The lines of what is loaded, in the order they are shown; one with nothing in it is left out
 	 */
-	record Facts( String agent, String version, String model, String mode, List<String> hints, List<String> skills, List<String> extensions,
-	    List<String> failed ) {
+	record Facts( String agent, String version, String model, String mode, List<String> hints, List<Group> groups ) {
 	}
 
 	/**
@@ -117,18 +124,14 @@ final class Header {
 	static List<Row> text( Theme theme, Facts facts, int room ) {
 		List<Row> text = new ArrayList<>();
 		text.add( Row.of() );
-		text.add( Row.of() );
-		text.add( Row.of() );
 		text.add( title( theme, facts, room ) );
-		text.add( Row.of() );
 		text.add(
 		    Row.of( cut( ( facts.version().isEmpty() ? "" : "v" + facts.version() + " · " ) + facts.model() + " · " + facts.mode(), room ), theme.muted ) );
 		text.add( Row.of() );
-		if ( !facts.skills().isEmpty() ) {
-			text.add( loaded( theme, "skills", facts.skills(), List.of(), room ) );
-		}
-		if ( !facts.extensions().isEmpty() || !facts.failed().isEmpty() ) {
-			text.add( loaded( theme, "extensions", facts.extensions(), facts.failed(), room ) );
+		for ( Group g : facts.groups() ) {
+			if ( !g.names().isEmpty() || !g.bad().isEmpty() ) {
+				text.add( loaded( theme, g.label(), g.names(), g.bad(), room ) );
+			}
 		}
 		text.add( Row.of() );
 		for ( String hint : facts.hints() ) {
@@ -152,8 +155,8 @@ final class Header {
 	}
 
 	/**
-	 * One line of what is loaded: the label, then the names in the order given as many as fit, then how many more there are. Names that did
-	 * not load come last, in the warning colour.
+	 * One line of what is loaded: the label, then the names in the order given as many as fit, then how many more there are. Names that are
+	 * there but not working come last, in the warning colour, as the caller worded them.
 	 *
 	 * @param theme  The palette
 	 * @param label  skills or extensions
@@ -167,7 +170,7 @@ final class Header {
 		Row				row	= Row.of( ( label + " ".repeat( LABEL ) ).substring( 0, LABEL ), theme.muted );
 		List<String>	all	= new ArrayList<>( names );
 		for ( String f : failed ) {
-			all.add( f + " (failed)" );
+			all.add( f );
 		}
 		int	budget	= room - LABEL;
 		int	used	= 0;

@@ -51,9 +51,9 @@ class extends="testbox.system.BaseSpec" {
 
 			describe( "the settings", function() {
 
-				it( "accept nothing, and the two settings", function() {
+				it( "accept nothing, and the three settings", function() {
 					expect( wiring.problems( {} ) ).toBeEmpty();
-					expect( wiring.problems( { agentCanSave : true, autoApprove : false } ) ).toBeEmpty();
+					expect( wiring.problems( { agentCanSave : true, autoApprove : false, builtin : true } ) ).toBeEmpty();
 				} );
 
 				it( "refuse a setting they do not know, naming the ones they do", function() {
@@ -61,11 +61,19 @@ class extends="testbox.system.BaseSpec" {
 					expect( found ).toHaveLength( 1 );
 					expect( found[ 1 ] ).toInclude( "agentCanSave" );
 					expect( found[ 1 ] ).toInclude( "autoApprove" );
+					expect( found[ 1 ] ).toInclude( "builtin" );
 				} );
 
 				it( "want true or false, not a number or a word", function() {
 					expect( wiring.problems( { autoApprove : "maybe" } ) ).toHaveLength( 1 );
 					expect( wiring.problems( { agentCanSave : 1 } ) ).toHaveLength( 1 );
+					expect( wiring.problems( { builtin : "maybe" } ) ).toHaveLength( 1 );
+				} );
+
+				it( "keep the skills bxAgents ships unless builtin is false", function() {
+					expect( wiring.wantsBuiltin( {} ) ).toBeTrue();
+					expect( wiring.wantsBuiltin( { builtin : true } ) ).toBeTrue();
+					expect( wiring.wantsBuiltin( { builtin : false } ) ).toBeFalse();
 				} );
 
 				it( "throw from attach with the same words", function() {

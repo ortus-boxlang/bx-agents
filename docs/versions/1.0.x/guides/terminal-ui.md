@@ -195,9 +195,9 @@ Details and limits: [CLI reference](../cli-reference.md#files-and-pictures-in-th
 
 How the chat looks and behaves is a short list of settings, the same in every file that can hold them. The chat opens full screen by default: it clears the screen, draws the header at the top and keeps the message box and the footer at the bottom. Your scrollback is kept, and finished turns still go into it.
 
-![The header: the bxAgents icon, the name and the agent, the version, the skills loaded and the keys, with the message box at the bottom](../assets/tui/chat-header.png)
+![The header: the bxAgents icon, the name and the agent, the version, the skills, connectors and gateways, and the keys, with the message box at the bottom](../assets/tui/chat-header.png)
 
-*The header at the top: the bxAgents icon drawn in braille characters, the way the BoxLang installers draw the BoxLang mark, with the name and the agent beside it, the version and model, the skills and extensions that loaded (a list that does not fit ends with how many more there are, and an extension that failed to load is marked), and the keys. The message box and the footer are at the bottom. On a terminal too small for the icon (under about 80 columns or 21 rows), the header is one line. The footer has the folder and branch, the context and the model on the right, so the top bar of the box only says who is writing.*
+*The header at the top: the bxAgents icon drawn in braille characters, the way the BoxLang installers draw the BoxLang mark, with the name and the agent beside it, the version and model, a line each for what the agent has: `skills`, `extensions`, `connectors`, `gateways` and `mcp` (a line with nothing in it is left out, a list that does not fit ends with how many more there are, an extension that failed to load is marked, and a connector that is signed in has a check mark), and the keys. The skills that bxAgents ships are counted as `6 from bxAgents`, so yours come first. The message box and the footer are at the bottom. On a terminal too small for the icon (under about 80 columns or 21 rows), the header is one line. The footer has the folder and branch, the context and the model on the right, so the top bar of the box only says who is writing.*
 
 | Setting | Values (default first) | What it does |
 |---|---|---|
