@@ -21,6 +21,7 @@ An agent keeps its state in one place, the **data home**, and reaches the rest o
   routines/      reports saved by routines, one folder each (see routines)
   logs/          what the agent logs, one file per area (see logs)
   backups/       written by bxAgents backup
+  settings.yml   your own settings for how the terminal chat looks, for this agent (see Settings), made when you first save one
 ```
 
 There is always a home. Where it is, first match wins:
@@ -100,6 +101,7 @@ A skill is a folder with a `SKILL.md`: instructions the agent loads by name when
 | Installed | `.agents/skills/` in the project | The registry tools (`npx skills`, `bxAgents skills install`), restored at build time | `installed` |
 | Ships with the agent | `skills/` in the project, and the skills extensions carry | You | `project` |
 | The agent's own | `skills/` in the data home | The agent, with its `skill_save` tool | `agent` |
+| bxAgents' own | `skills/` inside the bxAgents module | bxAgents | `bxagents` |
 
 The build copies the first two into the app, and the app loads the third at start and the moment a skill is saved. A diagram of the levels is on the [skills page](skills.md#the-three-levels). A skill that ships with the agent wins over an installed one of the same name.
 
@@ -120,8 +122,8 @@ A saved skill is part of the data home, so `backup` and `restore` carry it. To r
 
 ### Seeing the skills
 
-- **In chat:** `/skills` lists every skill with its level: installed, project or agent.
-- **Over the API:** `GET /skills` answers `{ skills: [ { name, description, origin } ] }` (`origin` is `installed`, `project` or `agent`) to anyone who may call the API. It never shows a folder on the machine.
+- **In chat:** `/skills` lists every skill with its level: installed, project, bxagents or agent.
+- **Over the API:** `GET /skills` answers `{ skills: [ { name, description, origin } ] }` (`origin` is `installed`, `project`, `bxagents` or `agent`) to anyone who may call the API. It never shows a folder on the machine.
 
 ## Routine reports
 

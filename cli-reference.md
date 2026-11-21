@@ -557,6 +557,7 @@ A chat with the built agent, in a terminal screen that keeps your scrollback: fi
 ```bash
 bxAgents chat                                  # fast, in-process
 bxAgents chat --no-tui                         # plain line-by-line REPL
+bxAgents chat --inline                         # the box under the last line, not pinned to the bottom of a cleared screen
 bxAgents chat --server [--port=<port>]         # full app, own throwaway server
 bxAgents chat --connect=http://127.0.0.1:8080  # full app, server you already run
 bxAgents chat --connect=https://agent.example.com --token=<token>   # a server that wants one
@@ -576,7 +577,7 @@ In the screen:
 | Esc | Stop the agent. It stops at its next step, not mid-word |
 | Enter while the agent works | Steer it: your message is added to the run |
 | Ctrl+C | Clear the box; on an empty box, leave; while the agent works, stop it. Ctrl+D leaves on an empty box |
-| `?` alone, or `/keys` | List the keys as they are bound now, with the action name of each |
+| `?` alone, F1, Ctrl+/, or `/keys` | Open the shortcuts panel: the keys as they are bound now, with the action name of each, narrowed by typing |
 
 Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/volumes` (the folders the agent may use), `/agent` (pick a sub-agent to talk to), `/skills` (the skills the agent can load, and from which level), `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/keys` (which key does what), `/prompt` (how the message box looks, see below), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
 
@@ -636,8 +637,8 @@ Set the start in [`Agent.yaml`](conventions/agent-yaml.md#settings) or with `bxA
 tui:
   prompt: bars
   widgets:
-    top: [ agent, folder, user, clock ]
-    bottom: [ ctx, profile ]
+    top: []
+    bottom: [ folder, git, ctx, profile ]
 ```
 
 Tables in an answer are drawn with rounded borders in the accent colour, a bold header and the column alignment of the table; cells wrap on a narrow terminal. Code blocks are coloured by language.
@@ -713,7 +714,7 @@ extensions:                          # values for extensions, and what to turn o
 
 A missing file means both are on. A key the file does not know, or a value of the wrong kind, is reported when the chat starts instead of being ignored.
 
-Keys are written as people say them: `enter`, `alt+enter`, `shift+enter`, `ctrl+j`, `esc`, `tab`, `up`, `down`, `home`, `end`, or a letter with `ctrl` or `alt`. Actions you can change: `submit`, `newline`, `historyPrevious`, `historyNext`, `clear`, `exit`, `deleteToStart`, `deleteWord`, `lineStart`, `lineEnd`, `complete`, `pasteImage` (in the message box) and `stop` (while the agent works). Moving the cursor with the arrows, Backspace and Delete are not actions. An entry that names no action, cannot be read as a key, or takes a key another action in the same place already has, is reported when the chat starts and that action keeps its default keys, so a typo never leaves you without a way to send a message. The heading and the hint row show your keys.
+Keys are written as people say them: `enter`, `alt+enter`, `shift+enter`, `ctrl+j`, `esc`, `tab`, `up`, `down`, `home`, `end`, or a letter with `ctrl` or `alt`. Actions you can change: `submit`, `newline`, `historyPrevious`, `historyNext`, `clear`, `exit`, `deleteToStart`, `deleteWord`, `lineStart`, `lineEnd`, `complete`, `pasteImage` and `clearScreen` (in the message box) and `stop` (while the agent works). Moving the cursor with the arrows, Backspace and Delete are not actions. An entry that names no action, cannot be read as a key, or takes a key another action in the same place already has, is reported when the chat starts and that action keeps its default keys, so a typo never leaves you without a way to send a message. The heading and the hint row show your keys.
 
 #### Files and pictures in the message
 

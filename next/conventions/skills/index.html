@@ -289,7 +289,7 @@ Always greet the user warmly and use their name if known.
 <p>The skill's name is its frontmatter <code>name:</code> if present; otherwise it falls back to the folder name (<code>greeting/</code> with no frontmatter name would be discovered as <code>greeting</code> anyway, but an explicit <code>name:</code> always wins even if it differs from the folder). Two skills resolving to the same name fail validation with a duplicate-name error.</p>
 <p>A folder without a <code>SKILL.md</code> inside it is not discovered as a skill at all - it's simply ignored (useful for scratch subfolders, assets kept alongside a skill under a different structure, etc., as long as they don't sit directly under <code>skills/</code> themselves without a <code>SKILL.md</code>).</p>
 <h2 id="the-three-levels"><a href="#the-three-levels" id="the-three-levels" name="the-three-levels" class="anchor"></a>The three levels</h2>
-<p>An agent's skill list is made from three levels. The first two are built into the app; the third is written by the agent while it runs.</p>
+<p>An agent's skill list is made from three levels, and a fourth that bxAgents brings itself. The first two are built into the app; the third is written by the agent while it runs.</p>
 <pre><code class="language-mermaid">flowchart TB
     GL[&quot;Global skills folder&lt;br/&gt;managed by a skills tool (npx, CommandBox)&quot;]
 
@@ -326,12 +326,14 @@ Always greet the user warmly and use their name if known.
 <tr><td>1. Installed</td><td><code>.agents/skills/</code> in the project. A skills tool links a skill from its global folder into it, or <code>bxAgents skills install</code> copies one there. It stays out of source control and is restored at build time</td><td>A skills tool or the registry</td><td><code>installed</code></td></tr>
 <tr><td>2. Ships with the agent</td><td><code>skills/</code> in the project, and the skills <a href="/next/conventions/extensions/index.html">extensions</a> carry</td><td>You</td><td><code>project</code></td></tr>
 <tr><td>3. The agent's own</td><td><code>skills/</code> in the <a href="/next/conventions/data/index.html#skills-the-agent-saves">data home</a></td><td>The agent, with its <code>skill_save</code> tool</td><td><code>agent</code></td></tr>
+<tr><td>bxAgents' own</td><td><code>skills/</code> inside the bxAgents module: how to build, operate and chat with an agent</td><td>bxAgents</td><td><code>bxagents</code></td></tr>
 </tbody>
 </table></div>
 <p>The rules between the levels:</p>
 <ul>
 <li><strong>Yours wins over installed.</strong> A skill in <code>skills/</code> and an installed one with the same name or folder: the one in <code>skills/</code> is used.</li>
 <li><strong>The agent never replaces the first two.</strong> <code>skill_save</code> refuses the name of an installed skill or one that ships with the agent. It can save over a skill it wrote itself, to improve it.</li>
+<li><strong>bxAgents' own come last.</strong> A skill of yours with the same name as one of the six that bxAgents ships wins, and <code>skill_save</code> cannot take their names. They are available on request like every skill: only a name and a description are in the context until the model asks for one. <code>skills.builtin: false</code> in <code>Agent.yaml</code> leaves them out.</li>
 <li><strong>A link is followed.</strong> The app gets a copy of what the link points at, so a deployed app does not depend on the global folder.</li>
 <li><strong>The app tells levels 1 and 2 apart</strong> by <code>skills/.installed.json</code>, which the build writes beside the skills. <code>/skills</code> and <code>GET /skills</code> use it to show each skill's level.</li>
 </ul>

@@ -26,6 +26,7 @@ Type `/` in the terminal chat (a menu you move through with the arrow keys, see 
 | `/name <name>` | T W | Name this conversation | `/name Quarterly plan` |
 | `/fork [name]` | T W | Copy this conversation, messages and all, and carry on in the copy | `/fork Other approach` |
 | `/clear` | T W G | Forget this conversation's messages, keep the conversation | `/clear` |
+| `/settings [name] [value\|reset] [--global]` | T | Terminal only. Open the settings panel, or show, change or reset one setting. A change is saved for this agent in its data home, or for every agent with `--global` | `/settings header compact` |
 | `/cls` | T | Terminal only. Clear the screen above the message box and the scrollback. The conversation stays, while `/clear` forgets its messages. Ctrl+L does the same | `/cls` |
 | `/compact` | T W G | Replace older messages with a summary and keep the latest few (`keepRecent`). The agent's own model writes the summary, unless its memory names a summary model | `/compact` |
 | `/export [file] [--format=md\|html]` | T W | Save the conversation. The file name decides the format unless `--format` says | `/export plan.html` |
@@ -42,7 +43,7 @@ On a gateway, `/new`, `/clear`, `/compact`, `/sessions` and `/resume` are off un
 | `/tools` | T W G | List the agent's tools | `/tools` |
 | `/volumes` | T W G | List the folders the agent may use, by name, mode and description. Never a folder on the machine | `/volumes` |
 | `/agent [name]` | T | Terminal only. List the agent and its sub-agents, or switch to one and start a new conversation with it. Every agent keeps its own memory. The web page has the **Talk to** menu for this, and a gateway always talks to the main agent | `/agent researcher` |
-| `/skills` | T W G | List the skills the agent can load, and its level: installed, project or agent | `/skills` |
+| `/skills` | T W G | List the skills the agent can load, and its level: installed, project, bxagents or agent | `/skills` |
 | `/routines [all]` | T W | List your [routines](../conventions/routines.md): schedule in words, status and next run (an admin adds `all`). | `/routines` |
 | `/routine <name> [run\|pause\|resume\|delete confirm\|reports\|report <file>]` | T W | Show one routine, or act on it. `delete` needs `confirm`, and no command removes a report | `/routine check-build pause` |
 | `/context` | T W | How big the context is and what it is made of, and how many of the messages its memory keeps this conversation has (a warning near the limit). Worked out locally, no model call | `/context` |
