@@ -61,7 +61,10 @@ class {
 			)
 		}
 
-		var executable = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).findExecutable()
+		// `_path` replaces the machine's PATH as the folders to search, for tests: a machine that has the miniserver installed, such as a
+		// CI runner, could never show the "not found" answer otherwise
+		var launcher = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" )
+		var executable = structKeyExists( arguments.options, "_path" ) ? launcher.findExecutable( arguments.options._path ) : launcher.findExecutable()
 		if ( isNull( executable ) ) {
 			throw(
 				type    = "BxAgents.MiniServerNotFound",

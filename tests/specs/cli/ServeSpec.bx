@@ -37,11 +37,12 @@ class extends="testbox.system.BaseSpec" {
 				var projectRoot = newTempProject( "full-project" );
 				buildVerb.run( { projectRoot : projectRoot } );
 
-				// This sandbox doesn't have boxlang-miniserver on PATH - a real
-				// deployment target would, so this specifically exercises the
-				// "not found" failure path rather than skipping it.
+				// Search an empty folder instead of the machine's PATH: a machine that has boxlang-miniserver installed (a CI runner
+				// does) would otherwise never reach the "not found" failure path this exercises.
+				var nowhere = createTempDirectory( prefix = "bxagents-cli-serve-nowhere-" );
+				tempDirs.append( nowhere );
 				expect( function() {
-					serveVerb.run( { projectRoot : projectRoot } );
+					serveVerb.run( { projectRoot : projectRoot, _path : nowhere } );
 				} ).toThrow( "BxAgents.MiniServerNotFound" );
 			} );
 
