@@ -46,7 +46,7 @@ On a gateway, `/new`, `/clear`, `/compact`, `/sessions` and `/resume` are off un
 | `/routine <name> [run\|pause\|resume\|delete confirm\|reports\|report <file>]` | T W | Show one routine, or act on it. `delete` needs `confirm`, and no command removes a report | `/routine check-build pause` |
 | `/context` | T W | How big the context is and what it is made of, and how many of the messages its memory keeps this conversation has (a warning near the limit). Worked out locally, no model call | `/context` |
 | `/stats [days] [--by=model\|provider\|day\|user]` | T | Tokens the model calls used. `/stats enable` turns usage recording on | `/stats 7 --by=day` |
-| `/keys` | T W | Which key does what, with the action name of each. `?` alone does the same | `/keys` |
+| `/keys` | T W | Opens the shortcuts panel: which key does what, with the action name of each, narrowed by typing. `?` alone does the same | `/keys` |
 
 ## Models
 

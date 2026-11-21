@@ -106,6 +106,43 @@ function dimmed( required any fg, required any bg ) {
 	)
 }
 
+/**
+ * Draws a box drawing or block character as lines that fill the cell, so that a vertical line joins the one above and below it (the font's
+ * glyph is as tall as the text, and the cell is taller). Light lines, the rounded corners (drawn square) and the thin left bars are drawn here.
+ *
+ * @g The graphics, already set to the colour of the character
+ * @ch The character
+ * @px The left of the cell
+ * @py The top of the cell
+ *
+ * @return True when the character was drawn, false when it is not one of these and the font should draw it
+ */
+function drawLineCell( required any g, required string ch, required numeric px, required numeric py ) {
+	// which arms the character has: up, down, left, right
+	var arms = {
+		"─" : [ 0, 0, 1, 1 ], "│" : [ 1, 1, 0, 0 ],
+		"╭" : [ 0, 1, 0, 1 ], "┌" : [ 0, 1, 0, 1 ], "╮" : [ 0, 1, 1, 0 ], "┐" : [ 0, 1, 1, 0 ],
+		"╰" : [ 1, 0, 0, 1 ], "└" : [ 1, 0, 0, 1 ], "╯" : [ 1, 0, 1, 0 ], "┘" : [ 1, 0, 1, 0 ],
+		"├" : [ 1, 1, 0, 1 ], "┤" : [ 1, 1, 1, 0 ], "┬" : [ 0, 1, 1, 1 ], "┴" : [ 1, 0, 1, 1 ], "┼" : [ 1, 1, 1, 1 ]
+	}
+	var bars = { "▏" : 1, "▎" : 2, "▍" : 3 }
+	var midX = px + int( cellW / 2 )
+	var midY = py + int( cellH / 2 )
+	if ( arms.keyExists( arguments.ch ) ) {
+		var a = arms[ arguments.ch ]
+		if ( a[ 1 ] ) { g.fillRect( midX, py, 1, midY - py + 1 ) }
+		if ( a[ 2 ] ) { g.fillRect( midX, midY, 1, py + cellH - midY ) }
+		if ( a[ 3 ] ) { g.fillRect( px, midY, midX - px + 1, 1 ) }
+		if ( a[ 4 ] ) { g.fillRect( midX, midY, px + cellW - midX, 1 ) }
+		return true
+	}
+	if ( bars.keyExists( arguments.ch ) ) {
+		g.fillRect( px, py, max( 2, int( cellW * bars[ arguments.ch ] / 8 ) ), cellH )
+		return true
+	}
+	return false
+}
+
 function drawFrame( required any screen ) {
 	var img = JImage.init( imgW, imgH, JImage.TYPE_INT_RGB )
 	var g = img.createGraphics()
@@ -139,7 +176,10 @@ function drawFrame( required any screen ) {
 				var bold = bitAnd( c.flags, 1 ) > 0
 				var italic = bitAnd( c.flags, 4 ) > 0
 				g.setFont( bold ? ( italic ? fonts.both : fonts.bold ) : ( italic ? fonts.italic : fonts.plain ) )
-				g.drawString( c.ch, px, py + ascent )
+				// line and block characters fill the whole cell, as a terminal draws them, so vertical lines join from row to row
+				if ( !drawLineCell( g, c.ch, px, py ) ) {
+					g.drawString( c.ch, px, py + ascent )
+				}
 				if ( bitAnd( c.flags, 8 ) ) {
 					g.fillRect( px, py + cellH - 3, cellW, 1 )
 				}

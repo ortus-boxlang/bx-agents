@@ -54,6 +54,30 @@ public final class Row {
 		return this;
 	}
 
+	/**
+	 * Appends another row's segments, cut or padded with spaces to exactly {@code width} cells
+	 *
+	 * @param other the row to append
+	 * @param width how many cells it takes here
+	 *
+	 * @return this row
+	 */
+	public Row addPadded( Row other, int width ) {
+		int used = 0;
+		for ( Seg s : other.segs ) {
+			if ( used >= width ) {
+				break;
+			}
+			String text = s.text.length() > width - used ? s.text.substring( 0, width - used ) : s.text;
+			segs.add( new Seg( text, s.style ) );
+			used += text.length();
+		}
+		if ( used < width ) {
+			segs.add( new Seg( " ".repeat( width - used ), dev.tamboui.style.Style.EMPTY ) );
+		}
+		return this;
+	}
+
 	/** @return the row as a TamboUI line, for printing into the scrollback */
 	public dev.tamboui.text.Line toLine() {
 		java.util.List<dev.tamboui.text.Span> spans = new ArrayList<>();

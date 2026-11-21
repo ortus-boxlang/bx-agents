@@ -337,6 +337,19 @@ public final class KeyMap {
 		return String.join( ", ", labels );
 	}
 
+	/**
+	 * @param action the action
+	 *
+	 * @return the keys the action has when nothing is changed, written the same way as {@link #describe}
+	 */
+	public String describeDefault( Action action ) {
+		List<String> labels = new ArrayList<>();
+		for ( String spec : action.defaults ) {
+			labels.add( parse( spec ).label() );
+		}
+		return String.join( ", ", labels );
+	}
+
 	/** @return the first key of the action as people read it, for a hint line */
 	public String first( Action action ) {
 		return bound.get( action ).get( 0 ).label();
@@ -348,7 +361,8 @@ public final class KeyMap {
 	}
 
 	/**
-	 * @return a row per action for a help screen: id, keys, what it does, and where ({@code box} or {@code run})
+	 * @return a row per action for a help screen: id, keys, what it does, where ({@code box} or {@code run}), and {@code was}, the keys it
+	 *         had before the person changed them (empty when it still has its own)
 	 */
 	public List<Map<String, String>> table() {
 		List<Map<String, String>> rows = new ArrayList<>();
@@ -358,6 +372,8 @@ public final class KeyMap {
 			row.put( "keys", describe( a ) );
 			row.put( "does", a.does );
 			row.put( "place", a.place.name().toLowerCase( Locale.ROOT ) );
+			// what the keys were before the person's own changes, empty when nothing was changed
+			row.put( "was", describeDefault( a ).equals( describe( a ) ) ? "" : describeDefault( a ) );
 			rows.add( row );
 		}
 		for ( String id : extra.keySet() ) {
@@ -366,6 +382,7 @@ public final class KeyMap {
 			row.put( "keys", describeExtra( id ) );
 			row.put( "does", extraDoes.get( id ) );
 			row.put( "place", "box" );
+			row.put( "was", "" );
 			rows.add( row );
 		}
 		return rows;
