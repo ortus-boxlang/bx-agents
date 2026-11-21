@@ -81,7 +81,7 @@ Needs a [`notes`](../conventions/agent-yaml.md#notes) block in `Agent.yaml`.
 ## 6. Make the chat your own
 
 1. `/prompt` shows the message box looks and widgets. `/prompt box` changes the look and `/prompt top +git -clock` changes the top bar, for this chat only. To set it for the project, use a [`tui:` block](terminal-ui.md#the-look-of-the-message-box) in `Agent.yaml`.
-2. `?` alone, or `/keys`, lists every key with its action name. To change one, put it in `~/.bxagents/bxAgents.yml`: `chat:` then `keys:` then, for example, `newline: ctrl+n`. See [Change a key](terminal-ui.md#change-a-key).
+2. `?` alone, `F1`, or `/keys`, opens a panel with every key and the name of its action; type to narrow it. To change one, put it in `~/.bxagents/bxAgents.yml`: `chat:` then `keys:` then, for example, `newline: ctrl+n`. See [Change a key](terminal-ui.md#change-a-key).
 3. `/extensions` lists what the [extensions](first-extension.md) added: commands, keys and more. After you edit one, `/reload` loads it again without leaving the chat.
 4. `/record demo.cast` starts saving the screen as an asciicast file, and `/record stop` ends it. Or start with `bxAgents chat --record=demo.cast`.
 5. `/stats` shows the tokens the model calls used, once `usage: true` is set in `Agent.yaml`. `/stats enable` writes that line for you.

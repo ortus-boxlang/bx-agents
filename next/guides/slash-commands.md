@@ -26,6 +26,7 @@ Type `/` in the terminal chat (a menu you move through with the arrow keys, see 
 | `/name <name>` | T W | Name this conversation | `/name Quarterly plan` |
 | `/fork [name]` | T W | Copy this conversation, messages and all, and carry on in the copy | `/fork Other approach` |
 | `/clear` | T W G | Forget this conversation's messages, keep the conversation | `/clear` |
+| `/cls` | T | Terminal only. Clear the screen above the message box and the scrollback. The conversation stays, while `/clear` forgets its messages. Ctrl+L does the same | `/cls` |
 | `/compact` | T W G | Replace older messages with a summary and keep the latest few (`keepRecent`). The agent's own model writes the summary, unless its memory names a summary model | `/compact` |
 | `/export [file] [--format=md\|html]` | T W | Save the conversation. The file name decides the format unless `--format` says | `/export plan.html` |
 | `/exit` (alias `/quit`) | T | Leave the chat | `/exit` |
@@ -46,7 +47,7 @@ On a gateway, `/new`, `/clear`, `/compact`, `/sessions` and `/resume` are off un
 | `/routine <name> [run\|pause\|resume\|delete confirm\|reports\|report <file>]` | T W | Show one routine, or act on it. `delete` needs `confirm`, and no command removes a report | `/routine check-build pause` |
 | `/context` | T W | How big the context is and what it is made of, and how many of the messages its memory keeps this conversation has (a warning near the limit). Worked out locally, no model call | `/context` |
 | `/stats [days] [--by=model\|provider\|day\|user]` | T | Tokens the model calls used. `/stats enable` turns usage recording on | `/stats 7 --by=day` |
-| `/keys` | T W | Which key does what, with the action name of each. `?` alone does the same | `/keys` |
+| `/keys` | T W | Opens the shortcuts panel: which key does what, with the action name of each, narrowed by typing. `?` alone does the same | `/keys` |
 
 ## Models
 
