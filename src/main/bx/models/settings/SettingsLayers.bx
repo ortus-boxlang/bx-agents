@@ -14,7 +14,7 @@
  *
  *   a mapping       merges key by key with the layer below
  *   a plain value   replaces, and so does a list
- *   key+: list      appends to the list below
+ *   key+: list      appends to the list below (an entry it already has is not added again)
  *   key+: text      appends to the text below, after a blank line
  *   key-: list      removes those entries from the list below (a mapping entry matches by its `name`, else its `url`)
  *   key: ~          removes the key
@@ -292,8 +292,14 @@ class {
 			return duplicate( arguments.value )
 		}
 		if ( isArray( arguments.current ) && isArray( arguments.value ) ) {
+			// an entry the list already has is not added again: listing a tool twice is an error, and a person who adds what
+			// the author already gave means "have it", not "have it twice"
 			var joined = duplicate( arguments.current )
-			joined.append( duplicate( arguments.value ), true )
+			for ( var item in arguments.value ) {
+				if ( !joined.some( have => jsonSerialize( have ) == jsonSerialize( item ) ) ) {
+					joined.append( duplicate( item ) )
+				}
+			}
 			return joined
 		}
 		if ( isSimpleValue( arguments.current ) && isSimpleValue( arguments.value ) ) {

@@ -1,0 +1,158 @@
+/**
+ * Layered settings, end to end: a real project is built, then the generated factory is loaded and the agent is built from it,
+ * with the person's Agent.yml files changed between the build and the start. Covers the build path (the person's files are
+ * baked), the start path (a built app reads them again, with no source folder involved), a list append, a removal, a file for
+ * one agent over the file for every agent, a setting that needs a rebuild, and `chat:` refused in a project.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "Layered settings end to end (slow/e2e lane)", function() {
+
+			beforeEach( function() {
+				variables.nl = char( 10 )
+				variables.pipeline = new bxagents.models.build.BuildPipeline( "e2e-test" );
+				variables.dir = createTempDirectory( prefix = "bxagents-layers-e2e-" );
+				variables.project = dir & "/project";
+				variables.home = dir & "/home";
+				directoryCreate( project );
+				directoryCreate( home );
+				variables.globalFile = dir & "/global.yml";
+				variables.jvm = createObject( "java", "java.lang.System" );
+				variables.savedGlobal = jvm.getProperty( "BXAGENTS_USER_CONFIG" );
+				jvm.setProperty( "BXAGENTS_USER_CONFIG", globalFile );
+				// memory in the process, so the agent needs no chat database
+				fileWrite( project & "/Agent.yml", [
+					"name: layered",
+					"model: mock/author-model",
+					"memory: cache",
+					"tools: [ now@bxai ]",
+					"mcpServers: [ 'https://mcp.example.com/one' ]",
+					"data:",
+					"  home: " & home
+				].toList( nl ) & nl );
+				fileWrite( project & "/instructions.md", "Be helpful." );
+			} );
+
+			afterEach( function() {
+				if ( isNull( savedGlobal ) ) {
+					jvm.clearProperty( "BXAGENTS_USER_CONFIG" );
+				} else {
+					jvm.setProperty( "BXAGENTS_USER_CONFIG", savedGlobal );
+				}
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function write( required string file, required array lines ) {
+				fileWrite( arguments.file, arguments.lines.toList( nl ) & nl );
+			}
+
+			function built() {
+				var lines = [];
+				var result = pipeline.build( project, "", ( message ) => lines.append( message ) );
+				result.progress = lines;
+				return result;
+			}
+
+			function startAgent( required string appDir ) {
+				var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext();
+				return createObject( "java", "ortus.boxlang.bxagents.build.DynamicClassLoader" )
+					.instantiate( arguments.appDir & "/agent/GeneratedAgentFactory.bx", context )
+					.buildAgent();
+			}
+
+			function modelOf( required any agent ) {
+				return arguments.agent.getAiModel().getConfig().params.model;
+			}
+
+			function toolNames( required any agent ) {
+				return arguments.agent.getTools().map( t => t.getName() );
+			}
+
+			it( "bakes the person's files at build, and says which setting came from which file", function() {
+				write( globalFile, [ "model: mock/global-model", "tools+: [ '*@bxai' ]" ] );
+				var result = built();
+
+				expect( result.progress.toList( "|" ) ).toInclude( "model (set) from " & globalFile );
+				var baked = jsonDeserialize( fileRead( result.appDir & "/config/agent-settings.json" ) );
+				expect( baked.base.model ).toBe( "mock/author-model" );
+				expect( baked.baked.model ).toBe( "mock/global-model" );
+				expect( modelOf( startAgent( result.appDir ) ) ).toBe( "global-model" );
+			} );
+
+			it( "reads the person's files again when a built app starts, with no rebuild", function() {
+				var result = built();
+				expect( modelOf( startAgent( result.appDir ) ) ).toBe( "author-model" );
+
+				write( globalFile, [ "model: mock/start-model" ] );
+				var agent = startAgent( result.appDir );
+				expect( modelOf( agent ) ).toBe( "start-model" );
+				expect( new "models.runtime.RuntimeSettings@bxagents"().lastResult().changed.map( e => e.path ) ).toBe( [ "model" ] );
+			} );
+
+			it( "appends to the author's list and to the instructions, and removes entries, at start", function() {
+				var result = built();
+				write( globalFile, [ "instructions+: |", "  Always answer in French.", "mcpServers-: [ 'https://mcp.example.com/one' ]" ] );
+				var agent = startAgent( result.appDir );
+				expect( agent.getInstructions() ).toBe( "Be helpful." & nl & nl & "Always answer in French." );
+				expect( toolNames( agent ) ).toInclude( "now" );
+
+				write( globalFile, [ "tools-: [ now@bxai ]" ] );
+				expect( toolNames( startAgent( result.appDir ) ) ).notToInclude( "now" );
+			} );
+
+			it( "puts the file for one agent over the file for every agent", function() {
+				var result = built();
+				write( globalFile, [ "model: mock/global-model" ] );
+				write( home & "/Agent.yml", [ "model: mock/agent-model" ] );
+				expect( modelOf( startAgent( result.appDir ) ) ).toBe( "agent-model" );
+			} );
+
+			it( "does not apply an addition twice when the build and the start read the same file", function() {
+				write( globalFile, [ "instructions+: |", "  Always answer in French.", "tools+: [ now@bxai ]" ] );
+				var result = built();
+				var agent = startAgent( result.appDir );
+				expect( agent.getInstructions() ).toBe( "Be helpful." & nl & nl & "Always answer in French." );
+				expect( toolNames( agent ).filter( n => n == "now" ) ).toHaveLength( 1 );
+			} );
+
+			it( "reports a setting that is generated into the app as needing a rebuild, with its file", function() {
+				var result = built();
+				write( globalFile, [ "agentApi:", "  enabled: false", "model: mock/other" ] );
+				startAgent( result.appDir );
+				var last = new "models.runtime.RuntimeSettings@bxagents"().lastResult();
+				// the author set no agentApi, so the whole mapping is one setting
+				expect( last.needsRebuild.map( e => e.path ) ).toBe( [ "agentApi" ] );
+				expect( last.needsRebuild[ 1 ].file ).toBe( globalFile );
+			} );
+
+			it( "refuses to start on a bad person's file and names it", function() {
+				var result = built();
+				write( globalFile, [ "modle: x" ] );
+				var message = "";
+				try {
+					startAgent( result.appDir );
+				} catch ( any e ) {
+					message = e.message;
+				}
+				expect( message ).toInclude( globalFile );
+			} );
+
+			it( "refuses chat: in a project, which only a person's file may set", function() {
+				fileAppend( project & "/Agent.yml", "chat:" & nl & "  shell: true" & nl );
+				var message = "";
+				try {
+					built();
+				} catch ( any e ) {
+					message = e.message;
+				}
+				expect( message ).toInclude( "only valid in a person's file" );
+				expect( message ).toInclude( project );
+			} );
+
+		} );
+	}
+
+}

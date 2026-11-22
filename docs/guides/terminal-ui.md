@@ -241,6 +241,8 @@ tui:
   tools: summary
 ```
 
+These are the same files that layer every other setting of the agent, not only `tui:`: see [layered settings](../conventions/layered-settings.md).
+
 A value a setting does not take is reported when the chat starts, and the layer below it applies. A chat over `--connect` talks to an agent somewhere else, so it has no agent file: only the flag, your file and the defaults apply.
 
 ### Change them with /settings

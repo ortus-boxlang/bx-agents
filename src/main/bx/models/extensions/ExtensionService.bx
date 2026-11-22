@@ -11,8 +11,8 @@
  *             agent or a chat platform never reads a developer's home folder.
  *   project   `<project>/extensions`
  *
- * What the people said: the `extensions:` block of the person's `Agent.yml` and, over it, the project's
- * `Agent.yml` (see ExtensionSettings). Whatever is wrong in either (an extension that will not load, a
+ * What the people said: the `extensions:` block of the project's `Agent.yml` and, over it, the person's own
+ * `Agent.yml`, because the person who runs the agent has the last word (see ExtensionSettings). Whatever is wrong in either (an extension that will not load, a
  * file that is not YAML) is returned by `problems()`; it never stops the chat from starting.
  */
 class {
@@ -57,7 +57,7 @@ class {
 	 */
 	function install( required any commands ) {
 		variables.commands = arguments.commands
-		var settings = new "models.extensions.ExtensionSettings@bxagents"().combine( [ variables.userConfig.extensions(), projectBlock() ] )
+		var settings = new "models.extensions.ExtensionSettings@bxagents"().combine( [ projectBlock(), variables.userConfig.extensions() ] )
 		variables.registry = new "models.extensions.ExtensionRegistry@bxagents"( arguments.commands, settings )
 		for ( var folder in variables.moduleFolders ) {
 			variables.registry.addLayer( "modules", folder )

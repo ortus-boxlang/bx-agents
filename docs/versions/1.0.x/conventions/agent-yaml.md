@@ -56,11 +56,11 @@ environments:
 | `vault` | mapping | Gives the agent `vault_list` and `vault_request` and scrubs vault secrets from tool results. `vault: {}` turns it on. See [the vault](vault.md). |
 | `routines` | mapping | Prompts the agent runs on a schedule, made by asking it. Off unless `enabled: true`. `maxPerUser`, `minInterval`, `maxParallel`, `maxPromptLength`, `approvalTimeout`, `timezone`, `summaryLength`, `maxReportSize` and `maxReportFiles` set the limits. See [routines](routines.md). |
 | `skills` | mapping | Skills the agent saves for itself. `agentCanSave` (default `true`) gives the root agent a `skill_save` tool; `autoApprove` (default `false`) skips the person's approval of each save; `builtin` (default `true`) keeps the six skills that bxAgents ships available to the agent, and `false` leaves them out. Saved skills live in the data home and are in the agent's skill list at once. See [data and volumes](data.md#skills-the-agent-saves). |
-| `data` | mapping | Where the agent keeps everything: `data: { home: ~/.nanobox }`. See [data and volumes](data.md). Only in the project's own `Agent.yml`. |
-| `volumes` | mapping | Host folders the agent's file tools may use, by name: `volumes: { notes: { path: ~/Notes, mode: rw } }`. See [data and volumes](data.md#volumes). Only in the project's own `Agent.yml`. |
-| `usage` | boolean | Records what each model call used (the time, who, the provider, the model and the tokens), for [`bxAgents stats`](../cli-reference.md#stats) and `/stats`. **Off by default**: set `usage: true` to turn it on. Counts only, never what was said. Only in the project's own `Agent.yml`. Rebuild after changing it. |
+| `data` | mapping | Where the agent keeps everything: `data: { home: ~/.nanobox }`. See [data and volumes](data.md). `data.home` can not be set in a person's file, because it decides where the agent's own file lives. |
+| `volumes` | mapping | Host folders the agent's file tools may use, by name: `volumes: { notes: { path: ~/Notes, mode: rw } }`. See [data and volumes](data.md#volumes). A person can add volumes in their own files: see [layered settings](layered-settings.md). |
+| `usage` | boolean | Records what each model call used (the time, who, the provider, the model and the tokens), for [`bxAgents stats`](../cli-reference.md#stats) and `/stats`. **Off by default**: set `usage: true` to turn it on. Counts only, never what was said. A person can turn it on in their own files, and it applies when the app starts. |
 | `tui` | mapping | How the terminal chat looks and behaves: `{ prompt, widgets: { top, bottom }, fullscreen, header, spacing, theme, animations, thinking, tools, markdown, menuRows, notify, terminalTitle }`, all optional. The settings after `widgets` are listed in [Settings](../guides/terminal-ui.md#settings); this block is the project's suggestion, and a person's own files win over it. `prompt` is `bars` (default), `bars-hints`, `rule`, `box` or `panel`; `widgets` list what goes in the top bar and at the bottom (`agent`, `profile`, `folder`, `user`, `clock`, `machine`, `git`, `date`, `session`, `elapsed`, `ctx`). A wrong name is refused and the valid ones are listed. See [The prompt and the tables](../cli-reference.md#the-prompt-and-the-tables). |
-| `extensions` | mapping | Values for the project's [extensions](extensions.md), by extension name, and what to turn off: `{ disable: [ roll, "deploy:deploy" ], deploy: { target: production } }`. Each extension's block is merged over the defaults its `configure()` sets. Only in the project's own `Agent.yml`. |
+| `extensions` | mapping | Values for the project's [extensions](extensions.md), by extension name, and what to turn off: `{ disable: [ roll, "deploy:deploy" ], deploy: { target: production } }`. Each extension's block is merged over the defaults its `configure()` sets. A person's own files can set values too, and theirs win. |
 | `environments` | mapping | Per-environment overrides. See [Environments](#environments). |
 
 These are the same settings an `Agent.bx`'s `configure()` returns, so every behavior documented for them applies unchanged.
@@ -69,6 +69,9 @@ These are the same settings an `Agent.bx`'s `configure()` returns, so every beha
     An **unknown key is an error**, and the message lists the valid ones. A typo such as `modle:` would otherwise do nothing, quietly. Anything free-form belongs in an `Agent.bx`.
 
 A value of the wrong type (a text where a list belongs, say) and an empty value (`model:` with nothing after it) are errors too.
+
+!!! tip "The person who installs your agent can change these"
+    Every setting except `name` and `data.home` can be overridden or added to from `~/.bxagents/Agent.yml` (every agent) and `~/.bxagents/<agent>/Agent.yml` (one agent), when the agent is built and again when a built app starts. See [layered settings](layered-settings.md).
 
 ## Tools
 

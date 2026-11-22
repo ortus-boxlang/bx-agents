@@ -81,7 +81,7 @@ extensions:
     target: production
 ```
 
-A person can set their own values in `~/.bxagents/Agent.yml` (same `extensions:` block); the project's values win over theirs. Nested structs merge key by key, arrays and simple values replace. In the extension, `settings` is the merged struct.
+A person can set their own values in `~/.bxagents/Agent.yml` (same `extensions:` block); their values win over the project's, because the person who runs the agent has the last word (see [layered settings](layered-settings.md)). Nested structs merge key by key, arrays and simple values replace. In the extension, `settings` is the merged struct.
 
 ## Lifecycle
 

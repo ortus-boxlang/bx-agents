@@ -670,7 +670,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( isNull( served.lookup( "mine" ) ) ).toBeTrue();
 			} );
 
-			it( "loads the example project: every example adds what it says, and the project's values beat the person's", function() {
+			it( "loads the example project: every example adds what it says, and the person's values beat the project's", function() {
 				var service = new bxagents.models.extensions.ExtensionService( projectRoot : example, userConfig : userConfig, transport : "web", moduleFolders : [] );
 				var commands = new bxagents.models.chat.commands.CommandCatalog().standard();
 				service.install( commands );
@@ -679,8 +679,8 @@ class extends="testbox.system.BaseSpec" {
 
 				// the person turned roll off; the project did not turn it back on
 				expect( isNull( commands.lookup( "roll" ) ) ).toBeTrue();
-				// the project's greeting wins over the person's
-				expect( text( "/hello Ada" ) ).toBe( "Welcome aboard, Ada!" );
+				// the person's greeting wins over the project's: the person who runs the agent has the last word
+				expect( text( "/hello Ada" ) ).toBe( "From the person, Ada!" );
 				expect( text( "/deploy" ) ).toInclude( "production" );
 				expect( text( "/standup" ) ).toInclude( "team-standup" );
 				expect( service.problems() ).toBeEmpty();

@@ -697,7 +697,7 @@ Two prefixes in the message box run something on **your own machine**, never on 
 
 `!` must be followed at once by the command (`! hello` is a message) and `#` by a call (`# A heading` and `#hashtag` are messages). A call is **only** a call: a string (`'..'` or `".."`), number, `true`, `false`, `null`, array, struct or nested call as an argument, positional or named, and nothing else. There are no variables, operators, `.` access or statements, and a name that is not a registered built-in function is refused before anything runs. What waits for the next message shows in `/context` (as *Attached*) and in the status bar, and is gone once the message is sent.
 
-The two are yours to switch off or narrow, in a file that belongs to you and not to any project, `~/.bxagents/Agent.yml` (`BXAGENTS_USER_CONFIG` names another file):
+The two are yours to switch off or narrow, in a file that belongs to you and not to any project, `~/.bxagents/Agent.yml` (`BXAGENTS_USER_CONFIG` names another file). It is the same file that [layers every other setting](conventions/layered-settings.md); `chat:` is valid only there:
 
 ```yaml
 chat:
