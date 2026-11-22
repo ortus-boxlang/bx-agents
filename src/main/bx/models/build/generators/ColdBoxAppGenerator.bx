@@ -858,7 +858,12 @@ class {
 		}
 		// then the skills bxAgents itself ships, available on request and not in the context: after the project's and the
 		// extensions' so theirs win a name, before the agent's own so it cannot take one. skills.builtin: false leaves them out.
-		if ( new "models.skills.SkillWiring@bxagents"().wantsBuiltin( isStruct( arguments.resolvedConfig.skills ?: "" ) ? arguments.resolvedConfig.skills : {} ) ) {
+		if ( variables.readsSettingsAtStart ) {
+			lines.insertAt(
+				lines.findNoCase( "		// usage recording is off unless Agent.yml says usage: true" ),
+				'		if ( new "models.skills.SkillWiring@bxagents"().wantsBuiltin( isStruct( rootSettings.skills ?: "" ) ? rootSettings.skills : {} ) ) { new "models.skills.SkillWiring@bxagents"().loadBuiltin() }'
+			)
+		} else if ( new "models.skills.SkillWiring@bxagents"().wantsBuiltin( isStruct( arguments.resolvedConfig.skills ?: "" ) ? arguments.resolvedConfig.skills : {} ) ) {
 			lines.insertAt(
 				lines.findNoCase( "		// usage recording is off unless Agent.yml says usage: true" ),
 				'		new "models.skills.SkillWiring@bxagents"().loadBuiltin()'
@@ -1008,14 +1013,19 @@ class {
 		}
 
 		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery, thisName, arguments.defaultMemory, arguments.appDir, arguments.nodeRelativePath ) )
-		if ( structKeyExists( arguments.resolvedConfig, "notes" ) && isStruct( arguments.resolvedConfig.notes ) ) {
+		// the root agent of a built app reads these from the settings the app started with, so a person's Agent.yml can turn them on, off or change them
+		var rootAtStart = variables.readsSettingsAtStart && arguments.accessorPath.isEmpty()
+		if ( rootAtStart ) {
+			statements.append( 'if ( isStruct( rootSettings.notes ?: "" ) ) { new "models.notes.NotesWiring@bxagents"().attach( #arguments.varName#, rootSettings.notes, "#Strings::bxLiteral( thisName )#" ) }' )
+		} else if ( structKeyExists( arguments.resolvedConfig, "notes" ) && isStruct( arguments.resolvedConfig.notes ) ) {
 			// the notes this agent keeps: a prompt block and the note_remember and note_forget tools
 			statements.append( 'new "models.notes.NotesWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.notes )#, "#Strings::bxLiteral( thisName )#" )' )
 		}
 
 		if ( arguments.accessorPath.isEmpty() ) {
 			// the root agent may save skills of its own (subagents never do): the skill_save tool, unless skills.agentCanSave is false
-			statements.append( 'new "models.skills.SkillWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( isStruct( arguments.resolvedConfig.skills ?: "" ) ? arguments.resolvedConfig.skills : {} )#, "#Strings::bxLiteral( thisName )#", "#Strings::bxLiteral( variables.projectDataHome )#" )' )
+			var skillsArgument = rootAtStart ? 'isStruct( rootSettings.skills ?: "" ) ? rootSettings.skills : {}' : renderLiteral( isStruct( arguments.resolvedConfig.skills ?: "" ) ? arguments.resolvedConfig.skills : {} )
+			statements.append( 'new "models.skills.SkillWiring@bxagents"().attach( #arguments.varName#, #skillsArgument#, "#Strings::bxLiteral( thisName )#", "#Strings::bxLiteral( variables.projectDataHome )#" )' )
 		}
 
 		if ( arguments.accessorPath.isEmpty() && isStruct( arguments.resolvedConfig.routines ?: "" ) ) {
@@ -1023,9 +1033,19 @@ class {
 			statements.append( 'new "models.routines.RoutineWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.routines )#, "#Strings::bxLiteral( thisName )#", "#Strings::bxLiteral( variables.projectDataHome )#" )' )
 		}
 
-		if ( structKeyExists( arguments.resolvedConfig, "vault" ) && isStruct( arguments.resolvedConfig.vault ) ) {
+		if ( rootAtStart ) {
+			statements.append( 'if ( isStruct( rootSettings.vault ?: "" ) ) { new "models.vault.VaultWiring@bxagents"().attach( #arguments.varName#, rootSettings.vault, "#Strings::bxLiteral( thisName )#" ) }' )
+		} else if ( structKeyExists( arguments.resolvedConfig, "vault" ) && isStruct( arguments.resolvedConfig.vault ) ) {
 			// the vault tools: vault_list and vault_request (never a value)
 			statements.append( 'new "models.vault.VaultWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.vault )#, "#Strings::bxLiteral( thisName )#" )' )
+		}
+
+		if ( rootAtStart ) {
+			// services that ask each person to sign in, and the connectors: read from the settings the app started with
+			statements.append( 'var #arguments.varName#SignIn = new "models.connect.ConnectionWiring@bxagents"().signInEntries( rootSettings.mcpServers ?: [] )' )
+			statements.append( 'if ( #arguments.varName#SignIn.len() ) { new "models.connect.ConnectionWiring@bxagents"().attach( #arguments.varName#, #arguments.varName#SignIn ) }' )
+			statements.append( 'new "models.connectors.ConnectorWiring@bxagents"().attach( #arguments.varName#, new "models.connectors.ConnectorWiring@bxagents"().configFrom( rootSettings, "#Strings::bxLiteral( webUiPathOf( arguments.discovery ) )#" ) )' )
+			return { statements : statements, nodes : nodes }
 		}
 
 		var signInServers = []
@@ -1122,13 +1142,10 @@ class {
 	 * @return A BoxLang `aiMemory( memory: "type", config: {...} )` expression string
 	 */
 	private string function renderCheckpointerExpression( required struct resolvedConfig ) {
-		var checkpointer = arguments.resolvedConfig.checkpointer ?: { type: "cache" }
-		var type = trim( checkpointer.type ?: "cache" )
-		var rest = duplicate( checkpointer )
-		rest.delete( "type" )
+		var picked = new "models.build.MemoryChoice@bxagents"().checkpointer( arguments.resolvedConfig.checkpointer ?: { type: "cache" } )
 		// aiMemory()'s first param is named `memory`, not `type` - all-named-args here
 		// because BoxLang doesn't allow mixing positional and named arguments in one call.
-		return 'aiMemory( memory: "#Strings::bxLiteral( type )#", config: #renderLiteral( rest )# )'
+		return 'aiMemory( memory: "#Strings::bxLiteral( picked.type )#", config: #renderLiteral( picked.config )# )'
 	}
 
 	/**
@@ -1154,33 +1171,14 @@ class {
 	 * @return A BoxLang `aiMemory( ... )` or MemoryWiring expression string, or "" to omit the argument entirely
 	 */
 	private string function renderMemoryExpression( required struct resolvedConfig, string defaultMemory = "" ) {
-		var declared = arguments.resolvedConfig.memory ?: {}
-
-		if ( isSimpleValue( declared ) && len( trim( declared ) ) ) {
-			declared = { type: trim( declared ) }
-		}
-
-		var type = isStruct( declared ) ? trim( declared.type ?: "" ) : ""
-		if ( !len( type ) ) {
-			type = arguments.defaultMemory
-		}
-		if ( !len( type ) ) {
+		var picked = new "models.build.MemoryChoice@bxagents"().memory( arguments.resolvedConfig.memory ?: {}, arguments.defaultMemory, arguments.resolvedConfig.name ?: "" )
+		if ( picked.kind == "wiring" ) {
 			// No memory named anywhere: the agent remembers its conversations in the chat database, one row per
 			// person and conversation under its own name (see MemoryWiring). `maxMessages` and `keepRecent` tune it.
-			var settings = isStruct( declared ) ? duplicate( declared ) : {}
-			settings.delete( "key" )
-			return 'new "models.memory.MemoryWiring@bxagents"().memory( "#Strings::bxLiteral( arguments.resolvedConfig.name ?: "" )#", #renderLiteral( settings )# )'
+			return 'new "models.memory.MemoryWiring@bxagents"().memory( "#Strings::bxLiteral( arguments.resolvedConfig.name ?: "" )#", #renderLiteral( picked.settings )# )'
 		}
-
-		var rest = isStruct( declared ) ? duplicate( declared ) : {}
-		rest.delete( "type" )
-		// A memory that outlives the process names its storage after its key, and bx-ai makes a new random key every
-		// time one is built. Without a stable one, a file memory is never found again on the next start, and
-		// `sessions export`, `fork` and a resumed chat see nothing. The agent's own name is the default.
-		var key = trim( rest.key ?: ( arguments.resolvedConfig.name ?: "" ) )
-		rest.delete( "key" )
-		var keyArgument = len( key ) ? ' key: "#Strings::bxLiteral( key )#",' : ""
-		return 'aiMemory( memory: "#Strings::bxLiteral( type )#",#keyArgument# config: #renderLiteral( rest )# )'
+		var keyArgument = len( picked.key ) ? ' key: "#Strings::bxLiteral( picked.key )#",' : ""
+		return 'aiMemory( memory: "#Strings::bxLiteral( picked.type )#",#keyArgument# config: #renderLiteral( picked.config )# )'
 	}
 
 	/**
@@ -1290,10 +1288,15 @@ class {
 		lines.append( atStart ? '	instructions : rootSettings.instructions ?: "",' : '	instructions : #instructionsExpression#,' )
 		lines.append( '	model : #modelExpression#,' )
 		lines.append( "	tools : #arguments.varName#Tools," )
-		if ( len( memoryExpression ) ) {
-			lines.append( "	memory : #memoryExpression#," )
+		if ( atStart ) {
+			lines.append( '	memory : new "models.build.MemoryChoice@bxagents"().memoryFor( rootSettings.memory ?: {}, "#Strings::bxLiteral( arguments.defaultMemory )#", "#Strings::bxLiteral( arguments.name )#" ),' )
+			lines.append( '	checkpointer : new "models.build.MemoryChoice@bxagents"().checkpointerFor( rootSettings.checkpointer ?: {} ),' )
+		} else {
+			if ( len( memoryExpression ) ) {
+				lines.append( "	memory : #memoryExpression#," )
+			}
+			lines.append( "	checkpointer : #checkpointerExpression#," )
 		}
-		lines.append( "	checkpointer : #checkpointerExpression#," )
 
 		if ( arguments.subAgentVarNames.len() ) {
 			lines.append( "	subAgents : [ #arguments.subAgentVarNames.toList( ", " )# ]," )

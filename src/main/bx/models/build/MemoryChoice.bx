@@ -1,0 +1,88 @@
+/**
+ * Which conversation memory and which checkpointer an agent gets from its `memory:` and `checkpointer:` settings.
+ *
+ * One place that decides, so the source the build writes (ColdBoxAppGenerator) and the objects an app builds when it
+ * starts, from the settings a person's Agent.yml changed, are the same. The rules are the ones the generator always had:
+ *
+ *   - `memory:` as a bare text is a memory type; a mapping is `{ type, key, ...config }`
+ *   - no type anywhere (and no build-wide default) gives the chat-database memory of MemoryWiring, one row per person
+ *   - a type gives `aiMemory( memory: type, key: key, config: rest )`, with the key defaulting to the agent's name so a
+ *     memory kept on disk is found again on the next start
+ */
+class {
+
+	/**
+	 * @declared The agent's `memory` setting: text, a mapping, or nothing
+	 * @defaultMemory The build-wide default memory type, "" for none
+	 * @name The agent's name
+	 *
+	 * @return { kind : "wiring", settings } for the chat-database memory, or { kind : "aiMemory", type, key, config } for a named type
+	 */
+	struct function memory( any declared = {}, string defaultMemory = "", required string name ) {
+		var given = arguments.declared
+		if ( isSimpleValue( given ) && len( trim( given ) ) ) {
+			given = { type : trim( given ) }
+		}
+		var type = isStruct( given ) ? trim( given.type ?: "" ) : ""
+		if ( !len( type ) ) {
+			type = arguments.defaultMemory
+		}
+		if ( !len( type ) ) {
+			var settings = isStruct( given ) ? duplicate( given ) : {}
+			settings.delete( "key" )
+			return { kind : "wiring", settings : settings }
+		}
+		var rest = isStruct( given ) ? duplicate( given ) : {}
+		rest.delete( "type" )
+		// A memory that outlives the process names its storage after its key, and bx-ai makes a new random key every
+		// time one is built. Without a stable one, a file memory is never found again on the next start, and
+		// `sessions export`, `fork` and a resumed chat see nothing. The agent's own name is the default.
+		var key = trim( rest.key ?: arguments.name )
+		rest.delete( "key" )
+		return { kind : "aiMemory", type : type, key : key, config : rest }
+	}
+
+	/**
+	 * @declared The agent's `checkpointer` setting; `{ type: cache }` when it says nothing
+	 *
+	 * @return { type, config }
+	 */
+	struct function checkpointer( any declared = {} ) {
+		var given = isStruct( arguments.declared ) && arguments.declared.count() ? arguments.declared : { type : "cache" }
+		var rest = duplicate( given )
+		rest.delete( "type" )
+		return { type : trim( given.type ?: "cache" ), config : rest }
+	}
+
+	/**
+	 * The agent's memory, built now.
+	 *
+	 * @declared The agent's `memory` setting
+	 * @defaultMemory The build-wide default memory type, "" for none
+	 * @name The agent's name
+	 *
+	 * @return The memory object
+	 */
+	any function memoryFor( any declared = {}, string defaultMemory = "", required string name ) {
+		var picked = memory( arguments.declared, arguments.defaultMemory, arguments.name )
+		if ( picked.kind == "wiring" ) {
+			return new "models.memory.MemoryWiring@bxagents"().memory( arguments.name, picked.settings )
+		}
+		return len( picked.key )
+			? aiMemory( memory : picked.type, key : picked.key, config : picked.config )
+			: aiMemory( memory : picked.type, config : picked.config )
+	}
+
+	/**
+	 * The agent's checkpointer, built now.
+	 *
+	 * @declared The agent's `checkpointer` setting
+	 *
+	 * @return The checkpointer object
+	 */
+	any function checkpointerFor( any declared = {} ) {
+		var picked = checkpointer( arguments.declared )
+		return aiMemory( memory : picked.type, config : picked.config )
+	}
+
+}
