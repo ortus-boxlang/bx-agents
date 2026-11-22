@@ -72,6 +72,8 @@ Everything except `name` and `data.home` can be overridden (`data.home` decides 
 
 `chat:` is valid only in the person's files. In a project it is an error, so a project can never switch those on for a person. `extensions:` values layer the same way.
 
+Only what `Agent.yml` can say is overridable. A `schedules/*.bx` scheduler is a code file, so a person's file cannot add one.
+
 Unchanged: an unknown key is an error and the message lists the valid ones. Secrets stay `${env.X}` or `${vault.X}` placeholders, never in the files. A bad value names the file.
 
 Because the global file can widen every agent, `/info` lists each setting that came from a person's file, with the file.
