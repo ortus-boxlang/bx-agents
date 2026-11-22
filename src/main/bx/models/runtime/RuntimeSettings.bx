@@ -1,0 +1,166 @@
+/**
+ * The settings of a built app when it STARTS: what the build baked, with the person's two files merged over it (the
+ * same SettingsLayers the build uses, so the two can not drift apart).
+ *
+ * A built app is a zip or a container with no source folder, so the build writes `config/agent-settings.json`:
+ *
+ *   base         the author's settings, before any person's file touched them
+ *   baked        the settings the build generated from, the builder's own files included
+ *   agentName    names the agent's data home, where its own Agent.yml lives
+ *   dataHome     `data.home` as the author wrote it
+ *   codeDefined  settings an Agent.bx sets in code that a file can not hold (a hook, a closure), so they are not in `base`
+ *
+ * At start the app reads `~/.bxagents/Agent.yml` and `<data home>/Agent.yml` as they are NOW and merges them over
+ * `base`, never over `baked`: a `tools+:` that the build already applied must not be applied twice. Nothing that was
+ * baked from the builder's files is lost when the person's files are unchanged, because the same merge gives the same result.
+ *
+ * Some settings are generated into the app (routes, gateways, schedulers, the subagent tree). A person's change to one
+ * of those has no effect until `bxAgents build`, so it is reported at start, with its file, and never silently ignored.
+ */
+class {
+
+	static {
+		// the last result in this process, for /info
+		last = { active : false, config : {}, files : [], changed : [], needsRebuild : [] }
+	}
+
+	/**
+	 * @return What the app resolved at its last start in this process; nothing is active before a start
+	 */
+	static struct function lastResult() {
+		return static.last
+	}
+
+	/**
+	 * The text of `config/agent-settings.json`.
+	 *
+	 * @author The settings of the author's file, before the person's files
+	 * @merged The settings the build generates from
+	 * @agentName The agent's name
+	 * @dataHome `data.home` as written, or blank
+	 *
+	 * @return JSON
+	 */
+	string function bake( required struct author, required struct merged, required string agentName, string dataHome = "" ) {
+		var keys = new "models.build.AgentYamlLoader@bxagents"().keys().filter( key => key != "environments" )
+		var codeDefined = []
+		var base = {}
+		var baked = {}
+		for ( var key in keys ) {
+			for ( var pair in [ { from : arguments.author, into : base }, { from : arguments.merged, into : baked } ] ) {
+				if ( !pair.from.keyExists( key ) ) {
+					continue
+				}
+				// an Agent.bx can put a closure or an object in a setting; a file can not hold it (jsonSerialize does not
+				// even refuse a closure, it writes nothing useful), so a person's file replaces it at most
+				if ( holdsCode( pair.from[ key ] ) ) {
+					if ( !codeDefined.containsNoCase( key ) ) {
+						codeDefined.append( key )
+					}
+				} else {
+					pair.into[ key ] = pair.from[ key ]
+				}
+			}
+		}
+		return jsonSerialize( { "version" : 1, "agentName" : arguments.agentName, "dataHome" : arguments.dataHome, "base" : base, "baked" : baked, "codeDefined" : codeDefined } )
+	}
+
+	/**
+	 * Merges the person's files, as they are now, over what the build baked. Reads and applies nothing else.
+	 *
+	 * @file `config/agent-settings.json` of the app; a missing file means an app built without it, so nothing is layered
+	 * @globalFile The person's file for every agent, for a test; the usual one when not given
+	 * @flags Settings of one run
+	 *
+	 * @return { active, config, files, changed, needsRebuild }: config is the effective settings, changed what the person's files set
+	 *         ([ { path, op, layer, file, value } ]), needsRebuild the ones among them that the app can not apply without a build
+	 */
+	struct function resolve( required string file, string globalFile = "", struct flags = {} ) {
+		if ( !fileExists( arguments.file ) ) {
+			return { active : false, config : {}, files : [], changed : [], needsRebuild : [] }
+		}
+		var data = jsonDeserialize( fileRead( arguments.file ) )
+		var dataHome = new "models.data.DataHome@bxagents"( projectRoot : expandPath( "/" ), configured : data.dataHome ?: "", agentName : data.agentName ?: "" )
+		var layers = new "models.settings.SettingsLayers@bxagents"( arguments.globalFile, dataHome.path() & "/Agent.yml", arguments.flags )
+		var effective = layers.merged( data.base ?: {}, "the Agent.yml this app was built from" )
+
+		var needsRebuild = layers.buildOnly().filter( entry => !sameValue( valueAt( data.baked ?: {}, entry.path ), valueAt( effective, entry.path ) ) )
+		return { active : true, config : effective, files : layers.files(), changed : layers.fromPerson(), needsRebuild : needsRebuild }
+	}
+
+	/**
+	 * Resolves, then applies what bx-ai reads from its settings (the model, providers, profiles, security, usage ...) and
+	 * says what the person's files changed. The app's own `bxai-settings.json` has already been applied.
+	 *
+	 * @file `config/agent-settings.json` of the app
+	 * @globalFile The person's file for every agent, for a test
+	 * @flags Settings of one run
+	 *
+	 * @return What resolve() returns
+	 */
+	struct function start( required string file, string globalFile = "", struct flags = {} ) {
+		var result = resolve( arguments.file, arguments.globalFile, arguments.flags )
+		static.last = result
+		if ( !result.changed.len() ) {
+			return result
+		}
+		new "models.runtime.ModuleSettings@bxagents"().applyStruct( "bxai", new "models.build.AiSettings@bxagents"().settings( result.config ) )
+		for ( var entry in result.changed ) {
+			writeLog( text = "#entry.path# (#entry.op#) from #entry.file#", type = "information", log = "bxagents-settings" )
+		}
+		for ( var entry in result.needsRebuild ) {
+			writeLog( text = "#entry.path# in #entry.file# needs a rebuild: bxAgents build. It is generated into the app, so it has no effect until then.", type = "warning", log = "bxagents-settings" )
+		}
+		return result
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return True when the value is, or holds anywhere inside it, a function or an object
+	 */
+	private boolean function holdsCode( any value ) {
+		if ( isNull( arguments.value ) ) {
+			return false
+		}
+		if ( isCustomFunction( arguments.value ) || isClosure( arguments.value ) || isObject( arguments.value ) ) {
+			return true
+		}
+		if ( isStruct( arguments.value ) ) {
+			for ( var key in arguments.value ) {
+				if ( holdsCode( arguments.value[ key ] ?: javacast( "null", 0 ) ) ) {
+					return true
+				}
+			}
+		} else if ( isArray( arguments.value ) ) {
+			for ( var item in arguments.value ) {
+				if ( holdsCode( item ?: javacast( "null", 0 ) ) ) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	/**
+	 * @return The value at a dotted path, or null when there is none
+	 */
+	private any function valueAt( required struct settings, required string path ) {
+		var here = arguments.settings
+		for ( var part in listToArray( arguments.path, "." ) ) {
+			if ( !isStruct( here ) || !here.keyExists( part ) ) {
+				return javacast( "null", 0 )
+			}
+			here = here[ part ]
+		}
+		return here
+	}
+
+	private boolean function sameValue( any a, any b ) {
+		if ( isNull( arguments.a ) || isNull( arguments.b ) ) {
+			return isNull( arguments.a ) && isNull( arguments.b )
+		}
+		return jsonSerialize( arguments.a ) == jsonSerialize( arguments.b )
+	}
+
+}

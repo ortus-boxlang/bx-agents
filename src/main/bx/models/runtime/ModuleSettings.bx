@@ -41,6 +41,24 @@ class {
 	}
 
 	/**
+	 * Merges settings that are already in memory (what a person's files changed at start), once for the same content.
+	 *
+	 * @moduleName The BoxLang module, for example bxai
+	 * @source What to put into its live settings
+	 *
+	 * @return The module's settings after the merge
+	 */
+	struct function applyStruct( required string moduleName, required struct source ) {
+		var live = getModuleInfo( arguments.moduleName ).settings
+		var stamp = arguments.moduleName & "|struct|" & hash( jsonSerialize( arguments.source ) )
+		if ( !static.applied.keyExists( stamp ) ) {
+			merge( live, duplicate( arguments.source ) )
+			static.applied[ stamp ] = true
+		}
+		return live
+	}
+
+	/**
 	 * @target The struct to change
 	 * @source What to put into it
 	 */

@@ -115,8 +115,11 @@ class {
 				agentName   : agentName
 			)
 			var layers = new "models.settings.SettingsLayers@bxagents"( arguments.globalFile, dataHome.path() & "/Agent.yml", arguments.flags )
+			// kept for the app: at start it merges the person's files over the author's settings again (RuntimeSettings),
+			// and doing that over the settings that already hold them would add a `+` list twice
+			var author = duplicate( config )
 			config = layers.merged( config, definition.path )
-			personLayers = { files : layers.files(), changed : layers.fromPerson(), buildOnly : layers.buildOnly() }
+			personLayers = { files : layers.files(), changed : layers.fromPerson(), buildOnly : layers.buildOnly(), author : author }
 		}
 
 		// provider + model into one slug, and every profile on the mock provider under `test`

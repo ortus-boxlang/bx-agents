@@ -193,6 +193,18 @@ class {
 		)
 		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.hasEmailGateway, database.datasource ?: "" ) )
 		fileWrite( appDir & "/config/bxai-settings.json", jsonSerialize( bxaiSettings( arguments.resolvedConfig ) ) )
+		// what the app needs to merge the person's files over the author's settings when it starts (models.runtime.RuntimeSettings)
+		if ( isStruct( arguments.resolvedConfig.personLayers ?: "" ) ) {
+			fileWrite(
+				appDir & "/config/agent-settings.json",
+				new "models.runtime.RuntimeSettings@bxagents"().bake(
+					arguments.resolvedConfig.personLayers.author,
+					arguments.resolvedConfig,
+					resolveAgentName( arguments.resolvedConfig ),
+					( isStruct( arguments.resolvedConfig.data ?: "" ) ? arguments.resolvedConfig.data : {} ).home ?: ""
+				)
+			)
+		}
 		fileWrite( wireboxPath, renderWireBox( agentFactory.nodes ) )
 		fileWrite( agentFactoryPath, agentFactory.source )
 
@@ -806,6 +818,8 @@ class {
 			"	function buildAgent() {",
 			"		// bx-ai's settings (default model, profiles, capability defaults) have to be in place before an agent is built, whoever builds it: chat, invoke, a test or ColdBox",
 			'		new "models.runtime.ModuleSettings@bxagents"().apply( "bxai", resolveAppPath( "../config/bxai-settings.json", "#Strings::bxLiteral( Strings::normalizePath( arguments.appDir ) & "/config/bxai-settings.json" )#" ) )',
+			'		// the Agent.yml files of the person who runs this app, as they are now, over what was baked: settings bx-ai reads apply here, and what only a build can change is reported',
+			'		new "models.runtime.RuntimeSettings@bxagents"().start( resolveAppPath( "../config/agent-settings.json", "#Strings::bxLiteral( Strings::normalizePath( arguments.appDir ) & "/config/agent-settings.json" )#" ) )',
 			'		// usage recording is off unless Agent.yml says usage: true',
 			'		new "models.usage.UsageRecorder@bxagents"().start()',
 			body,

@@ -1,0 +1,110 @@
+/**
+ * What a built app does with the person's Agent.yml files when it starts: the same merge as the build, over the
+ * author's settings, so what was baked from the builder's files is not applied twice.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "RuntimeSettings", function() {
+
+			beforeEach( function() {
+				variables.nl = char( 10 )
+				variables.dir = createTempDirectory( prefix = "bxagents-runtime-" )
+				variables.home = dir & "/home"
+				directoryCreate( home )
+				variables.settings = new bxagents.models.runtime.RuntimeSettings()
+				variables.author = { name : "bot", model : "openai/gpt-5", tools : [ "now@bxai" ], agentApi : { enabled : true } }
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true )
+				}
+			} );
+
+			function write( required string file, required array lines ) {
+				fileWrite( file, arguments.lines.toList( nl ) & nl )
+				return file
+			}
+
+			/**
+			 * Bakes what a build would, with the data home set to a scratch folder so the agent's own file is found there.
+			 */
+			function baked( struct merged = author ) {
+				var file = dir & "/agent-settings.json"
+				fileWrite( file, settings.bake( author, arguments.merged, "bot", home ) )
+				return file
+			}
+
+			it( "does nothing for an app built without the file", function() {
+				var result = settings.resolve( dir & "/none.json" )
+				expect( result.active ).toBeFalse()
+				expect( result.changed ).toBeEmpty()
+			} );
+
+			it( "keeps what the author wrote when the person has no files", function() {
+				var result = settings.resolve( baked(), dir & "/none.yml" )
+				expect( result.active ).toBeTrue()
+				expect( result.config.model ).toBe( "openai/gpt-5" )
+				expect( result.changed ).toBeEmpty()
+			} );
+
+			it( "merges the global file, then the agent's own file in its data home, over the author's settings", function() {
+				var global = write( dir & "/global.yml", [ "model: global/m", "tools+: [ extra@bxai ]" ] )
+				write( home & "/Agent.yml", [ "model: agent/m" ] )
+				var result = settings.resolve( baked(), global )
+				expect( result.config.model ).toBe( "agent/m" )
+				expect( result.config.tools ).toBe( [ "now@bxai", "extra@bxai" ] )
+				expect( result.files.map( f => f.layer ) ).toBe( [ "global", "agent" ] )
+			} );
+
+			it( "does not apply a person's list addition twice when the build already applied the same file", function() {
+				var global = write( dir & "/global.yml", [ "tools+: [ extra@bxai ]" ] )
+				var merged = duplicate( author )
+				merged.tools = [ "now@bxai", "extra@bxai" ]
+				var result = settings.resolve( baked( merged ), global )
+				expect( result.config.tools ).toBe( [ "now@bxai", "extra@bxai" ] )
+			} );
+
+			it( "reports a build-only setting a person changed since the build, with its file", function() {
+				var global = write( dir & "/global.yml", [ "agentApi:", "  enabled: false", "model: other/m" ] )
+				var result = settings.resolve( baked(), global )
+				expect( result.needsRebuild.map( e => e.path ) ).toBe( [ "agentApi.enabled" ] )
+				expect( result.needsRebuild[ 1 ].file ).toBe( global )
+				expect( result.changed.map( e => e.path ) ).toBe( [ "agentApi.enabled", "model" ] )
+			} );
+
+			it( "does not report a build-only setting the build already took from the same file", function() {
+				var global = write( dir & "/global.yml", [ "agentApi:", "  enabled: false" ] )
+				var merged = duplicate( author )
+				merged.agentApi.enabled = false
+				var result = settings.resolve( baked( merged ), global )
+				expect( result.changed.map( e => e.path ) ).toBe( [ "agentApi.enabled" ] )
+				expect( result.needsRebuild ).toBeEmpty()
+			} );
+
+			it( "leaves a setting an Agent.bx holds in code out of the file and says so", function() {
+				var withCode = duplicate( author )
+				withCode.params = { hook : () => 1 }
+				var file = dir & "/agent-settings.json"
+				fileWrite( file, settings.bake( withCode, withCode, "bot", home ) )
+				var data = jsonDeserialize( fileRead( file ) )
+				expect( data.codeDefined ).toBe( [ "params" ] )
+				expect( data.base.keyExists( "params" ) ).toBeFalse()
+			} );
+
+			it( "refuses a bad person's file and names it", function() {
+				var bad = write( dir & "/global.yml", [ "modle: x" ] )
+				var message = ""
+				try {
+					settings.resolve( baked(), bad )
+				} catch ( any e ) {
+					message = e.message
+				}
+				expect( message ).toInclude( bad )
+			} );
+
+		} );
+	}
+
+}
