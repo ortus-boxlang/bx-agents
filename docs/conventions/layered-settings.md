@@ -103,12 +103,15 @@ Read from the generators, not yet proven by running. "Start" means the built app
 ## API shape
 
 ```text
-SettingsLayers( projectFile, globalFile, agentFile, flags = {} )
-  .load()                  reads and validates the files, throws a message naming the file
-  .merged( base )          the merge over a base struct, rules above
-  .provenance()            { "model": { value, layer, file }, ... } one entry per leaf
-  .fromPerson()            the provenance entries whose layer is a person file
-  .buildOnly( merged )     keys the built app cannot apply, with their file
+SettingsLayers( globalFile = "", agentFile = "", flags = {} )
+  .load()                   reads and checks the person's files, throws a message naming the file
+  .merged( base, baseFile ) the base with the person's layers and the flags applied, rules above
+  .files()                  [ { layer, file } ] the person's files that exist
+  .provenance()             { "dotted.path": { op, layer, file, value } } for the last merge
+  .fromPerson()             the provenance entries that came from a person's file, sorted by path
+  .buildOnly()              the ones the built app can not apply at start
 ```
+
+The base is the author's `Agent.yml` at build and the baked settings at start, so the project file is not a parameter. A mapping that nothing below had is one setting, so its path is where the file started writing (`agentApi`); inside a mapping that exists, each leaf has its own path (`tui.header`).
 
 Build calls `merged()` inside `AgentConfigResolver`. Start calls the same class from the app's startup, through `ModuleSettings`.

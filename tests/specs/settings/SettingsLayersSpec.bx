@@ -1,0 +1,267 @@
+/**
+ * Layered settings: the person's files (`~/.bxagents/Agent.yml` for every agent, `~/.bxagents/<agent>/Agent.yml` for one)
+ * and the flags of one run, merged over the author's settings, with the `+`, `-` and `~` markers and where each value came from.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "SettingsLayers", function() {
+
+			beforeEach( function() {
+				variables.nl = char( 10 )
+				variables.dir = createTempDirectory( prefix = "bxagents-layers-" )
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( variables.dir ) ) {
+					directoryDelete( variables.dir, true )
+				}
+			} );
+
+			/**
+			 * @name global or agent
+			 * @lines The lines of the file
+			 *
+			 * @return The path of the file written
+			 */
+			function person( required string name, required array lines ) {
+				var file = variables.dir & "/" & arguments.name & "-Agent.yml"
+				fileWrite( file, arguments.lines.toList( variables.nl ) & variables.nl )
+				return file
+			}
+
+			function layers( string global = "", string agent = "", struct flags = {} ) {
+				return new bxagents.models.settings.SettingsLayers(
+					len( arguments.global ) ? arguments.global : variables.dir & "/none-global.yml",
+					arguments.agent,
+					arguments.flags
+				)
+			}
+
+			function failure( required any action ) {
+				var message = ""
+				try {
+					arguments.action()
+				} catch ( any e ) {
+					message = e.message
+				}
+				return message
+			}
+
+			describe( "which layer wins", function() {
+
+				it( "leaves the base alone when there is no person file", function() {
+					var base = { model : "openai/gpt-5", tools : [ "now@bxai" ] }
+					var result = layers().merged( base )
+					expect( result ).toBe( base )
+					expect( layers().merged( base ).tools ).toHaveLength( 1 )
+				} );
+
+				it( "does not change the struct it was given", function() {
+					var base = { model : "openai/gpt-5", tools : [ "a" ] }
+					layers( person( "global", [ "model: ollama/qwen3", "tools+: [ b ]" ] ) ).merged( base )
+					expect( base.model ).toBe( "openai/gpt-5" )
+					expect( base.tools ).toHaveLength( 1 )
+				} );
+
+				it( "puts the global file over the project, the agent's file over the global one, and the flag over all", function() {
+					var base = { model : "project/m", usage : false }
+					var global = person( "global", [ "model: global/m", "usage: true" ] )
+					var agent = person( "agent", [ "model: agent/m" ] )
+					expect( layers( global ).merged( base ).model ).toBe( "global/m" )
+					expect( layers( global, agent ).merged( base ).model ).toBe( "agent/m" )
+					expect( layers( global, agent ).merged( base ).usage ).toBeTrue()
+					expect( layers( global, agent, { model : "flag/m" } ).merged( base ).model ).toBe( "flag/m" )
+				} );
+
+				it( "merges mappings key by key and replaces plain values", function() {
+					var base = { tui : { fullscreen : true, header : "bars" }, params : { temperature : 0.2 } }
+					var global = person( "global", [ "tui:", "  header: none", "params:", "  max_tokens: 100" ] )
+					var result = layers( global ).merged( base )
+					expect( result.tui ).toBe( { fullscreen : true, header : "none" } )
+					expect( result.params ).toBe( { temperature : 0.2, max_tokens : 100 } )
+				} );
+
+				it( "replaces a list by default", function() {
+					var global = person( "global", [ "tools: [ b@bxai ]" ] )
+					expect( layers( global ).merged( { tools : [ "a@bxai" ] } ).tools ).toBe( [ "b@bxai" ] )
+				} );
+
+			} );
+
+			describe( "the markers", function() {
+
+				it( "appends to the author's list with key+:", function() {
+					var global = person( "global", [ "tools+: [ b@bxai ]" ] )
+					var agent = person( "agent", [ "tools+: [ c@bxai ]" ] )
+					expect( layers( global, agent ).merged( { tools : [ "a@bxai" ] } ).tools ).toBe( [ "a@bxai", "b@bxai", "c@bxai" ] )
+				} );
+
+				it( "sets the list when the author wrote none", function() {
+					var global = person( "global", [ "mcpServers+: [ 'https://mcp.example.com' ]" ] )
+					expect( layers( global ).merged( {} ).mcpServers ).toBe( [ "https://mcp.example.com" ] )
+				} );
+
+				it( "removes entries with key-:, a mapping entry by its url or its name", function() {
+					var base = { tools : [ "a@bxai", "b@bxai" ], mcpServers : [ "https://one", { url : "https://two", token : "${env.T}" }, { name : "three", command : "x" } ] }
+					var global = person( "global", [ "tools-: [ a@bxai ]", "mcpServers-: [ 'https://one', 'https://two', three ]" ] )
+					var result = layers( global ).merged( base )
+					expect( result.tools ).toBe( [ "b@bxai" ] )
+					expect( result.mcpServers ).toBeEmpty()
+				} );
+
+				it( "does nothing for key-: on a key nobody set", function() {
+					var global = person( "global", [ "tools-: [ a@bxai ]" ] )
+					expect( layers( global ).merged( { model : "m" } ).keyExists( "tools" ) ).toBeFalse()
+				} );
+
+				it( "appends text to text with a blank line between", function() {
+					var global = person( "global", [ "instructions+: |", "  Always answer in French." ] )
+					var result = layers( global ).merged( { instructions : "Be helpful." } )
+					expect( result.instructions ).toBe( "Be helpful." & variables.nl & variables.nl & "Always answer in French." )
+				} );
+
+				it( "removes a whole key with key: ~", function() {
+					var global = person( "global", [ "mcpServers: ~", "tui: ~" ] )
+					var result = layers( global ).merged( { mcpServers : [ "https://one" ], tui : { header : "bars" }, model : "m" } )
+					expect( result.keyExists( "mcpServers" ) ).toBeFalse()
+					expect( result.keyExists( "tui" ) ).toBeFalse()
+					expect( result.model ).toBe( "m" )
+				} );
+
+				it( "applies the plain value, then the removal, then the addition, for one key in one file", function() {
+					var global = person( "global", [ "tools+: [ c ]", "tools-: [ b ]", "tools: [ a, b ]" ] )
+					expect( layers( global ).merged( { tools : [ "z" ] } ).tools ).toBe( [ "a", "c" ] )
+				} );
+
+				it( "works inside a mapping", function() {
+					var global = person( "global", [ "toolOptions:", "  bxai:", "    allowedPaths+: [ /tmp/b ]" ] )
+					var result = layers( global ).merged( { toolOptions : { bxai : { allowedPaths : [ "/tmp/a" ] } } } )
+					expect( result.toolOptions.bxai.allowedPaths ).toBe( [ "/tmp/a", "/tmp/b" ] )
+				} );
+
+				it( "refuses a marker with nothing to apply", function() {
+					var file = person( "global", [ "tools+:" ] )
+					var message = failure( () => layers( file ).load() )
+					expect( message ).toInclude( file )
+					expect( message ).toInclude( "tools+" )
+				} );
+
+				it( "refuses a marker with a mapping", function() {
+					var file = person( "global", [ "tools+: { a: 1 }" ] )
+					expect( failure( () => layers( file ).load() ) ).toInclude( "needs a list" )
+				} );
+
+				it( "refuses to add a list to text", function() {
+					var file = person( "global", [ "instructions+: [ a ]" ] )
+					expect( failure( () => layers( file ).merged( { instructions : "text" } ) ) ).toInclude( "can not add" )
+				} );
+
+			} );
+
+			describe( "what a person's file may say", function() {
+
+				it( "refuses name, data.home and environments, naming the file", function() {
+					for ( var line in [ "name: other", "data: { home: /tmp/x }", "environments: { test: { model: m } }" ] ) {
+						var file = person( "global", [ line ] )
+						var message = failure( () => layers( file ).load() )
+						expect( message ).toInclude( file )
+						expect( message ).toInclude( "can not be set here" )
+					}
+				} );
+
+				it( "refuses an unknown key, names the file and lists the valid keys", function() {
+					var file = person( "agent", [ "modle: x" ] )
+					var message = failure( () => layers( "", file ).load() )
+					expect( message ).toInclude( file )
+					expect( message ).toInclude( "unknown setting [modle]" )
+					expect( message ).toInclude( "Valid settings:" )
+					expect( message ).toInclude( "mcpServers" )
+				} );
+
+				it( "checks the name of a key that a marker removes", function() {
+					var file = person( "global", [ "modle: ~" ] )
+					expect( failure( () => layers( file ).load() ) ).toInclude( "unknown setting [modle]" )
+				} );
+
+				it( "refuses a value of the wrong type, naming the file", function() {
+					var file = person( "global", [ "tools: not-a-list" ] )
+					var message = failure( () => layers( file ).load() )
+					expect( message ).toInclude( file )
+					expect( message ).toInclude( "must be a list" )
+				} );
+
+				it( "refuses a file that is not YAML", function() {
+					var file = person( "global", [ "tools: [ a", "model: : :" ] )
+					expect( failure( () => layers( file ).load() ) ).toInclude( "is not valid YAML" )
+				} );
+
+				it( "accepts chat in a person's file, and refuses it in a project", function() {
+					var file = person( "global", [ "chat:", "  shell: false" ] )
+					expect( layers( file ).merged( { model : "m" } ).chat.shell ).toBeFalse()
+					var message = failure( () => layers().merged( { model : "m", chat : { shell : true } }, "/p/Agent.yml" ) )
+					expect( message ).toInclude( "/p/Agent.yml" )
+					expect( message ).toInclude( "only valid in a person's file" )
+				} );
+
+				it( "treats an empty file as no settings", function() {
+					var file = person( "global", [ "" ] )
+					expect( layers( file ).merged( { model : "m" } ).model ).toBe( "m" )
+				} );
+
+			} );
+
+			describe( "where each value came from", function() {
+
+				it( "records the layer and the file of every setting a person's file wrote", function() {
+					var global = person( "global", [ "model: global/m", "tools+: [ b ]" ] )
+					var agent = person( "agent", [ "usage: true" ] )
+					var set = layers( global, agent )
+					set.merged( { model : "project/m", tools : [ "a" ], name : "bot" }, "/p/Agent.yml" )
+					var found = set.fromPerson()
+					expect( found.map( e => e.path ) ).toBe( [ "model", "tools", "usage" ] )
+					expect( found[ 1 ].layer ).toBe( "global" )
+					expect( found[ 1 ].file ).toBe( global )
+					expect( found[ 1 ].op ).toBe( "set" )
+					expect( found[ 2 ].op ).toBe( "append" )
+					expect( found[ 3 ].layer ).toBe( "agent" )
+					expect( found[ 3 ].file ).toBe( agent )
+					expect( set.provenance().name.layer ).toBe( "project" )
+					expect( set.provenance().name.file ).toBe( "/p/Agent.yml" )
+				} );
+
+				it( "lets the highest layer own a setting, and drops what a replaced mapping held", function() {
+					var global = person( "global", [ "tui:", "  header: none" ] )
+					var agent = person( "agent", [ "tui: ~" ] )
+					var set = layers( global, agent )
+					set.merged( { tui : { header : "bars" } } )
+					var found = set.fromPerson()
+					expect( found ).toHaveLength( 1 )
+					expect( found[ 1 ].path ).toBe( "tui" )
+					expect( found[ 1 ].op ).toBe( "delete" )
+					expect( found[ 1 ].layer ).toBe( "agent" )
+				} );
+
+				it( "names nested settings by their dotted path", function() {
+					var global = person( "global", [ "tui:", "  header: none" ] )
+					var set = layers( global )
+					set.merged( { tui : { header : "bars", fullscreen : true } } )
+					expect( set.fromPerson().map( e => e.path ) ).toBe( [ "tui.header" ] )
+				} );
+
+				it( "lists the settings that need a rebuild", function() {
+					var global = person( "global", [ "model: m", "agentApi:", "  enabled: false", "gatewaySession:", "  policy: reject" ] )
+					var set = layers( global )
+					set.merged( {} )
+					var needs = set.buildOnly()
+					// a mapping nothing below it had is one setting, so the path is where the file started writing
+					expect( needs.map( e => e.path ) ).toBe( [ "agentApi", "gatewaySession" ] )
+					expect( needs[ 1 ].file ).toBe( global )
+				} );
+
+			} );
+
+		} );
+	}
+
+}

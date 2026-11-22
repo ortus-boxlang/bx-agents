@@ -1,0 +1,350 @@
+/**
+ * Layers an agent's settings from the files that all carry the name `Agent.yml`, and remembers where each value came from.
+ *
+ *   <project>/Agent.yml             the author's file          the base, read by the build (AgentYamlLoader)
+ *   ~/.bxagents/Agent.yml           the person's file, every agent       layer "global"
+ *   ~/.bxagents/<agent>/Agent.yml   the person's file, this agent        layer "agent"
+ *   the flags of one run                                                  layer "flag"
+ *
+ * The first one that says something wins, so they are applied lowest first: base, global, agent, flag.
+ * The same class runs at BUILD (`bxAgents build` bakes the result) and at START (a built app with no source folder
+ * reads the person's two files again and merges them over what it baked), so the two can not drift apart.
+ *
+ * The rules, per key:
+ *
+ *   a mapping       merges key by key with the layer below
+ *   a plain value   replaces, and so does a list
+ *   key+: list      appends to the list below
+ *   key+: text      appends to the text below, after a blank line
+ *   key-: list      removes those entries from the list below (a mapping entry matches by its `name`, else its `url`)
+ *   key: ~          removes the key
+ *
+ * Inside one file, one key is applied in this order: the plain value, then `key-:`, then `key+:`. The markers work at
+ * any depth of a mapping (`volumes: { notes+: ... }` is not special, `tools+:` is the common one).
+ *
+ * `name` and `data.home` can not be set in a person's file: `data.home` decides where the agent's own file lives,
+ * and `name` decides which one that is. `environments` is the author's way to vary a build, so it is not for a
+ * person either. `chat` is valid only in a person's file, never in a project.
+ *
+ * This class reads files and structs and nothing else (no ColdBox, no running agent), so it is cheap to call at start.
+ */
+class {
+
+	static {
+		// layers that belong to a person, in the order they are applied
+		PERSON_LAYERS = [ "global", "agent" ]
+		// top-level keys whose effect is generated into the app at build (routes, gateways, schedulers, the agent tree),
+		// so a change from a person's file needs `bxAgents build`. See docs/conventions/layered-settings.md.
+		BUILD_ONLY    = [ "agentApi", "gatewaySession", "routines", "subAgents", "data", "environments" ]
+	}
+
+	/**
+	 * @globalFile The person's file for every agent; `BXAGENTS_USER_CONFIG`, else ~/.bxagents/Agent.yml, when not given
+	 * @agentFile The person's file for this one agent ("" for none)
+	 * @flags Settings of one run, in the nested shape of the file ({ model : "ollama/qwen3" }); they win over every file
+	 */
+	function init( string globalFile = "", string agentFile = "", struct flags = {} ) {
+		variables.globalFile = len( arguments.globalFile ) ? arguments.globalFile : defaultGlobalFile()
+		variables.agentFile = arguments.agentFile
+		variables.flags = arguments.flags
+		variables.layers = []
+		variables.provenance = {}
+		variables.loaded = false
+		return this
+	}
+
+	/**
+	 * @return The person's file for every agent when nothing names another
+	 */
+	string function defaultGlobalFile() {
+		var named = trim( getSystemSetting( "BXAGENTS_USER_CONFIG", "" ) )
+		return len( named ) ? named : createObject( "java", "java.lang.System" ).getProperty( "user.home" ) & "/.bxagents/Agent.yml"
+	}
+
+	/**
+	 * Reads and checks the person's files. A missing file is no layer. Anything wrong throws, naming the file.
+	 *
+	 * @return this
+	 */
+	function load() {
+		variables.layers = []
+		for ( var named in [ { name : "global", file : variables.globalFile }, { name : "agent", file : variables.agentFile } ] ) {
+			if ( !len( named.file ) || !fileExists( named.file ) ) {
+				continue
+			}
+			variables.layers.append( { name : named.name, file : named.file, data : readPersonFile( named.file ) } )
+		}
+		variables.loaded = true
+		return this
+	}
+
+	/**
+	 * The files that were read, for a message that says where to look.
+	 *
+	 * @return [ { layer, file } ] in the order they apply
+	 */
+	array function files() {
+		ensureLoaded()
+		return variables.layers.map( layer => { layer : layer.name, file : layer.file } )
+	}
+
+	/**
+	 * Applies the person's layers, then the flags, over a base. The base is not changed.
+	 *
+	 * @base The settings so far: the project's Agent.yml at build, the baked settings at start
+	 * @baseFile Where the base came from, for messages and for provenance
+	 *
+	 * @return The merged settings
+	 */
+	struct function merged( required struct base, string baseFile = "" ) {
+		ensureLoaded()
+		if ( arguments.base.keyExists( "chat" ) ) {
+			fail( arguments.baseFile, "[chat] is only valid in a person's file (~/.bxagents/Agent.yml), never in a project, so a project can not switch those on for a person" )
+		}
+		variables.provenance = {}
+		var result = duplicate( arguments.base )
+		for ( var key in result ) {
+			remember( key, "set", "project", arguments.baseFile, result[ key ] )
+		}
+		for ( var layer in variables.layers ) {
+			result = apply( result, layer.data, layer.name, layer.file, "" )
+		}
+		if ( variables.flags.count() ) {
+			checkNotOverridable( "the flags of this run", variables.flags )
+			result = apply( result, variables.flags, "flag", "the flags of this run", "" )
+		}
+		return result
+	}
+
+	/**
+	 * @return { "dotted.path" : { op : set|append|remove|delete, layer : project|global|agent|flag, file : "...", value : ... } }
+	 *         for every setting the last merged() wrote
+	 */
+	struct function provenance() {
+		return variables.provenance
+	}
+
+	/**
+	 * What came from a person's file, one entry per setting, so `/info` can show it and nothing is silent.
+	 *
+	 * @return [ { path, op, layer, file, value } ] sorted by path
+	 */
+	array function fromPerson() {
+		var out = []
+		for ( var path in variables.provenance ) {
+			var entry = variables.provenance[ path ]
+			if ( static.PERSON_LAYERS.contains( entry.layer ) ) {
+				out.append( { path : path, op : entry.op, layer : entry.layer, file : entry.file, value : entry.value } )
+			}
+		}
+		return out.sort( ( a, b ) => compareNoCase( a.path, b.path ) )
+	}
+
+	/**
+	 * The person's settings that a built app can not apply when it starts, because the build generates files from them.
+	 *
+	 * @return [ { path, layer, file } ]
+	 */
+	array function buildOnly() {
+		return fromPerson()
+			.filter( entry => static.BUILD_ONLY.containsNoCase( listFirst( entry.path, "." ) ) )
+			.map( entry => { path : entry.path, layer : entry.layer, file : entry.file } )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private void function ensureLoaded() {
+		if ( !variables.loaded ) {
+			load()
+		}
+	}
+
+	/**
+	 * @return The file's settings as written, markers included. Throws when it is wrong.
+	 */
+	private struct function readPersonFile( required string file ) {
+		var parsed = ""
+		try {
+			parsed = yamlDeserialize( fileRead( arguments.file ) )
+		} catch ( any e ) {
+			fail( arguments.file, "it is not valid YAML: #e.message#" )
+		}
+		// an empty file, or one that holds only comments, reads as null
+		if ( isNull( parsed ) || ( isSimpleValue( parsed ) && !len( trim( parsed ) ) ) ) {
+			return {}
+		}
+		if ( !isStruct( parsed ) ) {
+			fail( arguments.file, "it must be a mapping of settings (model:, tools+:, ...), not a list or a single value" )
+		}
+		checkNotOverridable( arguments.file, parsed )
+
+		// the keys without their markers, so the loader can check names and types the way it does for a project;
+		// the keys that remove a setting only have their names checked
+		var plain = {}
+		var removed = []
+		for ( var key in parsed ) {
+			var split = splitKey( key )
+			if ( isNull( parsed[ key ] ) ) {
+				if ( len( split.op ) ) {
+					fail( arguments.file, "[#key#] is empty. Give it a value, or write [#split.base#: ~] to remove the setting" )
+				}
+				removed.append( split.base )
+			} else if ( len( split.op ) ) {
+				checkMarker( arguments.file, key, split, parsed[ key ] )
+				removed.append( split.base )
+			} else {
+				plain[ split.base ] = parsed[ key ]
+			}
+		}
+		new "models.build.AgentYamlLoader@bxagents"().checkPersonFile( arguments.file, plain, removed )
+		return parsed
+	}
+
+	/**
+	 * A `+` or `-` marker needs a list, or for `+` text, to work with; the type of the key says which.
+	 */
+	private void function checkMarker( required string file, required string key, required struct split, required any value ) {
+		var textOk = arguments.split.op == "+" && isSimpleValue( arguments.value )
+		if ( !isArray( arguments.value ) && !textOk ) {
+			fail(
+				arguments.file,
+				"[#arguments.key#] needs a list#arguments.split.op == "+" ? " (or text, to add to text)" : ""#. To replace the setting, write [#arguments.split.base#:] with a plain value"
+			)
+		}
+	}
+
+	private void function checkNotOverridable( required string file, required struct data ) {
+		if ( arguments.data.keyExists( "name" ) || arguments.data.keyExists( "name+" ) || arguments.data.keyExists( "name-" ) ) {
+			fail( arguments.file, "[name] can not be set here: it is how the agent is found, and the file for one agent is named after it" )
+		}
+		if ( arguments.data.keyExists( "environments" ) ) {
+			fail( arguments.file, "[environments] can not be set here: it is the author's way to vary a build" )
+		}
+		var data = arguments.data.data ?: ""
+		if ( isStruct( data ) && ( data.keyExists( "home" ) || data.keyExists( "home+" ) || data.keyExists( "home-" ) ) ) {
+			fail( arguments.file, "[data.home] can not be set here: it decides where the agent's own Agent.yml lives" )
+		}
+	}
+
+	/**
+	 * @return { base, op } for `tools+` ( "tools", "+" ), `tools-`, and a plain key ( the key, "" )
+	 */
+	private struct function splitKey( required string key ) {
+		var last = right( arguments.key, 1 )
+		if ( len( arguments.key ) > 1 && ( last == "+" || last == "-" ) ) {
+			return { base : left( arguments.key, len( arguments.key ) - 1 ), op : last }
+		}
+		return { base : arguments.key, op : "" }
+	}
+
+	/**
+	 * Applies one layer over a struct, and returns the result. The plain value of a key first, then `key-:`, then `key+:`.
+	 *
+	 * @target The settings below this layer (not changed)
+	 * @layer The layer's settings as written
+	 * @layerName global, agent or flag
+	 * @file Where the layer came from
+	 * @path The dotted path of target, "" at the top
+	 */
+	private struct function apply( required struct target, required struct layer, required string layerName, required string file, required string path ) {
+		var result = duplicate( arguments.target )
+		for ( var pass in [ "", "-", "+" ] ) {
+			for ( var key in arguments.layer ) {
+				var split = splitKey( key )
+				if ( split.op != pass ) {
+					continue
+				}
+				var at = len( arguments.path ) ? arguments.path & "." & split.base : split.base
+				var value = arguments.layer[ key ]
+
+				if ( isNull( value ) ) {
+					result.delete( split.base )
+					forget( at )
+					remember( at, "delete", arguments.layerName, arguments.file, "" )
+				} else if ( pass == "" ) {
+					if ( isStruct( value ) && isStruct( result[ split.base ] ?: "" ) ) {
+						result[ split.base ] = apply( result[ split.base ], value, arguments.layerName, arguments.file, at )
+					} else {
+						result[ split.base ] = duplicate( value )
+						forget( at )
+						remember( at, "set", arguments.layerName, arguments.file, value )
+					}
+				} else if ( pass == "+" ) {
+					result[ split.base ] = append( result[ split.base ] ?: javacast( "null", 0 ), value, key, arguments.file )
+					remember( at, "append", arguments.layerName, arguments.file, value )
+				} else {
+					if ( result.keyExists( split.base ) ) {
+						result[ split.base ] = removeFrom( result[ split.base ], value, key, arguments.file )
+						remember( at, "remove", arguments.layerName, arguments.file, value )
+					}
+				}
+			}
+		}
+		return result
+	}
+
+	/**
+	 * @current What is below: absent, a list, or text
+	 * @value What `key+:` adds: a list or text
+	 */
+	private any function append( any current, required any value, required string key, required string file ) {
+		if ( isNull( arguments.current ) ) {
+			return duplicate( arguments.value )
+		}
+		if ( isArray( arguments.current ) && isArray( arguments.value ) ) {
+			var joined = duplicate( arguments.current )
+			joined.append( duplicate( arguments.value ), true )
+			return joined
+		}
+		if ( isSimpleValue( arguments.current ) && isSimpleValue( arguments.value ) ) {
+			return len( trim( arguments.current ) ) ? rtrim( arguments.current ) & char( 10 ) & char( 10 ) & trim( arguments.value ) : trim( arguments.value )
+		}
+		fail( arguments.file, "[#arguments.key#] can not add to what is set below it: a list adds to a list and text adds to text" )
+	}
+
+	/**
+	 * @current What is below, a list
+	 * @value The entries to take out. A text matches the same text, or a mapping entry with that `name` or `url`.
+	 */
+	private any function removeFrom( required any current, required any value, required string key, required string file ) {
+		if ( !isArray( arguments.current ) ) {
+			fail( arguments.file, "[#arguments.key#] can only take entries out of a list" )
+		}
+		var drop = arguments.value
+		return arguments.current.filter( entry => !drop.some( out => matches( entry, out ) ) )
+	}
+
+	private boolean function matches( required any entry, required any out ) {
+		if ( isSimpleValue( arguments.entry ) ) {
+			return isSimpleValue( arguments.out ) && toString( arguments.entry ) == toString( arguments.out )
+		}
+		if ( isStruct( arguments.entry ) && isSimpleValue( arguments.out ) ) {
+			return ( arguments.entry.name ?: "" ) == arguments.out || ( arguments.entry.url ?: "" ) == arguments.out
+		}
+		return false
+	}
+
+	private void function remember( required string path, required string op, required string layer, required string file, required any value ) {
+		variables.provenance[ arguments.path ] = { op : arguments.op, layer : arguments.layer, file : arguments.file, value : isSimpleValue( arguments.value ) || isArray( arguments.value ) || isStruct( arguments.value ) ? duplicate( arguments.value ) : "" }
+	}
+
+	/**
+	 * A setting that was replaced or removed takes what was recorded for the settings inside it with it.
+	 */
+	private void function forget( required string path ) {
+		var inside = arguments.path & "."
+		for ( var key in variables.provenance.keyArray() ) {
+			if ( left( key, len( inside ) ) == inside ) {
+				variables.provenance.delete( key )
+			}
+		}
+	}
+
+	private void function fail( required string file, required string reason ) {
+		throw(
+			type    = "BxAgents.InvalidSettings",
+			message = "#len( arguments.file ) ? "Agent.yml at [#arguments.file#]" : "The settings"# is invalid: #arguments.reason#"
+		)
+	}
+
+}

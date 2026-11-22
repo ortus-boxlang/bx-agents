@@ -74,7 +74,8 @@ class {
 		"checkpointer"   : "struct",
 		"gatewaySession" : "struct",
 		"agentApi"       : "struct",
-		"environments"   : "struct"
+		"environments"   : "struct",
+		"chat"           : "struct"
 	}
 
 	/**
@@ -100,6 +101,9 @@ class {
 			fail( arguments.path, "it must be a mapping of settings (name:, model:, ...), not a list or a single value" )
 		}
 
+		if ( parsed.keyExists( "chat" ) ) {
+			fail( arguments.path, "[chat] is only valid in a person's file (~/.bxagents/Agent.yml), never in a project, so a project can not switch those on for a person" )
+		}
 		validateKeys( arguments.path, parsed, variables.ALLOWED_KEYS, "" )
 		validateTypes( arguments.path, parsed, "" )
 
@@ -121,6 +125,29 @@ class {
 		}
 
 		return { "config" : config, "environments" : environments }
+	}
+
+	/**
+	 * Check the plain settings of a person's file (`~/.bxagents/Agent.yml`, or the agent's own) the way a project's
+	 * file is checked: the same keys, the same types. `chat` is allowed here, and only here. `environments` is not:
+	 * it is the author's way to vary a build.
+	 *
+	 * @path Absolute path to the file, for the error message
+	 * @data The settings with the layering markers already taken off the key names
+	 * @removed Names of settings the file removes or adds to with a marker (`tools+:`, `model: ~`); only the name is checked
+	 */
+	void function checkPersonFile( required string path, required struct data, array removed = [] ) {
+		var allowed = variables.ALLOWED_KEYS.filter( key => key != "environments" )
+		allowed.append( "chat" )
+		var names = {}
+		for ( var key in arguments.data ) {
+			names[ key ] = true
+		}
+		for ( var key in arguments.removed ) {
+			names[ key ] = true
+		}
+		validateKeys( arguments.path, names, allowed, "" )
+		validateTypes( arguments.path, arguments.data, "" )
 	}
 
 	/**
