@@ -99,7 +99,7 @@ Elimina solo `.build/` y `dist/` - tus convenciones fuente no se tocan nunca.
 
 Un agente desplegado ya no está en tu propia máquina, así que decide quién puede llamarlo. La API
 del agente está abierta por defecto, lo cual es correcto en un portátil e incorrecto en internet.
-Antes de desplegar, define `agentApi` en `Agent.yaml` ([Lección 13](13-exposing-http-and-mcp.md)):
+Antes de desplegar, define `agentApi` en `Agent.yml` ([Lección 13](13-exposing-http-and-mcp.md)):
 un secreto compartido en una variable de entorno, `tokens: true` para tokens por persona, y
 `allowedIPs` o `rateLimit` donde encajen. Ejecuta `token` donde está la base de datos del agente (en
 el servidor), crea uno para cada persona o programa, y habla con el despliegue desde tu propia terminal:

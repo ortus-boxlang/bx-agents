@@ -8,7 +8,7 @@ tags: [conventions, extensions, commands, scheduling, web-ui]
 
 # extensions/
 
-An **extension** adds to BxAgents without changing it: chat commands (`/deploy`, `/roll 2d6`), listeners for the events of the chat and of bx-ai, schedules that run when the agent is served, and pieces of the [web page](#the-web-page-slots-and-web). It is a class that looks and behaves like a ColdBox `ModuleConfig`: it has a `configure()`, an `onLoad()` and an `onUnload()`, its settings come from `Agent.yaml`, and things are handed to it with `$inject`.
+An **extension** adds to BxAgents without changing it: chat commands (`/deploy`, `/roll 2d6`), listeners for the events of the chat and of bx-ai, schedules that run when the agent is served, and pieces of the [web page](#the-web-page-slots-and-web). It is a class that looks and behaves like a ColdBox `ModuleConfig`: it has a `configure()`, an `onLoad()` and an `onUnload()`, its settings come from `Agent.yml`, and things are handed to it with `$inject`.
 
 One file is a whole extension:
 
@@ -73,7 +73,7 @@ function configure() {
 }
 ```
 
-The people who use it change them under the extension's name in `Agent.yaml`:
+The people who use it change them under the extension's name in `Agent.yml`:
 
 ```yaml
 extensions:
@@ -81,7 +81,7 @@ extensions:
     target: production
 ```
 
-A person can set their own values in `~/.bxagents/bxAgents.yml` (same `extensions:` block); the project's values win over theirs. Nested structs merge key by key, arrays and simple values replace. In the extension, `settings` is the merged struct.
+A person can set their own values in `~/.bxagents/Agent.yml` (same `extensions:` block); the project's values win over theirs. Nested structs merge key by key, arrays and simple values replace. In the extension, `settings` is the merged struct.
 
 ## Lifecycle
 
@@ -115,7 +115,7 @@ A class in `commands/` extends `models.chat.commands.BaseCommand@bxagents` and s
 
 ## Schedulers
 
-A class in `schedulers/` is a **BoxLang scheduler**: a class with a `configure()` that defines tasks through the `scheduler` property BoxLang gives it, like any other BoxLang scheduler. When the agent is served (`bxAgents serve`, a `.bxa`, a deployed server) it starts in the runtime's scheduler service. Like every class of an extension it is given `settings` (the defaults with the values from `Agent.yaml`) and `log` before `configure()` runs:
+A class in `schedulers/` is a **BoxLang scheduler**: a class with a `configure()` that defines tasks through the `scheduler` property BoxLang gives it, like any other BoxLang scheduler. When the agent is served (`bxAgents serve`, a `.bxa`, a deployed server) it starts in the runtime's scheduler service. Like every class of an extension it is given `settings` (the defaults with the values from `Agent.yml`) and `log` before `configure()` runs:
 
 ```text
 class {
@@ -206,7 +206,7 @@ function pulse( agentContext, commandArguments ) { ... }
 function resetPulse( agentContext, commandArguments ) { ... }
 ```
 
-A key is named `extension:method` (`pulse:pulse`). `/keys` lists it with the built-in ones, and a person can give it other keys under `chat: keys:` in `~/.bxagents/bxAgents.yml`. A key a built-in action already uses, or an earlier extension holds, is refused with a sentence that says so. A typed draft stays in the box while a key runs. Keys are for the terminal chat; the web page and chat platforms have commands.
+A key is named `extension:method` (`pulse:pulse`). `/keys` lists it with the built-in ones, and a person can give it other keys under `chat: keys:` in `~/.bxagents/Agent.yml`. A key a built-in action already uses, or an earlier extension holds, is refused with a sentence that says so. A typed draft stays in the box while a key runs. Keys are for the terminal chat; the web page and chat platforms have commands.
 
 `@Status` is a piece of status next to the size of the context: a method that returns a short text, asked each time the box is drawn in the terminal and after each change to the conversation on the web page (chips in the bar above the conversation, see [Status items](#status-items)). Return an empty string to show nothing. It must be quick; one that throws is left out and the reason is put on its extension once.
 
@@ -266,7 +266,7 @@ function ticketNames( agentContext, query ) { return tickets.keyArray() }
 
 Written as calls: `registry.prefix( "%", ( agentContext, text ) => ..., { hint : "..." } )` and `registry.source( "ticket", ( agentContext, query ) => ..., { hint : "...", suggest : ( agentContext, query ) => [ ... ] } )`.
 
-The person chooses the prefix or the name, by the id `extension:method`, in `~/.bxagents/bxAgents.yml`:
+The person chooses the prefix or the name, by the id `extension:method`, in `~/.bxagents/Agent.yml`:
 
 ```yaml
 chat:
@@ -292,7 +292,7 @@ if ( agentContext.confirm( "Make the #priority# ticket?" ) ) { ... }
 
 ## Reloading
 
-`/reload` loads the extensions again without leaving the chat: it runs `onUnload()` of what was loaded, reads `~/.bxagents/bxAgents.yml` and the `extensions:` settings of `Agent.yaml` anew, and loads what is found, with its commands, keys, status items, prefixes, sources and listeners. An extension that fails to load is reported and left out; the others load. It is for admins and works in the terminal chat only: a served app registers schedulers and ColdBox listeners when it starts, so restart it instead.
+`/reload` loads the extensions again without leaving the chat: it runs `onUnload()` of what was loaded, reads `~/.bxagents/Agent.yml` and the `extensions:` settings of `Agent.yml` anew, and loads what is found, with its commands, keys, status items, prefixes, sources and listeners. An extension that fails to load is reported and left out; the others load. It is for admins and works in the terminal chat only: a served app registers schedulers and ColdBox listeners when it starts, so restart it instead.
 
 ## The web page: slots and `web/`
 
@@ -427,7 +427,7 @@ class {
 }
 ```
 
-The sidebar slot is markup, so the setting in it goes through `encodeForHTML()`: `settings.name` can be changed in `Agent.yaml`.
+The sidebar slot is markup, so the setting in it goes through `encodeForHTML()`: `settings.name` can be changed in `Agent.yml`.
 
 `web/panel.css` uses the page's variables, so the button follows light, dark and the accent:
 
@@ -576,7 +576,7 @@ extensions:
   disable: [ roll, "deploy:deploy", "acme-*" ]
 ```
 
-A plain name turns off the extension of that name (and any command called that); `extension:item` turns off one command; `*` matches any run of characters. Both `Agent.yaml` and `~/.bxagents/bxAgents.yml` accept it.
+A plain name turns off the extension of that name (and any command called that); `extension:item` turns off one command; `*` matches any run of characters. Both `Agent.yml` and `~/.bxagents/Agent.yml` accept it.
 
 ## Looking at them
 

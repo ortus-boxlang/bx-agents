@@ -4,7 +4,7 @@ A project that shows what extensions can do. Everything is in `extensions/`:
 
 | Extension | Shape | Shows |
 |---|---|---|
-| `hello.bx` | one file | the smallest extension; a setting changed in `Agent.yaml`; a command line verb (`@Verb`) |
+| `hello.bx` | one file | the smallest extension; a setting changed in `Agent.yml`; a command line verb (`@Verb`) |
 | `roll.bx` | one file | several commands; bare, simple, array and struct annotations; aliases |
 | `deploy.bx` | one file | module-config properties, `onLoad()` / `onUnload()`, an admin-only command, injected `log` |
 | `guard.bx` | one file | listening: `onChatInput` can stop or change a message, `@On` for bx-ai events |
@@ -24,7 +24,7 @@ bxAgents greet --name=Ada   # a verb the hello extension adds
 bxAgents serve           # the standup scheduler is registered with the served app; the page is at /chat
 ```
 
-Turn something off in `Agent.yaml`: `extensions: { disable: [ roll, "deploy:status" ] }`.
+Turn something off in `Agent.yml`: `extensions: { disable: [ roll, "deploy:status" ] }`.
 
 Start one of your own with `bxAgents add extension <name>` (it asks what to bring), or put another project's extension to
 work with `bxAgents extensions install`. Any folder here installs as it is, into another project or for yourself:

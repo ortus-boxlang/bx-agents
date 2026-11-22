@@ -8,10 +8,10 @@ tags: [conventions, configuration]
 
 # Agent.bx
 
-!!! info "La mayoría de los agentes usan Agent.yaml"
-    La forma predeterminada de definir un agente es un [`Agent.yaml`](agent-yaml.md) sencillo. Recurre a `Agent.bx` cuando la definición misma necesita código: hooks, instrucciones dinámicas, tools registradas en código, un método sobreescrito o `detectEnvironment()`. Una carpeta contiene una u otra, nunca ambas. Las secciones sobre [el slug de modelo](#the-model-slug), [overrides de entorno](#overrides-de-entorno), [semántica de fusión](#semántica-de-fusión) y [la ruta de agente siempre activa](#la-ruta-de-agente-siempre-activa) de más abajo aplican a ambas.
+!!! info "La mayoría de los agentes usan Agent.yml"
+    La forma predeterminada de definir un agente es un [`Agent.yml`](agent-yaml.md) sencillo. Recurre a `Agent.bx` cuando la definición misma necesita código: hooks, instrucciones dinámicas, tools registradas en código, un método sobreescrito o `detectEnvironment()`. Una carpeta contiene una u otra, nunca ambas. Las secciones sobre [el slug de modelo](#the-model-slug), [overrides de entorno](#overrides-de-entorno), [semántica de fusión](#semántica-de-fusión) y [la ruta de agente siempre activa](#la-ruta-de-agente-siempre-activa) de más abajo aplican a ambas.
 
-`Agent.bx` es la forma avanzada de definir un agente. Un proyecto BxAgents necesita un `Agent.yaml` **o** un `Agent.bx`. **Extiende el propio [`AiAgent`](https://ai.ortusbooks.com/main-components/agents/class-based-agents) de bx-ai**, así que *es* el agente - el build lo instancia en lugar de reconstruir uno a partir de un struct de configuración, así que lo que escribes es lo que se ejecuta. Hereda y añade lo que necesites: helpers privados, métodos sobreescritos, tools registradas en código. Porque es una clase real en lugar de un descriptor que devuelve un struct, un IDE puede introspeccionarla como cualquier otra clase de BoxLang - ir a la definición, autocompletar en métodos heredados, todo.
+`Agent.bx` es la forma avanzada de definir un agente. Un proyecto BxAgents necesita un `Agent.yml` **o** un `Agent.bx`. **Extiende el propio [`AiAgent`](https://ai.ortusbooks.com/main-components/agents/class-based-agents) de bx-ai**, así que *es* el agente - el build lo instancia en lugar de reconstruir uno a partir de un struct de configuración, así que lo que escribes es lo que se ejecuta. Hereda y añade lo que necesites: helpers privados, métodos sobreescritos, tools registradas en código. Porque es una clase real en lugar de un descriptor que devuelve un struct, un IDE puede introspeccionarla como cualquier otra clase de BoxLang - ir a la definición, autocompletar en métodos heredados, todo.
 
 ```javascript
 class extends="bxModules.bxai.models.runnables.AiAgent" {
@@ -29,7 +29,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 }
 ```
 
-`bxAgents new --class` genera el andamiaje exactamente con esta forma (sin `--class`, `new` genera un `Agent.yaml`). `instructions.md` es opcional - configura `instructions` directamente en `super.init()`, o coloca el archivo junto a `Agent.bx` y deja que el build lo conecte por ti (ver la tabla abajo).
+`bxAgents new --class` genera el andamiaje exactamente con esta forma (sin `--class`, `new` genera un `Agent.yml`). `instructions.md` es opcional - configura `instructions` directamente en `super.init()`, o coloca el archivo junto a `Agent.bx` y deja que el build lo conecte por ti (ver la tabla abajo).
 
 ## Lo que el build agrega encima de la clase
 
@@ -96,7 +96,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 | `gatewaySession` | struct | `{ policy, maxQueueDepth, attachments, commands }`, todos opcionales (por defecto `"queue"` / `50` / `true`). Solo significativo si el proyecto tiene al menos una entrada de [gateway](gateways/index.md#3-push-style-gateways-type-telegram--slack--discord--email--whatsapp-cloud--teams--twilio--github--signal-and-friends) de estilo push - controla la política del `GatewaySession` generado para un segundo mensaje entrante que llega en un hilo que ya tiene un turno en curso. `policy` debe ser uno de `reject`/`queue`/`steer`/`interrupt`. |
 | `agentApi` | struct | `{ enabled, access, tokenEnvVar, tokens, profiles, path, allowedIPs, rateLimit, manageTokens }`, todos opcionales. Controla la ruta de agente siempre activa, en `/__bxagents` salvo que `path` la mueva. Consulta [La ruta de agente siempre activa](#la-ruta-de-agente-siempre-activa) más abajo. |
 | `tools`, `toolOptions` | array, struct | Tools de módulos y sus opciones. Ver [Tools](agent-yaml.md#tools) y [Opciones de tools](agent-yaml.md#opciones-de-tools). |
-| `provider`, `params`, `options`, `providers`, `profiles`, `defaultProfile`, `profile`, `contextWindow`, `vision`, `embeddings`, `speech`, `transcription`, `image` | varios | Los ajustes del modelo, con la misma forma y las mismas comprobaciones que en [`Agent.yaml`](agent-yaml.md). Un subagente no puede definir `params`, `options`, `providers`, `profiles`, `defaultProfile` ni las cuatro capacidades: se aplican a toda la app y pertenecen a la raíz. Ver [Modelos y perfiles](models.md). |
+| `provider`, `params`, `options`, `providers`, `profiles`, `defaultProfile`, `profile`, `contextWindow`, `vision`, `embeddings`, `speech`, `transcription`, `image` | varios | Los ajustes del modelo, con la misma forma y las mismas comprobaciones que en [`Agent.yml`](agent-yaml.md). Un subagente no puede definir `params`, `options`, `providers`, `profiles`, `defaultProfile` ni las cuatro capacidades: se aplican a toda la app y pertenecen a la raíz. Ver [Modelos y perfiles](models.md). |
 | `notes` | struct | Notas breves que guarda el agente. Ver [Notas](agent-yaml.md#notas). |
 | `usage` | booleano | Registra lo que usó cada llamada al modelo. Solo en la raíz. Ver [`usage`](agent-yaml.md#ajustes). |
 | `tui` | struct | Cómo se ve el chat de terminal. Solo en la raíz. Ver [`tui`](agent-yaml.md#ajustes). |
@@ -315,7 +315,7 @@ Como la ruta está reservada, `build` **rechaza** cualquier entrada de `gateways
 | `allowedIPs` | lista | Por defecto ninguna (cualquiera). Las direcciones y redes que pueden llamar, p. ej. `[ "10.0.0.0/8", "203.0.113.7", "::1" ]`. Es el middleware de ruta `AllowedIPs` de cbSecurity delante de cada ruta, así que cualquier otra dirección recibe `403` (`{ "error": true, "messages": [ "Your IP address is not allowed" ] }`) antes de mirar ningún token. Comprueba la dirección de la conexión, nunca una cabecera `X-Forwarded-For` que elige el cliente; detrás de un proxy inverso todos tienen la dirección del proxy salvo que configures `middleware.trustedProxies` de cbSecurity. `/health` sigue abierto. |
 | `rateLimit` | struct | Por defecto ninguno. `{ requests, perSeconds }`: como máximo `requests` llamadas desde una misma dirección en cada ventana de `perSeconds` segundos. Es el middleware de ruta `Throttle` de cbSecurity, un solo contador para toda la API, guardado en CacheBox. Pasarse responde `429` con una cabecera `Retry-After`; cada respuesta lleva `X-RateLimit-Limit` y `X-RateLimit-Remaining`. |
 | `manageTokens` | boolean | Por defecto `false`. `true` permite a un admin crear, listar y revocar [tokens de acceso](#tokens-de-acceso-para-un-agente-desplegado) por la API (`GET`/`POST /__bxagents/tokens`, `POST /__bxagents/tokens/revoke`) y muestra la pestaña **Tokens** de la página Access de la app web (`<path>/access/tokens`). Requiere `tokens: true` y una API con token; un token `chat` recibe `403`. El secreto de un token nuevo solo está en la respuesta de la creación. Desactivado, las rutas no existen y los tokens se crean solo con `bxAgents token create`. |
-| `profiles` | lista | Por defecto ninguno. Los [perfiles](models.md#perfiles) que un cliente puede pedir con `options.profile` en `/events`, y lo que lista `GET /__bxagents/profiles` (nunca una clave). Cualquier otro perfil es un `400`, así que un llamante no puede elegir un modelo que no ofreciste. `chat --connect` usa esta lista para `/profile`. Cada nombre debe estar declarado en `Agent.yaml`, o ser `default`. |
+| `profiles` | lista | Por defecto ninguno. Los [perfiles](models.md#perfiles) que un cliente puede pedir con `options.profile` en `/events`, y lo que lista `GET /__bxagents/profiles` (nunca una clave). Cualquier otro perfil es un `400`, así que un llamante no puede elegir un modelo que no ofreciste. `chat --connect` usa esta lista para `/profile`. Cada nombre debe estar declarado en `Agent.yml`, o ser `default`. |
 
 ```javascript
 function configure() {
@@ -365,7 +365,7 @@ La verja **falla cerrada**: si la variable nombrada está sin definir o vacía e
 Un secreto compartido (`tokenEnvVar`) basta para un solo llamador. Para dejar entrar a varias personas o máquinas, cada una con un nombre que puedes revocar, activa los tokens emitidos:
 
 ```yaml
-# Agent.yaml
+# Agent.yml
 agentApi:
   tokens: true
 ```

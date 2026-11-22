@@ -9,20 +9,20 @@ tags: [course, conventions, subagents]
 # Composing Subagents
 
 `subagents/` holds nested agents - each an ordinary BxAgents project of its own, with
-its own `Agent.yaml` + `instructions.md`, and optionally its own `tools/`, `skills/`,
+its own `Agent.yml` + `instructions.md`, and optionally its own `tools/`, `skills/`,
 etc.
 
 ```text
 my-agent/
-├── Agent.yaml            # subAgents: [ researcher ]
+├── Agent.yml            # subAgents: [ researcher ]
 ├── instructions.md
 └── subagents/
     └── researcher/
-        ├── Agent.yaml
+        ├── Agent.yml
         └── instructions.md
 ```
 
-A subagent is wired to its parent by name, declared in the parent's `Agent.yaml`
+A subagent is wired to its parent by name, declared in the parent's `Agent.yml`
 
 - this is the `subagents/` **folder name**:
 
@@ -80,7 +80,7 @@ two agents share one.
 ## Try it
 
 Scaffold a `subagents/researcher/` folder as its own small BxAgents project (its own
-`Agent.yaml` + `instructions.md`), then wire it into your root `Agent.yaml`'s
+`Agent.yml` + `instructions.md`), then wire it into your root `Agent.yml`'s
 `subAgents` list. Rebuild and ask your root agent something that would naturally delegate
 to the researcher subagent - it's callable exactly like any other tool.
 

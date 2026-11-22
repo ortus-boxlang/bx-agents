@@ -87,7 +87,7 @@ flowchart TD
     style R fill:#f8d7da,stroke:#721c24
 ```
 
-Controla la política desde `Agent.yaml`:
+Controla la política desde `Agent.yml`:
 
 ```yaml
 gatewaySession:

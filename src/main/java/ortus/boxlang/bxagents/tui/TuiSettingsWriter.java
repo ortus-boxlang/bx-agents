@@ -27,8 +27,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Writes one setting into a YAML file that holds a {@code tui:} block, an agent's {@code settings.yml} or the person's
- * {@code ~/.bxagents/bxAgents.yml}, working on the lines of the file. What the person wrote (other sections, comments, the order, the
+ * Writes one setting into a YAML file that holds a {@code tui:} block, an agent's {@code Agent.yml} or the person's
+ * {@code ~/.bxagents/Agent.yml}, working on the lines of the file. What the person wrote (other sections, comments, the order, the
  * comment at the end of the setting's own line) is left as it was, and only the line of the one setting changes:
  *
  * <pre>

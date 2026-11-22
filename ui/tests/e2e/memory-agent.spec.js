@@ -117,7 +117,7 @@ test.describe( "Agent", () => {
 
 	test( "reads a project file", async( { page } ) => {
 		await page.goto( APP + "/agent/files" );
-		await page.getByRole( "button", { name: "Read Agent.yaml" } ).click();
+		await page.getByRole( "button", { name: "Read Agent.yml" } ).click();
 		await expect( page.getByRole( "region", { name: "File" } ).locator( "pre" ) ).toContainText( "name:" );
 	} );
 

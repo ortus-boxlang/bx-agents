@@ -20,10 +20,10 @@ Es una interfaz de pantalla completa en el verde azulado del logo de BxAgents. L
 
 | Etapa | Qué eliges | Qué escribe |
 |---|---|---|
-| Nombre, propósito | El nombre del agente y una descripción de una línea | `name`, `description` en [`Agent.yaml`](../conventions/agent-yaml.md) |
+| Nombre, propósito | El nombre del agente y una descripción de una línea | `name`, `description` en [`Agent.yml`](../conventions/agent-yaml.md) |
 | Forma | Un agente, un equipo, un agente programado, un servidor MCP | La [plantilla](../agent-templates.md) correspondiente |
 | Modelo | Un proveedor y, opcionalmente, un nombre de modelo (Enter toma el predeterminado del proveedor). **Otro proveedor** te deja escribir `provider/model` tú mismo | `model`, y un marcador para `<PROVEEDOR>_API_KEY` en `.env` |
-| Ajustes del modelo | Si quieres ajustar el modelo; luego la temperatura (0 a 2), la respuesta más larga en tokens y el tiempo límite en segundos. Enter deja uno sin definir | [`params`](../conventions/models.md) (`temperature`, `max_tokens`) y [`options`](../conventions/models.md) (`timeout`) en `Agent.yaml` |
+| Ajustes del modelo | Si quieres ajustar el modelo; luego la temperatura (0 a 2), la respuesta más larga en tokens y el tiempo límite en segundos. Enter deja uno sin definir | [`params`](../conventions/models.md) (`temperature`, `max_tokens`) y [`options`](../conventions/models.md) (`timeout`) en `Agent.yml` |
 | Tools | Fecha y hora, traer páginas, buscar en la web, navegar sitios, archivos, imágenes y voz | Una lista [`tools:`](../conventions/agent-yaml.md#tools); navegar también añade `bx-playwright` a tu `box.json` |
 | Buscador | El integrado, Brave, Tavily, Exa o Google | Un marcador de clave en `.env` y una línea en `instructions.md` que indica al agente qué proveedor usar |
 | Tools de archivos | Solo lectura, las 19, o una por una; luego las carpetas que pueden usar | [`toolOptions.bxai.allowedPaths`](../conventions/agent-yaml.md#tools-de-archivos) |
@@ -120,4 +120,4 @@ Una opción con un valor incorrecto detiene el comando y dice qué acepta. El as
 | `bxAgents new --model=...` | Sin preguntas: un modelo significa que lo llama un script. Añade `--wizard` para que pregunte el resto |
 | `bxAgents new --no-wizard` o `--yes` | Sin preguntas, solo opciones y valores predeterminados |
 
-Define `NO_COLOR` para una salida sin color. Las opciones de Agent.yaml que escribe el asistente necesitan el `Agent.yaml` predeterminado, así que no se pueden combinar con `--class`.
+Define `NO_COLOR` para una salida sin color. Las opciones de Agent.yml que escribe el asistente necesitan el `Agent.yml` predeterminado, así que no se pueden combinar con `--class`.

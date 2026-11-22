@@ -8,7 +8,7 @@ tags: [conventions, extensions, commands, scheduling, web-ui]
 
 # extensions/
 
-Una **extensión** añade cosas a BxAgents sin modificarlo: comandos de chat (`/deploy`, `/roll 2d6`), listeners de los eventos del chat y de bx-ai, tareas programadas que se ejecutan cuando el agente se sirve, y piezas de la [página web](#la-página-web-slots-y-web). Es una clase que se ve y se comporta como un `ModuleConfig` de ColdBox: tiene `configure()`, `onLoad()` y `onUnload()`, su configuración viene de `Agent.yaml` y se le entregan objetos con `$inject`.
+Una **extensión** añade cosas a BxAgents sin modificarlo: comandos de chat (`/deploy`, `/roll 2d6`), listeners de los eventos del chat y de bx-ai, tareas programadas que se ejecutan cuando el agente se sirve, y piezas de la [página web](#la-página-web-slots-y-web). Es una clase que se ve y se comporta como un `ModuleConfig` de ColdBox: tiene `configure()`, `onLoad()` y `onUnload()`, su configuración viene de `Agent.yml` y se le entregan objetos con `$inject`.
 
 Un archivo es una extensión completa:
 
@@ -73,7 +73,7 @@ function configure() {
 }
 ```
 
-Quienes la usan los cambian bajo el nombre de la extensión en `Agent.yaml`:
+Quienes la usan los cambian bajo el nombre de la extensión en `Agent.yml`:
 
 ```yaml
 extensions:
@@ -81,7 +81,7 @@ extensions:
     target: production
 ```
 
-Una persona puede poner sus propios valores en `~/.bxagents/bxAgents.yml` (mismo bloque `extensions:`); los del proyecto ganan a los suyos. Los structs anidados se fusionan clave por clave; los arreglos y los valores simples reemplazan. Dentro de la extensión, `settings` es el struct fusionado.
+Una persona puede poner sus propios valores en `~/.bxagents/Agent.yml` (mismo bloque `extensions:`); los del proyecto ganan a los suyos. Los structs anidados se fusionan clave por clave; los arreglos y los valores simples reemplazan. Dentro de la extensión, `settings` es el struct fusionado.
 
 ## Ciclo de vida
 
@@ -115,7 +115,7 @@ Una clase en `commands/` extiende `models.chat.commands.BaseCommand@bxagents` y 
 
 ## Schedulers
 
-Una clase en `schedulers/` es un **scheduler de BoxLang**: una clase con un `configure()` que define tareas mediante la propiedad `scheduler` que BoxLang le da, como cualquier otro scheduler de BoxLang. Cuando se sirve el agente (`bxAgents serve`, un `.bxa`, un servidor desplegado) arranca en el servicio de schedulers del runtime. Como toda clase de una extensión, recibe `settings` (los valores por defecto con los de `Agent.yaml`) y `log` antes de que se ejecute `configure()`:
+Una clase en `schedulers/` es un **scheduler de BoxLang**: una clase con un `configure()` que define tareas mediante la propiedad `scheduler` que BoxLang le da, como cualquier otro scheduler de BoxLang. Cuando se sirve el agente (`bxAgents serve`, un `.bxa`, un servidor desplegado) arranca en el servicio de schedulers del runtime. Como toda clase de una extensión, recibe `settings` (los valores por defecto con los de `Agent.yml`) y `log` antes de que se ejecute `configure()`:
 
 ```text
 class {
@@ -206,7 +206,7 @@ function pulse( agentContext, commandArguments ) { ... }
 function resetPulse( agentContext, commandArguments ) { ... }
 ```
 
-Un atajo se llama `extensión:método` (`pulse:pulse`). `/keys` lo lista junto a los integrados, y la persona puede darle otras teclas bajo `chat: keys:` en `~/.bxagents/bxAgents.yml`. Una tecla que ya usa una acción integrada, o que tiene una extensión anterior, se rechaza con una frase que lo dice. Un borrador escrito se queda en la caja mientras se ejecuta el atajo. Los atajos son del chat de terminal; la página web y las plataformas de chat tienen comandos.
+Un atajo se llama `extensión:método` (`pulse:pulse`). `/keys` lo lista junto a los integrados, y la persona puede darle otras teclas bajo `chat: keys:` en `~/.bxagents/Agent.yml`. Una tecla que ya usa una acción integrada, o que tiene una extensión anterior, se rechaza con una frase que lo dice. Un borrador escrito se queda en la caja mientras se ejecuta el atajo. Los atajos son del chat de terminal; la página web y las plataformas de chat tienen comandos.
 
 `@Status` es un dato de estado junto al tamaño del contexto: un método que devuelve un texto corto, consultado cada vez que se dibuja la caja en la terminal y tras cada cambio de la conversación en la página web (etiquetas en la barra sobre la conversación, ver [Elementos de estado](#elementos-de-estado)). Devuelve una cadena vacía para no mostrar nada. Debe ser rápido; el que lanza un error se omite y el motivo se anota una vez en su extensión.
 
@@ -266,7 +266,7 @@ function ticketNames( agentContext, query ) { return tickets.keyArray() }
 
 Escrito como llamadas: `registry.prefix( "%", ( agentContext, text ) => ..., { hint : "..." } )` y `registry.source( "ticket", ( agentContext, query ) => ..., { hint : "...", suggest : ( agentContext, query ) => [ ... ] } )`.
 
-La persona elige el prefijo o el nombre, por el id `extensión:método`, en `~/.bxagents/bxAgents.yml`:
+La persona elige el prefijo o el nombre, por el id `extensión:método`, en `~/.bxagents/Agent.yml`:
 
 ```yaml
 chat:
@@ -292,7 +292,7 @@ if ( agentContext.confirm( "¿Crear el ticket #priority#?" ) ) { ... }
 
 ## Recargar
 
-`/reload` carga de nuevo las extensiones sin salir del chat: ejecuta `onUnload()` de lo cargado, vuelve a leer `~/.bxagents/bxAgents.yml` y los ajustes `extensions:` de `Agent.yaml`, y carga lo que encuentra, con sus comandos, atajos, elementos de estado, prefijos, fuentes y oyentes. Una extensión que no carga se avisa y se deja fuera; las demás cargan. Es para administradores y solo en el chat de terminal: una app servida registra schedulers y oyentes de ColdBox al arrancar, así que se reinicia.
+`/reload` carga de nuevo las extensiones sin salir del chat: ejecuta `onUnload()` de lo cargado, vuelve a leer `~/.bxagents/Agent.yml` y los ajustes `extensions:` de `Agent.yml`, y carga lo que encuentra, con sus comandos, atajos, elementos de estado, prefijos, fuentes y oyentes. Una extensión que no carga se avisa y se deja fuera; las demás cargan. Es para administradores y solo en el chat de terminal: una app servida registra schedulers y oyentes de ColdBox al arrancar, así que se reinicia.
 
 ## La página web: slots y `web/`
 
@@ -427,7 +427,7 @@ class {
 }
 ```
 
-El slot de la barra lateral es marcado, así que el valor de configuración que lleva pasa por `encodeForHTML()`: `settings.name` se puede cambiar en `Agent.yaml`.
+El slot de la barra lateral es marcado, así que el valor de configuración que lleva pasa por `encodeForHTML()`: `settings.name` se puede cambiar en `Agent.yml`.
 
 `web/panel.css` usa las variables de la página, así que el botón sigue el claro, el oscuro y el acento:
 
@@ -576,7 +576,7 @@ extensions:
   disable: [ roll, "deploy:deploy", "acme-*" ]
 ```
 
-Un nombre simple desactiva la extensión con ese nombre (y cualquier comando que se llame así); `extension:item` desactiva un solo comando; `*` coincide con cualquier secuencia de caracteres. Tanto `Agent.yaml` como `~/.bxagents/bxAgents.yml` lo aceptan.
+Un nombre simple desactiva la extensión con ese nombre (y cualquier comando que se llame así); `extension:item` desactiva un solo comando; `*` coincide con cualquier secuencia de caracteres. Tanto `Agent.yml` como `~/.bxagents/Agent.yml` lo aceptan.
 
 ## Verlas
 

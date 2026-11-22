@@ -42,4 +42,4 @@ bxAgents build
 bxAgents chat
 ```
 
-Every example builds independently - each is a complete, self-contained project directory (its own `Agent.yaml`), not a shared/linked structure. See [Quick Start](../docs/getting-started/quick-start.md) for the full `new` → edit → `build` → `serve`/`chat` walkthrough.
+Every example builds independently - each is a complete, self-contained project directory (its own `Agent.yml`), not a shared/linked structure. See [Quick Start](../docs/getting-started/quick-start.md) for the full `new` → edit → `build` → `serve`/`chat` walkthrough.

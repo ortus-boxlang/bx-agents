@@ -45,7 +45,7 @@ class extends="testbox.system.BaseSpec" {
 				var result = doctorVerb.run( { projectRoot : dir } );
 
 				expect( result.exitCode ).toBe( 1 );
-				expect( result.message ).toInclude( "No Agent.yaml or Agent.bx found" );
+				expect( result.message ).toInclude( "No Agent.yml or Agent.bx found" );
 			} );
 
 			it( "reports the running BoxLang version and bx-ai as loaded", function() {
@@ -89,7 +89,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "says where the data home is and that it can be written, without making it", function() {
 				var dir = newTempProject( "validation/with-data" );
-				fileWrite( dir & "/Agent.yaml", "name: kept" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "data:" & char( 10 ) & "  home: ./state-elsewhere" & char( 10 ) );
+				fileWrite( dir & "/Agent.yml", "name: kept" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "data:" & char( 10 ) & "  home: ./state-elsewhere" & char( 10 ) );
 				var result = doctorVerb.run( { projectRoot : dir } );
 
 				expect( result.message ).toInclude( "state-elsewhere] (setting) can be written" );
@@ -124,7 +124,7 @@ class extends="testbox.system.BaseSpec" {
 				var root = createTempDirectory( prefix = "bxagents-cli-doctor-" );
 				tempDirs.append( root );
 				var nl = char( 10 );
-				fileWrite( root & "/Agent.yaml", "name: keyed" & nl & "model: mock/mock-model" & nl & "profiles:" & nl
+				fileWrite( root & "/Agent.yml", "name: keyed" & nl & "model: mock/mock-model" & nl & "profiles:" & nl
 					& "  fast:" & nl & "    provider: openai" & nl & "    apiKeyEnv: DOCTOR_FAST_KEY" & nl
 					& "  planner:" & nl & "    provider: claude" & nl & "    apiKeyEnv: DOCTOR_PLANNER_KEY" & nl
 					& "speech:" & nl & "  provider: mock" & nl );
@@ -170,7 +170,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "asks for no key when every model is the mock provider", function() {
 				var root = createTempDirectory( prefix = "bxagents-cli-doctor-" );
 				tempDirs.append( root );
-				fileWrite( root & "/Agent.yaml", "name: mocked" & char( 10 ) & "model: mock/mock-model" & char( 10 ) );
+				fileWrite( root & "/Agent.yml", "name: mocked" & char( 10 ) & "model: mock/mock-model" & char( 10 ) );
 				fileWrite( root & "/instructions.md", "Be helpful." );
 
 				expect( doctorVerb.run( { projectRoot : root } ).message ).notToInclude( "API_KEY" );

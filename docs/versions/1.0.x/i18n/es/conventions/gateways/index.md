@@ -93,7 +93,7 @@ Instala la app web (un módulo de ColdBox, `bxagentsui`) en `<path>`, y la app l
 
 La interfaz web es un subsistema en lugar de un simple interruptor de exposición - la lista de rutas, el almacén, las conversaciones y preferencias, el branding y la temática, y por qué no usa `toAi()` están todos en su propia página: **[La interfaz web de chat](../web-ui.md)**.
 
-**Validación:** `exposes` debe ser `agent`, `mcp`, o `webui`; `path` es requerido y debe ser único a través de cada entrada de exposición; el `target` de una exposición `mcp` es requerido y debe coincidir con el nombre de archivo de una entrada real `mcp/*`; el `apiKeyEnvVar` de `webui` es completamente opcional, sin ninguna comprobación de campo requerido (ver abajo). Una entrada `webui` puede listar `profiles` para el selector de modelo de la página (ver [Elegir el modelo](../web-ui.md#elegir-el-modelo)); cada uno debe estar declarado en `Agent.yaml`, y ningún otro tipo de entrada puede listarlos.
+**Validación:** `exposes` debe ser `agent`, `mcp`, o `webui`; `path` es requerido y debe ser único a través de cada entrada de exposición; el `target` de una exposición `mcp` es requerido y debe coincidir con el nombre de archivo de una entrada real `mcp/*`; el `apiKeyEnvVar` de `webui` es completamente opcional, sin ninguna comprobación de campo requerido (ver abajo). Una entrada `webui` puede listar `profiles` para el selector de modelo de la página (ver [Elegir el modelo](../web-ui.md#elegir-el-modelo)); cada uno debe estar declarado en `Agent.yml`, y ningún otro tipo de entrada puede listarlos.
 
 ## 2. Gateways de channel-adapter (`type: "mock" | "cli" | "http"`)
 
@@ -231,10 +231,10 @@ application.bxaiGatewaySession = gatewaySession
 !!! warning
     La clave de `aiGatewayRegistry().get(...)` es siempre la cadena de TIPO del gateway ("telegram", "slack", "discord", "email", ...) - confirmado contra el propio código fuente real de `GatewayRegistry.register()` de bx-ai, que siempre indexa por el propio `getName()` fijo de la clase del gateway, nunca nada suministrado por el llamador. Una consecuencia real: **dos entradas `gateways/*` del mismo tipo de estilo push colisionan en el mismo slot de registro a nivel de todo el proyecto** - el segundo registro silenciosamente sobrescribe al primero. No hay alias por entrada hoy; usa un tipo distinto por cada cuenta de plataforma adicional, o espera al soporte multi-instancia.
 
-Controla la política de `GatewaySession` vía un bloque opcional `gatewaySession` en el propio `Agent.yaml` del proyecto raíz:
+Controla la política de `GatewaySession` vía un bloque opcional `gatewaySession` en el propio `Agent.yml` del proyecto raíz:
 
 ```yaml
-# Agent.yaml
+# Agent.yml
 gatewaySession:       # ambos opcionales - estos son los valores por defecto
   policy: queue
   maxQueueDepth: 50
@@ -252,7 +252,7 @@ Un mensaje que es uno de los comandos con barra de la sesión lo responde BxAgen
 Por defecto hay un conjunto seguro activado: `/help`, `/tools`, `/model`, `/info`, `/remember` y `/notes`. No necesitan una conversación propia y no cambian nada compartido. Redúcelo, amplíalo o apágalo en el mismo bloque `gatewaySession`:
 
 ```yaml
-# Agent.yaml
+# Agent.yml
 gatewaySession:
   commands:
     enabled: true            # false apaga los comandos

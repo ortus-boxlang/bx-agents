@@ -127,7 +127,7 @@ class KeysPanelTest {
 			panel.key( KeyEvent.ofKey( KeyCode.PAGE_DOWN ) );
 		}
 		List<String> last = text( panel, 10 );
-		assertThat( String.join( "\n", last ) ).contains( "bxAgents.yml" );
+		assertThat( String.join( "\n", last ) ).contains( "Agent.yml" );
 		panel.key( KeyEvent.ofKey( KeyCode.DOWN ) );
 		assertThat( text( panel, 10 ) ).isEqualTo( last );
 	}
@@ -155,7 +155,7 @@ class KeysPanelTest {
 	}
 
 	@Test
-	@DisplayName( "each action shows the name to use for it in bxAgents.yml, and the filter finds it by that name" )
+	@DisplayName( "each action shows the name to use for it in Agent.yml, and the filter finds it by that name" )
 	void actionNames() {
 		KeysPanel panel = panel();
 		assertThat( String.join( "\n", text( panel, 80 ) ) ).contains( "Send the message  submit" );

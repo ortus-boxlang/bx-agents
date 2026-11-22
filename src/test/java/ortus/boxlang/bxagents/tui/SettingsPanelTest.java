@@ -40,7 +40,7 @@ class SettingsPanelTest {
 	 * @return the panel
 	 */
 	private static SettingsPanel panel( Set<Boolean> agreed ) {
-		return new SettingsPanel( TuiSettings.defaults(), "/home/me/.bxagents/bot/settings.yml", "/home/me/.bxagents/bxAgents.yml", agreed );
+		return new SettingsPanel( TuiSettings.defaults(), "/home/me/.bxagents/bot/Agent.yml", "/home/me/.bxagents/Agent.yml", agreed );
 	}
 
 	/**
@@ -73,7 +73,7 @@ class SettingsPanelTest {
 		SettingsPanel panel = panel( new HashSet<>() );
 		assertThat( press( panel, KeyCode.RIGHT ) ).isEqualTo( SettingsPanel.Outcome.NONE );
 		assertThat( String.join( "\n", panel.rows( Theme.detect(), 100, 30 ).stream().map( Row::plainText ).toList() ) )
-		    .contains( "Save to /home/me/.bxagents/bot/settings.yml?" );
+		    .contains( "Save to /home/me/.bxagents/bot/Agent.yml?" );
 		assertThat( press( panel, KeyCode.ENTER ) ).isEqualTo( SettingsPanel.Outcome.CHANGE );
 		SettingsPanel.Change change = panel.pending();
 		assertThat( change.setting().name() ).isEqualTo( "fullscreen" );
@@ -105,7 +105,7 @@ class SettingsPanelTest {
 		press( panel, 'g' );
 		assertThat( press( panel, KeyCode.RIGHT ) ).isEqualTo( SettingsPanel.Outcome.NONE );
 		assertThat( String.join( "\n", panel.rows( Theme.detect(), 100, 30 ).stream().map( Row::plainText ).toList() ) )
-		    .contains( "saves for every agent  in /home/me/.bxagents/bxAgents.yml" );
+		    .contains( "saves for every agent  in /home/me/.bxagents/Agent.yml" );
 		assertThat( press( panel, KeyCode.ENTER ) ).isEqualTo( SettingsPanel.Outcome.CHANGE );
 		assertThat( panel.pending().global() ).isTrue();
 		assertThat( agreed ).containsExactly( false, true );
@@ -117,7 +117,7 @@ class SettingsPanelTest {
 		SettingsPanel panel = panel( new HashSet<>( Set.of( false ) ) );
 		assertThat( press( panel, 'r' ) ).isEqualTo( SettingsPanel.Outcome.RESET );
 		assertThat( panel.pending().value() ).isNull();
-		SettingsPanel remote = new SettingsPanel( TuiSettings.defaults(), "", "/home/me/.bxagents/bxAgents.yml", new HashSet<>() );
+		SettingsPanel remote = new SettingsPanel( TuiSettings.defaults(), "", "/home/me/.bxagents/Agent.yml", new HashSet<>() );
 		assertThat( String.join( "\n", remote.rows( Theme.detect(), 100, 30 ).stream().map( Row::plainText ).toList() ) ).contains( "saves for every agent" );
 		press( remote, 'g' );
 		assertThat( String.join( "\n", remote.rows( Theme.detect(), 100, 30 ).stream().map( Row::plainText ).toList() ) )

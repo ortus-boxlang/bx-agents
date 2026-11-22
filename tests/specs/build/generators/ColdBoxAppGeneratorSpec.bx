@@ -250,7 +250,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "writes the project's providers, profiles and slots into bxai-settings.json and applies them before ColdBox boots", function() {
 				var root = createTempDirectory( prefix = "bxagents-gen-ai-" );
 				tempDirs.append( root );
-				fileWrite( root & "/Agent.yaml", "name: p" & char( 10 ) & "provider: mock" & char( 10 ) & "model: mock-model" & char( 10 ) & "params:" & char( 10 ) & "  temperature: 0.2" & char( 10 ) & "profiles:" & char( 10 ) & "  fast:" & char( 10 ) & "    provider: mock" & char( 10 ) & "    model: fast-model" & char( 10 ) & "defaultProfile: fast" & char( 10 ) );
+				fileWrite( root & "/Agent.yml", "name: p" & char( 10 ) & "provider: mock" & char( 10 ) & "model: mock-model" & char( 10 ) & "params:" & char( 10 ) & "  temperature: 0.2" & char( 10 ) & "profiles:" & char( 10 ) & "  fast:" & char( 10 ) & "    provider: mock" & char( 10 ) & "    model: fast-model" & char( 10 ) & "defaultProfile: fast" & char( 10 ) );
 				fileWrite( root & "/instructions.md", "Be helpful." );
 				var buildDir = newBuildDir();
 				var result = generateFor( root, buildDir );
@@ -532,7 +532,7 @@ class extends="testbox.system.BaseSpec" {
 				var dir = createTempDirectory( prefix = "bxagents-coldbox-memory-" );
 				tempDirs.append( dir );
 				var buildDir = newBuildDir();
-				fileWrite( dir & "/Agent.yaml", "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "memory:" & char( 10 ) & "  type: file" & char( 10 ) & "  directoryPath: ./data/memory" & char( 10 ) );
+				fileWrite( dir & "/Agent.yml", "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "memory:" & char( 10 ) & "  type: file" & char( 10 ) & "  directoryPath: ./data/memory" & char( 10 ) );
 				fileWrite( dir & "/instructions.md", "Be helpful." );
 
 				var factory = fileRead( generateFor( dir, buildDir ).agentFactory );
@@ -544,7 +544,7 @@ class extends="testbox.system.BaseSpec" {
 				var dir = createTempDirectory( prefix = "bxagents-coldbox-memory-" );
 				tempDirs.append( dir );
 				var buildDir = newBuildDir();
-				fileWrite( dir & "/Agent.yaml", "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "memory:" & char( 10 ) & "  type: file" & char( 10 ) & "  key: shared-notes" & char( 10 ) );
+				fileWrite( dir & "/Agent.yml", "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "memory:" & char( 10 ) & "  type: file" & char( 10 ) & "  key: shared-notes" & char( 10 ) );
 				fileWrite( dir & "/instructions.md", "Be helpful." );
 
 				var factory = fileRead( generateFor( dir, buildDir ).agentFactory );
@@ -577,7 +577,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( first ).toBe( second );
 			} );
 
-			it( "writes inline Agent.yaml instructions as a string literal when there is no instructions.md", function() {
+			it( "writes inline Agent.yml instructions as a string literal when there is no instructions.md", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/yaml-inline-instructions", buildDir );
 
@@ -588,7 +588,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( factory ).toInclude( "costs ####5 per answer" );
 			} );
 
-			it( "lets an instructions.md win over inline Agent.yaml instructions", function() {
+			it( "lets an instructions.md win over inline Agent.yml instructions", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/yaml-instructions-file-wins", buildDir );
 
@@ -783,7 +783,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "passes maxMessages and keepRecent of a memory block with no type to the default memory", function() {
 				var dir = createTempDirectory( prefix = "bxagents-coldbox-memory-" );
 				fileWrite( dir & "/instructions.md", "Be helpful." );
-				fileWrite( dir & "/Agent.yaml", "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "memory:" & char( 10 ) & "  maxMessages: 300" & char( 10 ) & "  keepRecent: 10" & char( 10 ) );
+				fileWrite( dir & "/Agent.yml", "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "memory:" & char( 10 ) & "  maxMessages: 300" & char( 10 ) & "  keepRecent: 10" & char( 10 ) );
 				var factory = fileRead( generateFor( dir, newBuildDir() ).agentFactory );
 
 				// struct keys come out in no fixed order, so the two settings are looked for one by one
@@ -796,7 +796,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "builds a memory that names a type exactly as written, with no default memory beside it", function() {
 				var dir = createTempDirectory( prefix = "bxagents-coldbox-memory-" );
 				fileWrite( dir & "/instructions.md", "Be helpful." );
-				fileWrite( dir & "/Agent.yaml", "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "memory:" & char( 10 ) & "  type: window" & char( 10 ) & "  maxMessages: 40" & char( 10 ) );
+				fileWrite( dir & "/Agent.yml", "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "memory:" & char( 10 ) & "  type: window" & char( 10 ) & "  maxMessages: 40" & char( 10 ) );
 				var buildDir = newBuildDir();
 				var factory = fileRead( generateFor( dir, buildDir ).agentFactory );
 
@@ -878,7 +878,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'agentName : "' & config.name & '"' );
 			} );
 
-			it( "stamps data.home from Agent.yaml into the app so it keeps the data where serve and chat do", function() {
+			it( "stamps data.home from Agent.yml into the app so it keeps the data where serve and chat do", function() {
 				var buildDir = newBuildDir();
 				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
 				config.data = { home : "~/.nanobox" };
@@ -1010,7 +1010,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "declares no datasource when every agent chose its own memory type", function() {
 				var dir = createTempDirectory( prefix = "bxagents-coldbox-memory-" );
 				fileWrite( dir & "/instructions.md", "Be helpful." );
-				fileWrite( dir & "/Agent.yaml", "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "memory:" & char( 10 ) & "  type: window" & char( 10 ) );
+				fileWrite( dir & "/Agent.yml", "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "memory:" & char( 10 ) & "  type: window" & char( 10 ) );
 				var buildDir = newBuildDir();
 				generateFor( dir, buildDir );
 				var content = fileRead( buildDir & "/bxagents/Application.bx" );

@@ -8,7 +8,7 @@ tags: [course, build]
 
 # Building Your Agent
 
-With `Agent.yaml` and `instructions.md` in place, build your project:
+With `Agent.yml` and `instructions.md` in place, build your project:
 
 ```bash
 bxAgents build
@@ -34,7 +34,7 @@ flowchart TD
     style F fill:#d4edda,stroke:#155724
 ```
 
-1. **Resolve config** - loads `Agent.yaml` (or a class-based `Agent.bx`, calling its
+1. **Resolve config** - loads `Agent.yml` (or a class-based `Agent.bx`, calling its
    `configure()`) and the active environment override, then deep-merges any `boxlang.json`/`boxlang-{env}.json`.
 2. **Discover** - walks the project and enumerates every convention folder into raw
    entries. Pure discovery - no interpretation of file contents yet.

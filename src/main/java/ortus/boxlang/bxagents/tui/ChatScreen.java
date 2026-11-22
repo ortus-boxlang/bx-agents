@@ -110,7 +110,7 @@ public final class ChatScreen implements AutoCloseable {
 	/** a short note at the front of the hint row, such as the size of the context; empty for none */
 	private volatile String					status			= "";
 	private volatile boolean				turnOver;
-	/** the look of the message box: its style and widgets; /prompt and Agent.yaml's tui: block change it */
+	/** the look of the message box: its style and widgets; /prompt and Agent.yml's tui: block change it */
 	private volatile PromptLook				look			= PromptLook.defaults();
 	private final WidgetContext				facts			= new WidgetContext();
 	private Thread							turnThread;
@@ -416,7 +416,7 @@ public final class ChatScreen implements AutoCloseable {
 	}
 
 	/**
-	 * Sets the look from the {@code tui:} block, as the layers of Agent.yaml and the settings files decided: a map with {@code prompt} and
+	 * Sets the look from the {@code tui:} block, as the layers of Agent.yml and the settings files decided: a map with {@code prompt} and
 	 * {@code widgets}
 	 * ({@code top} and {@code bottom} lists). What is missing keeps its default; a name that is not known is left out.
 	 */

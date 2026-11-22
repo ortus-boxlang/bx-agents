@@ -29,7 +29,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "refuses every one of them to anyone who is not an admin", function() {
 				expect( service.composition( ada ).code() ).toBe( "forbidden" );
 				expect( service.agentFiles( ada ).code() ).toBe( "forbidden" );
-				expect( service.agentFile( ada, "Agent.yaml" ).code() ).toBe( "forbidden" );
+				expect( service.agentFile( ada, "Agent.yml" ).code() ).toBe( "forbidden" );
 				expect( service.usage( ada ).code() ).toBe( "forbidden" );
 				expect( service.vaultActivity( ada ).code() ).toBe( "forbidden" );
 				expect( service.backups( ada ).code() ).toBe( "forbidden" );
@@ -69,7 +69,7 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "lists the project's files that are safe to show, and reads them with secrets as stars", function() {
-				fileWrite( dir & "/Agent.yaml", "name: lead" & char( 10 ) & "apiKey: sk-real-secret" & char( 10 ) & "model: openai/gpt-4o" & char( 10 ) );
+				fileWrite( dir & "/Agent.yml", "name: lead" & char( 10 ) & "apiKey: sk-real-secret" & char( 10 ) & "model: openai/gpt-4o" & char( 10 ) );
 				fileWrite( dir & "/.env", "OPENAI_API_KEY=sk-real-secret" );
 				fileWrite( dir & "/instructions.md", "Be brief." );
 				directoryCreate( dir & "/skills/triage", true, true );
@@ -77,9 +77,9 @@ class extends="testbox.system.BaseSpec" {
 				fileWrite( dir & "/skills/triage/.hidden.md", "no" );
 
 				var paths = service.agentFiles( admin ).data().files.map( f => f.path );
-				expect( paths ).toBe( [ "Agent.yaml", "instructions.md", "skills/triage/SKILL.md" ] );
+				expect( paths ).toBe( [ "Agent.yml", "instructions.md", "skills/triage/SKILL.md" ] );
 
-				var yaml = service.agentFile( admin, "Agent.yaml" ).data();
+				var yaml = service.agentFile( admin, "Agent.yml" ).data();
 				expect( yaml.text ).toInclude( "apiKey: ********" );
 				expect( yaml.text ).notToInclude( "sk-real-secret" );
 				expect( yaml.text ).toInclude( "model: openai/gpt-4o" );
@@ -92,7 +92,7 @@ class extends="testbox.system.BaseSpec" {
 				directoryCreate( project & "/gateways", true, true );
 				directoryCreate( project & "/tools", true, true );
 				directoryCreate( project & "/skills/triage", true, true );
-				fileWrite( project & "/Agent.yaml", "name: lead" & char( 10 ) & "apiKey: sk-real-secret" & char( 10 ) );
+				fileWrite( project & "/Agent.yml", "name: lead" & char( 10 ) & "apiKey: sk-real-secret" & char( 10 ) );
 				fileWrite( project & "/instructions.md", "Be brief." );
 				fileWrite( project & "/subagents/Scout.bx", "class {}" );
 				fileWrite( project & "/gateways/telegram.yaml", "type: telegram" & char( 10 ) & "token: ${TELEGRAM_TOKEN}" & char( 10 ) );
@@ -118,7 +118,7 @@ class extends="testbox.system.BaseSpec" {
 				var paths = shown.agentFiles( admin ).data().files.map( f => f.path );
 
 				expect( copied.copied ).toBe( 4 );
-				expect( paths ).toInclude( "Agent.yaml" );
+				expect( paths ).toInclude( "Agent.yml" );
 				expect( paths ).toInclude( "instructions.md" );
 				expect( paths ).toInclude( "subagents/Scout.bx" );
 				expect( paths ).toInclude( "gateways/telegram.yaml" );
@@ -127,7 +127,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( paths ).toInclude( "extensions/acme/skills/x/SKILL.md" );
 				expect( paths ).toInclude( "data/skills/mine/SKILL.md" );
 				expect( paths.filter( p => p.contains( ".env" ) || p.contains( "secrets" ) ) ).toBeEmpty();
-				var yaml = shown.agentFile( admin, "Agent.yaml" ).data().text;
+				var yaml = shown.agentFile( admin, "Agent.yml" ).data().text;
 				expect( yaml ).toInclude( "apiKey: ********" );
 				expect( yaml ).notToInclude( "sk-real-secret" );
 				expect( shown.agentFile( admin, "gateways/telegram.yaml" ).data().text ).toInclude( "TELEGRAM_TOKEN" );
@@ -155,7 +155,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "never shows a .env, a hidden file or a path outside the project", function() {
 				fileWrite( dir & "/.env", "SECRET=1" );
-				fileWrite( dir & "/Agent.yaml", "name: lead" );
+				fileWrite( dir & "/Agent.yml", "name: lead" );
 
 				expect( service.agentFile( admin, ".env" ).code() ).toBe( "not_found" );
 				expect( service.agentFile( admin, "../etc/passwd" ).code() ).toBe( "not_found" );

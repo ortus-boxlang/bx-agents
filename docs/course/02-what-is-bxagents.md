@@ -21,7 +21,7 @@ deferred into the request path.
 
 ```mermaid
 flowchart LR
-    A["your convention tree<br/>Agent.yaml, tools/, skills/, ..."] -->|"bxAgents build"| B[".build/app/<br/>a plain ColdBox application"]
+    A["your convention tree<br/>Agent.yml, tools/, skills/, ..."] -->|"bxAgents build"| B[".build/app/<br/>a plain ColdBox application"]
     B -->|"bxAgents serve / chat / invoke"| C["running agent"]
     B -->|"bxAgents package"| D["dist/name-version.bxa"]
     D -->|"bxAgents deploy"| E["a real target"]
@@ -31,15 +31,15 @@ flowchart LR
 
 ## Folders are the API
 
-`Agent.yaml` and `instructions.md` are the only files that matter to get started. Every
+`Agent.yml` and `instructions.md` are the only files that matter to get started. Every
 other convention folder - `tools/`, `skills/`, `subagents/`, `gateways/`,
 `schedules/`, `mcp/`, `interceptors/`, `extensions/`, `modules/` - is optional and **only shapes the
 generated output if it exists and has content in it**. You add conventions as you
 actually need them, not up front.
 
-## Agent.yaml defines the agent
+## Agent.yml defines the agent
 
-`Agent.yaml` is plain settings - a name, a model, and any optional extras - and the
+`Agent.yml` is plain settings - a name, a model, and any optional extras - and the
 build turns it into a real BX AI agent. No code is needed for most agents. You'll write
 your first one in [Lesson 5](05-agent-bx.md).
 
@@ -58,7 +58,7 @@ on the right:
 ```text
 your-agent/
 ├── Application.bx
-├── Agent.yaml
+├── Agent.yml
 ├── instructions.md
 ├── tools/
 ├── skills/

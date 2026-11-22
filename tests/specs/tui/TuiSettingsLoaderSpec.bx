@@ -1,6 +1,6 @@
 /**
  * The settings of the terminal chat, decided from the flag, the agent's own file in its data home, the person's file, the project's
- * Agent.yaml and the defaults, and the files that hold them.
+ * Agent.yml and the defaults, and the files that hold them.
  */
 class extends="testbox.system.BaseSpec" {
 
@@ -22,9 +22,9 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			/**
-			 * A project folder that is a scratch one, with no Agent.yaml unless the text is given.
+			 * A project folder that is a scratch one, with no Agent.yml unless the text is given.
 			 *
-			 * @agentYaml The text of its Agent.yaml, or blank for none
+			 * @agentYaml The text of its Agent.yml, or blank for none
 			 *
 			 * @return The folder
 			 */
@@ -32,7 +32,7 @@ class extends="testbox.system.BaseSpec" {
 				var dir = createTempDirectory( prefix = "bxagents-settings-" )
 				variables.dirs.append( dir )
 				if ( len( arguments.agentYaml ) ) {
-					fileWrite( dir & "/Agent.yaml", arguments.agentYaml )
+					fileWrite( dir & "/Agent.yml", arguments.agentYaml )
 					fileWrite( dir & "/instructions.md", "Be helpful." )
 				}
 				return dir
@@ -48,7 +48,7 @@ class extends="testbox.system.BaseSpec" {
 			function person( string text = "" ) {
 				var dir = createTempDirectory( prefix = "bxagents-person-" )
 				variables.dirs.append( dir )
-				var file = dir & "/bxAgents.yml"
+				var file = dir & "/Agent.yml"
 				if ( len( arguments.text ) ) {
 					fileWrite( file, arguments.text )
 				}
@@ -56,10 +56,10 @@ class extends="testbox.system.BaseSpec" {
 			}
 
 			it( "checks the settings of a tui: block, names what is wrong, and leaves prompt and widgets to their own check", function() {
-				expect( look.problems( { fullscreen : true, header : "compact", spacing : "normal", theme : "light", animations : false, thinking : "hide", tools : "summary", markdown : "source", menuRows : 12, notify : "bell", terminalTitle : false }, "Agent.yaml" ) ).toBeEmpty();
-				var found = look.problems( { fullscreen : "sometimes", menuRows : 99, header : "big" }, "settings.yml" );
+				expect( look.problems( { fullscreen : true, header : "compact", spacing : "normal", theme : "light", animations : false, thinking : "hide", tools : "summary", markdown : "source", menuRows : 12, notify : "bell", terminalTitle : false }, "Agent.yml" ) ).toBeEmpty();
+				var found = look.problems( { fullscreen : "sometimes", menuRows : 99, header : "big" }, "Agent.yml" );
 				expect( found ).toHaveLength( 3 );
-				expect( found.toList( "|" ) ).toInclude( "settings.yml: tui.fullscreen 'sometimes' is not valid. Use one of: true, false" );
+				expect( found.toList( "|" ) ).toInclude( "Agent.yml: tui.fullscreen 'sometimes' is not valid. Use one of: true, false" );
 				expect( found.toList( "|" ) ).toInclude( "tui.menuRows '99' is not valid. Use one of: 3 to 20" );
 				expect( look.problems( { colour : "red" }, "x" )[ 1 ] ).toInclude( "The settings are fullscreen, header" );
 			} );
@@ -77,7 +77,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( person( "tui: 3" & nl ).config.problems().toList( "|" ) ).toInclude( "'tui' must be a mapping" );
 			} );
 
-			it( "decides from the layers: the flag, the agent's file, the person's file, Agent.yaml, then the default", function() {
+			it( "decides from the layers: the flag, the agent's file, the person's file, Agent.yml, then the default", function() {
 				var root = project( "name: looks" & nl & "model: mock/mock-model" & nl & "tui:" & nl & "  fullscreen: false" & nl & "  header: compact" & nl & "  spacing: compact" & nl & "  theme: light" & nl );
 				var mine = person( "tui:" & nl & "  header: hidden" & nl & "  spacing: normal" & nl );
 				var loader = new bxagents.models.tui.TuiSettingsLoader( root, mine.config, { inline : false } );
@@ -86,7 +86,7 @@ class extends="testbox.system.BaseSpec" {
 				var decided = loader.load().settings;
 
 				expect( decided.get( "theme" ) ).toBe( "light" );
-				expect( decided.source( "theme" ) ).toBe( "Agent.yaml" );
+				expect( decided.source( "theme" ) ).toBe( "Agent.yml" );
 				expect( decided.get( "header" ) ).toBe( "hidden" );
 				expect( decided.source( "header" ) ).toBe( "your file" );
 				expect( decided.get( "spacing" ) ).toBe( "compact" );
@@ -136,14 +136,14 @@ class extends="testbox.system.BaseSpec" {
 			it( "writes one setting into a file, keeps the rest of it, and takes the setting out again", function() {
 				var dir = createTempDirectory( prefix = "bxagents-file-" )
 				variables.dirs.append( dir )
-				var file = new bxagents.models.tui.TuiSettingsFile( dir & "/home/settings.yml" );
+				var file = new bxagents.models.tui.TuiSettingsFile( dir & "/home/Agent.yml" );
 				expect( file.read() ).toBeEmpty();
 				file.set( "fullscreen", "false" );
 				file.set( "header", "compact" );
 				expect( file.read() ).toBe( { fullscreen : false, header : "compact" } );
-				fileAppend( dir & "/home/settings.yml", "chat:" & nl & "  shell: true" & nl );
+				fileAppend( dir & "/home/Agent.yml", "chat:" & nl & "  shell: true" & nl );
 				file.set( "header", "hidden" );
-				expect( fileRead( dir & "/home/settings.yml" ) ).toInclude( "chat:" & nl & "  shell: true" );
+				expect( fileRead( dir & "/home/Agent.yml" ) ).toInclude( "chat:" & nl & "  shell: true" );
 				expect( file.read().header ).toBe( "hidden" );
 				expect( file.remove( "header" ) ).toBeTrue();
 				expect( file.remove( "header" ) ).toBeFalse();

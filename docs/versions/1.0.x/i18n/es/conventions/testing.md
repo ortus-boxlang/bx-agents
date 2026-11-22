@@ -48,10 +48,10 @@ class extends="bxModules.bxagents.models.testing.BaseAgentSpec" {
 
 ## Probando contra el proveedor mock
 
-Por defecto, `bxAgents test` construye tu agente usando el override de entorno `test` de `Agent.yaml` (generado automáticamente):
+Por defecto, `bxAgents test` construye tu agente usando el override de entorno `test` de `Agent.yml` (generado automáticamente):
 
 ```yaml
-# Agent.yaml
+# Agent.yml
 environments:
   test:
     model: mock/mock-model

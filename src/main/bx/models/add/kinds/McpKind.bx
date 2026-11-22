@@ -1,14 +1,14 @@
 /**
  * `add mcp` - two directions, one verb:
  *
- *   add mcp client [github|<name>]   an MCP server the agent CALLS, written into Agent.yaml
+ *   add mcp client [github|<name>]   an MCP server the agent CALLS, written into Agent.yml
  *   add mcp server [name]            an MCP server the project HOSTS (mcp/<name>.bx, plus an
  *                                    optional gateways/ entry that serves it over HTTP)
  *
  * The client side is remote servers over HTTP. A server that runs as a local program
  * (stdio) is written as a `command` entry. The known servers come from the connector
  * catalog (src/main/bx/catalog/connectors). Credentials are never typed:
- * they are `${env.NAME}` placeholders in Agent.yaml and an empty stub in `.env`.
+ * they are `${env.NAME}` placeholders in Agent.yml and an empty stub in `.env`.
  */
 import bxModules.bxagents.models.util.NameRules;
 
@@ -24,7 +24,7 @@ class {
 	}
 
 	struct function info() {
-		return { name : "mcp", summary : "An MCP server to call, or one to host (Agent.yaml mcpServers, or mcp/<name>.bx)" }
+		return { name : "mcp", summary : "An MCP server to call, or one to host (Agent.yml mcpServers, or mcp/<name>.bx)" }
 	}
 
 	/**
@@ -159,7 +159,7 @@ class {
 			label = arguments.a.text(
 				key     = "name",
 				title   = "A name for it",
-				help    = "A label for Agent.yaml; it is not sent to the server.",
+				help    = "A label for Agent.yml; it is not sent to the server.",
 				default = len( given ) ? given : hostLabel( url ),
 				validate = ( value ) => NameRules::isValid( value ) ? "" : "Letters, digits, - and _, starting with a letter."
 			)
@@ -183,7 +183,7 @@ class {
 			envVar = arguments.a.text(
 				key      = "env",
 				title    = auth == "basic" ? "Which environment variable holds the password?" : "Which environment variable holds the key?",
-				help     = "Only the variable's name goes in Agent.yaml; its value goes in .env.",
+				help     = "Only the variable's name goes in Agent.yml; its value goes in .env.",
 				default  = len( envVar ) ? envVar : defaultEnvVar( label ),
 				validate = ( value ) => reFind( "^[A-Z][A-Z0-9_]*$", value ) ? "" : "Capital letters, digits and underscores, e.g. MY_SERVER_TOKEN."
 			)
@@ -384,7 +384,7 @@ class {
 	}
 
 	/**
-	 * Agent.yaml is committed, so a credential written into the address would be committed
+	 * Agent.yml is committed, so a credential written into the address would be committed
 	 * with it. The address may name a place; the key goes in an environment variable.
 	 *
 	 * @return The reason the address is not acceptable, or an empty string

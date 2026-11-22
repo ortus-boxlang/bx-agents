@@ -105,7 +105,7 @@ Lo que puede usar el agente, en tres pestañas. **Tools** lista cada tool agrupa
 
 ### Connectors
 
-Los [connectors](connectors.md) que ofrece el agente, como tarjetas, con pestañas **All**, **Connected**, **Needs attention** e **In Agent.yaml** (los servicios escritos bajo `mcpServers`), cada una en su dirección (`<path>/connectors/connected`). **Connect** pide un token o inicia un inicio de sesión, y muestra antes el riesgo de los connectors de riesgo medio o alto. **Tools** abre un cajón para activar o desactivar herramientas sueltas. Cada persona conecta su propia cuenta; solo un admin puede conectar un programa local como Git.
+Los [connectors](connectors.md) que ofrece el agente, como tarjetas, con pestañas **All**, **Connected**, **Needs attention** e **In Agent.yml** (los servicios escritos bajo `mcpServers`), cada una en su dirección (`<path>/connectors/connected`). **Connect** pide un token o inicia un inicio de sesión, y muestra antes el riesgo de los connectors de riesgo medio o alto. **Tools** abre un cajón para activar o desactivar herramientas sueltas. Cada persona conecta su propia cuenta; solo un admin puede conectar un programa local como Git.
 
 ![La página Connectors](../assets/webui/connectors.png)
 
@@ -266,7 +266,7 @@ Los bloques son `text`, `table`, `choose` (opciones, cada una con la línea de c
     Solo `keepRecent` se toma del request. `summarize()` también honra los overrides `model`/`provider`, pero aceptarlos aquí permitiría a cualquier visitante apuntar una llamada de resumen a un proveedor y modelo de su elección con tus credenciales - la propia configuración de la memoria decide eso en su lugar.
 
 ```yaml
-# Agent.yaml - lo que hace funcional a /compact
+# Agent.yml - lo que hace funcional a /compact
 memory:
   type: cache
   summaryProvider: openai
@@ -285,8 +285,8 @@ return { exposes : "webui", path : "/chat", profiles : [ "fast", "planner" ] };
 
 - `GET /profiles` devuelve solo los perfiles listados: nombre, descripción, proveedor, modelo y cuál es el predeterminado. Nunca una clave.
 - La página envía la elección con cada mensaje como `options.profile` y la recuerda en el navegador. "Default model" no envía ninguna.
-- Una petición que nombra un perfil que no está en la lista es un `400`, lo declare o no `Agent.yaml`. Un perfil es un modelo que paga tu servidor, así que el navegador nunca elige uno que no ofreciste. Sin lista, todo `options.profile` se rechaza.
-- Cada nombre debe ser un perfil que `Agent.yaml` declara, o `default`. Las entradas de la web UI comparten un único handler, así que entradas que listan perfiles distintos son un error de build.
+- Una petición que nombra un perfil que no está en la lista es un `400`, lo declare o no `Agent.yml`. Un perfil es un modelo que paga tu servidor, así que el navegador nunca elige uno que no ofreciste. Sin lista, todo `options.profile` se rechaza.
+- Cada nombre debe ser un perfil que `Agent.yml` declara, o `default`. Las entradas de la web UI comparten un único handler, así que entradas que listan perfiles distintos son un error de build.
 - Una entrada `agent` (una ruta `toAi()`) reenvía los `params` y `options` del propio llamante, así que no tiene lista que ofrecer. La [ruta siempre activa](agent-bx.md#agentapi) tiene la suya: `agentApi.profiles`.
 
 ## Usuarios e inicio de sesión
@@ -520,7 +520,7 @@ Para cualquier cosa que los tokens no cubran - fuentes personalizadas, layout, r
 ## Proteger la API
 
 !!! warning
-    **`apiKeyEnvVar` es un secreto compartido, no un sistema de inicio de sesión.** Es lo mismo que `agentApi.tokenEnvVar` de la API del agente (si ambos están, gana el nombre de `Agent.yaml`). Sin configurar, la API está abierta (bien en tu propia máquina, no para un despliegue público; `serve` avisa cuando una API abierta escucha en todas las interfaces). Configúralo, y cada llamada a `/__bxagents` debe llevar una cabecera `x-bxagents-token` que coincida, comparada en tiempo constante. **Las páginas de la app (`<path>/`) no están protegidas por él**, porque la navegación de página simple de un navegador no puede enviar una cabecera personalizada; la página lo pide en un diálogo **Password**. Se abre solo la primera vez que una llamada se rechaza con `401` (una vez por carga de página, con "The server refused the password, or asks for one."), y en cualquier momento con el botón de la llave de la cabecera. **Save** guarda la contraseña en `localStorage` y vuelve a cargar la página; desde entonces se envía en cada llamada. **Forget it** la quita. Para varias personas usa [tokens emitidos](agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) o `users`.
+    **`apiKeyEnvVar` es un secreto compartido, no un sistema de inicio de sesión.** Es lo mismo que `agentApi.tokenEnvVar` de la API del agente (si ambos están, gana el nombre de `Agent.yml`). Sin configurar, la API está abierta (bien en tu propia máquina, no para un despliegue público; `serve` avisa cuando una API abierta escucha en todas las interfaces). Configúralo, y cada llamada a `/__bxagents` debe llevar una cabecera `x-bxagents-token` que coincida, comparada en tiempo constante. **Las páginas de la app (`<path>/`) no están protegidas por él**, porque la navegación de página simple de un navegador no puede enviar una cabecera personalizada; la página lo pide en un diálogo **Password**. Se abre solo la primera vez que una llamada se rechaza con `401` (una vez por carga de página, con "The server refused the password, or asks for one."), y en cualquier momento con el botón de la llave de la cabecera. **Save** guarda la contraseña en `localStorage` y vuelve a cargar la página; desde entonces se envía en cada llamada. **Forget it** la quita. Para varias personas usa [tokens emitidos](agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) o `users`.
 
 ## Ajustes y apariencia
 
@@ -554,10 +554,10 @@ Un proyecto con una exposición `webui` también obtiene la **gestión de sesió
 !!! info
     **¿Por qué no `toAi()`?** El `toAi()` de ColdBox 8.1 deja que **un `userId` suministrado por el llamador gane** sobre el derivado del servidor, y el middleware de rutas de ColdBox no alcanza sus rutas. El handler propio de la API del agente deriva la identidad únicamente del lado del servidor, nunca mira `body.userId`, y está detrás de una sola compuerta.
 
-Ningún tipo de memoria se fuerza. Elige uno (o varios) por agente con una clave `memory` en `Agent.yaml`, la misma forma que `checkpointer`:
+Ningún tipo de memoria se fuerza. Elige uno (o varios) por agente con una clave `memory` en `Agent.yml`, la misma forma que `checkpointer`:
 
 ```yaml
-# Agent.yaml
+# Agent.yml
 memory:
   type: cache
   maxMessages: 50
@@ -582,9 +582,9 @@ La página Memory tiene además **Conversation memory**: los mensajes que guarda
 
 ## Conexiones, código y qué falta
 
-Cuando una entrada de `mcpServers` tiene [`oauth`](connect.md), la página [Connectors](#connectors) tiene una pestaña **In Agent.yaml** (`<path>/connectors/agent`; solo aparece entonces, y `capabilities.connections` de `GET /agent` lo indica): una fila por servicio con *Connect* o *Disconnect*. La página nunca ve un token.
+Cuando una entrada de `mcpServers` tiene [`oauth`](connect.md), la página [Connectors](#connectors) tiene una pestaña **In Agent.yml** (`<path>/connectors/agent`; solo aparece entonces, y `capabilities.connections` de `GET /agent` lo indica): una fila por servicio con *Connect* o *Disconnect*. La página nunca ve un token.
 
-![Los servicios de Agent.yaml con el correo conectado](../assets/webui/connections.png)
+![Los servicios de Agent.yml con el correo conectado](../assets/webui/connections.png)
 
 Las respuestas del asistente se renderizan como Markdown completo; cada bloque de código muestra su lenguaje y copia el código con el botón **Copy**.
 

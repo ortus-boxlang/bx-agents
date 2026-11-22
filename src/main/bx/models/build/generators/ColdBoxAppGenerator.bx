@@ -237,7 +237,7 @@ class {
 	 * @datasourceName Non-empty only when the web UI's chat store needs one (see `generate()`'s `webUiDatabase`) - registers it as a NAMED SQLite `this.datasources[...]` entry AND as `this.datasource` (the app default), so an unqualified query always resolves rather than failing with "No default datasource defined"
 	 * @databasePath Only used alongside `datasourceName` - the SQLite file path, relative to the app folder, for that datasource's `"database"` key
 	 * @agentName The agent's name, which names the conventional data home (~/.bxagents/<name>)
-	 * @dataHome `data.home` from Agent.yaml, stamped into the app so the data home is the same one `serve` and `chat` use. Blank when it is not set
+	 * @dataHome `data.home` from Agent.yml, stamped into the app so the data home is the same one `serve` and `chat` use. Blank when it is not set
 	 * @schedulerClasses Class paths of the project's schedulers, registered through `this.schedulers` so they start and stop with the app
 	 *
 	 * @return The rendered bxagents/Application.bx source: the base class the app's own Application.bx extends
@@ -386,7 +386,7 @@ class {
 		lines.append( "	}" )
 		lines.append( "" )
 		lines.append( "	/**" )
-		lines.append( "	 * Where the app keeps everything: BXAGENTS_HOME, else `data.home` from Agent.yaml, else ~/.bxagents/<agent name>." )
+		lines.append( "	 * Where the app keeps everything: BXAGENTS_HOME, else `data.home` from Agent.yml, else ~/.bxagents/<agent name>." )
 		lines.append( "	 */" )
 		lines.append( "	private any function dataHome() {" )
 		lines.append( '		return new "models.data.DataHome@bxagents"( projectRoot : expandPath( "/" ), configured : "#Strings::bxLiteral( arguments.dataHome )#", agentName : "#Strings::bxLiteral( arguments.agentName )#" )' )
@@ -806,7 +806,7 @@ class {
 			"	function buildAgent() {",
 			"		// bx-ai's settings (default model, profiles, capability defaults) have to be in place before an agent is built, whoever builds it: chat, invoke, a test or ColdBox",
 			'		new "models.runtime.ModuleSettings@bxagents"().apply( "bxai", resolveAppPath( "../config/bxai-settings.json", "#Strings::bxLiteral( Strings::normalizePath( arguments.appDir ) & "/config/bxai-settings.json" )#" ) )',
-			'		// usage recording is off unless Agent.yaml says usage: true',
+			'		// usage recording is off unless Agent.yml says usage: true',
 			'		new "models.usage.UsageRecorder@bxagents"().start()',
 			body,
 			"",
@@ -817,25 +817,25 @@ class {
 		// the skills that ship with the app (its skills/ folder) join bx-ai's global skills first: bx-ai reads its skills
 		// folder when the runtime starts, before this app's settings are applied, so it never sees them
 		lines.insertAt(
-			lines.findNoCase( "		// usage recording is off unless Agent.yaml says usage: true" ),
+			lines.findNoCase( "		// usage recording is off unless Agent.yml says usage: true" ),
 			'		new "models.skills.SkillWiring@bxagents"().loadShipped( resolveAppPath( "../skills", "#Strings::bxLiteral( Strings::normalizePath( arguments.appDir ) & "/skills" )#" ) )'
 		)
 		// the skills project extensions carry join bx-ai's global skills, before any agent is built
 		var skillsLine = extensionSkillsLine( arguments.projectRoot, arguments.resolvedConfig )
 		if ( len( skillsLine ) ) {
-			lines.insertAt( lines.findNoCase( "		// usage recording is off unless Agent.yaml says usage: true" ), skillsLine )
+			lines.insertAt( lines.findNoCase( "		// usage recording is off unless Agent.yml says usage: true" ), skillsLine )
 		}
 		// then the skills bxAgents itself ships, available on request and not in the context: after the project's and the
 		// extensions' so theirs win a name, before the agent's own so it cannot take one. skills.builtin: false leaves them out.
 		if ( new "models.skills.SkillWiring@bxagents"().wantsBuiltin( isStruct( arguments.resolvedConfig.skills ?: "" ) ? arguments.resolvedConfig.skills : {} ) ) {
 			lines.insertAt(
-				lines.findNoCase( "		// usage recording is off unless Agent.yaml says usage: true" ),
+				lines.findNoCase( "		// usage recording is off unless Agent.yml says usage: true" ),
 				'		new "models.skills.SkillWiring@bxagents"().loadBuiltin()'
 			)
 		}
 		// then the skills the agent saved in its data home, after the project's and the extensions' so theirs win
 		lines.insertAt(
-			lines.findNoCase( "		// usage recording is off unless Agent.yaml says usage: true" ),
+			lines.findNoCase( "		// usage recording is off unless Agent.yml says usage: true" ),
 			'		new "models.skills.SkillWiring@bxagents"().load( "#Strings::bxLiteral( variables.projectDataHome )#", "#Strings::bxLiteral( resolveAgentName( arguments.resolvedConfig ) )#" )'
 		)
 
@@ -1216,7 +1216,7 @@ class {
 		}
 
 		// An instructions.md beside the agent wins; `instructions:` inline in an
-		// Agent.yaml is the fallback, so the file stays the more deliberate choice.
+		// Agent.yml is the fallback, so the file stays the more deliberate choice.
 		var instructionsPath = arguments.nodePath & "/instructions.md"
 		var inlineInstructions = arguments.resolvedConfig.instructions ?: ""
 		var instructionsExpression = ""
@@ -1228,14 +1228,14 @@ class {
 		} else {
 			throw(
 				type    = "BxAgents.MissingInstructions",
-				message = "No instructions.md found at [#instructionsPath#] (and no `instructions:` in the agent's Agent.yaml)"
+				message = "No instructions.md found at [#instructionsPath#] (and no `instructions:` in the agent's Agent.yml)"
 			)
 		}
 
 		var description = arguments.resolvedConfig.description ?: ""
 
 		// A profile, else the provider/model written in this node's own config, else what the
-		// root Agent.yaml set as the default (a subagent that says nothing inherits it)
+		// root Agent.yml set as the default (a subagent that says nothing inherits it)
 		var modelExpression = renderModelExpression( arguments.resolvedConfig )
 		if ( !len( modelExpression ) ) {
 			modelExpression = "aiModel()"
@@ -1640,7 +1640,7 @@ class {
 	/**
 	 * What the app tells bx-ai: where the skills are, `security` (passed through, bx-ai builds the
 	 * middleware), and the provider, default params, providers, profiles and capability defaults
-	 * from the root Agent.yaml. Subagents inherit them because bx-ai's settings are global.
+	 * from the root Agent.yml. Subagents inherit them because bx-ai's settings are global.
 	 *
 	 * @resolvedConfig The root resolved config
 	 *

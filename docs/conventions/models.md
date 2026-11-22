@@ -1,14 +1,14 @@
 ---
 title: Models and profiles
 icon: phosphor-duotone:brain
-summary: The default model, other providers, named profiles and the capability defaults, all in Agent.yaml.
-description: The default model, other providers, named profiles and the capability defaults, all in Agent.yaml.
+summary: The default model, other providers, named profiles and the capability defaults, all in Agent.yml.
+description: The default model, other providers, named profiles and the capability defaults, all in Agent.yml.
 tags: [conventions, models, profiles]
 ---
 
 # Models and profiles
 
-Which model an agent uses is written in `Agent.yaml`. The build maps it onto bx-ai's settings, so you never write a `boxlang.json` for it. The names are bx-ai's own: `provider`, `model`, `params`, `options`, `providers`, `profiles`.
+Which model an agent uses is written in `Agent.yml`. The build maps it onto bx-ai's settings, so you never write a `boxlang.json` for it. The names are bx-ai's own: `provider`, `model`, `params`, `options`, `providers`, `profiles`.
 
 ```yaml
 provider: openai                 # the default model
@@ -48,7 +48,7 @@ A profile is a named combination: a provider, a model, params, options and the n
 | `description` | For people and the terminal and web pickers. |
 | `provider`, `model` | What it runs on. A profile without a provider uses the default provider. |
 | `params`, `options` | Layered on top of the provider's and the default's: `params` from the default, then the provider, then the profile. |
-| `apiKeyEnv` | The **name** of the variable that holds the key. A key itself is never written in `Agent.yaml`; a profile that has one is refused. |
+| `apiKeyEnv` | The **name** of the variable that holds the key. A key itself is never written in `Agent.yml`; a profile that has one is refused. |
 | `contextWindow`, `vision` | What the project knows about the model, see below. |
 
 A profile cannot be named `default` or like a provider (`openai`, `claude`, ...), because both are selected by name. `defaultProfile` picks which profile is used when nothing asks for another one: it is the default model. If the file also has a top-level `model`, the profile wins and the build and `doctor` warn that the `model` line is ignored. Without a `defaultProfile`, the top-level `provider` and `model` are the default. `bxAgents add profile` writes a profile (and `--default` the `defaultProfile`) without touching the rest of the file; see [`add profile`](../cli-reference.md#add-profile).
@@ -79,12 +79,12 @@ profiles:
 An agent uses its own `profile:`, else its own `model:` (a `provider/model` slug), else the default. Every subagent inherits the root's settings, and may set its own `model` or `profile`:
 
 ```yaml
-# subagents/planner/Agent.yaml
+# subagents/planner/Agent.yml
 name: planner
 profile: planner
 ```
 
-`providers`, `profiles`, `defaultProfile`, `params`, `options` and the capability keys apply to the whole app, so they belong in the project's own `Agent.yaml`; a subagent that sets them fails validation.
+`providers`, `profiles`, `defaultProfile`, `params`, `options` and the capability keys apply to the whole app, so they belong in the project's own `Agent.yml`; a subagent that sets them fails validation.
 
 ## Capability defaults
 

@@ -18,7 +18,7 @@ ensambla con ello una aplicación ColdBox real y ejecutable.
 
 ```text
 my-agent/
-├── Agent.yaml         # name, model, description
+├── Agent.yml         # name, model, description
 ├── instructions.md    # the system prompt
 ├── tools/             # @AITool functions
 ├── skills/            # SKILL.md capabilities
@@ -31,7 +31,7 @@ my-agent/
 └── modules/            # module dependencies
 ```
 
-Todas las carpetas de arriba son opcionales excepto `Agent.yaml`. Añade las que tu agente
+Todas las carpetas de arriba son opcionales excepto `Agent.yml`. Añade las que tu agente
 realmente necesite; el resto pueden quedarse vacías o simplemente no existir. (`bxAgents new` crea
 todas las carpetas excepto `extensions/`, que aparece al ejecutar `bxAgents add extension`.)
 
@@ -40,7 +40,7 @@ todas las carpetas excepto `extensions/`, que aparece al ejecutar `bxAgents add 
 Las 20 lecciones siguen el orden en el que construirías de forma natural un proyecto real:
 
 1. **Lecciones 1-4** - orientación, instalación, y tu primer proyecto creado con el andamiaje.
-2. **Lecciones 5-8** - las piezas obligatorias: `Agent.yaml`, las instrucciones, construir, y
+2. **Lecciones 5-8** - las piezas obligatorias: `Agent.yml`, las instrucciones, construir, y
    chatear con el agente en la terminal.
 3. **Lecciones 9-12** - dar capacidades a tu agente: tools, skills, subagentes y modelos
    con nombre.

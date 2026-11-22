@@ -177,7 +177,7 @@ class extends="testbox.system.BaseSpec" {
 			 * @return A fake user config
 			 */
 			function userConfig( shell = true, bifs = true, keys = {} ) {
-				return { chat : () => { shell : shell, bifs : bifs }, keys : () => ( keys ), problems : () => [], path : () => "~/.bxagents/bxAgents.yml" }
+				return { chat : () => { shell : shell, bifs : bifs }, keys : () => ( keys ), problems : () => [], path : () => "~/.bxagents/Agent.yml" }
 			}
 
 			/**
@@ -682,8 +682,8 @@ class extends="testbox.system.BaseSpec" {
 					controllerFor( screen, session, userConfig( false, false ) ).run( screen )
 
 					var warn = screen.log.filter( e => e[ 1 ] == "print" && e[ 2 ] == "warn" ).map( e => e[ 3 ] )
-					expect( warn[ 1 ] ).toInclude( "Shell commands are switched off in ~/.bxagents/bxAgents.yml" );
-					expect( warn[ 2 ] ).toInclude( "Function calls are switched off in ~/.bxagents/bxAgents.yml" );
+					expect( warn[ 1 ] ).toInclude( "Shell commands are switched off in ~/.bxagents/Agent.yml" );
+					expect( warn[ 2 ] ).toInclude( "Function calls are switched off in ~/.bxagents/Agent.yml" );
 					expect( session.sent ).toBe( [ "plain" ] );
 				} );
 
@@ -698,7 +698,7 @@ class extends="testbox.system.BaseSpec" {
 				it( "tells the person what is wrong with their file when the chat starts", function() {
 					var screen = fakeScreen( [] )
 					var broken = userConfig()
-					broken.problems = () => [ "~/.bxagents/bxAgents.yml: chat has an unknown key [shel]. Use: shell, bifs" ]
+					broken.problems = () => [ "~/.bxagents/Agent.yml: chat has an unknown key [shel]. Use: shell, bifs" ]
 					controllerFor( screen, fakeSession(), broken ).run( screen )
 					var warn = screen.log.filter( e => e[ 1 ] == "print" && e[ 2 ] == "warn" ).map( e => e[ 3 ] )
 					expect( warn[ 1 ] ).toInclude( "unknown key [shel]" );
@@ -710,7 +710,7 @@ class extends="testbox.system.BaseSpec" {
 					controllerFor( screen, fakeSession(), userConfig( true, true, { newline : [ "ctrl+n" ] } ) ).run( screen )
 					expect( screen.keyOverrides ).toBe( [ { newline : [ "ctrl+n" ] } ] );
 					var warn = screen.log.filter( e => e[ 1 ] == "print" && e[ 2 ] == "warn" ).map( e => e[ 3 ] )
-					expect( warn[ 1 ] ).toInclude( "~/.bxagents/bxAgents.yml: [newline]: [banana]" );
+					expect( warn[ 1 ] ).toInclude( "~/.bxagents/Agent.yml: [newline]: [banana]" );
 				} );
 
 				it( "/keys opens the shortcuts panel, and a lone ? asks the same", function() {

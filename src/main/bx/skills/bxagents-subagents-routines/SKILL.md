@@ -7,20 +7,20 @@ description: >
 
 ## Subagents
 
-A subagent is an ordinary agent project under `subagents/<folder>/` (an `Agent.yaml` plus `instructions.md`, optionally its own `tools/`, `skills/`, `mcpServers`).
+A subagent is an ordinary agent project under `subagents/<folder>/` (an `Agent.yml` plus `instructions.md`, optionally its own `tools/`, `skills/`, `mcpServers`).
 
 ```text
 my-agent/
-├── Agent.yaml            # subAgents: [ researcher ]
+├── Agent.yml            # subAgents: [ researcher ]
 ├── instructions.md
 └── subagents/
     └── researcher/
-        ├── Agent.yaml
+        ├── Agent.yml
         └── instructions.md
 ```
 
 ```yaml
-# root Agent.yaml
+# root Agent.yml
 name: my-agent
 model: openai/gpt-5
 subAgents:

@@ -23,7 +23,7 @@ package ortus.boxlang.bxagents.tui;
  */
 public interface Widget {
 
-	/** @return the name used in {@code Agent.yaml} and {@code /prompt}, lower case, such as {@code folder} */
+	/** @return the name used in {@code Agent.yml} and {@code /prompt}, lower case, such as {@code folder} */
 	String name();
 
 	/** @return what it shows, in a few words, for the wizard and {@code /prompt} */

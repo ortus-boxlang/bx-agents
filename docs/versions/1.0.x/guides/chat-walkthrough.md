@@ -64,7 +64,7 @@ Needs more than one [profile](../conventions/models.md#profiles) in the project.
 
 ## 4. Notes the agent keeps
 
-Needs a [`notes`](../conventions/agent-yaml.md#notes) block in `Agent.yaml`.
+Needs a [`notes`](../conventions/agent-yaml.md#notes) block in `Agent.yml`.
 
 1. `/remember I prefer short answers` keeps a note about you. The agent sees it in every conversation.
 2. `/notes` opens the notes screen. **a** adds, **e** edits, **d** removes (after a yes), **Tab** switches between your notes and the agent's, **Esc** goes back.
@@ -80,11 +80,11 @@ Needs a [`notes`](../conventions/agent-yaml.md#notes) block in `Agent.yaml`.
 
 ## 6. Make the chat your own
 
-1. `/prompt` shows the message box looks and widgets. `/prompt box` changes the look and `/prompt top +git -clock` changes the top bar, for this chat only. To set it for the project, use a [`tui:` block](terminal-ui.md#the-look-of-the-message-box) in `Agent.yaml`.
-2. `?` alone, `F1`, or `/keys`, opens a panel with every key and the name of its action; type to narrow it. To change one, put it in `~/.bxagents/bxAgents.yml`: `chat:` then `keys:` then, for example, `newline: ctrl+n`. See [Change a key](terminal-ui.md#change-a-key).
+1. `/prompt` shows the message box looks and widgets. `/prompt box` changes the look and `/prompt top +git -clock` changes the top bar, for this chat only. To set it for the project, use a [`tui:` block](terminal-ui.md#the-look-of-the-message-box) in `Agent.yml`.
+2. `?` alone, `F1`, or `/keys`, opens a panel with every key and the name of its action; type to narrow it. To change one, put it in `~/.bxagents/Agent.yml`: `chat:` then `keys:` then, for example, `newline: ctrl+n`. See [Change a key](terminal-ui.md#change-a-key).
 3. `/extensions` lists what the [extensions](first-extension.md) added: commands, keys and more. After you edit one, `/reload` loads it again without leaving the chat.
 4. `/record demo.cast` starts saving the screen as an asciicast file, and `/record stop` ends it. Or start with `bxAgents chat --record=demo.cast`.
-5. `/stats` shows the tokens the model calls used, once `usage: true` is set in `Agent.yaml`. `/stats enable` writes that line for you.
+5. `/stats` shows the tokens the model calls used, once `usage: true` is set in `Agent.yml`. `/stats enable` writes that line for you.
 
 ## The wizard in the same style
 

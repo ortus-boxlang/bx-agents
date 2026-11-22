@@ -9,7 +9,7 @@
  *
  * The parent can be the root agent or any other subagent, which is what makes it
  * recursive: subagents are siblings in one folder and reference each other by name.
- * Wiring it in is an insert into the parent's Agent.yaml (see YamlEditor); a parent that
+ * Wiring it in is an insert into the parent's Agent.yml (see YamlEditor); a parent that
  * is a class, or a list written in a shape that cannot be extended by inserting, is left
  * alone and the line to add is shown instead.
  */
@@ -49,10 +49,10 @@ class {
 		var flags = arguments.ctx.options.duplicate()
 		flags.name = name
 
-		// These are settings of the whole app, so they belong in the project's own Agent.yaml
+		// These are settings of the whole app, so they belong in the project's own Agent.yml
 		for ( var flag in [ "temperature", "max-tokens", "timeout" ] ) {
 			if ( len( flags[ flag ] ?: "" ) ) {
-				throw( type = "BxAgents.InvalidAnswer", message = "--#flag# is a setting of the whole app, so it belongs in the project's own Agent.yaml (params and options). A subagent can set a model or a profile." )
+				throw( type = "BxAgents.InvalidAnswer", message = "--#flag# is a setting of the whole app, so it belongs in the project's own Agent.yml (params and options). A subagent can set a model or a profile." )
 			}
 		}
 
@@ -86,7 +86,7 @@ class {
 		var writer = new "models.wizard.FeatureWriter@bxagents"()
 		var dir = "subagents/" & a.name
 
-		arguments.changes.file( dir & "/Agent.yaml", renderAgentYaml( a, writer ) )
+		arguments.changes.file( dir & "/Agent.yml", renderAgentYaml( a, writer ) )
 		arguments.changes.file( dir & "/instructions.md", renderInstructions( a, writer ) )
 
 		for ( var stub in ( a.features.envStubs ?: [] ) ) {

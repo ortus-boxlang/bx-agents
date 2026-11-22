@@ -1,8 +1,8 @@
 ---
 title: "Lesson 17: Hosting and Consuming MCP Servers"
 icon: phosphor-duotone:link-simple
-summary: MCP in both directions - consume remote servers from Agent.yaml, host your own under mcp/.
-description: MCP in both directions - consume remote servers from Agent.yaml, host your own under mcp/.
+summary: MCP in both directions - consume remote servers from Agent.yml, host your own under mcp/.
+description: MCP in both directions - consume remote servers from Agent.yml, host your own under mcp/.
 tags: [course, conventions, mcp]
 ---
 
@@ -15,7 +15,7 @@ server is only reachable if a `gateways/` entry exposes it (see
 
 ```mermaid
 flowchart LR
-    subgraph consume["CONSUMING - declared on Agent.yaml"]
+    subgraph consume["CONSUMING - declared on Agent.yml"]
         direction LR
         AG["your agent"] -->|"calls out at runtime"| RM["a remote MCP server"]
     end
@@ -30,7 +30,7 @@ flowchart LR
 
 ## Consuming a remote server
 
-Declared directly in `Agent.yaml` via `mcpServers` - not a file under `mcp/`:
+Declared directly in `Agent.yml` via `mcpServers` - not a file under `mcp/`:
 
 ```yaml
 mcpServers:

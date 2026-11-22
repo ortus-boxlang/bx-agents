@@ -8,22 +8,22 @@ tags: [conventions, subagents]
 
 # subagents/
 
-`subagents/` holds nested agents, each an ordinary BxAgents project of its own - an `Agent.yaml` + `instructions.md` (and optionally its own `tools/`, `skills/`, etc.). A subagent's `tools/` belong to it alone, and its `tools:` list is its own; neither is inherited from or shared with its parent:
+`subagents/` holds nested agents, each an ordinary BxAgents project of its own - an `Agent.yml` + `instructions.md` (and optionally its own `tools/`, `skills/`, etc.). A subagent's `tools/` belong to it alone, and its `tools:` list is its own; neither is inherited from or shared with its parent:
 
 ```text
 my-agent/
-├── Agent.yaml            # subAgents: [ researcher ]
+├── Agent.yml            # subAgents: [ researcher ]
 ├── instructions.md
 └── subagents/
     └── researcher/
-        ├── Agent.yaml
+        ├── Agent.yml
         └── instructions.md
 ```
 
-A subagent is wired to its parent by name, declared in the parent's `Agent.yaml` `subAgents` list - the `subagents/` FOLDER name to wire at build time:
+A subagent is wired to its parent by name, declared in the parent's `Agent.yml` `subAgents` list - the `subagents/` FOLDER name to wire at build time:
 
 ```yaml
-# Agent.yaml
+# Agent.yml
 name: my-agent
 model: openai/gpt-5
 subAgents:
@@ -84,10 +84,10 @@ Subagents are built **leaf-first** (bottom-up): if `A` declares `subAgents: ["B"
 
 ## Validation
 
-- A subagent name in `subAgents` that doesn't correspond to a real `subagents/{name}/` folder (holding an `Agent.yaml` or `Agent.bx`) fails validation with a clear "references unknown subagent [...]" error - this applies to **every** node's `subAgents` list, including the root project's own definition, not just nested subagents.
+- A subagent name in `subAgents` that doesn't correspond to a real `subagents/{name}/` folder (holding an `Agent.yml` or `Agent.bx`) fails validation with a clear "references unknown subagent [...]" error - this applies to **every** node's `subAgents` list, including the root project's own definition, not just nested subagents.
 - **Circular references** (`A` → `B` → `A`) are rejected at validation time, with the full cycle path reported (e.g. `A -> B -> A`), before any code generation happens.
 - A "diamond" shape - two subagents both depending on the same shared descendant - is **not** a cycle and builds fine; only genuine cycles are rejected.
-- A missing `Agent.yaml`/`Agent.bx` inside a discovered `subagents/*` folder is reported as its own validation error, and so is a folder holding both (`BxAgents.AmbiguousAgentDefinition`) - a folder holds one definition.
+- A missing `Agent.yml`/`Agent.bx` inside a discovered `subagents/*` folder is reported as its own validation error, and so is a folder holding both (`BxAgents.AmbiguousAgentDefinition`) - a folder holds one definition.
 - Every node's own DECLARED `name` (root + every subagent's own definition) must be unique across the whole project - see below.
 
 ## Retrieving an agent from `schedules/`

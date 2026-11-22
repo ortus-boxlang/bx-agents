@@ -18,7 +18,7 @@ runnable ColdBox application out of it.
 
 ```text
 my-agent/
-├── Agent.yaml         # name, model, description
+├── Agent.yml         # name, model, description
 ├── instructions.md    # the system prompt
 ├── tools/             # @AITool functions
 ├── skills/            # SKILL.md capabilities
@@ -31,7 +31,7 @@ my-agent/
 └── modules/            # module dependencies
 ```
 
-Every folder above is optional except `Agent.yaml`. Add the ones your agent actually
+Every folder above is optional except `Agent.yml`. Add the ones your agent actually
 needs; the rest can stay empty or simply not exist. (`bxAgents new` creates every folder except
 `extensions/`, which appears when you run `bxAgents add extension`.)
 
@@ -40,7 +40,7 @@ needs; the rest can stay empty or simply not exist. (`bxAgents new` creates ever
 The 20 lessons follow the order you'd naturally build a real project in:
 
 1. **Lessons 1-4** - orientation, install, and your first scaffolded project.
-2. **Lessons 5-8** - the required pieces: `Agent.yaml`, instructions, building, and
+2. **Lessons 5-8** - the required pieces: `Agent.yml`, instructions, building, and
    chatting with the agent in the terminal.
 3. **Lessons 9-12** - giving your agent abilities: tools, skills, subagents, and
    models and profiles.

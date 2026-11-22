@@ -63,12 +63,12 @@ class TuiSettingsTest {
 	@Test
 	@DisplayName( "a later layer wins over an earlier one, and each value remembers where it came from" )
 	void layers() {
-		TuiSettings.Resolved resolved = TuiSettings.resolve( List.of( layer( "Agent.yaml", "fullscreen", false, "header", "compact" ),
+		TuiSettings.Resolved resolved = TuiSettings.resolve( List.of( layer( "Agent.yml", "fullscreen", false, "header", "compact" ),
 		    layer( "your file", "fullscreen", true, "spacing", "compact" ), layer( "this agent", "fullscreen", false ) ) );
 		assertThat( resolved.bool( "fullscreen" ) ).isFalse();
 		assertThat( resolved.source( "fullscreen" ) ).isEqualTo( "this agent" );
 		assertThat( resolved.get( "header" ) ).isEqualTo( "compact" );
-		assertThat( resolved.source( "header" ) ).isEqualTo( "Agent.yaml" );
+		assertThat( resolved.source( "header" ) ).isEqualTo( "Agent.yml" );
 		assertThat( resolved.get( "spacing" ) ).isEqualTo( "compact" );
 		assertThat( resolved.source( "spacing" ) ).isEqualTo( "your file" );
 		assertThat( resolved.get( "theme" ) ).isEqualTo( "auto" );
@@ -109,9 +109,9 @@ class TuiSettingsTest {
 		block.put( "prompt", "box" );
 		block.put( "widgets", Map.of() );
 		block.put( "menuRows", 6 );
-		List<String> problems = TuiSettings.problems( block, "Agent.yaml" );
+		List<String> problems = TuiSettings.problems( block, "Agent.yml" );
 		assertThat( problems ).hasSize( 2 );
-		assertThat( problems.get( 0 ) ).contains( "Agent.yaml: tui.fullscreen 'sometimes' is not valid. Use one of: true, false" );
+		assertThat( problems.get( 0 ) ).contains( "Agent.yml: tui.fullscreen 'sometimes' is not valid. Use one of: true, false" );
 		assertThat( problems.get( 1 ) ).contains( "tui has no setting 'colour'" );
 		assertThat( problems.get( 1 ) ).contains( "prompt, widgets" );
 		assertThat( TuiSettings.problems( Map.of(), "x" ) ).isEmpty();

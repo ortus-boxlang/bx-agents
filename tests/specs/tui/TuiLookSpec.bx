@@ -1,5 +1,5 @@
 /**
- * The tui: block of Agent.yaml: what it may hold, and how a project's look is found for the chat.
+ * The tui: block of Agent.yml: what it may hold, and how a project's look is found for the chat.
  */
 class extends="testbox.system.BaseSpec" {
 
@@ -26,14 +26,14 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "finds nothing wrong with a good block, or with no settings at all", function() {
-				expect( look.problems( {}, "Agent.yaml" ) ).toBeEmpty();
-				expect( look.problems( { prompt : "Panel", widgets : { top : [ "agent", "clock" ], bottom : [] } }, "Agent.yaml" ) ).toBeEmpty();
+				expect( look.problems( {}, "Agent.yml" ) ).toBeEmpty();
+				expect( look.problems( { prompt : "Panel", widgets : { top : [ "agent", "clock" ], bottom : [] } }, "Agent.yml" ) ).toBeEmpty();
 			} );
 
 			it( "names the valid choices when a style is wrong", function() {
-				var found = look.problems( { prompt : "fancy" }, "Agent.yaml" );
+				var found = look.problems( { prompt : "fancy" }, "Agent.yml" );
 				expect( found ).toHaveLength( 1 );
-				expect( found[ 1 ] ).toInclude( "Agent.yaml: tui.prompt 'fancy' is not a prompt style" );
+				expect( found[ 1 ] ).toInclude( "Agent.yml: tui.prompt 'fancy' is not a prompt style" );
 				expect( found[ 1 ] ).toInclude( "bars, bars-hints, rule, box, panel" );
 			} );
 
@@ -50,7 +50,7 @@ class extends="testbox.system.BaseSpec" {
 				var nl = char( 10 );
 				var dir = createTempDirectory( prefix = "bxagents-look-" );
 				variables.dirs.append( dir );
-				fileWrite( dir & "/Agent.yaml", "name: looks" & nl & "model: mock/mock-model" & nl & "tui:" & nl & "  prompt: box" & nl & "  widgets:" & nl & "    top: [ agent, clock ]" & nl );
+				fileWrite( dir & "/Agent.yml", "name: looks" & nl & "model: mock/mock-model" & nl & "tui:" & nl & "  prompt: box" & nl & "  widgets:" & nl & "    top: [ agent, clock ]" & nl );
 				fileWrite( dir & "/instructions.md", "Be helpful." );
 				var found = look.forProject( dir );
 				expect( found.prompt ).toBe( "box" );
@@ -58,7 +58,7 @@ class extends="testbox.system.BaseSpec" {
 
 				var plain = createTempDirectory( prefix = "bxagents-look-" );
 				variables.dirs.append( plain );
-				fileWrite( plain & "/Agent.yaml", "name: plain" & nl & "model: mock/mock-model" & nl );
+				fileWrite( plain & "/Agent.yml", "name: plain" & nl & "model: mock/mock-model" & nl );
 				fileWrite( plain & "/instructions.md", "Be helpful." );
 				expect( look.forProject( plain ) ).toBeEmpty();
 				expect( look.forProject( plain & "/missing" ) ).toBeEmpty();

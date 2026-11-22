@@ -30,7 +30,7 @@ import java.util.Map;
  * <p>
  * The same {@code tui:} block, with the same names, can be written in four places. The first of them that has a value for a setting wins,
  * from the highest: the flag of one run, the agent's own file in its data home, the person's file for all agents, and the project's
- * {@code Agent.yaml}. When none has a value the default of the registry is used. {@link #resolve} does that and remembers where each value
+ * {@code Agent.yml}. When none has a value the default of the registry is used. {@link #resolve} does that and remembers where each value
  * came from.
  * <p>
  * The {@code prompt} and {@code widgets} of the same block are the message box's look, which {@code PromptLook} owns.
@@ -204,7 +204,7 @@ public final class TuiSettings {
 	 * What is wrong with a {@code tui:} block, apart from the message box's look
 	 *
 	 * @param tui   The block as read from a file
-	 * @param label How to name the file in a message, such as {@code Agent.yaml}
+	 * @param label How to name the file in a message, such as {@code Agent.yml}
 	 *
 	 * @return One sentence per problem; empty when the settings are fine
 	 */

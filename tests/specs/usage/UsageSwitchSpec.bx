@@ -1,5 +1,5 @@
 /**
- * Turning usage recording on by writing the one line into Agent.yaml.
+ * Turning usage recording on by writing the one line into Agent.yml.
  */
 class extends="testbox.system.BaseSpec" {
 
@@ -18,11 +18,11 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			function yaml( required string text ) {
-				fileWrite( dir & "/Agent.yaml", arguments.text );
+				fileWrite( dir & "/Agent.yml", arguments.text );
 				fileWrite( dir & "/instructions.md", "Be helpful." );
 			}
 
-			it( "adds usage: true to Agent.yaml and changes nothing else", function() {
+			it( "adds usage: true to Agent.yml and changes nothing else", function() {
 				var before = "name: keeper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "tools:" & char( 10 ) & "  - now@bxai" & char( 10 );
 				yaml( before );
 
@@ -31,7 +31,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( done.ok ).toBeTrue();
 				expect( done.changed ).toBeTrue();
 				expect( done.message ).toInclude( "bxAgents build" );
-				var text = fileRead( dir & "/Agent.yaml" );
+				var text = fileRead( dir & "/Agent.yml" );
 				expect( text ).toInclude( before );
 				expect( text ).toInclude( "usage: true" );
 				expect( usageSwitch.isOn( dir ) ).toBeTrue();
@@ -53,7 +53,7 @@ class extends="testbox.system.BaseSpec" {
 				var done = usageSwitch.enable( dir );
 
 				expect( done.changed ).toBeTrue();
-				var text = fileRead( dir & "/Agent.yaml" );
+				var text = fileRead( dir & "/Agent.yml" );
 				expect( text ).toInclude( "usage: true" );
 				expect( text ).notToInclude( "false" );
 				expect( text.listToArray( char( 10 ) ).filter( l => l.startsWith( "usage:" ) ) ).toHaveLength( 1 );
@@ -75,11 +75,11 @@ class extends="testbox.system.BaseSpec" {
 				expect( done.message ).toInclude( "usage : true" );
 			} );
 
-			it( "says there is no Agent.yaml in an empty folder", function() {
+			it( "says there is no Agent.yml in an empty folder", function() {
 				var done = usageSwitch.enable( dir );
 
 				expect( done.ok ).toBeFalse();
-				expect( done.message ).toInclude( "no Agent.yaml" );
+				expect( done.message ).toInclude( "no Agent.yml" );
 			} );
 
 			it( "explains how to turn it on, and promises counts only", function() {

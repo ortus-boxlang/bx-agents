@@ -238,7 +238,7 @@ const sleep = ms => new Promise( r => setTimeout( r, ms ) );
 		async "webui/webui-agent-files"() {
 			const p = await open();
 			await goto( p, "/agent/files" );
-			await p.getByRole( "button", { name: "Read Agent.yaml" } ).click().catch( () => {} );
+			await p.getByRole( "button", { name: "Read Agent.yml" } ).click().catch( () => {} );
 			await sleep( 800 );
 			await save( p, "webui/webui-agent-files" );
 		},

@@ -85,7 +85,7 @@ misma: `GET /__bxagents/openapi` devuelve un documento OpenAPI de las rutas que 
 de verdad. Un cliente BoxLang, `bxModules.bxagents.models.api.AgentApiClient`, tiene un método por
 ruta. El recorrido, con ejemplos de curl y BoxLang, está en [Llama a tu agente desde código](../guides/agent-api.md).
 
-Quién puede llamarla se define bajo `agentApi` en `Agent.yaml`:
+Quién puede llamarla se define bajo `agentApi` en `Agent.yml`:
 
 - **Abierta** (por defecto): cualquiera que llegue al puerto, todos como un único usuario, `local`.
   Bien en tu propia máquina. `bxAgents serve` escucha en `127.0.0.1` por defecto y avisa si una API

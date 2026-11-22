@@ -43,7 +43,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -a 'serve' -d 'Serve a built project via boxlang-miniserver'
     complete -c $cmd -n __bxagents_needs_verb -a 'sessions' -d 'List, rename, fork, delete, clear, export and import the conversations in the chat...'
     complete -c $cmd -n __bxagents_needs_verb -a 'skills' -d 'Skills from skills.boxlang.io: skills <find|install|list|show|update|remove>'
-    complete -c $cmd -n __bxagents_needs_verb -a 'stats' -d 'What the model calls used: tokens by model, provider, day or user, once Agent.yaml says...'
+    complete -c $cmd -n __bxagents_needs_verb -a 'stats' -d 'What the model calls used: tokens by model, provider, day or user, once Agent.yml says...'
     complete -c $cmd -n __bxagents_needs_verb -a 'test' -d 'Run a project\'s own tests/specs via TestBox'
     complete -c $cmd -n __bxagents_needs_verb -a 'token' -d 'Issue, list and revoke access tokens for a deployed agent'
     complete -c $cmd -n __bxagents_needs_verb -a 'users' -d 'The sign-in accounts of the web page and who is an admin'

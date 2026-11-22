@@ -105,7 +105,7 @@ What the agent can use, in three tabs. **Tools** lists every tool grouped by whe
 
 ### Connectors
 
-The [connectors](connectors.md) the agent offers, as cards, with tabs for **All**, **Connected**, **Needs attention** and **In Agent.yaml** (the services written under `mcpServers`). **Connect** asks for a token or starts a sign in, and shows the risk first for medium and high risk connectors. **Tools** opens a drawer to turn single tools on or off. A banner warns when too many tools are on. Everyone connects their own account; only an admin can connect a local program such as Git.
+The [connectors](connectors.md) the agent offers, as cards, with tabs for **All**, **Connected**, **Needs attention** and **In Agent.yml** (the services written under `mcpServers`). **Connect** asks for a token or starts a sign in, and shows the risk first for medium and high risk connectors. **Tools** opens a drawer to turn single tools on or off. A banner warns when too many tools are on. Everyone connects their own account; only an admin can connect a local program such as Git.
 
 ![The Connectors page](../assets/webui/connectors.png)
 
@@ -123,7 +123,7 @@ The secrets the agent can use, by name, purpose and the hosts each may go to. A 
 
 ### Agent
 
-For admins. **Composition** draws how the agent is put together: what reaches it (gateways, the API, schedules), the main agent and its sub-agents with their tools and skills, and what it reaches out to (models, MCP servers, vault, volumes), with the tools that ask first marked. **Files** shows the project's own definition files read only (`Agent.yaml`, instructions, sub-agents, gateways); a key that looks like a secret is shown as stars. **Usage** shows tokens by day and by model once `usage: true` is set.
+For admins. **Composition** draws how the agent is put together: what reaches it (gateways, the API, schedules), the main agent and its sub-agents with their tools and skills, and what it reaches out to (models, MCP servers, vault, volumes), with the tools that ask first marked. **Files** shows the project's own definition files read only (`Agent.yml`, instructions, sub-agents, gateways); a key that looks like a secret is shown as stars. **Usage** shows tokens by day and by model once `usage: true` is set.
 
 ![The Agent page, Composition tab](../assets/webui/webui-agent.png)
 
@@ -258,7 +258,7 @@ Blocks are `text`, `table`, `choose` (options, each with the command line to run
     Only `keepRecent` is taken from the request. `summarize()` also honours `model`/`provider` overrides, but accepting those here would let any visitor aim a summarization call at a provider and model of their choosing on your credentials - the memory's own config decides that instead.
 
 ```yaml
-# Agent.yaml - what makes /compact functional
+# Agent.yml - what makes /compact functional
 memory:
   type: cache
   summaryProvider: openai
@@ -277,8 +277,8 @@ return { exposes : "webui", path : "/chat", profiles : [ "fast", "planner" ] };
 
 - `GET /profiles` returns only the listed profiles: name, description, provider, model and which is the default. Never a key.
 - The page sends the pick with each message as `options.profile` and remembers it in the browser. "Default model" sends none.
-- A request that names any profile that is not listed is a `400`, whether or not `Agent.yaml` declares it. A profile is a model your server pays for, so the browser never chooses one you did not offer. Without a list, every `options.profile` is refused.
-- Each name must be a profile `Agent.yaml` declares, or `default`. Web UI entries share one handler, so entries that list different profiles are a build error.
+- A request that names any profile that is not listed is a `400`, whether or not `Agent.yml` declares it. A profile is a model your server pays for, so the browser never chooses one you did not offer. Without a list, every `options.profile` is refused.
+- Each name must be a profile `Agent.yml` declares, or `default`. Web UI entries share one handler, so entries that list different profiles are a build error.
 - An `agent` entry (a `toAi()` route) forwards the caller's own `params` and `options`, so it has no list to offer. The [always-on route](agent-bx.md#agentapi) has its own: `agentApi.profiles`.
 
 ## Users and sign-in
@@ -528,7 +528,7 @@ For anything the tokens don't cover - custom fonts, layout, per-element rules - 
 ## Securing the API
 
 !!! warning
-    **`apiKeyEnvVar` is a shared secret, not a login system.** It is the same thing as the agent API's `agentApi.tokenEnvVar` (a name in `Agent.yaml` wins if both are set). Left unset, the API is open (fine on your own machine, not for a public deployment; `serve` warns when an open API listens on every interface). Set it, and every call to `/__bxagents` must carry a matching `x-bxagents-token` header, compared in constant time. **The app's pages (`<path>/`) are not gated by it**, because a browser's plain page navigation can't send a custom header; the page asks for it in a **Password** dialog. It opens by itself the first time a call is refused with `401` (once per page load, with "The server refused the password, or asks for one."), and any time from the key button in the header. **Save** keeps the password in `localStorage` and loads the page again; it is then sent on every call. **Forget it** removes it. For several people use [issued tokens](agent-bx.md#access-tokens-for-a-deployed-agent) or `users`.
+    **`apiKeyEnvVar` is a shared secret, not a login system.** It is the same thing as the agent API's `agentApi.tokenEnvVar` (a name in `Agent.yml` wins if both are set). Left unset, the API is open (fine on your own machine, not for a public deployment; `serve` warns when an open API listens on every interface). Set it, and every call to `/__bxagents` must carry a matching `x-bxagents-token` header, compared in constant time. **The app's pages (`<path>/`) are not gated by it**, because a browser's plain page navigation can't send a custom header; the page asks for it in a **Password** dialog. It opens by itself the first time a call is refused with `401` (once per page load, with "The server refused the password, or asks for one."), and any time from the key button in the header. **Save** keeps the password in `localStorage` and loads the page again; it is then sent on every call. **Forget it** removes it. For several people use [issued tokens](agent-bx.md#access-tokens-for-a-deployed-agent) or `users`.
 
 ## Logs and gateways
 
@@ -566,10 +566,10 @@ A project with a `webui` exposure also gets **session management on** in the gen
 !!! info
     **Why not `toAi()`?** ColdBox 8.1's `toAi()` lets a **caller-supplied `userId` win** over the server-derived one, and ColdBox route middleware does not reach its routes. The agent API's own handler derives the identity server-side only and never looks at `body.userId`, and sits behind one gate.
 
-No memory type is forced. Choose one (or several) per agent with a `memory` key on `Agent.yaml`, same shape as `checkpointer`:
+No memory type is forced. Choose one (or several) per agent with a `memory` key on `Agent.yml`, same shape as `checkpointer`:
 
 ```yaml
-# Agent.yaml
+# Agent.yml
 memory:
   type: cache
   maxMessages: 50
@@ -596,7 +596,7 @@ The Memory page also has **Conversation memory**: the messages the agent's memor
 
 ## Connections
 
-When an `mcpServers` entry has [`oauth`](connect.md), the [Connectors](#connectors) page has an **In Agent.yaml** tab (`<path>/connectors/agent`; it shows only then, and `GET /agent`'s `capabilities.connections` says whether). It lists each service with its name, its address, *Connected* or *Not connected*, and a *Connect* or *Disconnect* button. *Connect* opens the provider's sign in in a new tab (a link is also shown, in case the browser blocks the tab) and the page checks again every two seconds until it works. The page never sees a token.
+When an `mcpServers` entry has [`oauth`](connect.md), the [Connectors](#connectors) page has an **In Agent.yml** tab (`<path>/connectors/agent`; it shows only then, and `GET /agent`'s `capabilities.connections` says whether). It lists each service with its name, its address, *Connected* or *Not connected*, and a *Connect* or *Disconnect* button. *Connect* opens the provider's sign in in a new tab (a link is also shown, in case the browser blocks the tab) and the page checks again every two seconds until it works. The page never sees a token.
 
 
 ## Working on the web app

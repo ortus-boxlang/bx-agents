@@ -38,7 +38,7 @@ bxAgents chat --record=demo.cast
 | Esc | Stop the agent at its next step |
 | `?` alone, F1, Ctrl+/ , or `/keys` | Shortcuts panel with every key as bound now |
 
-Change keys in `~/.bxagents/bxAgents.yml` under `chat.keys` (for example `newline: [ ctrl+n, alt+enter ]`). Actions: `submit`, `newline`, `historyPrevious`, `historyNext`, `clear`, `exit`, `deleteToStart`, `deleteWord`, `lineStart`, `lineEnd`, `complete`, `pasteImage`, `clearScreen`, `stop`. A bad entry is reported at start and the default is kept.
+Change keys in `~/.bxagents/Agent.yml` under `chat.keys` (for example `newline: [ ctrl+n, alt+enter ]`). Actions: `submit`, `newline`, `historyPrevious`, `historyNext`, `clear`, `exit`, `deleteToStart`, `deleteWord`, `lineStart`, `lineEnd`, `complete`, `pasteImage`, `clearScreen`, `stop`. A bad entry is reported at start and the default is kept.
 
 ## Slash commands
 
@@ -52,7 +52,7 @@ Type `/` for a menu (Up/Down, Tab to fill, Enter to run). `/help` lists what you
 | Notes, vault, services | `/remember <text>`, `/notes [list\|add\|edit\|remove\|stats]`, `/vault [list\|status]`, `/connect [name]` |
 | Your terminal | `/settings [name] [value\|reset] [--global]`, `/prompt [style]`, `/copy`, `/record [file\|stop]`, `/extensions [name]`, `/reload` |
 
-Notes: `/settings`, `/prompt`, `/copy`, `/record`, `/profile`, `/default`, `/stats`, `/agent` and `/exit` work only in the terminal. `/logs` needs an admin. `/stats enable` writes `usage: true` to `Agent.yaml` (rebuild after).
+Notes: `/settings`, `/prompt`, `/copy`, `/record`, `/profile`, `/default`, `/stats`, `/agent` and `/exit` work only in the terminal. `/logs` needs an admin. `/stats enable` writes `usage: true` to `Agent.yml` (rebuild after).
 
 ## Sessions
 
@@ -76,7 +76,7 @@ Every chat is a conversation in the project's chat database, listed under your u
 | `notify` | `off`, `bell`, `system` |
 | `terminalTitle` | `true`, `false` |
 
-The first of these with a value wins: the run flag (`--inline`, `--fullscreen`), `~/.bxagents/<agent name>/settings.yml`, `~/.bxagents/bxAgents.yml`, `tui:` in the project's `Agent.yaml`, the default. All use the same block:
+The first of these with a value wins: the run flag (`--inline`, `--fullscreen`), `~/.bxagents/<agent name>/Agent.yml`, `~/.bxagents/Agent.yml`, `tui:` in the project's `Agent.yml`, the default. All use the same block:
 
 ```yaml
 tui:
@@ -88,11 +88,11 @@ The message box look is `prompt` (`bars` default, `bars-hints`, `rule`, `box`, `
 
 ## Notes and vault
 
-The agent keeps notes only when `Agent.yaml` has a `notes` block. `/remember <text>` saves a note about you. `/notes` opens a screen (`a` add, `e` or Enter edit, `d` remove, `t` or Tab switch yours and the agent's, `s` stats, Esc back). Removing the agent's own note over `--connect` needs an admin token. `/vault` opens the vault screen; a secret value is never typed in a command.
+The agent keeps notes only when `Agent.yml` has a `notes` block. `/remember <text>` saves a note about you. `/notes` opens a screen (`a` add, `e` or Enter edit, `d` remove, `t` or Tab switch yours and the agent's, `s` stats, Esc back). Removing the agent's own note over `--connect` needs an admin token. `/vault` opens the vault screen; a secret value is never typed in a command.
 
 ## Files, pictures, your machine
 
-`@` lists files under the folder you started in; `@path/to/file` sends a text file with the message; `@picture.png` sends an image (up to 4 per message, 5 MB each). `!command` runs a shell command on your machine and its output goes with your next message; `!!command` shows it only. `#function( args )` calls one BoxLang built-in the same way, `##` shows only. Switch these off with `chat.shell: false` or `chat.bifs: false` in `~/.bxagents/bxAgents.yml`.
+`@` lists files under the folder you started in; `@path/to/file` sends a text file with the message; `@picture.png` sends an image (up to 4 per message, 5 MB each). `!command` runs a shell command on your machine and its output goes with your next message; `!!command` shows it only. `#function( args )` calls one BoxLang built-in the same way, `##` shows only. Switch these off with `chat.shell: false` or `chat.bifs: false` in `~/.bxagents/Agent.yml`.
 
 ## Recording
 

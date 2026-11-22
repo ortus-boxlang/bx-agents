@@ -50,7 +50,7 @@ clobbers a real `build`/`serve`/`package` cycle. The built agent is exposed as `
 
 ## Testing needs no API key
 
-By default, `bxAgents test` builds your agent using an `Agent.yaml` `test` environment
+By default, `bxAgents test` builds your agent using an `Agent.yml` `test` environment
 override, scaffolded automatically by `new`:
 
 ```yaml

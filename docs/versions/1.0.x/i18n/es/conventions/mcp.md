@@ -12,7 +12,7 @@ MCP (Model Context Protocol) funciona en dos direcciones - consumiendo servidore
 
 ```mermaid
 flowchart LR
-    subgraph consume["CONSUMIR - declarado en Agent.yaml vía mcpServers"]
+    subgraph consume["CONSUMIR - declarado en Agent.yml vía mcpServers"]
         direction LR
         AG["tu agente"] -->|"llama hacia afuera en tiempo de ejecución"| RM["un servidor MCP remoto<br/>https://example.com/mcp"]
     end
@@ -31,14 +31,14 @@ flowchart LR
 Nada vincula a los dos: un agente que consume servidores remotos no necesita hospedar uno, y un servidor hospedado solo es alcanzable si una entrada `gateways/` lo expone.
 
 !!! tip
-    `bxAgents add mcp client github` añade un servidor a `Agent.yaml` con su credencial como marcador de entorno, y `bxAgents add mcp server` escribe el archivo de `mcp/` y la entrada de `gateways/` que lo sirve. Ver [`add`](../cli-reference.md#add-mcp).
+    `bxAgents add mcp client github` añade un servidor a `Agent.yml` con su credencial como marcador de entorno, y `bxAgents add mcp server` escribe el archivo de `mcp/` y la entrada de `gateways/` que lo sirve. Ver [`add`](../cli-reference.md#add-mcp).
 
 ## Consumir servidores remotos
 
-Declarados directamente en `Agent.yaml` (no un archivo bajo `mcp/`), vía `mcpServers`:
+Declarados directamente en `Agent.yml` (no un archivo bajo `mcp/`), vía `mcpServers`:
 
 ```yaml
-# Agent.yaml
+# Agent.yml
 name: my-agent
 model: openai/gpt-5
 mcpServers:

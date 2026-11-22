@@ -14,13 +14,13 @@ tags: [guides, examples, schedules]
 
 ```text
 scheduled-agent/
-├── Agent.yaml
+├── Agent.yml
 ├── instructions.md
 └── schedules/
     └── Nightly.bx
 ```
 
-`Agent.yaml` is the same shape as every other example - nothing special is needed on the agent side to be schedule-driven:
+`Agent.yml` is the same shape as every other example - nothing special is needed on the agent side to be schedule-driven:
 
 ```yaml
 name: scheduled-agent

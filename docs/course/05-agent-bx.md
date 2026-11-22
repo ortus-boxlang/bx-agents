@@ -1,14 +1,14 @@
 ---
-title: "Lesson 5: The Agent Definition - Agent.yaml"
+title: "Lesson 5: The Agent Definition - Agent.yml"
 icon: phosphor-duotone:robot
 summary: The one required file - a plain YAML file that says what your agent is.
 description: The one required file - a plain YAML file that says what your agent is.
 tags: [course, conventions]
 ---
 
-# The Agent Definition - Agent.yaml
+# The Agent Definition - Agent.yml
 
-`Agent.yaml` is the **only required file** in a BxAgents project (beside the
+`Agent.yml` is the **only required file** in a BxAgents project (beside the
 instructions it points at). It is plain settings - a name, a model, and any optional
 extras - and the build turns it into a real
 [BX AI agent](https://ai.ortusbooks.com/main-components/agents/class-based-agents).
@@ -27,7 +27,7 @@ That is a complete agent. `bxAgents new` scaffolds this shape for you (see
 `instructions.md` beside it (see [Lesson 6](06-instructions-and-system-prompt.md)).
 
 !!! info
-    A folder holds **one** agent definition. An `Agent.yaml` together with an
+    A folder holds **one** agent definition. An `Agent.yml` together with an
     `Agent.bx` (or an `Agent.yml`) in the same folder is an error, and the build names
     both files so you can keep one.
 
@@ -47,7 +47,7 @@ That is a complete agent. `bxAgents new` scaffolds this shape for you (see
 | `gatewaySession` | How chat gateways queue messages, which slash commands they answer and whether they read attachments (see [Lesson 14](14-connecting-chat-platforms.md)). |
 | `agentApi` | The always-on agent API: who may call it (tokens, allowed addresses, rate limit) and where it is served (see [Lesson 13](13-exposing-http-and-mcp.md)). |
 | `environments` | Per-environment overrides (see below). |
-| `provider`, `params`, `options`, `providers`, `profiles`, `notes` (short notes the agent keeps), `usage` (record token counts for `bxAgents stats`), `tui` (the look of the terminal chat), `extensions`, and more | Further settings, all listed in the [Agent.yaml](../conventions/agent-yaml.md) reference. |
+| `provider`, `params`, `options`, `providers`, `profiles`, `notes` (short notes the agent keeps), `usage` (record token counts for `bxAgents stats`), `tui` (the look of the terminal chat), `extensions`, and more | Further settings, all listed in the [Agent.yml](../conventions/agent-yaml.md) reference. |
 
 An **unknown key is an error** that lists the valid ones, so a typo such as `modle:`
 can never quietly do nothing. Wrong types and empty values are errors too.
@@ -105,11 +105,11 @@ picks it up. Only the active block is applied, on top of the top-level keys. You
 this exact mechanism for the `mock` provider in your tests ([Lesson 19](19-testing-your-agent.md)),
 which is why `bxAgents new` already gives you a `test` block.
 
-Full reference: [Agent.yaml](../conventions/agent-yaml.md).
+Full reference: [Agent.yml](../conventions/agent-yaml.md).
 
 ## When you need code: Agent.bx
 
-`Agent.yaml` covers almost every agent. Reach for the advanced class form, `Agent.bx`,
+`Agent.yml` covers almost every agent. Reach for the advanced class form, `Agent.bx`,
 only when the definition itself needs code: hooks, dynamic instructions, tools
 registered in code, an overridden method, or computing the environment with
 `detectEnvironment()`. It is a real class extending bx-ai's `AiAgent`, which the build
@@ -132,7 +132,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 ```
 
 Scaffold one with `bxAgents new --class`, or start in YAML and switch later: create the
-`Agent.bx`, move the settings across, and delete the `Agent.yaml`. Full reference:
+`Agent.bx`, move the settings across, and delete the `Agent.yml`. Full reference:
 [Agent.bx](../conventions/agent-bx.md).
 
 Next: [Lesson 6 - instructions.md and the System Prompt](06-instructions-and-system-prompt.md)

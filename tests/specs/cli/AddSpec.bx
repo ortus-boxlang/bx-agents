@@ -413,11 +413,11 @@ class extends="testbox.system.BaseSpec" {
 					return addVerb.run( options );
 				}
 
-				it( "adds a catalog server to Agent.yaml with its token as an environment placeholder, and a .env stub", function() {
+				it( "adds a catalog server to Agent.yml with its token as an environment placeholder, and a .env stub", function() {
 					var root = newTempProject( "yaml-minimal" );
 
 					var result = addMcp( root, {}, [ "mcp", "client", "github" ] );
-					var yaml = fileRead( root & "/Agent.yaml" );
+					var yaml = fileRead( root & "/Agent.yml" );
 
 					expect( result.exitCode ).toBe( 0 );
 					expect( yaml ).toInclude( "mcpServers:" );
@@ -430,10 +430,10 @@ class extends="testbox.system.BaseSpec" {
 
 				it( "adds to an mcpServers list that exists and keeps what was there", function() {
 					var root = newTempProject( "with-mcp-credentials" );
-					var before = fileRead( root & "/Agent.yaml" );
+					var before = fileRead( root & "/Agent.yml" );
 
 					addMcp( root, { url : "https://new.example.com/mcp", name : "fresh" } );
-					var after = fileRead( root & "/Agent.yaml" );
+					var after = fileRead( root & "/Agent.yml" );
 
 					expect( after.find( before.rtrim() ) ).toBe( 1 );
 					expect( after ).toInclude( "name: fresh" );
@@ -446,7 +446,7 @@ class extends="testbox.system.BaseSpec" {
 					addMcp( root, { url : "https://b.example.com/mcp", name : "basic", auth : "basic", user : "ada", env : "BASIC_PASS" } );
 					addMcp( root, { url : "https://c.example.com/mcp", name : "open" } );
 
-					var yaml = fileRead( root & "/Agent.yaml" );
+					var yaml = fileRead( root & "/Agent.yml" );
 
 					expect( yaml ).toInclude( 'X-Api-Key: "${env.KEYED_KEY}"' );
 					expect( yaml ).toInclude( "timeout: 20000" );
@@ -455,7 +455,7 @@ class extends="testbox.system.BaseSpec" {
 					expect( new bxagents.models.report.ProjectReport().build( root ).validation.errors ).toBeEmpty();
 				} );
 
-				it( "refuses an address that carries a key or a password, so Agent.yaml stays free of secrets", function() {
+				it( "refuses an address that carries a key or a password, so Agent.yml stays free of secrets", function() {
 					var root = newTempProject( "yaml-minimal" );
 
 					expect( function() {
@@ -464,7 +464,7 @@ class extends="testbox.system.BaseSpec" {
 					expect( function() {
 						addMcp( root, { url : "https://ada:hunter2@x.example.com/mcp", name : "x" } );
 					} ).toThrow( "BxAgents.InvalidAnswer" );
-					expect( fileRead( root & "/Agent.yaml" ) ).notToInclude( "hunter2" );
+					expect( fileRead( root & "/Agent.yml" ) ).notToInclude( "hunter2" );
 				} );
 
 				it( "refuses a server the agent already uses, by name or address", function() {
@@ -500,7 +500,7 @@ class extends="testbox.system.BaseSpec" {
 					var root = newTempProject( "yaml-minimal" );
 
 					var result = addMcp( root, {}, [ "mcp", "client", "git" ] );
-					var yaml = fileRead( root & "/Agent.yaml" );
+					var yaml = fileRead( root & "/Agent.yml" );
 
 					expect( yaml ).toInclude( "name: git" );
 					expect( yaml ).toInclude( "command:" );
@@ -510,19 +510,19 @@ class extends="testbox.system.BaseSpec" {
 					expect( new bxagents.models.cli.Build().run( { projectRoot : root } ).exitCode ).toBe( 0 );
 				} );
 
-				it( "writes into a subagent's own Agent.yaml with --agent", function() {
+				it( "writes into a subagent's own Agent.yml with --agent", function() {
 					var root = createTempDirectory( prefix = "bxagents-cli-add-" );
 					tempDirs.append( root );
-					fileWrite( root & "/Agent.yaml", "name: top" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "subAgents: [ helper ]" & char( 10 ) );
+					fileWrite( root & "/Agent.yml", "name: top" & char( 10 ) & "model: mock/mock-model" & char( 10 ) & "subAgents: [ helper ]" & char( 10 ) );
 					fileWrite( root & "/instructions.md", "Be helpful." );
 					directoryCreate( root & "/subagents/helper" );
-					fileWrite( root & "/subagents/helper/Agent.yaml", "name: helper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) );
+					fileWrite( root & "/subagents/helper/Agent.yml", "name: helper" & char( 10 ) & "model: mock/mock-model" & char( 10 ) );
 					fileWrite( root & "/subagents/helper/instructions.md", "Help." );
 
 					addMcp( root, { agent : "helper" }, [ "mcp", "client", "github" ] );
 
-					expect( fileRead( root & "/subagents/helper/Agent.yaml" ) ).toInclude( "name: github" );
-					expect( fileRead( root & "/Agent.yaml" ) ).notToInclude( "github" );
+					expect( fileRead( root & "/subagents/helper/Agent.yml" ) ).toInclude( "name: github" );
+					expect( fileRead( root & "/Agent.yml" ) ).notToInclude( "github" );
 				} );
 
 				it( "asks which server, how it signs in and for a name, then writes it after a review", function() {
@@ -533,7 +533,7 @@ class extends="testbox.system.BaseSpec" {
 
 					expect( prompter.remaining() ).toBe( 0 );
 					expect( result.exitCode ).toBe( 0 );
-					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( 'token: "${env.ACME_TOKEN}"' );
+					expect( fileRead( root & "/Agent.yml" ) ).toInclude( 'token: "${env.ACME_TOKEN}"' );
 				} );
 
 				it( "asks which way when the positional does not say", function() {
@@ -543,7 +543,7 @@ class extends="testbox.system.BaseSpec" {
 					addVerb.run( { projectRoot : root, _positionals : [ "mcp" ], _prompter : prompter, _interactive : true } );
 
 					expect( prompter.asked()[ 1 ].title ).toBe( "Which way?" );
-					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "name: github" );
+					expect( fileRead( root & "/Agent.yml" ) ).toInclude( "name: github" );
 				} );
 
 			} );
@@ -699,20 +699,20 @@ class extends="testbox.system.BaseSpec" {
 					expect( report.env.map( v => v.name ) ).toInclude( "TELEGRAM_BOT_TOKEN" );
 				} );
 
-				it( "writes the busy-agent policy to Agent.yaml only when it is not the default", function() {
+				it( "writes the busy-agent policy to Agent.yml only when it is not the default", function() {
 					var root = newTempProject( "yaml-minimal" );
 
 					addGateway( root, { policy : "queue" }, [ "gateway", "telegram" ] );
-					expect( fileRead( root & "/Agent.yaml" ) ).notToInclude( "gatewaySession" );
+					expect( fileRead( root & "/Agent.yml" ) ).notToInclude( "gatewaySession" );
 
 					addGateway( root, { policy : "steer" }, [ "gateway", "discord" ] );
-					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "gatewaySession:" & char( 10 ) & "  policy: steer" );
+					expect( fileRead( root & "/Agent.yml" ) ).toInclude( "gatewaySession:" & char( 10 ) & "  policy: steer" );
 					expect( new bxagents.models.report.ProjectReport().build( root ).validation.errors ).toBeEmpty();
 				} );
 
 				it( "will not rewrite a gatewaySession that is already there, and says what to set", function() {
 					var root = newTempProject( "yaml-minimal" );
-					fileAppend( root & "/Agent.yaml", char( 10 ) & "gatewaySession:" & char( 10 ) & "  policy: reject" & char( 10 ) );
+					fileAppend( root & "/Agent.yml", char( 10 ) & "gatewaySession:" & char( 10 ) & "  policy: reject" & char( 10 ) );
 
 					expect( function() {
 						addGateway( root, { policy : "steer" }, [ "gateway", "telegram" ] );
@@ -824,7 +824,7 @@ class extends="testbox.system.BaseSpec" {
 					var root = newTempProject( "yaml-minimal" );
 
 					var result = addSub( root, { model : "openai/gpt-5", description : "Writes the answer" } );
-					var yaml = fileRead( root & "/subagents/writer/Agent.yaml" );
+					var yaml = fileRead( root & "/subagents/writer/Agent.yml" );
 
 					expect( result.exitCode ).toBe( 0 );
 					expect( yaml ).toInclude( "name: writer" );
@@ -832,7 +832,7 @@ class extends="testbox.system.BaseSpec" {
 					expect( yaml ).toInclude( "model: openai/gpt-5" );
 					expect( yaml ).toInclude( "model: mock/mock-model" );
 					expect( fileRead( root & "/subagents/writer/instructions.md" ) ).toInclude( "You are writer." );
-					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "subAgents:" & char( 10 ) & "  - writer" );
+					expect( fileRead( root & "/Agent.yml" ) ).toInclude( "subAgents:" & char( 10 ) & "  - writer" );
 				} );
 
 				it( "uses a profile of the project, like the main agent can, instead of a model", function() {
@@ -840,7 +840,7 @@ class extends="testbox.system.BaseSpec" {
 					addVerb.run( { projectRoot : root, _positionals : [ "profile", "fast" ], yes : true, provider : "openai", model : "gpt-5-mini" } );
 
 					var result = addSub( root, { profile : "fast" } );
-					var yaml = fileRead( root & "/subagents/writer/Agent.yaml" );
+					var yaml = fileRead( root & "/subagents/writer/Agent.yml" );
 
 					expect( result.exitCode ).toBe( 0 );
 					expect( yaml ).toInclude( "profile: fast" );
@@ -866,14 +866,14 @@ class extends="testbox.system.BaseSpec" {
 
 					addVerb.run( { projectRoot : root, _positionals : [ "subagent" ], _prompter : prompter, _interactive : true } );
 
-					expect( fileRead( root & "/subagents/writer/Agent.yaml" ) ).toInclude( "profile: fast" );
+					expect( fileRead( root & "/subagents/writer/Agent.yml" ) ).toInclude( "profile: fast" );
 				} );
 
 				it( "takes the same capability flags as new, and the .env stubs they need", function() {
 					var root = newTempProject( "yaml-minimal" );
 
 					addSub( root, { model : "claude", with : "search", search : "brave", memory : "file", guard : "flag" } );
-					var yaml = fileRead( root & "/subagents/writer/Agent.yaml" );
+					var yaml = fileRead( root & "/subagents/writer/Agent.yml" );
 
 					expect( yaml ).toInclude( "tools:" );
 					expect( yaml ).toInclude( "memory: file" );
@@ -887,8 +887,8 @@ class extends="testbox.system.BaseSpec" {
 					addSub( root, { model : "claude", parent : "writer" }, [ "subagent", "editor" ] );
 					addSub( root, { model : "claude", parent : "writer" }, [ "subagent", "checker" ] );
 
-					expect( fileRead( root & "/subagents/writer/Agent.yaml" ) ).toInclude( "subAgents:" & char( 10 ) & "  - editor" & char( 10 ) & "  - checker" );
-					expect( fileRead( root & "/Agent.yaml" ) ).notToInclude( "editor" );
+					expect( fileRead( root & "/subagents/writer/Agent.yml" ) ).toInclude( "subAgents:" & char( 10 ) & "  - editor" & char( 10 ) & "  - checker" );
+					expect( fileRead( root & "/Agent.yml" ) ).notToInclude( "editor" );
 				} );
 
 				it( "builds and shows the nesting in inspect", function() {
@@ -908,7 +908,7 @@ class extends="testbox.system.BaseSpec" {
 
 					var result = addSub( root, { model : "claude" } );
 
-					expect( fileExists( root & "/subagents/writer/Agent.yaml" ) ).toBeTrue();
+					expect( fileExists( root & "/subagents/writer/Agent.yml" ) ).toBeTrue();
 					expect( fileRead( root & "/Agent.bx" ) ).notToInclude( "writer" );
 					expect( result.message ).toInclude( "is a class, so it was not edited" );
 				} );
@@ -936,7 +936,7 @@ class extends="testbox.system.BaseSpec" {
 
 					expect( prompter.remaining() ).toBe( 0 );
 					expect( result.exitCode ).toBe( 0 );
-					expect( fileRead( root & "/subagents/researcher/Agent.yaml" ) ).toInclude( "description: Researches" );
+					expect( fileRead( root & "/subagents/researcher/Agent.yml" ) ).toInclude( "description: Researches" );
 				} );
 
 			} );
@@ -1027,7 +1027,7 @@ class extends="testbox.system.BaseSpec" {
 					var root = newTempProject( "yaml-minimal" );
 
 					var result = addProvider( root, { temperature : "0.2", timeout : "60" } );
-					var yaml = fileRead( root & "/Agent.yaml" );
+					var yaml = fileRead( root & "/Agent.yml" );
 
 					expect( result.exitCode ).toBe( 0 );
 					expect( yaml ).toInclude( "providers:" );
@@ -1051,10 +1051,10 @@ class extends="testbox.system.BaseSpec" {
 
 				it( "adds a second provider beside the first and keeps the file's comments", function() {
 					var root = newTempProject( "yaml-minimal" );
-					fileAppend( root & "/Agent.yaml", char( 10 ) & "providers:" & char( 10 ) & "  ## my notes" & char( 10 ) & "  claude:" & char( 10 ) & "    params:" & char( 10 ) & "      temperature: 0.5" & char( 10 ) );
+					fileAppend( root & "/Agent.yml", char( 10 ) & "providers:" & char( 10 ) & "  ## my notes" & char( 10 ) & "  claude:" & char( 10 ) & "    params:" & char( 10 ) & "      temperature: 0.5" & char( 10 ) );
 
 					addProvider( root, { timeout : "30" } );
-					var yaml = fileRead( root & "/Agent.yaml" );
+					var yaml = fileRead( root & "/Agent.yml" );
 
 					expect( yaml ).toInclude( "## my notes" );
 					expect( yaml.find( "claude:" ) ).toBeLT( yaml.find( "openai:" ) );
@@ -1091,7 +1091,7 @@ class extends="testbox.system.BaseSpec" {
 
 					expect( prompter.remaining() ).toBe( 0 );
 					expect( result.exitCode ).toBe( 0 );
-					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "  groq:" );
+					expect( fileRead( root & "/Agent.yml" ) ).toInclude( "  groq:" );
 				} );
 
 			} );
@@ -1108,7 +1108,7 @@ class extends="testbox.system.BaseSpec" {
 					var root = newTempProject( "yaml-minimal" );
 
 					var result = addProfile( root, { description : "Cheap and quick", provider : "openai", model : "gpt-5-mini", temperature : "0.2" } );
-					var yaml = fileRead( root & "/Agent.yaml" );
+					var yaml = fileRead( root & "/Agent.yml" );
 
 					expect( result.exitCode ).toBe( 0 );
 					expect( yaml ).toInclude( "profiles:" );
@@ -1122,7 +1122,7 @@ class extends="testbox.system.BaseSpec" {
 				it( "builds, shows in inspect, and an agent can name it", function() {
 					var root = newTempProject( "yaml-minimal" );
 					addProfile( root, { provider : "claude", model : "claude-sonnet-4-5" } );
-					fileAppend( root & "/Agent.yaml", "profile: fast" & char( 10 ) );
+					fileAppend( root & "/Agent.yml", "profile: fast" & char( 10 ) );
 
 					var report = new bxagents.models.report.ProjectReport().build( root );
 
@@ -1135,10 +1135,10 @@ class extends="testbox.system.BaseSpec" {
 					var root = newTempProject( "yaml-minimal" );
 					addProfile( root, { provider : "openai", default : true } );
 
-					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "defaultProfile: fast" );
+					expect( fileRead( root & "/Agent.yml" ) ).toInclude( "defaultProfile: fast" );
 
 					var again = addProfile( root, { provider : "claude", default : true }, [ "profile", "slow" ] );
-					var yaml = fileRead( root & "/Agent.yaml" );
+					var yaml = fileRead( root & "/Agent.yml" );
 
 					expect( yaml ).toInclude( "defaultProfile: fast" );
 					expect( yaml ).notToInclude( "defaultProfile: slow" );
@@ -1150,7 +1150,7 @@ class extends="testbox.system.BaseSpec" {
 
 					addProfile( root, { provider : "openai", "api-key-env" : "RESEARCH_KEY" } );
 
-					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "apiKeyEnv: RESEARCH_KEY" );
+					expect( fileRead( root & "/Agent.yml" ) ).toInclude( "apiKeyEnv: RESEARCH_KEY" );
 					expect( fileRead( root & "/.env" ) ).toInclude( "RESEARCH_KEY=" );
 				} );
 
@@ -1180,7 +1180,7 @@ class extends="testbox.system.BaseSpec" {
 					] );
 
 					var result = addVerb.run( { projectRoot : root, _positionals : [ "profile" ], _prompter : prompter, _interactive : true } );
-					var yaml = fileRead( root & "/Agent.yaml" );
+					var yaml = fileRead( root & "/Agent.yml" );
 
 					expect( prompter.remaining() ).toBe( 0 );
 					expect( result.exitCode ).toBe( 0 );
@@ -1203,7 +1203,7 @@ class extends="testbox.system.BaseSpec" {
 					var root = newTempProject( "yaml-minimal" );
 
 					var result = addCapability( root, { provider : "openai", model : "text-embedding-3-small" } );
-					var yaml = fileRead( root & "/Agent.yaml" );
+					var yaml = fileRead( root & "/Agent.yml" );
 
 					expect( result.exitCode ).toBe( 0 );
 					expect( yaml ).toInclude( "embeddings:" & char( 10 ) & "  provider: openai" & char( 10 ) & "  model: text-embedding-3-small" );
@@ -1215,7 +1215,7 @@ class extends="testbox.system.BaseSpec" {
 
 					addCapability( root, { provider : "openai", voice : "alloy", format : "mp3" }, [ "capability", "speech" ] );
 					addCapability( root, { provider : "openai", size : "1024x1024", quality : "hd", style : "vivid", instructions : "Flat colors" }, [ "capability", "image" ] );
-					var yaml = fileRead( root & "/Agent.yaml" );
+					var yaml = fileRead( root & "/Agent.yml" );
 
 					expect( yaml ).toInclude( "  voice: alloy" );
 					expect( yaml ).toInclude( "  format: mp3" );
@@ -1267,8 +1267,8 @@ class extends="testbox.system.BaseSpec" {
 
 					expect( prompter.remaining() ).toBe( 0 );
 					expect( result.exitCode ).toBe( 0 );
-					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "transcription:" );
-					expect( fileRead( root & "/Agent.yaml" ) ).toInclude( "model: whisper-large-v3" );
+					expect( fileRead( root & "/Agent.yml" ) ).toInclude( "transcription:" );
+					expect( fileRead( root & "/Agent.yml" ) ).toInclude( "model: whisper-large-v3" );
 				} );
 
 			} );

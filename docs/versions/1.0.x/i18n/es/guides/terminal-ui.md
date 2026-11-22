@@ -66,11 +66,11 @@ Los turnos terminados se imprimen como texto de terminal normal, así que **tu s
 
 ![La salida de /keys, con cada tecla y el nombre de su acción](../assets/tui/chat-keys.png)
 
-*`/keys` lista cada tecla, el nombre de acción que se usa en `bxAgents.yml` y lo que hace.*
+*`/keys` lista cada tecla, el nombre de acción que se usa en `Agent.yml` y lo que hace.*
 
 ### Cambiar una tecla
 
-Las teclas viven en un archivo que es tuyo, no de ningún proyecto: `~/.bxagents/bxAgents.yml` (define `BXAGENTS_USER_CONFIG` para usar otro archivo).
+Las teclas viven en un archivo que es tuyo, no de ningún proyecto: `~/.bxagents/Agent.yml` (define `BXAGENTS_USER_CONFIG` para usar otro archivo).
 
 ```yaml
 chat:
@@ -85,7 +85,7 @@ Un error de escritura nunca te deja atascado. Una acción desconocida, una tecla
 
 ## Comandos: escribe `/`
 
-Un `/` al inicio del cuadro abre un menú de comandos. Sigue escribiendo para acotarlo, Tab o Enter para tomar uno. Todos están listados en [Comandos con barra](slash-commands.md); los que usarás primero son `/help`, `/new`, `/sessions`, `/resume`, `/context`, `/model` y `/exit`. `/stats` muestra los tokens que usaron las llamadas al modelo, una vez que `usage: true` está definido en `Agent.yaml`.
+Un `/` al inicio del cuadro abre un menú de comandos. Sigue escribiendo para acotarlo, Tab o Enter para tomar uno. Todos están listados en [Comandos con barra](slash-commands.md); los que usarás primero son `/help`, `/new`, `/sessions`, `/resume`, `/context`, `/model` y `/exit`. `/stats` muestra los tokens que usaron las llamadas al modelo, una vez que `usage: true` está definido en `Agent.yml`.
 
 ## Conversaciones
 
@@ -146,7 +146,7 @@ Cinco estilos, cada uno con una barra superior que lleva una etiqueta y pequeño
 
 Widgets: `agent`, `profile`, `folder`, `user`, `clock`, `machine`, `git`, `date`, `session`, `elapsed`, `ctx`. Un widget sin nada que mostrar (`git` fuera de un repositorio) se omite, y los últimos se caen cuando la línea es demasiado estrecha.
 
-Define el inicio para el proyecto en `Agent.yaml`:
+Define el inicio para el proyecto en `Agent.yml`:
 
 ```yaml
 tui:
@@ -160,7 +160,7 @@ O cámbialo para un solo chat: `/prompt box`, `/prompt top +git -clock`, `/promp
 
 ## Pantalla de notas
 
-`/notes` abre una pantalla con las notas que el agente guarda sobre ti y sobre su propio trabajo: `a` añade, `e` o Enter edita, `d` elimina, `t` o Tab alterna entre las tuyas y las del agente, `s` estadísticas, Esc vuelve. Necesita un bloque [`notes`](../conventions/agent-yaml.md#notas) en `Agent.yaml`.
+`/notes` abre una pantalla con las notas que el agente guarda sobre ti y sobre su propio trabajo: `a` añade, `e` o Enter edita, `d` elimina, `t` o Tab alterna entre las tuyas y las del agente, `s` estadísticas, Esc vuelve. Necesita un bloque [`notes`](../conventions/agent-yaml.md#notas) en `Agent.yml`.
 
 ## Grabarlo
 
@@ -178,7 +178,7 @@ O cámbialo para un solo chat: `/prompt box`, `/prompt top +git -clock`, `/promp
 | Ves | Causa y arreglo |
 |---|---|
 | El chat no encuentra el agente | Ejecuta primero `bxAgents build`, o usa `--connect` |
-| Una tecla no hace nada | Ejecuta `/keys` para ver qué está asignado, y reasigna en `bxAgents.yml` si tu terminal se reserva esa tecla |
+| Una tecla no hace nada | Ejecuta `/keys` para ver qué está asignado, y reasigna en `Agent.yml` si tu terminal se reserva esa tecla |
 | Los colores se ven mal | Define `COLORTERM=truecolor`, o `NO_COLOR=1` para desactivar el color |
 | `--connect` dice 401 | El servidor quiere un token: `--token=<token>` o `BXAGENTS_TOKEN` |
 | Se rechaza una imagen | El perfil define `vision: false`, o el archivo no es png, jpg, gif o webp, o pesa más de 5 MB |

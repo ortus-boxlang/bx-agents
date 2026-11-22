@@ -27,7 +27,7 @@ class extends="testbox.system.BaseSpec" {
 				var result = verb.run( { projectRoot : dir, model : "openai/gpt-5", skipInstall : true } );
 
 				expect( result.exitCode ).toBe( 0 );
-				expect( fileExists( dir & "/Agent.yaml" ) ).toBeTrue();
+				expect( fileExists( dir & "/Agent.yml" ) ).toBeTrue();
 				expect( fileExists( dir & "/Agent.bx" ) ).toBeFalse();
 			} );
 
@@ -37,14 +37,14 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( result.exitCode ).toBe( 0 );
 				expect( fileExists( dir & "/Agent.bx" ) ).toBeTrue();
-				expect( fileExists( dir & "/Agent.yaml" ) ).toBeFalse();
+				expect( fileExists( dir & "/Agent.yml" ) ).toBeFalse();
 			} );
 
 			it( "derives the agent name from the target directory name when --name is omitted", function() {
 				var dir = newTargetDir();
 				verb.run( { projectRoot : dir, model : "openai/gpt-5", skipInstall : true } );
 
-				var content = fileRead( dir & "/Agent.yaml" );
+				var content = fileRead( dir & "/Agent.yml" );
 				expect( content ).toInclude( "name: my-agent" );
 
 				var classDir = newTargetDir() & "-class";
@@ -100,7 +100,7 @@ class extends="testbox.system.BaseSpec" {
 				} );
 
 				expect( result.exitCode ).toBe( 0 );
-				var agent = fileRead( dir & "/Agent.yaml" );
+				var agent = fileRead( dir & "/Agent.yml" );
 				expect( agent ).toInclude( "- now@bxai" );
 				expect( agent ).toInclude( "- webSearch@bxai" );
 				expect( agent ).toInclude( "memory: file" );
@@ -134,7 +134,7 @@ class extends="testbox.system.BaseSpec" {
 				var dir = newTargetDir();
 
 				verb.run( { projectRoot : dir, model : "mock/mock-model", name : "tuned", temperature : "0.3", timeout : "30", skipInstall : true } );
-				var agent = fileRead( dir & "/Agent.yaml" );
+				var agent = fileRead( dir & "/Agent.yml" );
 
 				expect( agent ).toInclude( "provider: mock" & char( 10 ) & "model: mock-model" );
 				expect( agent ).toInclude( "temperature: 0.3" );
@@ -152,7 +152,7 @@ class extends="testbox.system.BaseSpec" {
 				var result = verb.run( { projectRoot : dir, skipInstall : true, _interactive : true, _prompter : prompter } );
 
 				expect( result.exitCode ).toBe( 0 );
-				var agent = fileRead( dir & "/Agent.yaml" );
+				var agent = fileRead( dir & "/Agent.yml" );
 				expect( agent ).toInclude( "name: helper" );
 				expect( agent ).toInclude( "provider: claude" );
 				expect( agent ).toInclude( "- now@bxai" );
@@ -201,7 +201,7 @@ class extends="testbox.system.BaseSpec" {
 				verb.run( { projectRoot : dir, model : "openai", name : "named", wizard : true, skipInstall : true, _prompter : prompter } );
 
 				expect( prompter.recorded().model.value ).toInclude( "from a flag" );
-				expect( fileRead( dir & "/Agent.yaml" ) ).toInclude( "name: named" );
+				expect( fileRead( dir & "/Agent.yml" ) ).toInclude( "name: named" );
 			} );
 
 			it( "throws BxAgents.ConflictingProjectSource when --repo and --forgebox are both passed", function() {

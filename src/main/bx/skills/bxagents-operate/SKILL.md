@@ -65,12 +65,12 @@ Everything the agent keeps is in one folder:
   routines/       routine reports
   logs/           one file per area
   backups/        written by bxAgents backup
-  settings.yml    your chat settings for this agent
+  Agent.yml    your chat settings for this agent
 ```
 
-Where it is, first match wins: `BXAGENTS_HOME`, `data.home` in `Agent.yaml`, the folder of `BXAGENTS_DB`, `data/` in the project if it already has a `chat.db`, then `~/.bxagents/<agent name>`. Two projects with the same agent name share a home. `bxAgents data [--json]` shows the home, where it came from, sizes and volumes.
+Where it is, first match wins: `BXAGENTS_HOME`, `data.home` in `Agent.yml`, the folder of `BXAGENTS_DB`, `data/` in the project if it already has a `chat.db`, then `~/.bxagents/<agent name>`. Two projects with the same agent name share a home. `bxAgents data [--json]` shows the home, where it came from, sizes and volumes.
 
-Settings files for the terminal chat: `~/.bxagents/<agent name>/settings.yml` (this agent), `~/.bxagents/bxAgents.yml` (every agent; `BXAGENTS_USER_CONFIG` names another file).
+Settings files for the terminal chat: `~/.bxagents/<agent name>/Agent.yml` (this agent), `~/.bxagents/Agent.yml` (every agent; `BXAGENTS_USER_CONFIG` names another file).
 
 ## Logs
 
@@ -88,7 +88,7 @@ Admins also have the Logs and Gateways pages in the web app, `GET /logs` and `/l
 
 ## Usage
 
-Off until `usage: true` is in the project's `Agent.yaml` (then rebuild). Counts only, never text, and only calls whose provider reports usage.
+Off until `usage: true` is in the project's `Agent.yml` (then rebuild). Counts only, never text, and only calls whose provider reports usage.
 
 ```bash
 bxAgents stats [--days=30] [--by=model|provider|day|user] [--user=NAME] [--json]
@@ -110,7 +110,7 @@ A backup holds the chat database, `files/`, `skills/` and `routines/`. Volumes a
 2. `serve` or `chat` says nothing is built: run `bxAgents build` (only `chat --connect` needs no local build).
 3. 401 from the API or `chat --connect`: pass `--token` or set `BXAGENTS_TOKEN`; check `bxAgents token list` for `expired` or `revoked`.
 4. A gateway is not answering: open the Gateways page or `GET /gateways` for its state, then `bxAgents logs gateways --level=warn`. After fixing a credential, Reconnect or restart.
-5. Build fails: read every listed error (unknown key, duplicate name, both `Agent.yaml` and `Agent.bx`). `bxAgents build --verbose` shows each phase.
+5. Build fails: read every listed error (unknown key, duplicate name, both `Agent.yml` and `Agent.bx`). `bxAgents build --verbose` shows each phase.
 6. No tokens recorded in `stats`: `usage: true` is not set or the app was not rebuilt and restarted. The `mock` provider records none.
 7. A routine never starts: the app must be served (the heartbeat runs only then) and `routines.enabled` must be true. Check `bxAgents logs routines`.
 

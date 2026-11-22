@@ -14,25 +14,25 @@ tags: [guides, examples, subagents]
 
 ```text
 multi-agent-team/
-├── Agent.yaml
+├── Agent.yml
 ├── instructions.md
 └── subagents/
     ├── researcher/
-    │   ├── Agent.yaml
+    │   ├── Agent.yml
     │   └── instructions.md
     └── writer/
-        ├── Agent.yaml
+        ├── Agent.yml
         └── instructions.md
 ```
 
-Cada carpeta `subagents/<nombre>/` es en sí misma un mini-agente completo - con su propio `Agent.yaml`, su propio `instructions.md`, y (aquí no se usan, pero están soportados) sus propios `tools/`/`skills/`.
+Cada carpeta `subagents/<nombre>/` es en sí misma un mini-agente completo - con su propio `Agent.yml`, su propio `instructions.md`, y (aquí no se usan, pero están soportados) sus propios `tools/`/`skills/`.
 
 ## Declarar el equipo
 
-El `Agent.yaml` raíz nombra los subagentes a cablear mediante `subAgents`:
+El `Agent.yml` raíz nombra los subagentes a cablear mediante `subAgents`:
 
 ```yaml
-# Agent.yaml
+# Agent.yml
 name: multi-agent-team
 description: A root agent delegating to a researcher and a writer subagent.
 model: mock/mock-model
@@ -41,17 +41,17 @@ model: mock/mock-model
 subAgents: [ researcher, writer ]
 ```
 
-`subAgents` se resuelve contra los nombres de carpeta bajo `subagents/`; el `Agent.yaml` de cada carpeta declara su propio `name`, `description` y `model` de forma independiente:
+`subAgents` se resuelve contra los nombres de carpeta bajo `subagents/`; el `Agent.yml` de cada carpeta declara su propio `name`, `description` y `model` de forma independiente:
 
 ```yaml
-# subagents/researcher/Agent.yaml
+# subagents/researcher/Agent.yml
 name: researcher
 description: Gathers facts on a topic.
 model: mock/mock-model
 ```
 
 ```yaml
-# subagents/writer/Agent.yaml
+# subagents/writer/Agent.yml
 name: writer
 description: Turns research into polished prose.
 model: mock/mock-model

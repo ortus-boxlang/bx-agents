@@ -49,7 +49,7 @@ Every `*EnvVar` key names an environment variable, never the secret. They are re
 
 ### Behavior
 
-One session serves all chat gateways and is bound to the root agent. Tune it in `Agent.yaml`:
+One session serves all chat gateways and is bound to the root agent. Tune it in `Agent.yml`:
 
 ```yaml
 gatewaySession:
@@ -77,7 +77,7 @@ Seven ready-made connectors ship with bxAgents: GitHub, Stripe, Notion, Atlassia
 - Connect with a token or a sign in (see the catalog page for which); Git runs locally and an admin connects it.
 - States: available, connected, needs attention (service refused the token), needs a program (for example `uvx`).
 
-Limit them in `Agent.yaml`:
+Limit them in `Agent.yml`:
 
 ```yaml
 connectors:
@@ -107,7 +107,7 @@ A tool that is off, over the admin `tools` ceiling, or not connected is refused 
 
 ## MCP servers
 
-Use a remote server by listing it in `Agent.yaml`:
+Use a remote server by listing it in `Agent.yml`:
 
 ```yaml
 mcpServers:

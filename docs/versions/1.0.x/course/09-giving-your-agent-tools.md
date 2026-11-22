@@ -37,7 +37,7 @@ actually has a `tools/` folder with files in it.
 An agent gets its own `tools/` folder and nothing else: a root agent's tools are not
 given to its subagents, and the other way round. Tools that *modules* register with
 bx-ai (its built-ins, `bx-playwright`, ...) are only attached when the agent asks for
-them in `Agent.yaml`:
+them in `Agent.yml`:
 
 ```yaml
 tools:
@@ -45,7 +45,7 @@ tools:
   - "*@bxplaywright"
 ```
 
-See [Agent.yaml](../conventions/agent-yaml.md#tools) for the details.
+See [Agent.yml](../conventions/agent-yaml.md#tools) for the details.
 
 ## Naming
 

@@ -1,9 +1,9 @@
 /**
- * Reads a project's `Agent.yaml` (or `Agent.yml`) into the same config struct a
+ * Reads a project's `Agent.yml` into the same config struct a
  * descriptor `Agent.bx`'s `configure()` returns, so everything downstream
  * (AgentConfigResolver, the validator, the generator) treats both the same way.
  *
- * `Agent.yaml` is the default way to define an agent; `Agent.bx` is the advanced
+ * `Agent.yml` is the default way to define an agent; `Agent.bx` is the advanced
  * option for behavior YAML cannot express (hooks, dynamic instructions, code).
  *
  * The keys are exactly the ones `configure()` documents (docs/conventions/agent-bx.md),
@@ -25,7 +25,7 @@
 class {
 
 	/**
-	 * Keys allowed at the top level of an Agent.yaml. The configure() keys, plus
+	 * Keys allowed at the top level of an Agent.yml. The configure() keys, plus
 	 * `instructions` and `environments`.
 	 */
 	variables.ALLOWED_KEYS = [
@@ -78,9 +78,9 @@ class {
 	}
 
 	/**
-	 * Load and validate an Agent.yaml.
+	 * Load and validate an Agent.yml.
 	 *
-	 * @path Absolute path to the Agent.yaml / Agent.yml
+	 * @path Absolute path to the Agent.yml
 	 *
 	 * @return { config : the configure()-shaped struct without `environments`, environments : { name : override struct } }
 	 */
@@ -126,7 +126,7 @@ class {
 	/**
 	 * Fail on any key that is not allowed, naming it and listing the valid ones.
 	 *
-	 * @path Absolute path to the Agent.yaml, for the error message
+	 * @path Absolute path to the Agent.yml, for the error message
 	 * @data The mapping to check
 	 * @allowed The allowed key names
 	 * @prefix Where the mapping sits, e.g. "environments.production.", for the error message
@@ -145,7 +145,7 @@ class {
 	/**
 	 * Fail on any key whose value has the wrong type.
 	 *
-	 * @path Absolute path to the Agent.yaml, for the error message
+	 * @path Absolute path to the Agent.yml, for the error message
 	 * @data The mapping to check
 	 * @prefix Where the mapping sits, e.g. "environments.production.", for the error message
 	 */
@@ -196,13 +196,13 @@ class {
 	}
 
 	/**
-	 * @path Absolute path to the Agent.yaml
+	 * @path Absolute path to the Agent.yml
 	 * @reason What is wrong with it
 	 */
 	private void function fail( required string path, required string reason ) {
 		throw(
 			type    = "BxAgents.InvalidAgentYaml",
-			message = "Agent.yaml at [#arguments.path#] is invalid: #arguments.reason#"
+			message = "Agent.yml at [#arguments.path#] is invalid: #arguments.reason#"
 		)
 	}
 

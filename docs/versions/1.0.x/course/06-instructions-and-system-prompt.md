@@ -12,8 +12,8 @@ tags: [course, conventions]
 edit, but you have two equally valid choices for where your agent's system prompt
 lives:
 
-1. Set `instructions` inline in `Agent.yaml`.
-2. Drop an `instructions.md` file beside `Agent.yaml` and let the build wire it in.
+1. Set `instructions` inline in `Agent.yml`.
+2. Drop an `instructions.md` file beside `Agent.yml` and let the build wire it in.
 
 ## Letting the file win
 
@@ -23,7 +23,7 @@ If `instructions.md` exists, the build emits:
 withInstructions( fileRead( "instructions.md" ) )
 ```
 
-which wins over an inline `instructions` in `Agent.yaml` (or whatever a class set).
+which wins over an inline `instructions` in `Agent.yml` (or whatever a class set).
 This is the more common pattern in
 practice - it keeps the prompt as plain text you can edit without touching BoxLang
 code, and it's easy to diff in a pull request.
