@@ -1106,6 +1106,42 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "reading the root agent's settings when the app starts", function() {
+
+				it( "builds the root agent from the settings the app resolved, and bakes what it needs to do that", function() {
+					var buildDir = newBuildDir();
+					var root = fixtures & "/yaml-minimal";
+					var config = resolver.resolve( projectRoot = root, withPerson = true, globalFile = buildDir & "/no-global.yml" );
+					var result = generator.generate( root, buildDir, config );
+					var factory = fileRead( result.agentFactory );
+
+					expect( factory ).toInclude( "RuntimeSettings@bxagents" );
+					expect( factory ).toInclude( "var rootSettings =" );
+					expect( factory ).toInclude( "modelFor( rootSettings )" );
+					expect( factory ).toInclude( "rootSettings.tools" );
+					expect( factory ).toInclude( "rootSettings.mcpServers" );
+					expect( factory ).toInclude( "rootSettings.instructions" );
+					expect( factory ).notToInclude( 'provider : "openai"' );
+
+					var baked = jsonDeserialize( fileRead( buildDir & "/config/agent-settings.json" ) );
+					expect( baked.agentName ).toBe( "yaml-agent" );
+					expect( baked.base.model ).toBe( "openai/gpt-5" );
+					// an instructions.md beside the agent is its instructions, so its text is what a person's `instructions+:` adds to
+					expect( baked.base.instructions ).toBe( fileRead( root & "/instructions.md", "UTF-8" ) );
+				} );
+
+				it( "keeps every value as a literal when the config was not resolved for a person to layer over", function() {
+					var buildDir = newBuildDir();
+					var result = generateFor( fixtures & "/yaml-minimal", buildDir );
+					var factory = fileRead( result.agentFactory );
+
+					expect( factory ).notToInclude( "rootSettings" );
+					expect( factory ).toInclude( 'provider : "openai"' );
+					expect( fileExists( buildDir & "/config/agent-settings.json" ) ).toBeFalse();
+				} );
+
+			} );
+
 		} );
 	}
 

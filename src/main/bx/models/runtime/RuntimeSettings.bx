@@ -62,7 +62,15 @@ class {
 				}
 			}
 		}
-		return jsonSerialize( { "version" : 1, "agentName" : arguments.agentName, "dataHome" : arguments.dataHome, "base" : base, "baked" : baked, "codeDefined" : codeDefined } )
+		return jsonSerialize( {
+			"version"     : 1,
+			"agentName"   : arguments.agentName,
+			"dataHome"    : arguments.dataHome,
+			"environment" : arguments.merged.environment ?: "",
+			"base"        : base,
+			"baked"       : baked,
+			"codeDefined" : codeDefined
+		} )
 	}
 
 	/**
@@ -83,6 +91,9 @@ class {
 		var dataHome = new "models.data.DataHome@bxagents"( projectRoot : expandPath( "/" ), configured : data.dataHome ?: "", agentName : data.agentName ?: "" )
 		var layers = new "models.settings.SettingsLayers@bxagents"( arguments.globalFile, dataHome.path() & "/Agent.yml", arguments.flags )
 		var effective = layers.merged( data.base ?: {}, "the Agent.yml this app was built from" )
+		// what the build did to the settings after the files: the environment it was built for, and one model slug from provider + model
+		effective[ "environment" ] = data.environment ?: ""
+		effective = new "models.build.AiSettings@bxagents"().normalize( effective )
 
 		var needsRebuild = layers.buildOnly().filter( entry => !sameValue( valueAt( data.baked ?: {}, entry.path ), valueAt( effective, entry.path ) ) )
 		return { active : true, config : effective, files : layers.files(), changed : layers.fromPerson(), needsRebuild : needsRebuild }
@@ -110,6 +121,26 @@ class {
 		}
 		for ( var entry in result.needsRebuild ) {
 			writeLog( text = "#entry.path# in #entry.file# needs a rebuild: bxAgents build. It is generated into the app, so it has no effect until then.", type = "warning", log = "bxagents-settings" )
+		}
+		return result
+	}
+
+	/**
+	 * start() for an app whose agent is built from the result: an app without the baked file can not be, so it says to build again.
+	 *
+	 * @file `config/agent-settings.json` of the app
+	 * @globalFile The person's file for every agent, for a test
+	 * @flags Settings of one run
+	 *
+	 * @return What start() returns
+	 */
+	struct function startAndRequire( required string file, string globalFile = "", struct flags = {} ) {
+		var result = start( arguments.file, arguments.globalFile, arguments.flags )
+		if ( !result.active ) {
+			throw(
+				type    = "BxAgents.MissingAppSettings",
+				message = "This app has no config/agent-settings.json (looked at [#arguments.file#]), which it reads its settings from when it starts. Run bxAgents build again."
+			)
 		}
 		return result
 	}

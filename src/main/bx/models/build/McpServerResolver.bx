@@ -22,6 +22,60 @@ class {
 	}
 
 	/**
+	 * The `mcpServers` setting as the list bx-ai takes, with ${env.NAME} placeholders resolved: what an app builds its agent
+	 * from when it starts.
+	 *
+	 * @entries The `mcpServers` setting
+	 * @label How to name it in a message
+	 *
+	 * @return The connection list; empty when there are none
+	 */
+	array function resolvedList( required array entries, string label = "mcpServers" ) {
+		var found = connections( arguments.entries )
+		return found.servers.len() ? resolve( found.servers, arguments.label ) : []
+	}
+
+	/**
+	 * Turns the `mcpServers` setting into the connection settings bx-ai takes: a plain URL stays a text, and a mapping loses
+	 * its `name` (a label for the file, not a connection setting). One place for it, so the source the build writes and the
+	 * list the app builds when it starts are the same.
+	 *
+	 * @entries The `mcpServers` setting
+	 *
+	 * @return { servers : the list, needsResolving : whether an entry holds ${env.NAME} placeholders or a program to start }
+	 */
+	struct function connections( required array entries ) {
+		var servers = []
+		var needsResolving = false
+		for ( var entry in arguments.entries ) {
+			if ( isStruct( entry ) ) {
+				if ( !len( entry.url ?: "" ) && !entry.keyExists( "command" ) ) {
+					throw(
+						type    = "BxAgents.InvalidMcpServer",
+						message = "An mcpServers entry is missing a 'url' or a 'command'"
+					)
+				}
+				var connection = duplicate( entry )
+				connection.delete( "name" )
+				if ( connection.len() == 1 && connection.keyExists( "url" ) ) {
+					servers.append( connection.url )
+				} else {
+					servers.append( connection )
+					needsResolving = true
+				}
+			} else if ( isSimpleValue( entry ) && len( entry ) ) {
+				servers.append( toString( entry ) )
+			} else {
+				throw(
+					type    = "BxAgents.InvalidMcpServer",
+					message = "An mcpServers entry must be a URL string or a { url, name } struct"
+				)
+			}
+		}
+		return { servers : servers, needsResolving : needsResolving }
+	}
+
+	/**
 	 * @servers The entries: a URL string, a web server struct or a stdio struct ( { command, env, ... } )
 	 * @label What the list belongs to, for messages
 	 * @context { apiPath : where the agent API is served; vault : a VaultWiring (tests) }

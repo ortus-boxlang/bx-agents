@@ -96,6 +96,9 @@ class {
 		variables.projectVolumes = isStruct( arguments.resolvedConfig.volumes ?: "" ) ? arguments.resolvedConfig.volumes : {}
 		variables.projectAgentName = arguments.resolvedConfig.name ?: ""
 		variables.projectDataHome = ( isStruct( arguments.resolvedConfig.data ?: "" ) ? arguments.resolvedConfig.data : {} ).home ?: ""
+		// A project built with the person's files in mind (the real build) reads the root agent's settings when the app
+		// starts, so a person's Agent.yml can change them; a config handed in without that keeps every value as a literal.
+		variables.readsSettingsAtStart = isStruct( arguments.resolvedConfig.personLayers ?: "" )
 
 		var applicationPath  = appDir & "/Application.bx"
 		var baseApplicationPath = appDir & "/bxagents/Application.bx"
@@ -195,11 +198,19 @@ class {
 		fileWrite( appDir & "/config/bxai-settings.json", jsonSerialize( bxaiSettings( arguments.resolvedConfig ) ) )
 		// what the app needs to merge the person's files over the author's settings when it starts (models.runtime.RuntimeSettings)
 		if ( isStruct( arguments.resolvedConfig.personLayers ?: "" ) ) {
+			// An instructions.md beside the agent is the author's instructions, so a person's `instructions:` replaces it and
+			// `instructions+:` adds to it; both need its text in the settings the app starts from.
+			var authorSettings = duplicate( arguments.resolvedConfig.personLayers.author )
+			var bakedSettings = duplicate( arguments.resolvedConfig )
+			if ( fileExists( arguments.projectRoot & "/instructions.md" ) ) {
+				authorSettings[ "instructions" ] = fileRead( arguments.projectRoot & "/instructions.md", "UTF-8" )
+				bakedSettings[ "instructions" ] = authorSettings.instructions
+			}
 			fileWrite(
 				appDir & "/config/agent-settings.json",
 				new "models.runtime.RuntimeSettings@bxagents"().bake(
-					arguments.resolvedConfig.personLayers.author,
-					arguments.resolvedConfig,
+					authorSettings,
+					bakedSettings,
 					resolveAgentName( arguments.resolvedConfig ),
 					( isStruct( arguments.resolvedConfig.data ?: "" ) ? arguments.resolvedConfig.data : {} ).home ?: ""
 				)
@@ -818,8 +829,6 @@ class {
 			"	function buildAgent() {",
 			"		// bx-ai's settings (default model, profiles, capability defaults) have to be in place before an agent is built, whoever builds it: chat, invoke, a test or ColdBox",
 			'		new "models.runtime.ModuleSettings@bxagents"().apply( "bxai", resolveAppPath( "../config/bxai-settings.json", "#Strings::bxLiteral( Strings::normalizePath( arguments.appDir ) & "/config/bxai-settings.json" )#" ) )',
-			'		// the Agent.yml files of the person who runs this app, as they are now, over what was baked: settings bx-ai reads apply here, and what only a build can change is reported',
-			'		new "models.runtime.RuntimeSettings@bxagents"().start( resolveAppPath( "../config/agent-settings.json", "#Strings::bxLiteral( Strings::normalizePath( arguments.appDir ) & "/config/agent-settings.json" )#" ) )',
 			'		// usage recording is off unless Agent.yml says usage: true',
 			'		new "models.usage.UsageRecorder@bxagents"().start()',
 			body,
@@ -828,6 +837,14 @@ class {
 			"	}",
 			""
 		]
+		if ( variables.readsSettingsAtStart ) {
+			// the Agent.yml files of the person who runs this app, as they are now, over what was baked: what bx-ai reads
+			// applies here, what only a build can change is reported, and the root agent below is built from the result
+			lines.insertAt(
+				lines.findNoCase( "		// usage recording is off unless Agent.yml says usage: true" ),
+				'		var rootSettings = new "models.runtime.RuntimeSettings@bxagents"().startAndRequire( resolveAppPath( "../config/agent-settings.json", "#Strings::bxLiteral( Strings::normalizePath( arguments.appDir ) & "/config/agent-settings.json" )#" ) ).config'
+			)
+		}
 		// the skills that ship with the app (its skills/ folder) join bx-ai's global skills first: bx-ai reads its skills
 		// folder when the runtime starts, before this app's settings are applied, so it never sees them
 		lines.insertAt(
@@ -1248,9 +1265,13 @@ class {
 
 		var description = arguments.resolvedConfig.description ?: ""
 
+		// The root agent of a built app reads these from the settings the app resolved when it started (rootSettings, set at
+		// the top of buildAgent), so a person's Agent.yml can change them. Everything else keeps its literal.
+		var atStart = variables.readsSettingsAtStart && !len( arguments.nodeRelativePath )
+
 		// A profile, else the provider/model written in this node's own config, else what the
 		// root Agent.yml set as the default (a subagent that says nothing inherits it)
-		var modelExpression = renderModelExpression( arguments.resolvedConfig )
+		var modelExpression = atStart ? "agentModel" : renderModelExpression( arguments.resolvedConfig )
 		if ( !len( modelExpression ) ) {
 			modelExpression = "aiModel()"
 		}
@@ -1259,10 +1280,14 @@ class {
 		var memoryExpression = renderMemoryExpression( arguments.resolvedConfig, arguments.defaultMemory )
 
 		var lines = renderToolsLines( arguments.varName, arguments.nodePath, arguments.resolvedConfig, arguments.name, arguments.appDir, arguments.nodeRelativePath )
+		if ( atStart ) {
+			lines.append( 'var agentModel = new "models.build.AiSettings@bxagents"().modelFor( rootSettings )' )
+			lines.append( 'if ( isSimpleValue( agentModel ) ) { agentModel = aiModel() }' )
+		}
 		lines.append( "var #arguments.varName# = aiAgent(" )
 		lines.append( '	name : "#Strings::bxLiteral( arguments.name )#",' )
-		lines.append( '	description : "#Strings::bxLiteral( description )#",' )
-		lines.append( '	instructions : #instructionsExpression#,' )
+		lines.append( atStart ? '	description : rootSettings.description ?: "",' : '	description : "#Strings::bxLiteral( description )#",' )
+		lines.append( atStart ? '	instructions : rootSettings.instructions ?: "",' : '	instructions : #instructionsExpression#,' )
 		lines.append( '	model : #modelExpression#,' )
 		lines.append( "	tools : #arguments.varName#Tools," )
 		if ( len( memoryExpression ) ) {
@@ -1276,8 +1301,12 @@ class {
 			lines.append( "	subAgents : []," )
 		}
 
-		var mcpServers = renderMcpServersExpression( arguments.resolvedConfig, arguments.name )
-		lines.append( "	mcpServers : #len( mcpServers ) ? mcpServers : '[]'#" )
+		if ( atStart ) {
+			lines.append( '	mcpServers : new "models.build.McpServerResolver@bxagents"().resolvedList( rootSettings.mcpServers ?: [], "mcpServers of #Strings::bxLiteral( arguments.name )#" )' )
+		} else {
+			var mcpServers = renderMcpServersExpression( arguments.resolvedConfig, arguments.name )
+			lines.append( "	mcpServers : #len( mcpServers ) ? mcpServers : '[]'#" )
+		}
 
 		lines.append( ")" )
 
@@ -1431,45 +1460,13 @@ class {
 	}
 
 	/**
-	 * Gives an agent that lists bx-ai's file tools the project's volumes to use them over, unless it names folders of
-	 * its own with `toolOptions.bxai.allowedPaths`. The tools are then fenced into volumes and speak in volume names.
+	 * @toolOptions The node's `toolOptions`
+	 * @declared The `tools:` entries
 	 *
-	 * @toolOptions The agent's own `toolOptions`
-	 * @declared The agent's `tools:` entries
-	 *
-	 * @return The `toolOptions` to generate, with `bxai.volumes` and `bxai.dataHome` added where they apply
+	 * @return The options with the project's volumes added for bx-ai's file tools (see ToolOptions)
 	 */
 	private struct function withVolumes( required any toolOptions, required any declared ) {
-		var options = isStruct( arguments.toolOptions ) ? arguments.toolOptions : {}
-		if ( !isArray( arguments.declared ) || !listsFileTools( arguments.declared ) ) {
-			return options
-		}
-		if ( isStruct( options.bxai ?: "" ) && options.bxai.keyExists( "allowedPaths" ) ) {
-			return options
-		}
-		var merged = duplicate( options )
-		merged.bxai = isStruct( merged.bxai ?: "" ) ? merged.bxai : {}
-		merged.bxai.volumes = variables.projectVolumes
-		if ( len( variables.projectDataHome ) ) {
-			merged.bxai.dataHome = variables.projectDataHome
-		}
-		merged.bxai.agentName = variables.projectAgentName
-		return merged
-	}
-
-	/**
-	 * @declared The `tools:` entries, each item@module
-	 *
-	 * @return True when one of them is a bx-ai file tool, or all of bx-ai's tools
-	 */
-	private boolean function listsFileTools( required array declared ) {
-		var fileTools = WizardCatalog::FILE_TOOLS_READ.duplicate().append( WizardCatalog::FILE_TOOLS_WRITE, true ).map( function( tool ) {
-			return tool.name
-		} )
-		return arguments.declared.some( function( entry ) {
-			var parts = toString( entry ).listToArray( "@" )
-			return parts.len() == 2 && parts[ 2 ] == "bxai" && ( parts[ 1 ] == "*" || fileTools.contains( parts[ 1 ] ) )
-		} )
+		return new "models.build.ToolOptions@bxagents"().withVolumes( arguments.toolOptions, arguments.declared, variables.projectVolumes, variables.projectDataHome, variables.projectAgentName )
 	}
 
 	/**
@@ -1511,7 +1508,9 @@ class {
 		var extensionTools = len( arguments.nodeRelativePath ) ? [] : new "models.extensions.ExtensionBundles@bxagents"().folders( arguments.nodePath, "tools" )
 		if ( len( ownToolsRelative ) && extensionTools.len() ) {
 			var folderLiterals = extensionTools.map( f => '{ extension : "#Strings::bxLiteral( f.extension )#", path : resolveAppPath( "#Strings::bxLiteral( f.relative )#", "#Strings::bxLiteral( f.source )#" ) }' )
-			var disableLiteral = renderLiteral( new "models.extensions.ExtensionSettings@bxagents"().disableList( isStruct( arguments.resolvedConfig.extensions ?: "" ) ? arguments.resolvedConfig.extensions : {} ) )
+			var disableLiteral = variables.readsSettingsAtStart && !len( arguments.nodeRelativePath )
+				? 'new "models.extensions.ExtensionSettings@bxagents"().disableList( isStruct( rootSettings.extensions ?: "" ) ? rootSettings.extensions : {} )'
+				: renderLiteral( new "models.extensions.ExtensionSettings@bxagents"().disableList( isStruct( arguments.resolvedConfig.extensions ?: "" ) ? arguments.resolvedConfig.extensions : {} ) )
 			lines.append( 'var #arguments.varName#OwnTools = new "models.build.ToolRegistryLoader@bxagents"().loadWithExtensions( resolveAppPath( "#Strings::bxLiteral( ownToolsRelative )#", "#Strings::bxLiteral( ownToolsFallback )#" ), [ #folderLiterals.toList( ", " )# ], #disableLiteral# )' )
 		} else if ( len( ownToolsRelative ) ) {
 			lines.append( 'var #arguments.varName#OwnTools = new "models.build.ToolRegistryLoader@bxagents"().load( resolveAppPath( "#Strings::bxLiteral( ownToolsRelative )#", "#Strings::bxLiteral( ownToolsFallback )#" ) )' )
@@ -1520,6 +1519,14 @@ class {
 		}
 
 		var declared = arguments.resolvedConfig.tools ?: []
+		if ( variables.readsSettingsAtStart ) {
+			// the volumes are the person's to add to as well, so every agent's file tools read them from the settings the app started with
+			var toolsExpression = len( arguments.nodeRelativePath ) ? "[ #( isArray( declared ) ? declared.map( entry => '"#Strings::bxLiteral( toString( entry ) )#"' ) : [] ).toList( ", " )# ]" : "rootSettings.tools ?: []"
+			var optionsExpression = len( arguments.nodeRelativePath ) ? renderLiteral( isStruct( arguments.resolvedConfig.toolOptions ?: "" ) ? arguments.resolvedConfig.toolOptions : {} ) : "rootSettings.toolOptions ?: {}"
+			lines.append( 'var #arguments.varName#Declared = #toolsExpression#' )
+			lines.append( 'var #arguments.varName#Tools = new "models.build.ToolSelector@bxagents"().select( #arguments.varName#Declared, #arguments.varName#OwnTools, "#Strings::bxLiteral( arguments.name )#", new "models.build.ToolOptions@bxagents"().withVolumes( #optionsExpression#, #arguments.varName#Declared, rootSettings.volumes ?: {}, ( isStruct( rootSettings.data ?: "" ) ? rootSettings.data : {} ).home ?: "", "#Strings::bxLiteral( variables.projectAgentName )#" ) )' )
+			return lines
+		}
 		var quoted = isArray( declared ) ? declared.map( entry => '"#Strings::bxLiteral( toString( entry ) )#"' ) : []
 		var toolOptions = withVolumes( arguments.resolvedConfig.toolOptions ?: {}, declared )
 		var toolOptionsArgument = isStruct( toolOptions ) && toolOptions.len() ? ", #renderLiteral( toolOptions )#" : ""
@@ -1699,36 +1706,9 @@ class {
 	 * @return A BoxLang expression for the list, or "" when the node declares none
 	 */
 	private string function renderMcpServersExpression( required struct resolvedConfig, required string name ) {
-		var entries = arguments.resolvedConfig.mcpServers ?: []
-		var servers = []
-		var needsResolving = false
-
-		for ( var entry in entries ) {
-			if ( isStruct( entry ) ) {
-				if ( !len( entry.url ?: "" ) && !entry.keyExists( "command" ) ) {
-					throw(
-						type    = "BxAgents.InvalidMcpServer",
-						message = "An mcpServers entry is missing a 'url' or a 'command'"
-					)
-				}
-				// `name` only labels the entry in the file; bx-ai's connection settings do not take it
-				var connection = duplicate( entry )
-				connection.delete( "name" )
-				if ( connection.len() == 1 && connection.keyExists( "url" ) ) {
-					servers.append( connection.url )
-				} else {
-					servers.append( connection )
-					needsResolving = true
-				}
-			} else if ( isSimpleValue( entry ) && len( entry ) ) {
-				servers.append( toString( entry ) )
-			} else {
-				throw(
-					type    = "BxAgents.InvalidMcpServer",
-					message = "An mcpServers entry must be a URL string or a { url, name } struct"
-				)
-			}
-		}
+		var found = new "models.build.McpServerResolver@bxagents"().connections( arguments.resolvedConfig.mcpServers ?: [] )
+		var servers = found.servers
+		var needsResolving = found.needsResolving
 
 		if ( !servers.len() ) {
 			return ""

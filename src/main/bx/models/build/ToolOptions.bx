@@ -1,0 +1,53 @@
+/**
+ * The options handed to a node's module tools, with the project's volumes added for bx-ai's file tools.
+ *
+ * One place for it because two callers need the same answer: the build, which writes the result into the generated
+ * source for most agents, and the app at start, which asks again with the volumes the person's files changed.
+ */
+import bxModules.bxagents.models.wizard.WizardCatalog;
+
+class {
+
+	/**
+	 * @toolOptions The node's `toolOptions` setting
+	 * @declared The node's `tools:` entries, each item@module
+	 * @volumes The project's `volumes` setting
+	 * @dataHome `data.home` as written, or blank
+	 * @agentName The project's agent name
+	 *
+	 * @return The options, with `bxai.volumes`, `bxai.dataHome` and `bxai.agentName` added when the node lists file tools and names no folders of its own
+	 */
+	struct function withVolumes( required any toolOptions, required any declared, required any volumes, string dataHome = "", string agentName = "" ) {
+		var options = isStruct( arguments.toolOptions ) ? arguments.toolOptions : {}
+		if ( !isArray( arguments.declared ) || !listsFileTools( arguments.declared ) ) {
+			return options
+		}
+		if ( isStruct( options.bxai ?: "" ) && options.bxai.keyExists( "allowedPaths" ) ) {
+			return options
+		}
+		var merged = duplicate( options )
+		merged.bxai = isStruct( merged.bxai ?: "" ) ? merged.bxai : {}
+		merged.bxai.volumes = isStruct( arguments.volumes ) ? arguments.volumes : {}
+		if ( len( arguments.dataHome ) ) {
+			merged.bxai.dataHome = arguments.dataHome
+		}
+		merged.bxai.agentName = arguments.agentName
+		return merged
+	}
+
+	/**
+	 * @declared The `tools:` entries, each item@module
+	 *
+	 * @return True when one of them is a bx-ai file tool, or all of bx-ai's tools
+	 */
+	boolean function listsFileTools( required array declared ) {
+		var fileTools = WizardCatalog::FILE_TOOLS_READ.duplicate().append( WizardCatalog::FILE_TOOLS_WRITE, true ).map( function( tool ) {
+			return tool.name
+		} )
+		return arguments.declared.some( function( entry ) {
+			var parts = toString( entry ).listToArray( "@" )
+			return parts.len() == 2 && parts[ 2 ] == "bxai" && ( parts[ 1 ] == "*" || fileTools.contains( parts[ 1 ] ) )
+		} )
+	}
+
+}
