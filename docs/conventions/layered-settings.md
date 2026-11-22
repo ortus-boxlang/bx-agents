@@ -45,6 +45,8 @@ A setting the built app cannot change without a rebuild is reported at start, wi
 | a plain value | replaces |
 | a list | replaces |
 | `key+:` with a list | appends to the list below |
+| `key+:` with text | appends to the text below, after a blank line (for `instructions`) |
+| `key-:` with a list | removes those entries from the list below |
 | `key: ~` | removes the key |
 
 ```yaml
@@ -57,11 +59,16 @@ mcpServers: [ https://mcp.example.com ]
 model: ollama/qwen3        # replaces
 tools+: [ "*@bxplaywright" ] # appends
 mcpServers: ~              # removes
+tools-: [ now@bxai ]       # removes one entry
+instructions+: |           # appends to the author's instructions
+  Always answer in French.
 ```
+
+A `key+:` or `key-:` on a key the lower layers do not set acts as a plain set (for `+:`) or does nothing (for `-:`). Using `+:` on a mapping is an error.
 
 ## Which keys, and where
 
-Everything except `name` and `data.home` can be overridden (`data.home` decides where the agent's own file lives). Both person files may add tools, `mcpServers` and `volumes`.
+Everything except `name` and `data.home` can be overridden (`data.home` decides where the agent's own file lives). Both person files may add tools, `mcpServers` and `volumes`, and remove entries with `key-:`.
 
 `chat:` is valid only in the person's files. In a project it is an error, so a project can never switch those on for a person. `extensions:` values layer the same way.
 
@@ -84,8 +91,10 @@ Read from the generators, not yet proven by running. "Start" means the built app
 | `tools`, `toolOptions`, `subAgents` | baked into the factory and copied folders | Build |
 | `mcpServers` | baked list, `${env}` resolved at start | Build for the list, Start for the values |
 | `memory`, `checkpointer`, `notes`, `vault`, `skills` | baked into the factory | Build |
-| `volumes`, `data` (except `home`) | baked into the factory and gateway code | Build |
-| `agentApi`, `gatewaySession`, `routines`, `connectors`, `extensions` | generated routes, gateways, schedulers, copied extension folders | Build (`extensions` values: Start) |
+| `volumes` | baked into `toolOptions` by `withVolumes`; made a read of the merged struct | Start |
+| `data` (except `home`) | baked into the factory and gateway code | Build |
+| `connectors` | `ConnectorWiring.attach` with a literal; the catalog is read where the app runs. The call is emitted always, so start can turn connectors on | Start |
+| `agentApi`, `gatewaySession`, `routines`, `extensions` | generated routes, gateways, schedulers, copied extension folders | Build (`extensions` values: Start) |
 | `environments` | resolved at build | Build |
 | `name`, `data.home` | not overridable | none |
 
