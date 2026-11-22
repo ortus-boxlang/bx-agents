@@ -238,6 +238,13 @@ class extends="testbox.system.BaseSpec" {
 				} ).toThrow( type = "BxAgents.InvalidAgentYaml" );
 			} );
 
+			it( "refuses chat: in a project, which only a person's own file may set", function() {
+				var path = writeYaml( [ "name: a", "model: openai/gpt-5", "chat:", "  shell: true" ] );
+				expect( function() {
+					loader.load( path );
+				} ).toThrow( type = "BxAgents.InvalidAgentYaml", regex = "only valid in a person's file" );
+			} );
+
 			it( "fails cleanly when the file does not exist", function() {
 				expect( function() {
 					loader.load( "/nope/Agent.yml" );
