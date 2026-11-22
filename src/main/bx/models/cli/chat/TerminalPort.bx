@@ -112,6 +112,28 @@ class {
 	 * @return [ { id, keys, does, place } ] the keys of the chat screen as they are now bound
 	 */
 	/**
+	 * Says where the settings files are, so /settings can change any setting and not only how the chat looks.
+	 *
+	 * @agent The agent's own Agent.yml, or blank when there is no local project
+	 * @global The person's Agent.yml for every agent
+	 *
+	 * @return this
+	 */
+	function withSettingsFiles( required string agent, required string global ) {
+		variables.settingsFiles = { agent : arguments.agent, global : arguments.global }
+		return this
+	}
+
+	/**
+	 * @scope "agent" or "global"
+	 *
+	 * @return The path of that Agent.yml, blank when there is none to write
+	 */
+	string function settingsFile( string scope = "agent" ) {
+		return ( variables.settingsFiles ?: {} )[ arguments.scope ] ?: ""
+	}
+
+	/**
 	 * @return One struct per setting of the chat: name, value, source (the layer the value comes from), allowed and does
 	 */
 	array function settingsTable() {

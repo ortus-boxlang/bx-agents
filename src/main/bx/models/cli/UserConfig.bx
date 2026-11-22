@@ -19,7 +19,7 @@
  *     disable: [ roll ]
  *     hello: { greeting: Hi }
  *
- * A missing file means the defaults. A key it does not know is reported (`problems()`), not ignored, so a
+ * A missing file means the defaults. A setting it does not know is reported (`problems()`), not ignored, so a
  * typo does not quietly leave a switch where the person thought it was.
  */
 class {
@@ -153,9 +153,13 @@ class {
 			return
 		}
 		variables.data = parsed
+		// the person's file is an Agent.yml like the author's: it may set any setting (SettingsLayers decides what it means
+		// and whether it is valid), so only a name that is no setting at all is reported here
+		var known = new "models.build.AgentYamlLoader@bxagents"().keys().append( "chat" )
 		for ( var key in parsed ) {
-			if ( ![ "chat", "tui", "extensions" ].contains( lCase( key ) ) ) {
-				variables.problems.append( "#variables.file# has an unknown setting [#key#]; the sections are: chat, tui, extensions" )
+			var base = reReplace( key, "[+\-]$", "" )
+			if ( !known.containsNoCase( base ) ) {
+				variables.problems.append( "#variables.file# has an unknown setting [#key#]. Valid settings: #known.toList( ', ' )#" )
 			}
 		}
 		if ( parsed.keyExists( "tui" ) ) {

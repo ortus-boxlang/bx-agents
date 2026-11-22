@@ -1,0 +1,121 @@
+/**
+ * Writing one setting into an Agent.yml on the lines of the file: only the entry that changes is touched.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "SettingsFileWriter", function() {
+
+			beforeEach( function() {
+				variables.nl = char( 10 )
+				variables.writer = new bxagents.models.settings.SettingsFileWriter()
+			} );
+
+			function file( required array lines ) {
+				return arguments.lines.toList( nl ) & nl
+			}
+
+			it( "adds a setting to the end of a file and keeps everything else", function() {
+				var text = file( [ "## my notes", "model: openai/gpt-5", "tui:", "  header: bars" ] )
+				var result = writer.set( text, "usage", "true" )
+				expect( result.ok ).toBeTrue()
+				expect( result.action ).toBe( "added" )
+				expect( result.text ).toBe( text & "usage: true" & nl )
+			} );
+
+			it( "adds to an empty file", function() {
+				expect( writer.set( "", "model", "ollama/qwen3" ).text ).toBe( "model: ollama/qwen3" & nl )
+			} );
+
+			it( "replaces a setting where it is and keeps the comments around it and after it", function() {
+				var text = file( [ "## the model", "model: openai/gpt-5   ## my favourite", "usage: false" ] )
+				var result = writer.set( text, "model", "ollama/qwen3" )
+				expect( result.action ).toBe( "changed" )
+				expect( result.text ).toBe( file( [ "## the model", "model: ollama/qwen3   ## my favourite", "usage: false" ] ) )
+			} );
+
+			it( "replaces a block entry with all the lines under it, and nothing after it", function() {
+				var text = file( [ "tools:", "  - now@bxai", "  - other@bxai", "## about the model", "model: m" ] )
+				var result = writer.set( text, "tools", "[ a@bxai ]" )
+				expect( result.text ).toBe( file( [ "tools: [ a@bxai ]", "## about the model", "model: m" ] ) )
+			} );
+
+			it( "replaces a block list written at the same indent as its key", function() {
+				var text = file( [ "tools:", "- now@bxai", "- other@bxai", "model: m" ] )
+				expect( writer.set( text, "tools", "[ a@bxai ]" ).text ).toBe( file( [ "tools: [ a@bxai ]", "model: m" ] ) )
+			} );
+
+			it( "treats a marker as part of the name", function() {
+				var text = file( [ "tools: [ a ]", "tools+: [ b ]" ] )
+				expect( writer.set( text, "tools+", "[ c ]" ).text ).toBe( file( [ "tools: [ a ]", "tools+: [ c ]" ] ) )
+				expect( writer.set( file( [ "tools: [ a ]" ] ), "tools+", "[ c ]" ).text ).toBe( file( [ "tools: [ a ]", "tools+: [ c ]" ] ) )
+			} );
+
+			it( "does not mistake a longer name for the setting", function() {
+				var text = file( [ "modelFacts: x" ] )
+				expect( writer.set( text, "model", "m" ).text ).toBe( file( [ "modelFacts: x", "model: m" ] ) )
+			} );
+
+			it( "changes a setting inside a block, keeping its indent and its neighbours", function() {
+				var text = file( [ "params:", "    temperature: 0.2", "    max_tokens: 100", "model: m" ] )
+				var result = writer.set( text, "params.temperature", "0.7" )
+				expect( result.text ).toBe( file( [ "params:", "    temperature: 0.7", "    max_tokens: 100", "model: m" ] ) )
+			} );
+
+			it( "adds a setting to the end of its block, before what follows", function() {
+				var text = file( [ "params:", "  temperature: 0.2", "## next", "model: m" ] )
+				expect( writer.set( text, "params.max_tokens", "50" ).text ).toBe( file( [ "params:", "  temperature: 0.2", "  max_tokens: 50", "## next", "model: m" ] ) )
+			} );
+
+			it( "adds a block that is not there", function() {
+				expect( writer.set( file( [ "model: m" ] ), "params.temperature", "0.2" ).text ).toBe( file( [ "model: m", "params:", "  temperature: 0.2" ] ) )
+			} );
+
+			it( "says so when a block is written on one line, and changes nothing", function() {
+				var result = writer.set( file( [ "params: { temperature: 0.2 }" ] ), "params.max_tokens", "5" )
+				expect( result.ok ).toBeFalse()
+				expect( result.reason ).toInclude( "written on one line" )
+			} );
+
+			it( "keeps the file's own line endings", function() {
+				var crlf = char( 13 ) & char( 10 )
+				var text = "model: a" & crlf & "usage: false" & crlf
+				expect( writer.set( text, "usage", "true" ).text ).toBe( "model: a" & crlf & "usage: true" & crlf )
+				expect( writer.set( text, "memory", "window" ).text ).toBe( text & "memory: window" & crlf )
+			} );
+
+			it( "takes a setting out and leaves the rest", function() {
+				var text = file( [ "## keep", "model: m", "tools:", "  - a", "usage: true" ] )
+				expect( writer.unset( text, "tools" ).text ).toBe( file( [ "## keep", "model: m", "usage: true" ] ) )
+				expect( writer.unset( text, "tools" ).action ).toBe( "removed" )
+			} );
+
+			it( "takes one setting out of a block", function() {
+				var text = file( [ "params:", "  temperature: 0.2", "  max_tokens: 5" ] )
+				expect( writer.unset( text, "params.temperature" ).text ).toBe( file( [ "params:", "  max_tokens: 5" ] ) )
+			} );
+
+			it( "leaves the text alone when there is nothing to take out", function() {
+				var text = file( [ "model: m" ] )
+				var result = writer.unset( text, "usage" )
+				expect( result.action ).toBe( "unchanged" )
+				expect( result.text ).toBe( text )
+			} );
+
+			it( "reads back what the file says", function() {
+				var text = file( [ "model: ollama/qwen3   ## mine", "params:", "  temperature: 0.2" ] )
+				expect( writer.valueOf( text, "model" ) ).toBe( "ollama/qwen3" )
+				expect( writer.valueOf( text, "params.temperature" ) ).toBe( "0.2" )
+				expect( writer.valueOf( text, "usage" ) ).toBe( "" )
+			} );
+
+			it( "refuses a name that is not a setting name", function() {
+				expect( writer.set( "", "a b", "1" ).ok ).toBeFalse()
+				expect( writer.set( "", "a.b.c", "1" ).ok ).toBeFalse()
+				expect( writer.set( "", "", "1" ).ok ).toBeFalse()
+			} );
+
+		} );
+	}
+
+}
