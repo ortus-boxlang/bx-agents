@@ -101,7 +101,7 @@ The agent is told who is writing (the platform and their id there, such as `slac
 which conversation it is: the chat, plus its thread when the platform has them (a Telegram forum
 topic, a Slack thread). So memory, `/notes`, `/remember` and the conversation list are kept apart
 per person and per thread. Two people in one channel do not share a memory, and neither do two
-chats on two platforms. The list is stored in the same `data/chat.db` the web page uses, marked
+chats on two platforms. The list is stored in the same `chat.db` (in the agent's data home) the web page uses, marked
 with the platform it started on; an admin can see it with `GET /__bxagents/sessions?all=1`.
 
 ## Commands in a chat

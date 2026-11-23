@@ -92,5 +92,5 @@ The model should reach for the `sayHello` tool and reply warmly, per the skill's
 ## Where to go next
 
 - [Example: A Multi-Agent Team](example-multi-agent-team.md) - the same shape, with subagents delegating to each other.
-- [Example: A Scheduled Agent](example-scheduled-agent.md) - the same shape, woken by a cron schedule instead of a chat prompt.
+- [Example: A Scheduled Agent](example-scheduled-agent.md) - the same shape, woken by a schedule instead of a chat prompt.
 - [Tools](../conventions/tools.md) and [Skills](../conventions/skills.md) for the full conventions these two files follow.

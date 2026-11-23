@@ -34,7 +34,7 @@ What you can do in it:
   can rebind them in `~/.bxagents/Agent.yml`.
 - **Slash commands.** Type `/` for a menu: `/help`, `/tools`, `/model`, `/info` and more. Every
   command is listed in [Slash commands](../guides/slash-commands.md).
-- **Sessions.** Every chat is a conversation kept in `data/chat.db`, the same list the web chat
+- **Sessions.** Every chat is a conversation kept in the `chat.db` of the agent's data home (`~/.bxagents/<agent name>/`), the same list the web chat
   shows. `/sessions` lists them, `/resume` goes back to one, `/new` starts another, `/name` names
   it, `/fork` copies it and carries on in the copy, and `/export` saves it as Markdown or HTML.
   `bxAgents chat --continue` reopens the latest one. The messages themselves last as long as the

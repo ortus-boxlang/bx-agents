@@ -8,7 +8,7 @@ tags: [conventions, secrets]
 
 # The vault
 
-An agent that connects to Gmail, a ticket system or any API needs a key or a login. The vault keeps them: **sealed in the chat database** (`data/chat.db`), added by a person from the terminal chat, the web page or the command line, and handed to a tool or an MCP server by the runtime at the moment it needs one. The model sees the **names** of secrets and what each is for. It never sees a value, and it cannot ask for one.
+An agent that connects to Gmail, a ticket system or any API needs a key or a login. The vault keeps them: **sealed in the chat database** (`chat.db` in the [data home](data.md), `~/.bxagents/<agent name>/chat.db` by default), added by a person from the terminal chat, the web page or the command line, and handed to a tool or an MCP server by the runtime at the moment it needs one. The model sees the **names** of secrets and what each is for. It never sees a value, and it cannot ask for one.
 
 Environment variables stay as they are, and are still the place for provider keys such as `OPENAI_API_KEY`. The vault is for the secrets people hand to a running agent: they change, they differ per person, and they should not need a redeploy.
 

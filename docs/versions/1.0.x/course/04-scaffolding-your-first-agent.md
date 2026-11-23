@@ -53,7 +53,7 @@ my-agent/
         └── AgentSpec.bx
 ```
 
-Plus a `.env` (commented API key stubs only; it deliberately does not set `BOXLANG_HOME`), a `.gitignore` (it ignores `.build/`, `dist/`, `.env`, `lib/` and `data/chat.db*`, among others)
+Plus a `.env` (commented API key stubs only; it deliberately does not set `BOXLANG_HOME`), a `.gitignore` (it ignores `.build/`, `dist/`, `.env`, `lib/` and `data/chat.db*`, among others; the chat database now lives in the agent's data home, `~/.bxagents/<agent name>/`, outside the project, so that last line only matters for a project that already keeps one in `data/`)
 and a few dotfiles (`.boxlang.json`, `.editorconfig`, `.bxlint.json`, `.gitattributes`,
 `.markdownlint.json`) - `new` never overwrites them if they already exist. BoxLang loads the `.env` from the project root itself, so
 this is where secrets live: the wizard and `add` write an empty line for each key your choices
