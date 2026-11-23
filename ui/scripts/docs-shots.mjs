@@ -58,15 +58,18 @@ if ( fs.existsSync( hot ) ) {
 const url = "http://127.0.0.1:" + agentPort;
 const env = {
 	...process.env,
-	PATH                  : binDir + path.delimiter + ( process.env.PATH || "" ),
-	BXAGENTS_HOME         : home,
-	BXAGENTS_PUBLIC_URL   : url,
-	TRAILER_ADMIN_TOKEN   : "docshots-admin-token",
-	NODE_PATH             : path.join( ui, "node_modules" )
+	PATH                : binDir + path.delimiter + ( process.env.PATH || "" ),
+	BXAGENTS_HOME       : home,
+	BXAGENTS_PUBLIC_URL : url,
+	TRAILER_ADMIN_TOKEN : "docshots-admin-token",
+	NODE_PATH           : path.join( ui, "node_modules" )
 };
 const boxlang = args => [
 	"-cp",
-	[ newestJar( "boxlang" ), path.join( repo, "build/classes/java/main" ) ].join( path.delimiter ),
+	[
+		newestJar( "boxlang" ),
+		path.join( repo, "build/classes/java/main" )
+	].join( path.delimiter ),
 	"ortus.boxlang.runtime.BoxRunner",
 	"--bx-config",
 	path.join( repo, "boxlang.json" ),
@@ -74,14 +77,26 @@ const boxlang = args => [
 ];
 
 console.log( "[docs-shots] building the demo agent" );
-const built = spawnSync( "java", boxlang( [ "module:bxagents", "build", "--projectRoot=" + project ] ), { cwd: repo, env, stdio: "inherit" } );
+const built = spawnSync( "java", boxlang( [
+	"module:bxagents",
+	"build",
+	"--projectRoot=" + project
+] ), { cwd: repo, env, stdio: "inherit" } );
 if ( built.status !== 0 ) {
 	process.exit( built.status || 1 );
 }
 
 const children = [];
 const start = ( name, args ) => {
-	const child = spawn( "java", args, { cwd: repo, env, stdio: [ "ignore", "pipe", "pipe" ] } );
+	const child = spawn( "java", args, {
+		cwd   : repo,
+		env,
+		stdio : [
+			"ignore",
+			"pipe",
+			"pipe"
+		]
+	} );
 	const log = fs.createWriteStream( path.join( work, name + ".log" ) );
 	child.stdout.pipe( log );
 	child.stderr.pipe( log );
@@ -90,7 +105,10 @@ const start = ( name, args ) => {
 };
 const stop = () => {
 	children.forEach( c => c.kill() );
-	spawnSync( "pkill", [ "-f", path.join( project, ".build/miniserver.json" ) ] );
+	spawnSync( "pkill", [
+		"-f",
+		path.join( project, ".build/miniserver.json" )
+	] );
 };
 process.on( "SIGINT", () => {
 	stop();
@@ -111,13 +129,28 @@ const waitFor = async( address, seconds ) => {
 	}
 	throw new Error( address + " did not answer in " + seconds + "s" );
 };
-const node = ( script, args ) => spawnSync( "node", [ script, ...args ], { cwd: demo, env, stdio: "inherit" } ).status;
+const node = ( script, args ) => spawnSync( "node", [
+	script,
+	...args
+], { cwd: demo, env, stdio: "inherit" } ).status;
 
 let status = 1;
 try {
-	start( "model", boxlang( [ path.join( repo, "tools/demo/fakellm.bxs" ), "--port=" + llmPort, "--script=" + path.join( demo, "trailer/model.json" ) ] ) );
-	start( "mail", boxlang( [ path.join( repo, "tools/demo/fake-oauth-mcp.bxs" ), "--port=" + mailPort ] ) );
-	start( "agent", boxlang( [ "module:bxagents", "serve", "--projectRoot=" + project, "--port=" + agentPort ] ) );
+	start( "model", boxlang( [
+		path.join( repo, "tools/demo/fakellm.bxs" ),
+		"--port=" + llmPort,
+		"--script=" + path.join( demo, "trailer/model.json" )
+	] ) );
+	start( "mail", boxlang( [
+		path.join( repo, "tools/demo/fake-oauth-mcp.bxs" ),
+		"--port=" + mailPort
+	] ) );
+	start( "agent", boxlang( [
+		"module:bxagents",
+		"serve",
+		"--projectRoot=" + project,
+		"--port=" + agentPort
+	] ) );
 	await waitFor( url + "/chat/", 240 );
 	console.log( "[docs-shots] seeding" );
 	if ( node( path.join( demo, "trailer/seed.js" ), [ "--url=" + url ] ) !== 0 ) {
@@ -128,7 +161,12 @@ try {
 		await new Promise( () => {} );
 	}
 	console.log( "[docs-shots] taking the shots" );
-	status = node( path.join( demo, "screens.js" ), [ "--url=" + url, "--out=" + path.join( repo, "docs/assets" ), "--mask=" + home, ...pass ] );
+	status = node( path.join( demo, "screens.js" ), [
+		"--url=" + url,
+		"--out=" + path.join( repo, "docs/assets" ),
+		"--mask=" + home,
+		...pass
+	] );
 } catch ( e ) {
 	console.error( e.message );
 } finally {
