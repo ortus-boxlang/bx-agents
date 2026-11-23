@@ -29,9 +29,10 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 /**
- * Packages a generated ColdBox app directory (`.build/app/`) into a
- * deterministic, portable `.bxa` (zip) artifact, plus a sibling `.sha256`
- * checksum file - Build Pipeline Phase 6 (M11).
+ * Packages a built app (the `.build/` folder: `app/`, `public/`, `lib/`, `runtime/`,
+ * `boxlang_modules/` and `miniserver.json`, the packaging set of the ColdBox BoxLang
+ * template) into a deterministic, portable `.bxa` (zip) artifact, plus a sibling
+ * `.sha256` checksum file - Build Pipeline Phase 6 (M11).
  * <p>
  * Determinism (byte-identical output for byte-identical input, run to run):
  * entries are added in a fixed (sorted, relative-path) order, and every
@@ -60,13 +61,30 @@ public class BxaPackager {
 	 * @return The absolute path to the written `.bxa` file
 	 */
 	public static Path pack( String appDir, String distDir, String baseName, List<String> ignorePatterns ) {
+		return pack( appDir, distDir, baseName, ignorePatterns, List.of() );
+	}
+
+	/**
+	 * Same as {@link #pack(String, String, String, List)}, limited to the named top-level entries of the folder: a
+	 * `.build/` holds more than an app carries (the manifest, work folders), so the caller names the folders and files
+	 * that belong in the artifact.
+	 *
+	 * @param appDir         Absolute path to the folder to package
+	 * @param distDir        Absolute path to the output directory (created if missing)
+	 * @param baseName       The artifact's base file name, e.g. "my-agent-1.0.0" (no extension)
+	 * @param ignorePatterns Additional glob patterns (from `.bxaignore`) to exclude, relative to appDir
+	 * @param includes       The top-level folders and files of appDir to include; empty means everything
+	 *
+	 * @return The absolute path to the written `.bxa` file
+	 */
+	public static Path pack( String appDir, String distDir, String baseName, List<String> ignorePatterns, List<String> includes ) {
 		try {
 			Path appPath	= Path.of( appDir );
 			Path distPath	= Path.of( distDir );
 			Files.createDirectories( distPath );
 
 			Path bxaPath	= distPath.resolve( baseName + ".bxa" );
-			byte[] zipBytes	= buildZipBytes( appPath, ignorePatterns );
+			byte[] zipBytes	= buildZipBytes( appPath, ignorePatterns, includes );
 			Files.write( bxaPath, zipBytes );
 
 			String digest	= sha256Hex( zipBytes );
@@ -110,10 +128,11 @@ public class BxaPackager {
 	 *
 	 * @param appPath        Absolute path to the generated app directory to zip
 	 * @param ignorePatterns Additional glob patterns (from `.bxaignore`) to exclude
+	 * @param includes       The top-level entries to include; empty means everything
 	 *
 	 * @return The zip's raw bytes
 	 */
-	private static byte[] buildZipBytes( Path appPath, List<String> ignorePatterns ) throws IOException {
+	private static byte[] buildZipBytes( Path appPath, List<String> ignorePatterns, List<String> includes ) throws IOException {
 		List<Pattern> compiledIgnores = new ArrayList<>();
 		for ( String glob : ignorePatterns ) {
 			compiledIgnores.add( globToPattern( glob ) );
@@ -126,7 +145,10 @@ public class BxaPackager {
 
 		List<String> relativePaths = new ArrayList<>();
 		for ( Path file : files ) {
-			relativePaths.add( toRelativeUnixPath( appPath, file ) );
+			String relative = toRelativeUnixPath( appPath, file );
+			if ( includes.isEmpty() || includes.contains( relative.split( "/" )[ 0 ] ) ) {
+				relativePaths.add( relative );
+			}
 		}
 		relativePaths.sort( Comparator.naturalOrder() );
 

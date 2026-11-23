@@ -1,7 +1,13 @@
 /**
  * Packages the build pipeline's final output into a portable `.bxa` artifact
- * (Build Pipeline Phase 6, M11): a deterministic zip of `.build/app/`, a
+ * (Build Pipeline Phase 6, M11): a deterministic zip of the built app, a
  * sibling `.sha256` checksum, and a redacted `manifest.json` copy in `dist/`.
+ *
+ * What is zipped is the packaging set of the ColdBox BoxLang template (its Build.bx): `app/`, `lib/`, `public/`,
+ * `runtime/` (without its logs and what a running server creates in its home), `boxlang_modules/` and
+ * `miniserver.json`, from `.build/`. `miniserver.json` names its folders relative to itself, so the unzipped
+ * folder is served by starting `boxlang-miniserver` inside it with BOXLANG_HOME set to its `runtime/`.
+ * The manifest and the work folders of `.build/` are not part of it.
  *
  * All JSON handling happens here in BoxLang (`jsonSerialize()`), not in the
  * Java packager - `BxaPackager` only ever sees bytes/files, never manifest
@@ -12,7 +18,7 @@ class {
 
 	/**
 	 * @projectRoot Absolute path to the project root (only used to look for an optional .bxaignore)
-	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app"
+	 * @buildDir Absolute path to the build folder, e.g. "<projectRoot>/.build"
 	 * @distDir Absolute path to the output dist directory, e.g. "<projectRoot>/dist"
 	 * @manifest The internal manifest struct, from ManifestNormalizer.normalize()
 	 * @baseName The artifact's base file name (no extension), e.g. "my-agent-1.0.0"
@@ -21,7 +27,7 @@ class {
 	 */
 	struct function package(
 		required string projectRoot,
-		required string appDir,
+		required string buildDir,
 		required string distDir,
 		required struct manifest,
 		required string baseName
@@ -34,10 +40,14 @@ class {
 		var manifestJsonPath = arguments.distDir & "/manifest.json"
 		fileWrite( manifestJsonPath, jsonSerialize( redacted ) )
 
-		var ignorePatterns = readBxaIgnore( arguments.projectRoot )
+		var layout = new "models.build.layout.BuildLayout@bxagents"()
+		var ignorePatterns = layout.packageIgnores()
+		ignorePatterns.append( readBxaIgnore( arguments.projectRoot ), true )
+		var includes = layout.packagedFolders()
+		includes.append( layout.packagedFiles(), true )
 
 		var bxaPath = createObject( "java", "ortus.boxlang.bxagents.build.BxaPackager" )
-			.pack( arguments.appDir, arguments.distDir, arguments.baseName, ignorePatterns )
+			.pack( arguments.buildDir, arguments.distDir, arguments.baseName, ignorePatterns, includes )
 
 		return {
 			bxa          : bxaPath.toString(),

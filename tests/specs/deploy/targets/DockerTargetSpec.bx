@@ -57,13 +57,46 @@ class extends="testbox.system.BaseSpec" {
 				} ).toThrow( "BxAgents.InvalidDeployConfig" );
 			} );
 
-			it( "throws BxAgents.NotBuilt when .build/app doesn't exist", function() {
+			it( "throws BxAgents.NotBuilt when .build has no app and public folders", function() {
 				expect( function() {
 					target.deploy(
 						{ registry : { type : "dockerhub", repository : "myorg/my-agent" } },
-						{ appDir : "/nonexistent/build/app/" & createUUID() }
+						{ buildDir : "/nonexistent/build/" & createUUID() }
 					);
 				} ).toThrow( "BxAgents.NotBuilt" );
+			} );
+
+			/**
+			 * UNVERIFIED against a real Docker: nothing here ran `docker build`. This pins the text of the recipe, which is read from the
+			 * BoxLang Docker and MiniServer docs: the whole .build is /app, miniserver.json is in it, the runtime folder is the BoxLang home.
+			 */
+			describe( "the built-in Dockerfile (unverified: no Docker was available to run it)", function() {
+
+				it( "copies the whole build into /app and works from there, so the relative paths of miniserver.json hold", function() {
+					var text = target.dockerfileText();
+					expect( text ).toInclude( "FROM ortussolutions/boxlang:miniserver" );
+					expect( text ).toInclude( "WORKDIR /app" );
+					expect( text ).toInclude( "COPY . /app" );
+				} );
+
+				it( "makes runtime/ the BoxLang home, so only the bundled bxagents module loads", function() {
+					expect( target.dockerfileText() ).toInclude( "ENV BOXLANG_HOME=/app/runtime" );
+				} );
+
+				it( "binds every interface, which a container needs, whatever host the build wrote", function() {
+					var text = target.dockerfileText();
+					expect( text ).toInclude( '"host": "0.0.0.0"' );
+					expect( text ).toInclude( "/app/miniserver.json" );
+					expect( text ).toInclude( "EXPOSE 8080" );
+				} );
+
+				it( "leaves the manifest, the work folders and the server's own logs out of the image", function() {
+					var ignored = target.dockerignoreText();
+					for ( var path in [ "manifest.json", "runtime-interceptors", "runtime/logs" ] ) {
+						expect( ignored ).toInclude( path );
+					}
+				} );
+
 			} );
 
 		} );

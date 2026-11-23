@@ -31,13 +31,61 @@ class extends="testbox.system.BaseSpec" {
 				};
 			}
 
+			/**
+			 * A build folder shaped like `.build`: the packaging set (app, lib, public, runtime, boxlang_modules, miniserver.json) and
+			 * what a build folder also holds that a packaged app does not carry
+			 */
 			private function newAppDir() {
 				var dir = newTempDir( "bxagents-packager-app-" );
-				fileWrite( dir & "/Application.bx", 'class { this.name = "test" }' );
-				directoryCreate( path = dir & "/config", createPath = true, ignoreExists = true );
-				fileWrite( dir & "/config/ColdBox.bx", "class { function configure(){} }" );
+				for ( var folder in [ "app/config", "public/includes", "lib/coldbox", "lib/modules/qb", "runtime/modules/bxagents", "runtime/logs", "runtime/classes", "boxlang_modules/bxfake", "runtime-interceptors" ] ) {
+					directoryCreate( path = dir & "/" & folder, createPath = true, ignoreExists = true );
+				}
+				fileWrite( dir & "/app/Application.bx", "class { abort; }" );
+				fileWrite( dir & "/app/config/Coldbox.bx", "class { function configure(){} }" );
+				fileWrite( dir & "/public/Application.bx", 'class { this.name = "test" }' );
+				fileWrite( dir & "/public/index.bxm", "" );
+				fileWrite( dir & "/lib/coldbox/Bootstrap.cfc", "x" );
+				fileWrite( dir & "/runtime/boxlang.json", "{}" );
+				fileWrite( dir & "/runtime/modules/bxagents/ModuleConfig.bx", "class {}" );
+				fileWrite( dir & "/runtime/logs/runtime.log", "a log" );
+				fileWrite( dir & "/runtime/classes/Compiled.class", "bytes" );
+				fileWrite( dir & "/boxlang_modules/bxfake/ModuleConfig.bx", "class {}" );
+				fileWrite( dir & "/miniserver.json", "{}" );
+				fileWrite( dir & "/manifest.json", "{}" );
+				fileWrite( dir & "/runtime-interceptors/Work.bx", "class {}" );
 				return dir;
 			}
+
+			private function entryNames( required string bxa ) {
+				var entries = createObject( "java", "java.util.zip.ZipFile" ).init( arguments.bxa );
+				var names = [];
+				var enumeration = entries.entries();
+				while ( enumeration.hasMoreElements() ) {
+					names.append( enumeration.nextElement().getName() );
+				}
+				entries.close();
+				return names;
+			}
+
+			it( "packages the template's set: app, lib, public, runtime, boxlang_modules and miniserver.json, from the build folder", function() {
+				var buildDir = newAppDir();
+				var result = packager.package( newTempDir( "bxagents-packager-root-" ), buildDir, newTempDir( "bxagents-packager-dist-" ) & "/dist", validManifest(), "test-agent-1.0.0" );
+				var names = entryNames( result.bxa );
+
+				for ( var expected in [ "app/Application.bx", "app/config/Coldbox.bx", "public/Application.bx", "public/index.bxm", "lib/coldbox/Bootstrap.cfc", "runtime/boxlang.json", "runtime/modules/bxagents/ModuleConfig.bx", "boxlang_modules/bxfake/ModuleConfig.bx", "miniserver.json" ] ) {
+					expect( names ).toInclude( expected );
+				}
+			} );
+
+			it( "leaves out the manifest, the work folders and what a running server wrote in its home (logs, class cache)", function() {
+				var buildDir = newAppDir();
+				var result = packager.package( newTempDir( "bxagents-packager-root-" ), buildDir, newTempDir( "bxagents-packager-dist-" ) & "/dist", validManifest(), "test-agent-1.0.0" );
+				var names = entryNames( result.bxa );
+
+				for ( var absent in [ "manifest.json", "runtime/logs/runtime.log", "runtime/classes/Compiled.class", "runtime-interceptors/Work.bx" ] ) {
+					expect( names ).notToInclude( absent );
+				}
+			} );
 
 			it( "writes a .bxa, a .sha256, and a manifest.json copy to dist/", function() {
 				var appDir = newAppDir();
@@ -117,7 +165,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "respects a project's .bxaignore", function() {
 				var appDir = newAppDir();
-				fileWrite( appDir & "/README.md", "not shipped" );
+				fileWrite( appDir & "/app/README.md", "not shipped" );
 				var distDir = newTempDir( "bxagents-packager-dist-" ) & "/dist";
 				var projectRoot = newTempDir( "bxagents-packager-root-" );
 				fileWrite( projectRoot & "/.bxaignore", "*.md" );
@@ -132,8 +180,8 @@ class extends="testbox.system.BaseSpec" {
 				}
 				entries.close();
 
-				expect( names ).notToInclude( "README.md" );
-				expect( names ).toInclude( "Application.bx" );
+				expect( names ).notToInclude( "app/README.md" );
+				expect( names ).toInclude( "public/Application.bx" );
 			} );
 
 		} );
