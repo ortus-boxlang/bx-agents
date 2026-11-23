@@ -29,6 +29,15 @@ class extends="testbox.system.BaseSpec" {
 				expect( config.passPredicate ).notToInclude( "bx[ms]" );
 			} );
 
+			it( "names the one page a test may add, and nothing else, in the pass predicate", function() {
+				var json = new bxagents.models.build.layout.MiniServerJson();
+				expect( json.passPredicate() ).toBe( "regex( '^/(index)\.bxm(/.*)?$' )" );
+				expect( json.passPredicate( [ "runner-coldbox.bxm" ] ) ).toBe( "regex( '^/(index|runner-coldbox)\.bxm(/.*)?$' )" );
+				expect( function() {
+					json.passPredicate( [ "a|b.bxm" ] );
+				} ).toThrow( "BxAgents.InvalidPage" );
+			} );
+
 			it( "writes miniserver.json into the build folder", function() {
 				var file = new bxagents.models.build.layout.MiniServerJson().write( tmp, 8080, "0.0.0.0" );
 				expect( file ).toBe( tmp & "/miniserver.json" );

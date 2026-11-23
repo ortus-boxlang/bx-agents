@@ -105,6 +105,24 @@ public class MiniServerLauncher {
 	 * @return The started {@link Process}
 	 */
 	public static Process launch( String executablePath, String configPath, boolean inheritIO, Map<String, String> environment ) {
+		return launch( executablePath, configPath, inheritIO, environment, null );
+	}
+
+	/**
+	 * Same as {@link #launch(String, String, boolean, Map)}, started in a given working directory. A built app's
+	 * {@code miniserver.json} names everything by paths relative to {@code .build} (its web root, engine config and
+	 * home), and the engine's {@code ${user-dir}} is the working directory, so the app only finds its own folders
+	 * when the server is started in {@code .build}.
+	 *
+	 * @param executablePath   Absolute path to the `boxlang-miniserver` executable or jar
+	 * @param configPath       Path to a `miniserver.json` config file
+	 * @param inheritIO        When true, the child process shares this process's stdin/stdout/stderr
+	 * @param environment      Variables to add to the child's environment; may be empty
+	 * @param workingDirectory The folder to start the server in; {@code null} keeps this process's own
+	 *
+	 * @return The started {@link Process}
+	 */
+	public static Process launch( String executablePath, String configPath, boolean inheritIO, Map<String, String> environment, String workingDirectory ) {
 		try {
 			List<String> command = new ArrayList<>();
 			if ( executablePath.endsWith( ".jar" ) ) {
@@ -116,6 +134,9 @@ public class MiniServerLauncher {
 
 			ProcessBuilder builder = new ProcessBuilder( command );
 			builder.environment().putAll( environment );
+			if ( workingDirectory != null && !workingDirectory.isBlank() ) {
+				builder.directory( new File( workingDirectory ) );
+			}
 			if ( inheritIO ) {
 				builder.inheritIO();
 			}

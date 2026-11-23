@@ -18,18 +18,30 @@ class {
 	/**
 	 * The predicate that lets only the front controller execute. The default of the server is
 	 * `regex( '^(/.+?\.cfml|/.+?\.cf[cms]|.+?\.bx[ms]{0,1})(/.*)?$' )`.
+	 *
+	 * @pages Further pages (file names under the web root) that may run: for a test that serves a runner page. A build has none
 	 */
-	string function passPredicate() {
-		return "regex( '^/index\.bxm(/.*)?$' )"
+	string function passPredicate( array pages = [] ) {
+		var names = [ "index" ]
+		for ( var page in arguments.pages ) {
+			var name = page.reReplace( "\.bxm$", "" )
+			// a name goes into a regular expression as it is: letters, digits, - and _ only
+			if ( !reFind( "^[A-Za-z0-9_-]+$", name ) ) {
+				throw( type = "BxAgents.InvalidPage", message = "[#page#] is not a page name a pass predicate can hold: use letters, digits, - and _ with .bxm" )
+			}
+			names.append( name )
+		}
+		return "regex( '^/(" & names.toList( "|" ) & ")\.bxm(/.*)?$' )"
 	}
 
 	/**
 	 * @port The port to listen on
 	 * @host The interface to bind
+	 * @pages See passPredicate()
 	 *
 	 * @return The config as a struct
 	 */
-	struct function render( required numeric port, required string host ) {
+	struct function render( required numeric port, required string host, array pages = [] ) {
 		return {
 			"port"            : javaCast( "int", arguments.port ),
 			"host"            : arguments.host,
@@ -39,7 +51,7 @@ class {
 			"rewrites"        : true,
 			"rewriteFileName" : "index.bxm",
 			"healthCheck"     : true,
-			"passPredicate"   : passPredicate()
+			"passPredicate"   : passPredicate( arguments.pages )
 		}
 	}
 
@@ -47,12 +59,13 @@ class {
 	 * @buildDir Absolute path to `.build`
 	 * @port The port to listen on
 	 * @host The interface to bind
+	 * @pages See passPredicate()
 	 *
 	 * @return Absolute path of the written file
 	 */
-	string function write( required string buildDir, required numeric port, required string host ) {
+	string function write( required string buildDir, required numeric port, required string host, array pages = [] ) {
 		var file = arguments.buildDir.reReplace( "[\\/]+$", "" ) & "/miniserver.json"
-		fileWrite( file, jsonSerialize( render( arguments.port, arguments.host ) ) )
+		fileWrite( file, jsonSerialize( render( arguments.port, arguments.host, arguments.pages ) ) )
 		return file
 	}
 
