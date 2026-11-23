@@ -8,6 +8,11 @@
  * has ffmpeg join them. A pause longer than --max-idle seconds is cut to that length, so a recording
  * that waited for a slow model does not make a slow video. --hold keeps the last frame on screen.
  *
+ * A still instead of a video, for a screenshot in the docs:
+ *   boxlang tools/demo/render.bxs <file.cast> <outdir> --still=<file.png> [--at="text on screen"] [--settle=0.6] [--rows=from-to]
+ * draws the screen as it was --settle seconds (recorded time, idle cut as above) after the text first showed on it, or as it was at
+ * the end of the recording without --at. No ffmpeg needed.
+ *
  * Needs: BoxLang, and ffmpeg on the PATH (without it the PNG frames are still written to
  * <outdir>/frames). --font takes a TrueType file; the default is Java's own "Monospaced" font, which
  * covers box drawing, braille spinners and check marks on most systems.
@@ -227,9 +232,57 @@ function drawFrame( required any screen ) {
 }
 
 // ----------------------------------------------------------------------------------
-// Frames
+// A still
 // ----------------------------------------------------------------------------------
 JImageIO = createObject( "java", "javax.imageio.ImageIO" )
+screen = new VtScreen( header.width, header.height )
+if ( len( opts.still ?: "" ) ) {
+	needle = opts.at ?: ""
+	settle = val( opts.settle ?: 0.6 )
+	function screenText() {
+		var text = ""
+		for ( var y = 0; y < screen.rows(); y++ ) {
+			for ( var x = 0; x < screen.cols(); x++ ) {
+				text &= screen.cell( x, y ).ch ?: " "
+			}
+			text &= char( 10 )
+		}
+		return text
+	}
+	foundAt = -1
+	for ( ev in events ) {
+		if ( foundAt >= 0 && ev.at > foundAt + settle ) {
+			break
+		}
+		if ( ev.kind == "o" ) {
+			screen.feed( ev.data )
+			if ( foundAt < 0 && len( needle ) && screenText().contains( needle ) ) {
+				foundAt = ev.at
+			}
+		} else if ( ev.kind == "r" ) {
+			size = ev.data.listToArray( "x" )
+			screen.resize( val( size[ 1 ] ), val( size[ 2 ] ) )
+		}
+	}
+	if ( len( needle ) && foundAt < 0 ) {
+		println( "The text [#needle#] never showed on the screen" )
+		java.lang.System::exit( 1 )
+	}
+	still = drawFrame( screen )
+	if ( len( opts.rows ?: "" ) ) {
+		// --rows=from-to keeps only those screen rows (counting from 0), for a screen with leftovers above the part to show
+		span = opts.rows.listToArray( "-" )
+		top = pad + val( span[ 1 ] ) * cellH - 3
+		still = still.getSubimage( 0, top, imgW, min( ( val( span[ 2 ] ) - val( span[ 1 ] ) + 1 ) * cellH + 6, imgH - top ) )
+	}
+	JImageIO.write( still, "png", createObject( "java", "java.io.File" ).init( opts.still ) )
+	println( "Wrote #opts.still# (#imgW#x#imgH#)" )
+	java.lang.System::exit( 0 )
+}
+
+// ----------------------------------------------------------------------------------
+// Frames
+// ----------------------------------------------------------------------------------
 screen = new VtScreen( header.width, header.height )
 frames = int( ceiling( total * fps ) )
 next = 1

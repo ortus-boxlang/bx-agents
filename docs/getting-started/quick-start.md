@@ -8,7 +8,7 @@ tags: [getting-started]
 
 # Quick Start
 
-![A terminal session: bxAgents new scaffolds a project, bxAgents build assembles a ColdBox app, bxAgents inspect prints the agent, model and environment, and bxAgents serve starts it on http://127.0.0.1:8080](../assets/cli-quickstart.svg)
+![A terminal session: bxAgents new scaffolds a project, bxAgents build assembles a ColdBox app, bxAgents inspect prints the agent and its model, and bxAgents serve starts it on http://127.0.0.1:8080](../assets/cli-quickstart.svg)
 
 
 By the end you will have an agent you can chat with in the terminal and serve over HTTP. This walks through the full lifecycle of a BxAgents project: scaffold, edit, build, run.

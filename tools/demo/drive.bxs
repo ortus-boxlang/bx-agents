@@ -19,6 +19,8 @@
  *       { "type"   : "What time is it?" },                        type characters one by one
  *       { "press"  : "enter" },                                   enter, tab, esc, backspace, up, down, left, right, f1, pgup, pgdn, ctrl-a to ctrl-z
  *       { "wait"   : 2 }                                          just wait, in seconds
+ *       { "visit"  : "http://127.0.0.1:9300/authorize" }          open the address that starts with this on screen, as a browser would,
+ *                                                                 and press its Allow link (the fake sign in, fake-oauth-mcp.bxs)
  *     ]
  *   }
  *
@@ -175,6 +177,45 @@ for ( step in spec.steps ) {
 			println( "drive: did not see [#step.expect#] within #( step.max ?: 60 )# seconds, carrying on" )
 		}
 		sleep( ( step.then ?: 0 ) * 1000 )
+	} else if ( structKeyExists( step, "visit" ) ) {
+		// the address as the terminal shows it now, wrapped over several lines: a program that redraws its footer mixes
+		// its text into the raw output, so read the screen, not the stream
+		vt = new VtScreen( cols, rows )
+		all = createObject( "java", "java.io.ByteArrayOutputStream" ).init()
+		for ( c in chunks.toArray() ) {
+			all.write( c.bytes )
+		}
+		vt.feed( toString( all.toByteArray(), "UTF-8" ) )
+		lines = []
+		for ( y = 0; y < vt.rows(); y++ ) {
+			row = ""
+			for ( x = 0; x < vt.cols(); x++ ) {
+				row &= ( vt.cell( x, y ).ch ?: " " ) == "" ? " " : vt.cell( x, y ).ch
+			}
+			lines.append( row.rtrim() )
+		}
+		address = ""
+		for ( y = 1; y <= lines.len(); y++ ) {
+			at = lines[ y ].indexOf( step.visit & "?" )
+			if ( at >= 0 ) {
+				address = lines[ y ].substring( at ).trim()
+				while ( y < lines.len() && reFind( "^[A-Za-z0-9%._~&=?/:+-]+$", lines[ y + 1 ].trim() ) ) {
+					y++
+					address &= lines[ y ].trim()
+				}
+				break
+			}
+		}
+		if ( !len( address ) ) {
+			println( "drive: no address starting with [#step.visit#] on the screen" )
+		} else {
+			page = http( address ).send().fileContent
+			allow = reFind( 'class="b ok" href="([^"]+)"', page, 1, true )
+			if ( allow.match.len() > 1 ) {
+				http( replace( allow.match[ 2 ], "&amp;", "&", "all" ) ).send()
+			}
+		}
+		sleep( ( step.then ?: 1 ) * 1000 )
 	} else if ( structKeyExists( step, "type" ) ) {
 		// one character at a time, by code point so an emoji is not cut in half
 		points = javaCast( "string", step.type ).codePoints().toArray()

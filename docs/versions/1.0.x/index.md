@@ -25,7 +25,7 @@ with files and folders, not a framework's API surface, and `bxAgents build` asse
 real, runnable ColdBox application out of it: a web app with thirteen pages, an API with an OpenAPI
 document, twelve kinds of gateway, routines, a vault, backups, and tests that need no API key.
 
-![A terminal session: bxAgents new scaffolds a project, bxAgents build assembles a ColdBox app, bxAgents inspect prints the agent, model and environment, and bxAgents serve starts it on http://127.0.0.1:8080](assets/cli-quickstart.svg)
+![A terminal session: bxAgents new scaffolds a project, bxAgents build assembles a ColdBox app, bxAgents inspect prints the agent and its model, and bxAgents serve starts it on http://127.0.0.1:8080](assets/cli-quickstart.svg)
 
 ## Watch the web app
 
