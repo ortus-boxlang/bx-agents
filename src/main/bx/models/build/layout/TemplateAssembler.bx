@@ -1,0 +1,101 @@
+import bxModules.bxagents.models.util.TreeDelete;
+
+/**
+ * Lays out the ColdBox BoxLang application template inside `.build`, from the snapshot this module
+ * carries (`templates/coldbox-boxlang`, see its VERSION): the template's `public/` folder, its engine
+ * config `runtime/boxlang.json` and its `app/Application.bx` guard, byte for byte, and the empty folders
+ * its conventions name. Nothing is fetched: refreshing the snapshot is a person's job
+ * (`tools/refresh-coldbox-template.sh`), never the build's, so a build is the same everywhere and offline.
+ *
+ * `public/` is replaced on every call so a file that is no longer part of the app can never stay behind
+ * in the web root. What a running server wrote into `runtime/` (logs, its class cache) is left alone.
+ */
+class {
+
+	variables.EMPTY_FOLDERS = [
+		"lib/modules",
+		"lib/java",
+		"boxlang_modules",
+		"runtime/global/components",
+		"runtime/global/classes",
+		"runtime/logs",
+		"runtime/lib",
+		"runtime/modules"
+	]
+
+	/**
+	 * @buildDir Absolute path to `.build`
+	 * @templateDir Test seam: the vendored template folder. Defaults to the one inside this module
+	 *
+	 * @return { version, tag, commit } as the template's VERSION file records them
+	 */
+	struct function assemble( required string buildDir, string templateDir = "" ) {
+		var build = arguments.buildDir.reReplace( "[\\/]+$", "" )
+		var template = len( arguments.templateDir ) ? arguments.templateDir : defaultTemplateDir()
+
+		// the web root is rebuilt from scratch: never through a link
+		if ( directoryExists( build & "/public" ) ) {
+			TreeDelete::tree( build & "/public" )
+		}
+		directoryCreate( path = build & "/public", createPath = true, ignoreExists = true )
+		copyTree( template & "/public", build & "/public" )
+
+		directoryCreate( path = build & "/runtime", createPath = true, ignoreExists = true )
+		fileCopy( template & "/runtime/boxlang.json", build & "/runtime/boxlang.json" )
+
+		directoryCreate( path = build & "/app", createPath = true, ignoreExists = true )
+		fileCopy( template & "/app/Application.bx", build & "/app/Application.bx" )
+
+		for ( var folder in variables.EMPTY_FOLDERS ) {
+			directoryCreate( path = build & "/" & folder, createPath = true, ignoreExists = true )
+		}
+
+		return versionOf( template )
+	}
+
+	/**
+	 * @template The vendored template folder
+	 *
+	 * @return { version, tag, commit } read from its VERSION file
+	 */
+	struct function versionOf( required string template ) {
+		var found = { version : "", tag : "", commit : "" }
+		var file = arguments.template & "/VERSION"
+		if ( !fileExists( file ) ) {
+			return found
+		}
+		for ( var line in fileRead( file, "UTF-8" ).listToArray( char( 10 ) ) ) {
+			var match = reFind( "^(version|tag|commit):\s+(\S.*)$", line, 1, true )
+			if ( match.pos[ 1 ] > 0 ) {
+				found[ line.mid( match.pos[ 2 ], match.len[ 2 ] ) ] = line.mid( match.pos[ 3 ], match.len[ 3 ] ).reReplace( "\s.*$", "" )
+			}
+		}
+		return found
+	}
+
+	/**
+	 * @return `templates/coldbox-boxlang` of this module: this class sits at `<module root>/models/build/layout/`
+	 */
+	string function defaultTemplateDir() {
+		return createObject( "java", "java.nio.file.Paths" )
+			.get( getDirectoryFromPath( getCurrentTemplatePath() ) & "../../../templates/coldbox-boxlang", [] )
+			.normalize().toString().replace( "\", "/", "all" )
+	}
+
+	/**
+	 * Copies a folder tree file by file (a `.gitkeep` placeholder is a git artifact, not part of an app).
+	 */
+	private void function copyTree( required string source, required string target ) {
+		for ( var entry in directoryList( path = arguments.source, recurse = false, listInfo = "query" ) ) {
+			var from = arguments.source & "/" & entry.name
+			var to = arguments.target & "/" & entry.name
+			if ( entry.type == "Dir" ) {
+				directoryCreate( path = to, createPath = true, ignoreExists = true )
+				copyTree( from, to )
+			} else if ( entry.name != ".gitkeep" ) {
+				fileCopy( from, to )
+			}
+		}
+	}
+
+}

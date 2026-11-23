@@ -1,0 +1,59 @@
+/**
+ * The `miniserver.json` of a built app: how `boxlang-miniserver` finds everything in `.build`.
+ *
+ * Every path is relative to `.build`, which is the folder the server is started in (that is what the
+ * template's `${user-dir}` resolves to), so the same file serves the app from where it was built, from a
+ * packaged copy unpacked anywhere, and from a container.
+ *
+ * - `webRoot: public`: the only folder that is served. `app/`, `lib/`, `runtime/` and the generated
+ *   config files cannot be fetched, because they are not under it.
+ * - `configPath` and `serverHome`: the template's engine config and the folder that is the BoxLang home. The home is also
+ *   what keeps the machine's own modules out: BoxLang adds `<home>/modules` to its module folders, and a
+ *   home of `runtime` holds the one module the app needs.
+ * - `passPredicate`: which requests run as BoxLang code. The server's default runs ANY .bx, .bxm or .bxs
+ *   under the web root; here only `index.bxm` runs, the front controller every request is rewritten to.
+ */
+class {
+
+	/**
+	 * The predicate that lets only the front controller execute. The default of the server is
+	 * `regex( '^(/.+?\.cfml|/.+?\.cf[cms]|.+?\.bx[ms]{0,1})(/.*)?$' )`.
+	 */
+	string function passPredicate() {
+		return "regex( '^/index\.bxm(/.*)?$' )"
+	}
+
+	/**
+	 * @port The port to listen on
+	 * @host The interface to bind
+	 *
+	 * @return The config as a struct
+	 */
+	struct function render( required numeric port, required string host ) {
+		return {
+			"port"            : javaCast( "int", arguments.port ),
+			"host"            : arguments.host,
+			"webRoot"         : "public",
+			"configPath"      : "runtime/boxlang.json",
+			"serverHome"      : "runtime",
+			"rewrites"        : true,
+			"rewriteFileName" : "index.bxm",
+			"healthCheck"     : true,
+			"passPredicate"   : passPredicate()
+		}
+	}
+
+	/**
+	 * @buildDir Absolute path to `.build`
+	 * @port The port to listen on
+	 * @host The interface to bind
+	 *
+	 * @return Absolute path of the written file
+	 */
+	string function write( required string buildDir, required numeric port, required string host ) {
+		var file = arguments.buildDir.reReplace( "[\\/]+$", "" ) & "/miniserver.json"
+		fileWrite( file, jsonSerialize( render( arguments.port, arguments.host ) ) )
+		return file
+	}
+
+}

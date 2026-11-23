@@ -1,0 +1,27 @@
+/**
+ * Where the built app's own folder is.
+ *
+ * In a served app the web root is `public/`, so `expandPath( "/" )` is no longer the app: the app is the
+ * `/app` mapping of the vendored ColdBox runtime/boxlang.json (`.build/app`). Outside a web boot (the
+ * terminal `chat`, `invoke`, a test run) there is no such mapping and the app root is the folder the process
+ * works in, which is what `expandPath( "/" )` has always answered there.
+ *
+ * Every place that used to say `expandPath( "/" )` for "the app" asks this class instead, so the answer
+ * is the same everywhere. The mapping is read from the runtime's own configuration, not guessed from a
+ * `/app` folder next to the process: a project may well have an `app/` folder of its own.
+ */
+class {
+
+	/**
+	 * @return The absolute path of the app root
+	 */
+	string function path() {
+		var mappings = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getConfiguration().mappings
+		// the runtime keeps a mapping key with its trailing slash
+		if ( mappings.keyExists( "/app/" ) || mappings.keyExists( "/app" ) ) {
+			return expandPath( "/app" )
+		}
+		return expandPath( "/" )
+	}
+
+}

@@ -1,0 +1,148 @@
+import bxModules.bxagents.models.util.Env;
+import bxModules.bxagents.models.util.TreeDelete;
+
+/**
+ * Puts the `bxagents` module into the built app, as `runtime/modules/bxagents`: the ONLY module the served
+ * app loads from there.
+ *
+ * The served app needs this module (its gateways, tool loader, the web chat ...) and, through it, the BoxLang
+ * modules bundled inside it (bxai, sqlite, ...: BoxLang 1.17+ loads those as nested modules). BoxLang loads
+ * every folder of every module directory it is given; a server pointed at the machine's own module
+ * directory would load whatever else is installed there, so the module is copied instead, alone, into the
+ * app's own `runtime/modules`, which is the BoxLang home's module folder (see MiniServerJson).
+ *
+ * The copy is a plain recursive copy of the installed folder: 70 MB in about a tenth of a second here, but it
+ * is skipped when nothing changed, which matters more for not touching a module a running server has open
+ * than for the time. "Nothing changed" is a stamp: the module's `box.json` (version, bundled module
+ * versions) and the SHA-256 of its jars. The copy goes into a work folder next to `runtime/` and is renamed
+ * into place once it is complete and stamped, so a copy that is interrupted can never carry a stamp, and
+ * its leftovers are removed by the next build.
+ */
+class {
+
+	variables.STAMP_FILE = ".copied-stamp"
+	variables.WORK_PREFIX = ".module-copy-"
+
+	/**
+	 * @moduleDir The module folder to copy (named `bxagents`). Empty copies nothing: a source checkout or a test harness
+	 *            has no installed module, and says so through `reason`
+	 * @runtimeDir Absolute path to `.build/runtime`
+	 *
+	 * @return { copied : boolean, reason : "copied" | "unchanged" | "no-module", stamp, target }
+	 */
+	struct function copy( required string moduleDir, required string runtimeDir ) {
+		var runtime = arguments.runtimeDir.reReplace( "[\\/]+$", "" )
+		var build = getDirectoryFromPath( runtime ).reReplace( "[\\/]+$", "" )
+		var target = runtime & "/modules/bxagents"
+		removeLeftovers( build )
+
+		if ( !len( arguments.moduleDir ) || !directoryExists( arguments.moduleDir ) ) {
+			return { copied : false, reason : "no-module", stamp : "", target : target }
+		}
+		var source = arguments.moduleDir.reReplace( "[\\/]+$", "" )
+		var stamp = stampOf( source )
+		if ( fileExists( target & "/" & variables.STAMP_FILE ) && fileRead( target & "/" & variables.STAMP_FILE, "UTF-8" ) == stamp ) {
+			return { copied : false, reason : "unchanged", stamp : stamp, target : target }
+		}
+
+		var work = build & "/" & variables.WORK_PREFIX & createUUID()
+		try {
+			directoryCreate( path = work, createPath = true )
+			directoryCopy( source, work & "/bxagents", true )
+			// the stamp is written last: a folder that has it is a complete copy
+			fileWrite( work & "/bxagents/" & variables.STAMP_FILE, stamp, "UTF-8" )
+			directoryCreate( path = runtime & "/modules", createPath = true, ignoreExists = true )
+			if ( directoryExists( target ) ) {
+				TreeDelete::tree( target )
+			}
+			createObject( "java", "java.nio.file.Files" ).move(
+				createObject( "java", "java.nio.file.Paths" ).get( work & "/bxagents", [] ),
+				createObject( "java", "java.nio.file.Paths" ).get( target, [] ),
+				[]
+			)
+		} finally {
+			if ( directoryExists( work ) ) {
+				TreeDelete::tree( work )
+			}
+		}
+		return { copied : true, reason : "copied", stamp : stamp, target : target }
+	}
+
+	/**
+	 * The folder to copy: `BXAGENTS_MODULE_DIR` (an environment variable or system property) when it names a module folder (or
+	 * `none`, which means there is none), else
+	 * the installed module this code runs from. The variable is how a checkout, the dev stack and the test suite say where the built
+	 * module is (`build/modules/bxagents`), since they run the code from `src/main/bx`.
+	 *
+	 * @return Absolute path of the module folder to copy, or "" when there is none
+	 */
+	string function sourceDir() {
+		var named = trim( Env::get( "BXAGENTS_MODULE_DIR" ) )
+		// "none" says there is no module to copy, even where this code runs from an installed one (a run that must not serve)
+		if ( named == "none" ) {
+			return ""
+		}
+		if ( len( named ) && fileExists( named & "/ModuleConfig.bx" ) ) {
+			return named.replace( "\", "/", "all" ).reReplace( "[\\/]+$", "" )
+		}
+		return installedModuleDir()
+	}
+
+	/**
+	 * The module folder this code runs from, when it is an installed module: a folder named `bxagents` with
+	 * its `ModuleConfig.bx`. A source checkout (`src/main/bx`) is not one, and the test harness reaches the module through a
+	 * mapping, so they answer "".
+	 *
+	 * @return Absolute path of the installed `bxagents` folder, or ""
+	 */
+	string function installedModuleDir() {
+		var root = createObject( "java", "java.nio.file.Paths" )
+			.get( getDirectoryFromPath( getCurrentTemplatePath() ) & "../../..", [] )
+			.normalize()
+		if ( root.getFileName().toString() != "bxagents" || !fileExists( root.toString() & "/ModuleConfig.bx" ) ) {
+			return ""
+		}
+		return root.toString().replace( "\", "/", "all" )
+	}
+
+	/**
+	 * @source The module folder
+	 *
+	 * @return What identifies this build of the module: its version, the hash of every jar and the box.json of every nested module
+	 */
+	string function stampOf( required string source ) {
+		var parts = []
+		if ( fileExists( arguments.source & "/box.json" ) ) {
+			parts.append( "box.json " & hash( fileReadBinary( arguments.source & "/box.json" ), "SHA-256" ) )
+		}
+		if ( directoryExists( arguments.source & "/libs" ) ) {
+			for ( var jar in directoryList( path = arguments.source & "/libs", recurse = false, type = "file", listInfo = "name", filter = "*.jar", sort = "name" ) ) {
+				parts.append( "libs/" & jar & " " & hash( fileReadBinary( arguments.source & "/libs/" & jar ), "SHA-256" ) )
+			}
+		}
+		if ( directoryExists( arguments.source & "/modules" ) ) {
+			for ( var nested in directoryList( path = arguments.source & "/modules", recurse = false, type = "dir", listInfo = "name", sort = "name" ) ) {
+				var file = arguments.source & "/modules/" & nested & "/box.json"
+				if ( fileExists( file ) ) {
+					parts.append( "modules/" & nested & " " & hash( fileReadBinary( file ), "SHA-256" ) )
+				}
+			}
+		}
+		return parts.toList( char( 10 ) )
+	}
+
+	/**
+	 * Removes the work folders an interrupted copy left in the build folder.
+	 */
+	private void function removeLeftovers( required string build ) {
+		if ( !directoryExists( arguments.build ) ) {
+			return
+		}
+		for ( var name in directoryList( path = arguments.build, recurse = false, type = "dir", listInfo = "name" ) ) {
+			if ( name.startsWith( variables.WORK_PREFIX ) ) {
+				TreeDelete::tree( arguments.build & "/" & name )
+			}
+		}
+	}
+
+}
