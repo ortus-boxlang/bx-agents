@@ -7,7 +7,7 @@
  * Builds the project's agent the SAME way `chat` does (a real `BuildPipeline`
  * run + `DynamicClassLoader`-loaded `GeneratedAgentFactory.bx`, no ColdBox
  * container involved) against a throwaway TEMP COPY of the project - never
- * the project's own `.build/app`, so running tests never clobbers (or is
+ * the project's own `.build`, so running tests never clobbers (or is
  * clobbered by) a real `build`/`serve`/`package` cycle. Defaults to the
  * `mock` provider via the `test()` environment-override convention (see
  * `ProjectScaffolder.bx` - a fresh project's scaffolded `Agent.bx` includes
@@ -70,6 +70,8 @@ class extends="testbox.system.BaseSpec" {
 		createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_DB", replace( variables.$bxagentsTempDir, "\", "/", "all" ) & "/data/chat.db" )
 
 		var pipeline = new "models.build.BuildPipeline@bxagents"( "test" )
+		// this build is only loaded in-process: it is never served, so the module and the server config it would carry are not copied
+		pipeline.setModuleSource( moduleDir : "" )
 		var result = pipeline.build( variables.$bxagentsTempDir, "test" )
 
 		var context = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getRuntimeContext()

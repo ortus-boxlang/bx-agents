@@ -27,6 +27,12 @@
 // neither reads nor fills the real one.
 createObject( "java", "java.lang.System" ).setProperty( "user.home", createObject( "java", "java.nio.file.Files" ).createTempDirectory( "bxagents-test-home-", [] ).toString() );
 
+// Every build copies the bxagents module into .build/runtime/modules (70 MB, see ModuleCopier). The suite builds hundreds of
+// projects and almost none serves one, so they get a stand-in module folder; the specs that boot a server name the built module.
+stubModule = createObject( "java", "java.nio.file.Files" ).createTempDirectory( "bxagents-test-module-", [] ).toString();
+fileWrite( stubModule & "/ModuleConfig.bx", "class {}" );
+createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_MODULE_DIR", stubModule );
+
 reportsDir = expandPath( "/tests/results" );
 if ( !directoryExists( reportsDir ) ) {
 	directoryCreate( reportsDir, true );
@@ -57,16 +63,22 @@ println( "" );
 println( "Bundles: " & results.getTotalBundles() & " | Suites: " & results.getTotalSuites() & " | Specs: " & results.getTotalSpecs() );
 println( "Pass: " & results.getTotalPass() & " | Fail: " & results.getTotalFail() & " | Error: " & results.getTotalError() & " | Skipped: " & results.getTotalSkipped() );
 
-if ( totalFail > 0 ) {
-	for ( bundleStat in results.getBundleStats() ) {
-		for ( suiteStat in ( bundleStat.suiteStats ?: [] ) ) {
-			for ( specStat in ( suiteStat.specStats ?: [] ) ) {
-				if ( specStat.status == "Failed" || specStat.status == "Error" ) {
-					failDetail = specStat.failMessage ?: ( specStat.error.message ?: "" )
-					println( "  [#specStat.status#] #bundleStat.name# > #suiteStat.name# > #specStat.name#: #failDetail#" )
-				}
+// A failure can sit in a describe() inside a describe(): walk the nested suites as well, or its detail is never printed
+function printFailures( required string path, required array suites ) {
+	for ( var suiteStat in arguments.suites ) {
+		for ( var specStat in ( suiteStat.specStats ?: [] ) ) {
+			if ( specStat.status == "Failed" || specStat.status == "Error" ) {
+				var failDetail = specStat.failMessage ?: ( specStat.error.message ?: "" );
+				println( "  [#specStat.status#] #arguments.path# > #suiteStat.name# > #specStat.name#: #failDetail#" );
 			}
 		}
+		printFailures( arguments.path & " > " & suiteStat.name, suiteStat.suiteStats ?: [] );
+	}
+}
+
+if ( totalFail > 0 ) {
+	for ( bundleStat in results.getBundleStats() ) {
+		printFailures( bundleStat.name, bundleStat.suiteStats ?: [] );
 	}
 }
 

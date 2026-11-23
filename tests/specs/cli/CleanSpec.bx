@@ -25,6 +25,24 @@ class extends="testbox.system.BaseSpec" {
 				return dir;
 			}
 
+			it( "removes a link in .build as a link: what it points at (the web app module's source in a dev build) is never emptied", function() {
+				var projectRoot = newTempProject( "full-project" );
+				buildVerb.run( { projectRoot : projectRoot } );
+				var elsewhere = createTempDirectory( prefix = "bxagents-cli-clean-link-" );
+				tempDirs.append( elsewhere );
+				fileWrite( elsewhere & "/source.bx", "class {}" );
+				createObject( "java", "java.nio.file.Files" ).createSymbolicLink(
+					createObject( "java", "java.nio.file.Paths" ).get( projectRoot & "/.build/public/includes/linked", [] ),
+					createObject( "java", "java.nio.file.Paths" ).get( elsewhere, [] ),
+					[]
+				);
+
+				cleanVerb.run( { projectRoot : projectRoot } );
+
+				expect( directoryExists( projectRoot & "/.build" ) ).toBeFalse();
+				expect( fileExists( elsewhere & "/source.bx" ) ).toBeTrue();
+			} );
+
 			it( "removes .build and dist without touching source conventions", function() {
 				var projectRoot = newTempProject( "full-project" );
 				buildVerb.run( { projectRoot : projectRoot } );

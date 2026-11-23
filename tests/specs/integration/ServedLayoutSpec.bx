@@ -1,0 +1,402 @@
+/**
+ * The layout, proven on a real server: a project is built, `serve` starts a real boxlang-miniserver on it, and the specs ask over HTTP.
+ *
+ * What is proven here and nowhere else:
+ *   - the served-app URL matrix: every URL of a file that is not under public/ answers 404 with no content, an unknown address is a
+ *     JSON 404 (not ColdBox's 500 error page), a `.bx` class is never executed, and the intended addresses answer (the health route, the
+ *     web page and its assets, the redirect from `/`, a 401 for an unauthenticated call)
+ *   - only the bxagents module is loaded: a decoy module in the machine's own module directory does NOT load in the served app, and
+ *     DOES load when the same server is started without the app's runtime home (so the check can fail)
+ *   - a packaged app boots from a clean folder with relative paths
+ *
+ * It needs the BUILT module (`./gradlew shadowJar createModuleStructure`, build/modules/bxagents) and `boxlang-miniserver` on the PATH,
+ * and says so, rather than failing, when either is missing.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function beforeAll() {
+		variables.system = createObject( "java", "java.lang.System" );
+		variables.builtModule = expandPath( "/" ) & "build/modules/bxagents";
+		variables.executable = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).findExecutable();
+		variables.ready = fileExists( builtModule & "/ModuleConfig.bx" ) && !isNull( executable );
+		variables.savedModule = new bxagents.models.util.Env().get( "BXAGENTS_MODULE_DIR" );
+		variables.tempDirs = [];
+		variables.processes = [];
+		variables.decoyDir = "";
+		// a home of its own for the servers this spec starts: the machine's real ~/.boxlang is never written to. A Java child takes its
+		// user.home from this option, which JAVA_TOOL_OPTIONS (already set on some machines, for a proxy) is appended to, not replaced
+		variables.fakeHome = createTempDirectory( prefix = "bxagents-fake-home-" );
+		tempDirs.append( fakeHome );
+		variables.childOptions = ( system.getenv( "JAVA_TOOL_OPTIONS" ) ?: "" ) & " -Duser.home=" & fakeHome;
+		if ( ready ) {
+			system.setProperty( "BXAGENTS_MODULE_DIR", builtModule );
+			// one build and one server for the matrix below (a bundle-level hook: variables set by a describe()-level beforeAll are not seen by it())
+			variables.project = newProject();
+			new bxagents.models.cli.Build().run( { projectRoot : project } );
+			variables.port = freePort();
+			variables.served = new bxagents.models.cli.Serve().run( { projectRoot : project, port : port } );
+			processes.append( served.process );
+			variables.base = "http://127.0.0.1:#port#";
+			waitForHealth( base );
+		}
+	}
+
+	function afterAll() {
+		for ( var process in variables.processes ) {
+			process.destroy();
+			process.waitFor( 5, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS );
+			if ( process.isAlive() ) {
+				process.destroyForcibly();
+			}
+		}
+		if ( len( variables.decoyDir ) && directoryExists( variables.decoyDir ) ) {
+			directoryDelete( variables.decoyDir, true );
+		}
+		for ( var dir in variables.tempDirs ) {
+			if ( directoryExists( dir ) ) {
+				directoryDelete( dir, true );
+			}
+		}
+		if ( len( variables.savedModule ) ) {
+			system.setProperty( "BXAGENTS_MODULE_DIR", variables.savedModule );
+		} else {
+			system.clearProperty( "BXAGENTS_MODULE_DIR" );
+		}
+	}
+
+	function run() {
+		describe( "a served app", function() {
+
+			it( "answers the addresses it is meant to answer", function() {
+				if ( !ready ) {
+					return;
+				}
+				expect( get( base & "/__bxagents/health" ).status ).toBe( 200 );
+				expect( get( base & "/__bxagents/health" ).body ).toInclude( '"status":"ok"' );
+				expect( get( base & "/robots.txt" ).status ).toBe( 200 );
+				expect( get( base & "/favicon.ico" ).status ).toBe( 200 );
+
+				// the web page: signed out, it goes to the sign-in form
+				var chat = get( base & "/chat/" );
+				expect( chat.status ).toBe( 302 );
+				expect( chat.location ).toInclude( "/chat/login.html" );
+				var login = get( base & "/chat/login.html" );
+				expect( login.status ).toBe( 200 );
+				expect( login.body ).toInclude( "<form" );
+
+				// `/` goes to the page
+				var root = get( base & "/" );
+				expect( root.status ).toBe( 302 );
+				expect( root.location ).toMatch( "/chat/$" );
+			} );
+
+			it( "serves the page's built scripts and styles from public/includes/bxagentsui", function() {
+				if ( !ready ) {
+					return;
+				}
+				var assets = directoryList( project & "/.build/public/includes/bxagentsui/build/assets", false, "name" );
+				expect( assets.len() ).toBeGT( 0 );
+				for ( var asset in assets ) {
+					var answer = get( base & "/includes/bxagentsui/build/assets/" & asset );
+					expect( answer.status ).toBe( 200, asset );
+					expect( len( answer.body ) ).toBeGT( 0, asset );
+				}
+				// the Vite manifest and the icon sprite are read on the server and are not under the web root
+				expect( get( base & "/includes/bxagentsui/build/.vite/manifest.json" ).status ).toBe( 404 );
+				expect( get( base & "/includes/bxagentsui/icons.svg" ).status ).toBe( 404 );
+			} );
+
+			it( "refuses an unauthenticated call to the agent API", function() {
+				if ( !ready ) {
+					return;
+				}
+				var answer = post( base & "/__bxagents/invoke", '{"input":"hello"}' );
+				expect( answer.status ).toBe( 401 );
+				expect( get( base & "/__bxagents/info" ).status ).toBe( 401 );
+			} );
+
+			it( "never answers the URL of a file outside public/ with its content (the old layout served all of these)", function() {
+				if ( !ready ) {
+					return;
+				}
+				// what the old layout answered 200 with, and the rest of what a build holds
+				var outside = [
+					"/config/agent-settings.json", "/config/", "/config/bxagentsui.json", "/project/Agent.yml", "/agent/instructions.md", "/agent/GeneratedAgentFactory.bx", "/skills/", "/tools/Greeter.bx",
+					"/app/config/agent-settings.json", "/app/config/bxagentsui.json", "/app/project/Agent.yml", "/app/agent/instructions.md", "/app/skills/", "/app/",
+					"/lib/", "/lib/coldbox/box.json", "/lib/modules/cbsecurity/box.json", "/runtime/boxlang.json", "/runtime/logs/runtime.log", "/runtime/modules/bxagents/box.json",
+					"/boxlang_modules/", "/miniserver.json", "/manifest.json", "/.build/", "/box.json", "/server.json", "/tests/", "/testbox/",
+					"/modules/cbsecurity/box.json", "/modules/", "/coldbox/box.json", "/data-home/chat.db",
+					"/../Agent.yml", "/%2e%2e/Agent.yml", "/includes/../Application.bx", "/includes/%2e%2e/%2e%2e/runtime/boxlang.json", "/includes/..%2f..%2fruntime/boxlang.json"
+				];
+				for ( var path in outside ) {
+					var answer = get( base & path );
+					expect( answer.status ).toBe( 404, path & " answered " & answer.status );
+					expect( answer.body ).notToInclude( "INSTRUCTIONS-MARKER", path );
+					expect( answer.body ).notToInclude( "layout-fixture-agent", path );
+					expect( answer.body ).notToInclude( "pbkdf2$", path );
+				}
+			} );
+
+			it( "never runs a .bx class or a page other than index.bxm, whatever its address", function() {
+				if ( !ready ) {
+					return;
+				}
+				// the server's default executes any .bx or .bxm under the web root, and answered these 200 with an empty body
+				for ( var path in [ "/Application.bx", "/app/Application.bx", "/app/tools/Greeter.bx", "/app/handlers/AgentApi.bx", "/app/config/Router.bx", "/app/models/ChatDb.bx", "/public/Application.bx", "/modules/cbsecurity/ModuleConfig.bx", "/modules/bxagentsui/ModuleConfig.bx", "/app/tools/Greeter.bx?method=sayHello&name=x" ] ) {
+					var answer = get( base & path );
+					expect( answer.status ).toBe( 404, path & " answered " & answer.status );
+				}
+				// the public/ folder has Application.bx and index.bxm of its own: Application.bx is never served, index.bxm is the front controller
+				expect( get( base & "/index.bxm" ).status ).toBe( 302 );
+			} );
+
+			it( "answers an address no route knows with a small JSON 404, not ColdBox's error page", function() {
+				if ( !ready ) {
+					return;
+				}
+				for ( var path in [ "/nothing-here", "/__bxagents/nothing", "/a/b/c.txt", "/config", "/app" ] ) {
+					var answer = get( base & path );
+					expect( answer.status ).toBe( 404, path );
+					expect( answer.body ).toBe( '{"error":"not_found"}', path );
+				}
+			} );
+
+			it( "lists public/includes (the server lists a folder that has no index file, and the setting is not configurable); nothing secret is there", function() {
+				if ( !ready ) {
+					return;
+				}
+				var answer = get( base & "/includes/" );
+				// measured: boxlang-miniserver 1.19.0 turns directory listing on in code (ResourceHandler.setDirectoryListingEnabled( true )), and
+				// miniserver.json has no key for it. An empty index.html in the folder replaces the listing; this build does not add one,
+				// because the folder holds only files meant for the browser.
+				expect( answer.status ).toBe( 200 );
+				expect( answer.body ).notToInclude( "agent-settings" );
+				expect( answer.body ).notToInclude( "boxlang.json" );
+			} );
+
+			it( "loads no module from the machine's own module directory: a decoy there does not load", function() {
+				if ( !ready ) {
+					return;
+				}
+				var marker = project & "/decoy-loaded.txt";
+				// the engine's own default module directory is ~/.boxlang/modules: a decoy module put there loads in any runtime that uses it
+				expect( fileExists( marker ) ).toBeFalse();
+				var decoy = placeDecoy( marker );
+				try {
+					// a server on the same build, started a moment later, so the decoy is there when it loads its modules
+					var otherPort = freePort();
+					var other = new bxagents.models.cli.Serve().run( { projectRoot : project, port : otherPort, _environment : { JAVA_TOOL_OPTIONS : childOptions } } );
+					processes.append( other.process );
+					waitForHealth( "http://127.0.0.1:#otherPort#" );
+					expect( fileExists( marker ) ).toBeFalse( "the decoy in the machine's module directory was loaded by the served app" );
+					other.process.destroy();
+				} finally {
+					removeDecoy( decoy );
+				}
+			} );
+
+			it( "does load that decoy in a server that does not have the app's runtime home: the check above can fail", function() {
+				if ( !ready ) {
+					return;
+				}
+				var marker = project & "/decoy-control.txt";
+				var decoy = placeDecoy( marker );
+				try {
+					var controlPort = freePort();
+					var dir = createTempDirectory( prefix = "bxagents-control-" );
+					tempDirs.append( dir );
+					directoryCreate( dir & "/public" );
+					fileWrite( dir & "/public/index.bxm", "<bx:script>writeOutput( 'ok' )</bx:script>" );
+					// no serverHome, no BOXLANG_HOME: the engine's own home, the one a served app must never use
+					fileWrite( dir & "/miniserver.json", jsonSerialize( { port : controlPort, host : "127.0.0.1", webRoot : "public" } ) );
+					var controlEnv = createObject( "java", "java.util.HashMap" ).init();
+					controlEnv.put( "JAVA_TOOL_OPTIONS", childOptions );
+					var control = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( executable, dir & "/miniserver.json", false, controlEnv, dir );
+					processes.append( control );
+					var deadline = getTickCount() + 30000;
+					while ( !fileExists( marker ) && getTickCount() < deadline ) {
+						sleep( 500 );
+					}
+					expect( fileExists( marker ) ).toBeTrue( "a server with the engine's default home did not load the decoy, so the check above proves nothing" );
+					control.destroy();
+				} finally {
+					removeDecoy( decoy );
+				}
+			} );
+
+			it( "boots a packaged copy from a clean folder, by relative paths, and answers the same matrix", function() {
+				if ( !ready ) {
+					return;
+				}
+				var manifest = jsonDeserialize( fileRead( project & "/.build/manifest.json" ) );
+				var dist = createTempDirectory( prefix = "bxagents-dist-" );
+				tempDirs.append( dist );
+				var packaged = new bxagents.models.build.PackagerService().package(
+					projectRoot = project,
+					buildDir    = project & "/.build",
+					distDir     = dist,
+					manifest    = manifest,
+					baseName    = "layout-1.0.0"
+				);
+
+				// a new folder, not the one it was built in. No space in its name: the boxlang-miniserver launcher script does not quote the
+				// BOXLANG_HOME it puts on the java command line (-XX:SharedArchiveFile=$BOXLANG_HOME/cache/...), so a home with a space
+				// in its path fails there ("Could not find or load main class where.runtime.cache..."), for an app of any layout
+				var folder = createTempDirectory( prefix = "bxagents-unpacked-" ) & "/elsewhere";
+				tempDirs.append( getDirectoryFromPath( folder ) );
+				directoryCreate( folder );
+				unzip( packaged.bxa, folder );
+
+				expect( directoryExists( folder & "/app" ) ).toBeTrue();
+				expect( directoryExists( folder & "/public" ) ).toBeTrue();
+				expect( fileExists( folder & "/runtime/modules/bxagents/ModuleConfig.bx" ) ).toBeTrue();
+				expect( fileExists( folder & "/miniserver.json" ) ).toBeTrue();
+				expect( fileExists( folder & "/manifest.json" ) ).toBeFalse();
+				expect( directoryExists( folder & "/runtime/logs" ) ).toBeFalse( "a packaged app carries no logs" );
+
+				var config = jsonDeserialize( fileRead( folder & "/miniserver.json" ) );
+				config.port = freePort();
+				fileWrite( folder & "/miniserver.json", jsonSerialize( config ) );
+
+				var env = createObject( "java", "java.util.HashMap" ).init();
+				env.put( "BOXLANG_HOME", folder & "/runtime" );
+				env.put( "BXAGENTS_HOME", dist & "/data-home" );
+				var process = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( executable, folder & "/miniserver.json", false, env, folder );
+				processes.append( process );
+				var url = "http://127.0.0.1:#config.port#";
+				waitForHealth( url );
+
+				expect( get( url & "/__bxagents/health" ).status ).toBe( 200 );
+				expect( get( url & "/chat/" ).status ).toBe( 302 );
+				expect( post( url & "/__bxagents/invoke", '{"input":"hello"}' ).status ).toBe( 401 );
+				expect( get( url & "/config/agent-settings.json" ).status ).toBe( 404 );
+				expect( get( url & "/app/Application.bx" ).status ).toBe( 404 );
+				expect( get( url & "/runtime/boxlang.json" ).status ).toBe( 404 );
+				var asset = directoryList( folder & "/public/includes/bxagentsui/build/assets", false, "name" )[ 1 ];
+				expect( get( url & "/includes/bxagentsui/build/assets/" & asset ).status ).toBe( 200 );
+				process.destroy();
+			} );
+
+		} );
+	}
+
+	// ------------------------------------------------------------------ helpers
+
+	/**
+	 * A project with a web page that has accounts (so the agent API wants a sign-in or a token), a tool, and text that must never be served.
+	 */
+	private string function newProject() {
+		var dir = createTempDirectory( prefix = "bxagents-layout-project-" );
+		tempDirs.append( dir );
+		directoryCopy( expandPath( "/fixtures" ) & "/gateways-webui-users", dir, true );
+		directoryCreate( dir & "/tools" );
+		fileCopy( expandPath( "/fixtures" ) & "/e2e-coldbox-route/tools/Greeter.bx", dir & "/tools/Greeter.bx" );
+		fileWrite( dir & "/instructions.md", "INSTRUCTIONS-MARKER: be helpful." );
+		fileWrite( dir & "/Agent.bx", 'class { function configure() { return { name : "layout-fixture-agent", model : "mock/mock-model" } } }' );
+		return dir;
+	}
+
+	private void function unzip( required string archive, required string destination ) {
+		var zip = createObject( "java", "java.util.zip.ZipFile" ).init( arguments.archive );
+		var entries = zip.entries();
+		while ( entries.hasMoreElements() ) {
+			var entry = entries.nextElement();
+			var target = arguments.destination & "/" & entry.getName();
+			if ( entry.isDirectory() ) {
+				directoryCreate( path = target, createPath = true, ignoreExists = true );
+			} else {
+				directoryCreate( path = getDirectoryFromPath( target ), createPath = true, ignoreExists = true );
+				var stream = zip.getInputStream( entry );
+				createObject( "java", "java.nio.file.Files" ).copy( stream, createObject( "java", "java.nio.file.Paths" ).get( target, [] ), [ createObject( "java", "java.nio.file.StandardCopyOption" ).REPLACE_EXISTING ] );
+				stream.close();
+			}
+		}
+		zip.close();
+	}
+
+	private numeric function freePort() {
+		var socket = createObject( "java", "java.net.ServerSocket" ).init( 0 );
+		var found = socket.getLocalPort();
+		socket.close();
+		return found;
+	}
+
+	/**
+	 * A module in the "machine's" own module directory (~/.boxlang/modules of the servers' fake home) that writes a file when it loads
+	 */
+	private string function placeDecoy( required string marker ) {
+		var dir = fakeHome & "/.boxlang/modules/zz-bxagents-decoy-" & replace( createUUID(), "-", "", "all" );
+		directoryCreate( path = dir, createPath = true );
+		fileWrite( dir & "/box.json", '{ "name": "zz decoy", "slug": "zz-decoy", "version": "1.0.0", "type": "boxlang-modules" }' );
+		fileWrite( dir & "/ModuleConfig.bx", 'class {' & char( 10 )
+			& '	this.version = "1.0.0"' & char( 10 )
+			& '	this.mapping = "zzdecoy"' & char( 10 )
+			& '	function onLoad() {' & char( 10 )
+			& '		fileWrite( "#arguments.marker.replace( "\", "/", "all" )#", "loaded" )' & char( 10 )
+			& '	}' & char( 10 )
+			& '}' & char( 10 ) );
+		variables.decoyDir = dir;
+		return dir;
+	}
+
+	private void function removeDecoy( required string dir ) {
+		if ( directoryExists( arguments.dir ) && arguments.dir.find( "zz-bxagents-decoy-" ) ) {
+			directoryDelete( arguments.dir, true );
+		}
+		variables.decoyDir = "";
+	}
+
+	private void function waitForHealth( required string url ) {
+		var deadline = getTickCount() + 90000;
+		var last = "no response";
+		while ( getTickCount() < deadline ) {
+			try {
+				var answer = get( arguments.url & "/__bxagents/health" );
+				if ( answer.status == 200 ) {
+					return;
+				}
+				last = "HTTP " & answer.status;
+			} catch ( any e ) {
+				last = e.message;
+			}
+			sleep( 500 );
+		}
+		throw( type = "BxAgents.ServerNeverReady", message = "#arguments.url# never answered its health route: #last#" );
+	}
+
+	/**
+	 * @return { status, body, location }: the redirect is not followed, and the bytes of the path are sent as written
+	 */
+	private struct function get( required string url ) {
+		return send( "GET", arguments.url );
+	}
+
+	private struct function post( required string url, required string body ) {
+		return send( "POST", arguments.url, arguments.body );
+	}
+
+	private struct function send( required string method, required string url, string body = "" ) {
+		var connection = createObject( "java", "java.net.URI" ).create( arguments.url ).toURL().openConnection();
+		connection.setInstanceFollowRedirects( false );
+		connection.setConnectTimeout( 5000 );
+		connection.setReadTimeout( 30000 );
+		connection.setRequestMethod( arguments.method );
+		if ( arguments.method == "POST" ) {
+			connection.setDoOutput( true );
+			connection.setRequestProperty( "Content-Type", "application/json" );
+			var out = connection.getOutputStream();
+			out.write( arguments.body.getBytes( "UTF-8" ) );
+			out.close();
+		}
+		var status = connection.getResponseCode();
+		var stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+		var text = "";
+		if ( !isNull( stream ) ) {
+			text = createObject( "java", "java.lang.String" ).init( stream.readAllBytes(), "UTF-8" );
+			stream.close();
+		}
+		var location = connection.getHeaderField( "Location" );
+		return { status : status, body : text, location : isNull( location ) ? "" : location };
+	}
+
+}

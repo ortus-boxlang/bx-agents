@@ -107,13 +107,26 @@ class extends="testbox.system.BaseSpec" {
 					return;
 				}
 
-				var dir = newTempProject( "invoke-agent" );
-				buildVerb.run( { projectRoot : dir } );
+				// the served app loads the bxagents module from its own runtime: the BUILT module (`shadowJar createModuleStructure`), not the
+				// suite's stand-in. Skipped, like the miniserver itself, when it has not been built.
+				var builtModule = expandPath( "/" ) & "build/modules/bxagents";
+				if ( !fileExists( builtModule & "/ModuleConfig.bx" ) ) {
+					return;
+				}
+				var system = createObject( "java", "java.lang.System" );
+				var saved = new bxagents.models.util.Env().get( "BXAGENTS_MODULE_DIR" );
+				system.setProperty( "BXAGENTS_MODULE_DIR", builtModule );
+				try {
+					var dir = newTempProject( "invoke-agent" );
+					buildVerb.run( { projectRoot : dir } );
 
-				var result = invokeVerb.run( { projectRoot : dir, message : "Hello there", server : true } );
+					var result = invokeVerb.run( { projectRoot : dir, message : "Hello there", server : true } );
 
-				expect( result.exitCode ).toBe( 0 );
-				expect( result.message ).toBe( "Mock response" );
+					expect( result.exitCode ).toBe( 0 );
+					expect( result.message ).toBe( "Mock response" );
+				} finally {
+					system.setProperty( "BXAGENTS_MODULE_DIR", saved );
+				}
 			} );
 
 		} );

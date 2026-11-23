@@ -26,8 +26,29 @@ createObject( "java", "java.lang.System" ).setProperty( "user.home", createObjec
 
 repoRoot   = expandPath( "/" )
 appDir     = repoRoot & "tests/.coldbox-app"
-configPath = repoRoot & "boxlang.json"
 port       = 39280
+
+// The served app is the real layout: .build/{app,public,lib,runtime,boxlang_modules}, started in .build from a miniserver.json whose
+// paths are relative to it, with the BoxLang home and the module copy under runtime/. The module it loads is the BUILT one
+// (build/modules/bxagents, which `shadowJar createModuleStructure` refreshes), copied into runtime/modules/bxagents by the build.
+builtModule = repoRoot & "build/modules/bxagents"
+if ( !fileExists( builtModule & "/ModuleConfig.bx" ) ) {
+	println( "! Skipping ColdBox integration tests: build/modules/bxagents not found - run `./gradlew shadowJar createModuleStructure` first" )
+	cliExit( 0 )
+}
+createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_MODULE_DIR", builtModule )
+
+/**
+ * Starts the miniserver on a built fixture the way `serve` does: miniserver.json in .build, relative paths, .build as the
+ * working folder and runtime/ as the BoxLang home. `pages` are extra .bxm pages the server may run (the runner page); nothing
+ * else but index.bxm executes.
+ */
+function serveBuilt( required string jarPath, required struct built, required numeric serverPort, array pages = [], any environment ) {
+	var configFile = new bxagents.models.build.layout.MiniServerJson().write( built.buildDir, serverPort, "127.0.0.1", pages )
+	var childEnv = isNull( arguments.environment ) ? createObject( "java", "java.util.HashMap" ).init() : arguments.environment
+	childEnv.put( "BOXLANG_HOME", built.runtimeDir )
+	return createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( arguments.jarPath, configFile, false, childEnv, built.buildDir )
+}
 
 // ------------------------------------------------------------------
 // 1. Pre-build the fixture the spec boots against, then copy the runner
@@ -42,9 +63,14 @@ directoryCopy( expandPath( "/fixtures" ) & "/e2e-coldbox-route", appDir, true )
 
 pipeline = new bxagents.models.build.BuildPipeline( "coldbox-integration-test" )
 buildResult = pipeline.build( appDir )
-println( "+ Built fixture at: " & buildResult.appDir )
+println( "+ Built fixture at: " & buildResult.buildDir )
 
-fileCopy( repoRoot & "tests/runner-coldbox.bxm", buildResult.appDir & "/runner-coldbox.bxm" )
+// the runner page is served from public/ like any page; it runs the specs from .build/tests (the template's /tests mapping) with
+// TestBox from .build/lib/testbox (its /testbox mapping)
+fileCopy( repoRoot & "tests/runner-coldbox.bxm", buildResult.publicDir & "/runner-coldbox.bxm" )
+directoryCreate( buildResult.buildDir & "/tests/specs/integration", true, true )
+directoryCopy( repoRoot & "tests/specs/integration/coldbox", buildResult.buildDir & "/tests/specs/integration/coldbox", true )
+directoryCopy( repoRoot & "build/lib-stage/lib/testbox", buildResult.libDir & "/testbox", true )
 
 // ------------------------------------------------------------------
 // 1b. ColdBox and its modules (qb, cbsecurity, cbauth, ...) come from the
@@ -54,14 +80,17 @@ fileCopy( repoRoot & "tests/runner-coldbox.bxm", buildResult.appDir & "/runner-c
 //     leaving WireBox to explain it later.
 // ------------------------------------------------------------------
 for ( bundled in [ "coldbox", "modules/qb", "modules/cbsecurity", "modules/cbauth" ] ) {
-	if ( !directoryExists( buildResult.appDir & "/" & bundled ) ) {
+	if ( !directoryExists( buildResult.libDir & "/" & bundled ) ) {
 		throw(
 			type    = "BxAgents.BundledLibMissing",
-			message = "The built app has no [" & bundled & "] - the module's bundled lib/ was not copied in. Run `./gradlew shadowJar` (which stages lib/ via installLibs) first."
+			message = "The built app has no [" & bundled & "] in its lib/ - the module's bundled lib/ was not copied in. Run `./gradlew shadowJar createModuleStructure` (which stages lib/ via installLibs) first."
 		)
 	}
 }
-println( "+ Bundled ColdBox libs present in the built app" )
+println( "+ Bundled ColdBox libs present in the built app's lib/" )
+if ( !directoryExists( buildResult.runtimeDir & "/modules/bxagents" ) || directoryList( buildResult.runtimeDir & "/modules", false, "name" ).len() != 1 ) {
+	throw( type = "BxAgents.ModuleCopyMissing", message = "runtime/modules should hold exactly the bxagents module, and holds [" & directoryList( buildResult.runtimeDir & "/modules", false, "name" ).toList() & "]" )
+}
 
 // ------------------------------------------------------------------
 // 2. Launch a real boxlang-miniserver, pointed directly at the built app,
@@ -79,28 +108,18 @@ if ( !len( jarPath ) ) {
 	cliExit( 0 )
 }
 
-// rewrites MUST be on: /api/chat/invoke isn't a real file, and ColdBox's own
+// rewrites MUST be on (MiniServerJson): /api/chat/invoke isn't a real file, and ColdBox's own
 // routing only ever gets a chance to see it via the rewrite-to-index.bxm
 // fallback (confirmed empirically this session - with rewrites off, MiniServer
-// 404s that path itself before ColdBox's Application.bx/Router ever run). A
-// real existing file like runner-coldbox.bxm is still served directly.
-miniServerConfigPath = repoRoot & "tests/.coldbox-app-miniserver.json"
-fileWrite( miniServerConfigPath, jsonSerialize( {
-	port            : port,
-	host            : "127.0.0.1",
-	webRoot         : buildResult.appDir,
-	configPath      : configPath,
-	rewrites        : true,
-	rewriteFileName : "index.bxm",
-	healthCheck     : true
-} ) )
+// 404s that path itself before ColdBox's Application.bx/Router ever run). The runner page is the one extra page
+// the server may run.
 
 // The fixture lists web accounts (secureChat), and accounts close the agent API to callers without a sign-in or a token,
 // so the calls below carry the fixture's shared secret.
 coldboxToken = "e2e-coldbox-secret"
 coldboxEnv = createObject( "java", "java.util.HashMap" ).init()
 coldboxEnv.put( "E2E_COLDBOX_API_TOKEN", coldboxToken )
-process = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( jarPath, miniServerConfigPath, false, coldboxEnv )
+process = serveBuilt( jarPath, buildResult, port, [ "runner-coldbox.bxm" ], coldboxEnv )
 
 try {
 	// ------------------------------------------------------------------
@@ -175,7 +194,7 @@ try {
 	// appends to it.
 	// ------------------------------------------------------------------
 	runnerUrl    = "http://127.0.0.1:#port#/runner-coldbox.bxm"
-	progressPath = buildResult.appDir & "/runner-progress.txt"
+	progressPath = buildResult.publicDir & "/runner-progress.txt"
 	report       = ""
 	lastError    = ""
 
@@ -332,13 +351,10 @@ try {
 	// covers the whole native path: ColdBox's `toAi()` emitting through the
 	// `SSE()` BIF, and `http().sse( true ).onChunk()` parsing it.
 	//
-	// What this really guards is a CONFIG dependency that is invisible in the
-	// code: SSE frames are terminated by a blank line, and the web runtime's
-	// whitespace compression - ON by default - collapses consecutive newlines
-	// and eats those terminators. With it on, this body carried zero `\n\n`
-	// and the native client reported `totalEvents: 0`. `boxlang.json` here and
-	// `Serve.bx` for real projects both set `whitespaceCompressionEnabled` to
-	// false; if either regresses, this assertion is what catches it.
+	// What this also covers is the response pipeline in the new layout: runtime/boxlang.json (the template's, with its one
+	// patched line) has whitespace compression off. Measured on BoxLang 1.19.0, a native SSE() emitter streams the same 14
+	// frames and 8 content deltas with compression on and off, so it is NOT what makes this stream work on this engine; it
+	// keeps a hand-written event stream (writeOutput of "...\n\n") intact (3 terminators against 0). See Serve.bx.
 	//
 	// The delta COUNT is the point. Reassembled output alone would pass just
 	// as well if the whole body were buffered and parsed at the end, which is
@@ -355,7 +371,7 @@ try {
 	if ( !streamDeltas.len() ) {
 		throw(
 			type    = "BxAgents.AgentStreamNoDeltas",
-			message = "Streaming /__bxagents/stream produced no deltas at all. The usual cause is whitespaceCompressionEnabled being back on for this runtime, which collapses the blank lines that terminate SSE frames - check boxlang.json and Serve.bx."
+			message = "Streaming /__bxagents/stream produced no deltas at all. Check that the stream route answers frames at all (a response pipeline that collapses blank lines, such as whitespaceCompressionEnabled, eats the lines that end an SSE frame; see Serve.bx for what was measured)."
 		)
 	}
 	if ( streamResult.output != "Mock response" ) {
@@ -610,9 +626,6 @@ try {
 	if ( process.isAlive() ) {
 		process.destroyForcibly()
 	}
-	if ( fileExists( miniServerConfigPath ) ) {
-		fileDelete( miniServerConfigPath )
-	}
 }
 
 // ------------------------------------------------------------------
@@ -652,20 +665,9 @@ if ( !len( expectedToken ) ) {
 	directoryCopy( expandPath( "/fixtures" ) & "/e2e-agent-api-token", tokenAppDir, true )
 
 	tokenBuild = new bxagents.models.build.BuildPipeline( "coldbox-integration-test" ).build( tokenAppDir )
-	println( "+ Built token-gated fixture at: " & tokenBuild.appDir )
+	println( "+ Built token-gated fixture at: " & tokenBuild.buildDir )
 
-	tokenConfigPath = repoRoot & "tests/.coldbox-app-token-miniserver.json"
-	fileWrite( tokenConfigPath, jsonSerialize( {
-		port            : tokenPort,
-		host            : "127.0.0.1",
-		webRoot         : tokenBuild.appDir,
-		configPath      : configPath,
-		rewrites        : true,
-		rewriteFileName : "index.bxm",
-		healthCheck     : true
-	} ) )
-
-	tokenProcess = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( jarPath, tokenConfigPath, false )
+	tokenProcess = serveBuilt( jarPath, tokenBuild, tokenPort )
 
 	try {
 		tokenUrl = "http://127.0.0.1:#tokenPort#/__bxagents/invoke"
@@ -796,9 +798,6 @@ if ( !len( expectedToken ) ) {
 		if ( tokenProcess.isAlive() ) {
 			tokenProcess.destroyForcibly()
 		}
-		if ( fileExists( tokenConfigPath ) ) {
-			fileDelete( tokenConfigPath )
-		}
 	}
 }
 
@@ -820,7 +819,7 @@ directoryCreate( issuedAppDir, true )
 directoryCopy( expandPath( "/fixtures" ) & "/e2e-agent-api-tokens", issuedAppDir, true )
 
 issuedBuild = new bxagents.models.build.BuildPipeline( "coldbox-integration-test" ).build( issuedAppDir )
-println( "+ Built issued-tokens fixture at: " & issuedBuild.appDir )
+println( "+ Built issued-tokens fixture at: " & issuedBuild.buildDir )
 
 // what an operator does: tokens in the database the app will open
 issuedStore = new bxagents.models.store.ChatStore( { driver : "sqlite", database : issuedBuild.appDir & "/data/chat.db" } )
@@ -833,17 +832,7 @@ expiredToken = issuedTokens.create( "stale", "chat", dateAdd( "n", -5, now() ) )
 revokedToken = issuedTokens.create( "gone" ).token
 issuedTokens.revoke( "gone" )
 
-issuedConfigPath = repoRoot & "tests/.coldbox-app-issued-miniserver.json"
-fileWrite( issuedConfigPath, jsonSerialize( {
-	port            : issuedPort,
-	host            : "127.0.0.1",
-	webRoot         : issuedBuild.appDir,
-	configPath      : configPath,
-	rewrites        : true,
-	rewriteFileName : "index.bxm",
-	healthCheck     : true
-} ) )
-issuedProcess = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( jarPath, issuedConfigPath, false )
+issuedProcess = serveBuilt( jarPath, issuedBuild, issuedPort )
 
 try {
 	issuedBase = "http://127.0.0.1:#issuedPort#/__bxagents"
@@ -1010,8 +999,5 @@ try {
 	issuedProcess.waitFor( 5, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS )
 	if ( issuedProcess.isAlive() ) {
 		issuedProcess.destroyForcibly()
-	}
-	if ( fileExists( issuedConfigPath ) ) {
-		fileDelete( issuedConfigPath )
 	}
 }

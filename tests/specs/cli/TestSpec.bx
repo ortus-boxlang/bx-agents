@@ -8,6 +8,27 @@
  */
 class extends="testbox.system.BaseSpec" {
 
+	/**
+	 * The spawned test run loads the bxagents module alone (a link to it in the run's work folder, not the machine's module directory),
+	 * so the specs that spawn one name the BUILT module as the one to link.
+	 */
+	function beforeAll() {
+		variables.system = createObject( "java", "java.lang.System" );
+		variables.savedModule = new bxagents.models.util.Env().get( "BXAGENTS_MODULE_DIR" );
+		variables.builtModule = expandPath( "/" ) & "build/modules/bxagents";
+		if ( fileExists( builtModule & "/ModuleConfig.bx" ) ) {
+			system.setProperty( "BXAGENTS_MODULE_DIR", builtModule );
+		}
+	}
+
+	function afterAll() {
+		if ( len( variables.savedModule ) ) {
+			system.setProperty( "BXAGENTS_MODULE_DIR", variables.savedModule );
+		} else {
+			system.clearProperty( "BXAGENTS_MODULE_DIR" );
+		}
+	}
+
 	function run() {
 		describe( "cli.Test", function() {
 
@@ -91,6 +112,9 @@ class extends="testbox.system.BaseSpec" {
 				// time (so its compiled classes never land in a home shared with another project)
 				expect( directoryExists( projectRoot & "/.build/test-runtime/classes" ) ).toBeTrue( "the test child used the project's own runtime home" );
 				expect( fileExists( projectRoot & "/.env" ) ).toBeFalse( "nothing is written to the project root for it" );
+				// the run reaches the module through a link in its work folder and deletes that folder afterwards: the module itself is untouched
+				expect( fileExists( builtModule & "/ModuleConfig.bx" ) ).toBeTrue( "cleaning up the run's work folder emptied the module it links to" );
+				expect( directoryList( builtModule, false, "name" ).len() ).toBeGT( 3 );
 			} );
 
 			it( "reports a real failing spec with exit code 1 and a useful failure message", function() {
