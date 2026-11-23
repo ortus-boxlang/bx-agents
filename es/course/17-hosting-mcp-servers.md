@@ -1,8 +1,8 @@
 ---
 title: "Lección 17: Alojar y consumir servidores MCP"
 icon: phosphor-duotone:link-simple
-summary: MCP en ambos sentidos - consume servidores remotos desde Agent.yaml, aloja los tuyos bajo mcp/.
-description: MCP en ambos sentidos - consume servidores remotos desde Agent.yaml, aloja los tuyos bajo mcp/.
+summary: MCP en ambos sentidos - consume servidores remotos desde Agent.yml, aloja los tuyos bajo mcp/.
+description: MCP en ambos sentidos - consume servidores remotos desde Agent.yml, aloja los tuyos bajo mcp/.
 tags: [course, conventions, mcp]
 ---
 
@@ -15,7 +15,7 @@ servidor alojado solo es accesible si una entrada de `gateways/` lo expone (cons
 
 ```mermaid
 flowchart LR
-    subgraph consume["CONSUMING - declared on Agent.yaml"]
+    subgraph consume["CONSUMING - declared on Agent.yml"]
         direction LR
         AG["your agent"] -->|"calls out at runtime"| RM["a remote MCP server"]
     end
@@ -30,7 +30,7 @@ flowchart LR
 
 ## Consumir un servidor remoto
 
-Se declara directamente en `Agent.yaml` mediante `mcpServers` - no es un archivo bajo `mcp/`:
+Se declara directamente en `Agent.yml` mediante `mcpServers` - no es un archivo bajo `mcp/`:
 
 ```yaml
 mcpServers:

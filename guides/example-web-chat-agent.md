@@ -16,7 +16,7 @@ This is the one example in this guide series with real screenshots, because it's
 
 ```text
 webui-agent/
-├── Agent.yaml
+├── Agent.yml
 ├── instructions.md
 ├── gateways/
 │   └── chat.bx
@@ -25,7 +25,7 @@ webui-agent/
         └── theme.css
 ```
 
-`Agent.yaml` is the same shape as every other example:
+`Agent.yml` is the same shape as every other example:
 
 ```yaml
 name: webui-agent
@@ -139,7 +139,7 @@ The page loads fine either way, but a call without the matching key gets a 401 a
 
 ## Access tokens for administrators
 
-With `agentApi: { tokens: true, manageTokens: true }` in `Agent.yaml`, a caller with an `admin` token sees the **Access** page (`/chat/access/tokens`). Its **Tokens** tab lists tokens, creates one (a name, a scope of `chat` or `admin`, and how long it lasts, such as `90d`), shows the secret once for you to copy, and revokes tokens. `manageTokens` is off by default and a `chat` token gets `403`. The same thing from a shell is `bxAgents token create|list|revoke`.
+With `agentApi: { tokens: true, manageTokens: true }` in `Agent.yml`, a caller with an `admin` token sees the **Access** page (`/chat/access/tokens`). Its **Tokens** tab lists tokens, creates one (a name, a scope of `chat` or `admin`, and how long it lasts, such as `90d`), shows the secret once for you to copy, and revokes tokens. `manageTokens` is off by default and a `chat` token gets `403`. The same thing from a shell is `bxAgents token create|list|revoke`.
 
 ![The Access page: the token list and the form that makes a token](../assets/webui/webui-access.png)
 

@@ -1,14 +1,14 @@
 ---
 title: "Lección 12: Modelos y perfiles"
 icon: phosphor-duotone:brain
-summary: Elige el modelo por defecto, configura otros proveedores y da nombre a combinaciones como fast y planner, todo en Agent.yaml.
-description: Elige el modelo por defecto, configura otros proveedores y da nombre a combinaciones como fast y planner, todo en Agent.yaml.
+summary: Elige el modelo por defecto, configura otros proveedores y da nombre a combinaciones como fast y planner, todo en Agent.yml.
+description: Elige el modelo por defecto, configura otros proveedores y da nombre a combinaciones como fast y planner, todo en Agent.yml.
 tags: [course, conventions, models, profiles]
 ---
 
 # Modelos y perfiles
 
-Ya eliges un modelo con un slug, `model: openai/gpt-5` ([Lección 5](05-agent-bx.md)). Cuando quieres más de un modelo en el mismo proyecto, les pones nombre: un **perfil** es un proveedor, un modelo y algunos ajustes bajo un nombre como `fast` o `planner`. Todo vive en `Agent.yaml`; nunca escribes un `boxlang.json`.
+Ya eliges un modelo con un slug, `model: openai/gpt-5` ([Lección 5](05-agent-bx.md)). Cuando quieres más de un modelo en el mismo proyecto, les pones nombre: un **perfil** es un proveedor, un modelo y algunos ajustes bajo un nombre como `fast` o `planner`. Todo vive en `Agent.yml`; nunca escribes un `boxlang.json`.
 
 ```yaml
 provider: openai
@@ -33,7 +33,7 @@ Un subagente elige uno con `profile:`; un agente que no dice nada usa el valor p
 - En el chat de terminal, `/model` muestra el modelo, `/profile` elige un perfil de una lista (o `/profile fast`) y `/default` vuelve. La conversación, la memoria y las tools se mantienen.
 - Una entrada de chat web o una API de agente que liste `profiles` los ofrece como selector. Solo se pueden elegir los listados, y la página nunca ve una clave.
 - `bxAgents models list` muestra con qué puede hablar el proyecto, y `bxAgents models test --all` envía a cada modelo una pregunta diminuta y dice si respondió y cuánto tardó. En el chat, `/ping` hace lo mismo.
-- Pon `usage: true` en `Agent.yaml` y `bxAgents stats` (o `/stats`) muestra lo que usaron las llamadas al modelo, por modelo, proveedor, día o usuario. Solo guarda recuentos.
+- Pon `usage: true` en `Agent.yml` y `bxAgents stats` (o `/stats`) muestra lo que usaron las llamadas al modelo, por modelo, proveedor, día o usuario. Solo guarda recuentos.
 
 ## Para qué sirve
 

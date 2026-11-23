@@ -14,25 +14,25 @@ tags: [guides, examples, subagents]
 
 ```text
 multi-agent-team/
-├── Agent.yaml
+├── Agent.yml
 ├── instructions.md
 └── subagents/
     ├── researcher/
-    │   ├── Agent.yaml
+    │   ├── Agent.yml
     │   └── instructions.md
     └── writer/
-        ├── Agent.yaml
+        ├── Agent.yml
         └── instructions.md
 ```
 
-Every `subagents/<name>/` folder is itself a complete mini-agent - its own `Agent.yaml`, its own `instructions.md`, and (not used here, but supported) its own `tools/`/`skills/`.
+Every `subagents/<name>/` folder is itself a complete mini-agent - its own `Agent.yml`, its own `instructions.md`, and (not used here, but supported) its own `tools/`/`skills/`.
 
 ## Declaring the team
 
-The root `Agent.yaml` names the subagents to wire in with `subAgents`:
+The root `Agent.yml` names the subagents to wire in with `subAgents`:
 
 ```yaml
-# Agent.yaml
+# Agent.yml
 name: multi-agent-team
 description: A root agent delegating to a researcher and a writer subagent.
 model: mock/mock-model
@@ -41,17 +41,17 @@ model: mock/mock-model
 subAgents: [ researcher, writer ]
 ```
 
-`subAgents` is resolved against folder names under `subagents/`; each folder's own `Agent.yaml` declares its own `name`, `description`, and `model` independently:
+`subAgents` is resolved against folder names under `subagents/`; each folder's own `Agent.yml` declares its own `name`, `description`, and `model` independently:
 
 ```yaml
-# subagents/researcher/Agent.yaml
+# subagents/researcher/Agent.yml
 name: researcher
 description: Gathers facts on a topic.
 model: mock/mock-model
 ```
 
 ```yaml
-# subagents/writer/Agent.yaml
+# subagents/writer/Agent.yml
 name: writer
 description: Turns research into polished prose.
 model: mock/mock-model

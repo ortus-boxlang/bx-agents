@@ -78,7 +78,7 @@ Finished turns are printed as ordinary terminal text, so **your scrollback, sear
 
 ![The keyboard shortcuts panel, with the keys in sections](../assets/tui/chat-keys.png)
 
-*F1 opens a panel in place of the message box. Everything you can press is in it, in sections: writing a message, the menus, while the agent works, the prefixes and the keys your extensions add. The grey word after a key is the name to use for it in `bxAgents.yml`.*
+*F1 opens a panel in place of the message box. Everything you can press is in it, in sections: writing a message, the menus, while the agent works, the prefixes and the keys your extensions add. The grey word after a key is the name to use for it in `Agent.yml`.*
 
 Type to narrow the list: `ctrl` shows the keys with Ctrl, `newline` the key that adds a line.
 
@@ -91,7 +91,7 @@ Type to narrow the list: `ctrl` shows the keys with Ctrl, `newline` the key that
 | Esc | Clear the filter; with no filter, close the panel |
 | F1, Ctrl+/ | Close it |
 
-A key you changed in `bxAgents.yml` shows what it was, as `(was Alt+Enter)`. Some terminals do not pass Ctrl+/ through, which is why F1 is the one to count on.
+A key you changed in `Agent.yml` shows what it was, as `(was Alt+Enter)`. Some terminals do not pass Ctrl+/ through, which is why F1 is the one to count on.
 
 <video controls preload="metadata" poster="/assets/video/keys-panel-poster.png" style="max-width:100%">
   <source src="/assets/video/keys-panel.mp4" type="video/mp4">
@@ -101,7 +101,7 @@ A key you changed in `bxAgents.yml` shows what it was, as `(was Alt+Enter)`. Som
 
 ### Change a key
 
-Keys live in a file that belongs to you, not to any project: `~/.bxagents/bxAgents.yml` (set `BXAGENTS_USER_CONFIG` to use another file).
+Keys live in a file that belongs to you, not to any project: `~/.bxagents/Agent.yml` (set `BXAGENTS_USER_CONFIG` to use another file).
 
 ```yaml
 chat:
@@ -144,7 +144,7 @@ A `/` at the start of the box opens a menu of every command, under a heading for
 
 *Browsing the menu, narrowing it with `ses`, filling `/sessions`, then running `/new`.*
 
-Each row shows what the command takes after its name, such as `/resume [n|id]`, and a short description. Up and Down walk your earlier messages again once the menu is closed. All of the commands are listed in [Slash commands](slash-commands.md); the ones you will use first are `/help`, `/new`, `/sessions`, `/resume`, `/context`, `/model` and `/exit`. `/stats` shows the tokens the model calls used, once `usage: true` is set in `Agent.yaml`.
+Each row shows what the command takes after its name, such as `/resume [n|id]`, and a short description. Up and Down walk your earlier messages again once the menu is closed. All of the commands are listed in [Slash commands](slash-commands.md); the ones you will use first are `/help`, `/new`, `/sessions`, `/resume`, `/context`, `/model` and `/exit`. `/stats` shows the tokens the model calls used, once `usage: true` is set in `Agent.yml`.
 
 ## Conversations
 
@@ -226,20 +226,22 @@ The message box's own look, `prompt` and `widgets`, is set in the same block, se
 The first of these that has a value for a setting wins:
 
 1. **The flag of one run:** `--inline` (same as `fullscreen: false`) or `--fullscreen`.
-2. **The agent's own file**, in its data home: `~/.bxagents/<agent name>/settings.yml` (see [the data home](../conventions/data.md#the-data-home)). It is yours, for that agent on this machine.
-3. **Your file for every agent**, `~/.bxagents/bxAgents.yml`. This is the fallback for an agent that has no setting of its own.
-4. **The project's `Agent.yaml`**, which is the author's suggestion.
+2. **The agent's own file**, in its data home: `~/.bxagents/<agent name>/Agent.yml` (see [the data home](../conventions/data.md#the-data-home)). It is yours, for that agent on this machine.
+3. **Your file for every agent**, `~/.bxagents/Agent.yml`. This is the fallback for an agent that has no setting of its own.
+4. **The project's `Agent.yml`**, which is the author's suggestion.
 5. **The default** in the table above.
 
 The same block, with the same names, goes in all three files:
 
 ```yaml
-# ~/.bxagents/support-bot/settings.yml, or ~/.bxagents/bxAgents.yml, or Agent.yaml
+# ~/.bxagents/support-bot/Agent.yml, or ~/.bxagents/Agent.yml, or Agent.yml
 tui:
   fullscreen: false
   header: compact
   tools: summary
 ```
+
+These are the same files that layer every other setting of the agent, not only `tui:`: see [layered settings](../conventions/layered-settings.md).
 
 A value a setting does not take is reported when the chat starts, and the layer below it applies. A chat over `--connect` talks to an agent somewhere else, so it has no agent file: only the flag, your file and the defaults apply.
 
@@ -275,7 +277,7 @@ Five styles, each with a top bar that carries a label and small facts (widgets):
 
 The default is no widget in the top bar and `folder`, `git`, `ctx` and `profile` at the bottom, so the top bar only says who is writing. Widgets: `agent`, `profile`, `folder`, `user`, `clock`, `machine`, `git`, `date`, `session`, `elapsed`, `ctx`. A widget with nothing to show (`git` outside a repository) is left out, and the last ones drop off when the line is too narrow.
 
-Set the start for the project in `Agent.yaml`:
+Set the start for the project in `Agent.yml`:
 
 ```yaml
 tui:
@@ -289,7 +291,7 @@ Or change it for one chat: `/prompt box`, `/prompt top +git -clock`, `/prompt bo
 
 ## Notes screen
 
-`/notes` opens a screen with the notes the agent keeps about you and about its own work: `a` add, `e` or Enter edit, `d` remove, `t` or Tab switch between yours and the agent's, `s` stats, Esc back. Needs a [`notes`](../conventions/agent-yaml.md#notes) block in `Agent.yaml`.
+`/notes` opens a screen with the notes the agent keeps about you and about its own work: `a` add, `e` or Enter edit, `d` remove, `t` or Tab switch between yours and the agent's, `s` stats, Esc back. Needs a [`notes`](../conventions/agent-yaml.md#notes) block in `Agent.yml`.
 
 ## Record it
 
@@ -307,7 +309,7 @@ Or change it for one chat: `/prompt box`, `/prompt top +git -clock`, `/prompt bo
 | You see | Cause and fix |
 |---|---|
 | The chat cannot find the agent | Run `bxAgents build` first, or use `--connect` |
-| A key does nothing | Run `/keys` to see what is bound, and rebind in `bxAgents.yml` if your terminal keeps that key for itself |
+| A key does nothing | Run `/keys` to see what is bound, and rebind in `Agent.yml` if your terminal keeps that key for itself |
 | Colours look wrong | Set `COLORTERM=truecolor`, or `NO_COLOR=1` to switch colour off |
 | `--connect` says 401 | The server wants a token: `--token=<token>` or `BXAGENTS_TOKEN` |
 | A picture is refused | The profile sets `vision: false`, or the file is not png, jpg, gif or webp, or is over 5 MB |

@@ -32,7 +32,7 @@ Qué puedes hacer en él:
 
 - **Teclas.** Enter envía, Alt+Enter añade una línea, Arriba y Abajo recorren tu historial, Esc
   detiene al agente, y un mensaje escrito mientras trabaja lo reconduce. `?` o `/keys` lista
-  todas las teclas, y puedes reasignarlas en `~/.bxagents/bxAgents.yml`.
+  todas las teclas, y puedes reasignarlas en `~/.bxagents/Agent.yml`.
 - **Comandos de barra.** Escribe `/` para ver un menú: `/help`, `/tools`, `/model`, `/info` y más.
   Todos los comandos están en [Comandos de barra](../guides/slash-commands.md).
 - **Sesiones.** Cada chat es una conversación guardada en `data/chat.db`, la misma lista que muestra
@@ -40,7 +40,7 @@ Qué puedes hacer en él:
   nombre, `/fork` la copia y sigue en la copia, y `/export` la guarda como Markdown o HTML.
   `bxAgents chat --continue` reabre la última. Los mensajes duran lo mismo que la memoria del
   agente, así que usa una memoria `file` si los quieres tras un reinicio.
-- **Notas.** Con un bloque `notes:` en `Agent.yaml`, `/remember <texto>` y `/notes` guardan notas
+- **Notas.** Con un bloque `notes:` en `Agent.yml`, `/remember <texto>` y `/notes` guardan notas
   cortas sobre ti que el agente lee al empezar cada conversación.
 - **Contexto.** La fila de ayuda bajo la caja muestra cuánto de la ventana del modelo está en uso,
   como `ctx ~12.4k / 128k 9%`. `/context` muestra de qué se compone.
@@ -88,7 +88,7 @@ clases compiladas de cada proyecto quede aislada.
 ## Probar sin una clave de API real
 
 Todas estas formas necesitan un modelo real para hablar con un proveedor real - pero todavía
-no te hace falta uno. (Más adelante, `bxAgents models test` envía a cada modelo una pregunta diminuta, así que una clave o un nombre de modelo equivocados salen a la luz antes que un chat.) Añade una sobrescritura de entorno `test` a `Agent.yaml` (se cubre por completo en
+no te hace falta uno. (Más adelante, `bxAgents models test` envía a cada modelo una pregunta diminuta, así que una clave o un nombre de modelo equivocados salen a la luz antes que un chat.) Añade una sobrescritura de entorno `test` a `Agent.yml` (se cubre por completo en
 la [Lección 19](19-testing-your-agent.md)):
 
 ```yaml

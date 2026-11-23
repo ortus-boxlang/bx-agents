@@ -20,7 +20,7 @@ interpreta en la [Lección 5](05-agent-bx.md)). Pásalo para una ejecución apta
 `--model`, en una terminal, `new` te hace preguntas (consulta el [asistente de `new`](../guides/new-wizard.md)).
 `--name` y `--description` son opcionales;
 `--name` toma por defecto el nombre del propio directorio de destino. `new` se niega a
-ejecutarse si el destino ya contiene un `Agent.yaml` o un `Agent.bx`.
+ejecutarse si el destino ya contiene un `Agent.yml` o un `Agent.bx`.
 
 ## El asistente
 
@@ -37,7 +37,7 @@ Consulta el [asistente de `new`](../guides/new-wizard.md) para ver cada pregunta
 
 ```text
 my-agent/
-├── Agent.yaml
+├── Agent.yml
 ├── instructions.md
 ├── tools/
 ├── skills/
@@ -65,7 +65,7 @@ Todas las carpetas de convención se crean **vacías**. Añades archivos a las q
 realmente necesita y dejas el resto en paz - una carpeta `tools/` vacía no tiene ningún
 efecto sobre la aplicación generada.
 
-## `Agent.yaml` tiene este aspecto
+## `Agent.yml` tiene este aspecto
 
 (Si pasas `--description`, `new` añade una línea `description:`.)
 
@@ -109,4 +109,4 @@ archivos a mano: `bxAgents add tool`, `add skill`, `add subagent`, `add gateway`
 los demás tipos de `add` hacen unas cuantas preguntas y escriben los archivos por ti (`--dry-run`
 los muestra antes). Las cuatro lecciones siguientes recorren lo que hace falta de verdad para ejecutarlo.
 
-Siguiente: [Lección 5 - La definición del agente: Agent.yaml](05-agent-bx.md)
+Siguiente: [Lección 5 - La definición del agente: Agent.yml](05-agent-bx.md)

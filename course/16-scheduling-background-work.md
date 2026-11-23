@@ -35,7 +35,7 @@ BoxLang's task methods say when: `.every( 15, "minutes" )`, `.everyDayAt( "09:00
 ## Retrieving your agent
 
 `run( ... )` sends a message to the **default agent**, the root agent your
-`Agent.yaml` defines. `agent( "TheAgentName" )` gets any other agent in the tree by the
+`Agent.yml` defines. `agent( "TheAgentName" )` gets any other agent in the tree by the
 `name` its definition declares (see [Lesson 11](11-composing-subagents.md)):
 
 ```javascript

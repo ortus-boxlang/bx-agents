@@ -39,7 +39,7 @@ The build adds `extends="bxagents.Scheduler"` to any scheduler class that names 
 | Method | What it does |
 |---|---|
 | `task( name )` | BoxLang's task builder: `.every()`, `.everyDayAt()`, `.onWeekdays()`, `.cron()` (six fields), `.withNoOverlaps()`, `.call()` ... |
-| `run( input, params, options )` | Sends a message to the **default agent**, the root agent your `Agent.yaml` or `Agent.bx` defines. Takes the agent's own `run()` arguments. |
+| `run( input, params, options )` | Sends a message to the **default agent**, the root agent your `Agent.yml` or `Agent.bx` defines. Takes the agent's own `run()` arguments. |
 | `agent( name )` | Any agent in the project tree by the `name` its own definition declares, root or subagent at any depth. With no name it is the default agent. |
 | `defaultAgent()` | The root agent. |
 | `getInstance( dsl )` | WireBox's `getInstance()`, for anything else the app registered. |
@@ -98,7 +98,7 @@ Lists (`1,3,5`), ranges (`1-5`), steps (`*/5`), month names (`JAN`) and day name
 Every agent in the project's tree is registered in the generated `config/WireBox.bx` under its own declared `name`. `agent( "ResearchBot" )` resolves it, and `run( ... )` is the root agent. Because `name` is also a WireBox binding key it must be **unique across the whole project** - `build` fails validation if two agents share one. See [subagents/](subagents.md#retrieving-an-agent-from-schedules).
 
 ```yaml
-# subagents/researcher/Agent.yaml
+# subagents/researcher/Agent.yml
 name: ResearchBot
 model: openai/gpt-5
 ```

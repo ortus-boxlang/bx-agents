@@ -84,7 +84,7 @@ describes itself: `GET /__bxagents/openapi` returns an OpenAPI document of the r
 really has. A BoxLang client, `bxModules.bxagents.models.api.AgentApiClient`, has one method per
 route. The tour, with curl and BoxLang examples, is in [Call your agent from code](../guides/agent-api.md).
 
-Who may call it is set under `agentApi` in `Agent.yaml`:
+Who may call it is set under `agentApi` in `Agent.yml`:
 
 - **Open** (the default): anyone who can reach the port, all as one user, `local`. Fine on your
   own machine. `bxAgents serve` listens on `127.0.0.1` by default and warns if an open API

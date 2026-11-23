@@ -67,7 +67,7 @@ Run `bxAgents chat` and type `/hello Ada`; `/extensions` lists what loaded. The 
 in the web page and, if allowed, on chat platforms. A folder with an `Extension.bx` can bring more:
 keys (`@Key`), status items (`@Status`), `@` sources and message prefixes for the terminal, web
 page slots and the styles and scripts of a `web/` folder, listeners for chat and bx-ai events, schedulers, tools, skills, a new gateway type or
-a `bxAgents` verb. Values for an extension go under `extensions:` in `Agent.yaml`.
+a `bxAgents` verb. Values for an extension go under `extensions:` in `Agent.yml`.
 
 Start one with `bxAgents add extension standup`, which asks what to bring and writes working
 stubs. Install someone else's with `bxAgents extensions install <folder, zip, owner/repo, address

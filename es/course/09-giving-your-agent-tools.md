@@ -36,7 +36,7 @@ carpeta `tools/` con archivos dentro.
 Un agente recibe su propia carpeta `tools/` y nada más: las tools de un agente raíz no se
 entregan a sus subagentes, ni al revés. Las tools que registran los *módulos* en bx-ai
 (las incorporadas, `bx-playwright`, ...) solo se adjuntan cuando el agente las pide en
-`Agent.yaml`:
+`Agent.yml`:
 
 ```yaml
 tools:
@@ -44,7 +44,7 @@ tools:
   - "*@bxplaywright"
 ```
 
-Consulta [Agent.yaml](../conventions/agent-yaml.md#tools) para los detalles.
+Consulta [Agent.yml](../conventions/agent-yaml.md#tools) para los detalles.
 
 ## Nombres
 

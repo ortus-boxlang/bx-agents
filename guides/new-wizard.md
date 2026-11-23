@@ -31,10 +31,10 @@ It is a full-screen UI in the teal of the BxAgents logo. Arrow keys (or `j`/`k`)
 
 | Stage | What you choose | What it writes |
 |---|---|---|
-| Name, purpose | The agent's name and a one-line description | `name`, `description` in [`Agent.yaml`](../conventions/agent-yaml.md) |
+| Name, purpose | The agent's name and a one-line description | `name`, `description` in [`Agent.yml`](../conventions/agent-yaml.md) |
 | Shape | A single agent, a team, a scheduled agent, an MCP server | The matching [template](../agent-templates.md) |
 | Model | A provider, then optionally a model name (Enter takes the provider's default). **Another provider** lets you type `provider/model` yourself | `model`, and a stub for the provider's `<PROVIDER>_API_KEY` in `.env` |
-| Model settings | Whether to tune the model, then the temperature (0 to 2), the longest answer in tokens and the timeout in seconds. Enter leaves one unset | [`params`](../conventions/models.md) (`temperature`, `max_tokens`) and [`options`](../conventions/models.md) (`timeout`) in `Agent.yaml` |
+| Model settings | Whether to tune the model, then the temperature (0 to 2), the longest answer in tokens and the timeout in seconds. Enter leaves one unset | [`params`](../conventions/models.md) (`temperature`, `max_tokens`) and [`options`](../conventions/models.md) (`timeout`) in `Agent.yml` |
 | Tools | Date and time, fetch pages, search the web, browse websites, files, images, speech and translation | A [`tools:`](../conventions/agent-yaml.md#tools) list; browsing also adds `bx-playwright` to your `box.json` |
 | Search provider | The built-in one, Brave, Tavily, Exa or Google | A key stub in `.env`, and a line in `instructions.md` telling the agent which provider to use |
 | File tools | Read only, all 19, or tool by tool, then the folders they may use | [`toolOptions.bxai.allowedPaths`](../conventions/agent-yaml.md#file-tools) |
@@ -84,7 +84,7 @@ The wizard never asks you to type a secret that it stores.
 
 ## MCP servers
 
-The wizard offers the seven [connectors](../conventions/connectors.md) and asks which to leave out. The ones you keep are offered to every person, who connects their own account; nothing is written for them in `Agent.yaml` unless you leave some out. `--mcp` (and `add mcp`) still writes a server of your own into `mcpServers`, with its credential read from the environment when the app starts:
+The wizard offers the seven [connectors](../conventions/connectors.md) and asks which to leave out. The ones you keep are offered to every person, who connects their own account; nothing is written for them in `Agent.yml` unless you leave some out. `--mcp` (and `add mcp`) still writes a server of your own into `mcpServers`, with its credential read from the environment when the app starts:
 
 ```yaml
 mcpServers:
@@ -152,4 +152,4 @@ A flag with a bad value stops the command and says what the flag accepts. The wi
 | `bxAgents new --model=...` | No questions: a model means a script is calling. Add `--wizard` to be asked the rest |
 | `bxAgents new --no-wizard` or `--yes` | No questions, flags and defaults only |
 
-Set `NO_COLOR` for plain output. The Agent.yaml options the wizard writes need the default `Agent.yaml`, so they cannot be combined with `--class`.
+Set `NO_COLOR` for plain output. The Agent.yml options the wizard writes need the default `Agent.yml`, so they cannot be combined with `--class`.

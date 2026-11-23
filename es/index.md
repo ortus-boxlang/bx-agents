@@ -53,7 +53,7 @@ El descubrimiento, la validación y la generación de código se ejecutan **una 
 en cada arranque. Lo que ejecutas después es una aplicación ColdBox normal.
 :::
 ::: card title="Las carpetas son la API" icon="phosphor-duotone:tree-structure" href="conventions/agent-yaml.md"
-`Agent.yaml` e `instructions.md` son los únicos archivos obligatorios. Cualquier otra carpeta
+`Agent.yml` e `instructions.md` son los únicos archivos obligatorios. Cualquier otra carpeta
 de convención es opcional y solo da forma a la salida si existe.
 :::
 ::: card title="Tools y skills" icon="phosphor-duotone:wrench" href="conventions/tools.md"
@@ -167,7 +167,7 @@ Tu árbol de convenciones, y la aplicación ColdBox normal en la que `build` lo 
 ::: column
 ```text
 your-agent/
-├── Agent.yaml         # nombre, modelo, descripción
+├── Agent.yml         # nombre, modelo, descripción
 ├── instructions.md    # el system prompt
 ├── tools/             # funciones @AITool
 ├── skills/            # capacidades SKILL.md
@@ -213,18 +213,18 @@ dinámico de archivos, sin trabajo de build diferido al camino de la petición.
 ::: columns
 ::: column
 !!! tip "Empieza con un solo archivo"
-    Solo `Agent.yaml` es obligatorio. `instructions.md` es opcional - define `instructions`
+    Solo `Agent.yml` es obligatorio. `instructions.md` es opcional - define `instructions`
     directamente en el YAML, o coloca el archivo y deja que el build lo conecte. Cualquier
     otra carpeta solo afecta a la salida generada si existe **y** tiene contenido - así que
     añades convenciones a medida que realmente las necesitas.
 :::
 ::: column
 !!! faq "YAML por defecto, una clase cuando necesitas código"
-    `Agent.yaml` contiene la configuración del agente - la mayoría de los agentes son unas
+    `Agent.yml` contiene la configuración del agente - la mayoría de los agentes son unas
     pocas líneas de él. Cuando la definición necesita código (hooks, instrucciones dinámicas,
     tools registradas en código), `Agent.bx` extiende directamente el propio `AiAgent` de
     BX AI - el build instancia tu clase, así que lo que escribes es lo que se ejecuta.
-    Consulta [Agent.yaml](conventions/agent-yaml.md) y [Agent.bx](conventions/agent-bx.md).
+    Consulta [Agent.yml](conventions/agent-yaml.md) y [Agent.bx](conventions/agent-bx.md).
 :::
 :::
 

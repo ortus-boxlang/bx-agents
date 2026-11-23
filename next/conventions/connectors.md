@@ -12,7 +12,7 @@ A **connector** is a ready-made connection to a service that has an MCP server. 
 
 - **Personal.** A token or sign in belongs to one person. The agent uses it only when that person asks, and two people never share a token or a session.
 - **Sealed.** Tokens are stored in the [vault](vault.md), locked to the host of the service. The model never sees one.
-- **Your own servers still work.** The services you write under `mcpServers` in [Agent.yaml](agent-yaml.md) are separate. An `mcpServers` entry with the same name as a connector replaces that connector, and the build warns.
+- **Your own servers still work.** The services you write under `mcpServers` in [Agent.yml](agent-yaml.md) are separate. An `mcpServers` entry with the same name as a connector replaces that connector, and the build warns.
 
 <video controls preload="metadata" poster="/assets/video/connectors-poster.png" style="max-width:100%">
   <source src="/assets/video/connectors.mp4" type="video/mp4">
@@ -31,10 +31,10 @@ A **connector** is a ready-made connection to a service that has an MCP server. 
 | needs attention | Connected, but the service refused the token (it failed, expired or was revoked), at connect time or during a call. Connect again |
 | needs a program | A local program the connector runs (such as `uvx` for Git) is not installed |
 
-## Limit them in Agent.yaml
+## Limit them in Agent.yml
 
 ```yaml
-# Agent.yaml
+# Agent.yml
 connectors:                  # leave the key out to offer every connector
   only: [ github, notion ]   # just these
   override:
@@ -62,7 +62,7 @@ A connector asks for either a token or a sign in, shown on its page in the [cata
 
 | Where | How |
 |---|---|
-| Web page | The **Connectors** page, with tabs for All, Connected, Needs attention and In Agent.yaml, each at its own address (`<path>/connectors/all`, `connected`, `attention`, `agent`). See [web-ui](web-ui.md#connectors) |
+| Web page | The **Connectors** page, with tabs for All, Connected, Needs attention and In Agent.yml, each at its own address (`<path>/connectors/all`, `connected`, `attention`, `agent`). See [web-ui](web-ui.md#connectors) |
 | Chat in the terminal | `/connect`, `/connect NAME`, `/connect NAME off`, `/connect NAME tools` |
 | CLI | `bxAgents connect`, `bxAgents connect NAME` |
 | Gateways | `/connect` lists them. A token is never typed in a chat: the reply points to the web page |

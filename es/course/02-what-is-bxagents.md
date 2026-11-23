@@ -21,7 +21,7 @@ dinámico de archivos, sin trabajo de build diferido al camino de la petición.
 
 ```mermaid
 flowchart LR
-    A["your convention tree<br/>Agent.yaml, tools/, skills/, ..."] -->|"bxAgents build"| B[".build/app/<br/>a plain ColdBox application"]
+    A["your convention tree<br/>Agent.yml, tools/, skills/, ..."] -->|"bxAgents build"| B[".build/app/<br/>a plain ColdBox application"]
     B -->|"bxAgents serve / chat / invoke"| C["running agent"]
     B -->|"bxAgents package"| D["dist/name-version.bxa"]
     D -->|"bxAgents deploy"| E["a real target"]
@@ -31,15 +31,15 @@ flowchart LR
 
 ## Las carpetas son la API
 
-`Agent.yaml` e `instructions.md` son los únicos archivos que importan para empezar. Cualquier
+`Agent.yml` e `instructions.md` son los únicos archivos que importan para empezar. Cualquier
 otra carpeta de convención - `tools/`, `skills/`, `subagents/`, `gateways/`,
 `schedules/`, `mcp/`, `interceptors/`, `extensions/`, `modules/` - es opcional y **solo da forma a la salida
 generada si existe y tiene contenido**. Añades convenciones a medida que realmente las
 necesitas, no por adelantado.
 
-## Agent.yaml define el agente
+## Agent.yml define el agente
 
-`Agent.yaml` son ajustes en texto plano - un nombre, un modelo y cualquier extra opcional -
+`Agent.yml` son ajustes en texto plano - un nombre, un modelo y cualquier extra opcional -
 y el build lo convierte en un agente real de BX AI. La mayoría de los agentes no necesitan
 código. Escribirás el tuyo en la [Lección 5](05-agent-bx.md).
 
@@ -57,7 +57,7 @@ convierte a la derecha:
 ::: column
 ```text
 your-agent/
-├── Agent.yaml
+├── Agent.yml
 ├── instructions.md
 ├── tools/
 ├── skills/

@@ -9,20 +9,20 @@ tags: [course, conventions, subagents]
 # Componer subagentes
 
 `subagents/` contiene agentes anidados - cada uno un proyecto BxAgents corriente por sí
-mismo, con su propio `Agent.yaml` + `instructions.md`, y opcionalmente sus propios `tools/`,
+mismo, con su propio `Agent.yml` + `instructions.md`, y opcionalmente sus propios `tools/`,
 `skills/`, etc.
 
 ```text
 my-agent/
-├── Agent.yaml            # subAgents: [ researcher ]
+├── Agent.yml            # subAgents: [ researcher ]
 ├── instructions.md
 └── subagents/
     └── researcher/
-        ├── Agent.yaml
+        ├── Agent.yml
         └── instructions.md
 ```
 
-Un subagente se cablea a su padre por nombre, declarado en el `Agent.yaml`
+Un subagente se cablea a su padre por nombre, declarado en el `Agent.yml`
 del padre - este es el **nombre de la carpeta** en `subagents/`:
 
 ```yaml
@@ -79,8 +79,8 @@ agentes comparten uno.
 ## Pruébalo
 
 Crea una carpeta `subagents/researcher/` como su propio pequeño proyecto BxAgents (con su
-propio `Agent.yaml` + `instructions.md`), y después cablea el subagente en la lista `subAgents`
-de tu `Agent.yaml` raíz. Reconstruye y pregunta a tu agente raíz algo que naturalmente delegaría en
+propio `Agent.yml` + `instructions.md`), y después cablea el subagente en la lista `subAgents`
+de tu `Agent.yml` raíz. Reconstruye y pregunta a tu agente raíz algo que naturalmente delegaría en
 el subagente investigador - es invocable exactamente igual que cualquier otra tool.
 
 Referencia completa: [subagents/](../conventions/subagents.md).

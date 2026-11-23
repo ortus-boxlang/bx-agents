@@ -8,7 +8,7 @@ tags: [course, build]
 
 # Construir tu agente
 
-Con `Agent.yaml` e `instructions.md` en su sitio, construye tu proyecto:
+Con `Agent.yml` e `instructions.md` en su sitio, construye tu proyecto:
 
 ```bash
 bxAgents build
@@ -34,7 +34,7 @@ flowchart TD
     style F fill:#d4edda,stroke:#155724
 ```
 
-1. **Resolver la configuración** - carga `Agent.yaml` (o un `Agent.bx` basado en clase, llamando a su
+1. **Resolver la configuración** - carga `Agent.yml` (o un `Agent.bx` basado en clase, llamando a su
    `configure()`) y la sobrescritura del entorno activo, y después fusiona en profundidad cualquier
    `boxlang.json`/`boxlang-{env}.json`.
 2. **Descubrir** - recorre el proyecto y enumera cada carpeta de convención en entradas en

@@ -28,7 +28,7 @@ Esto crea:
 
 ```text
 my-agent/
-├── Agent.yaml
+├── Agent.yml
 ├── instructions.md
 ├── tools/
 ├── skills/
@@ -46,9 +46,9 @@ my-agent/
 
 Más un `.env` (los secretos viven aquí, así que pon ahí las claves de API de tu proveedor y mantenlo fuera del control de código) y un `.gitignore`. BoxLang carga por sí mismo el `.env` desde la raíz del proyecto.
 
-Este es el starter `minimal` - el predeterminado cuando se omite `--template`. Una plantilla es un preajuste: el asistente (y flags como `--with`, `--channels` y `--deploy`) añaden tools, canales y un destino de despliegue encima. `new` también puede generar uno de otros 7 starters incorporados (`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent`), cada uno añadiendo un poco de contenido preconfigurado (un gateway, un scheduler) sobre el mismo esqueleto, o saltarse el andamiaje por completo y crear el proyecto a partir de un repositorio de GitHub existente (`--repo=owner/repo`) o un paquete de ForgeBox (`--forgebox=<slug>`) en su lugar - ver la [Referencia de la CLI](../cli-reference.md#new) para la lista completa y cómo funciona cada uno. El agente se define por defecto con un `Agent.yaml`; pasa `--class` para generar en su lugar el `Agent.bx` avanzado basado en clase (ver [Agent.bx](../conventions/agent-bx.md)).
+Este es el starter `minimal` - el predeterminado cuando se omite `--template`. Una plantilla es un preajuste: el asistente (y flags como `--with`, `--channels` y `--deploy`) añaden tools, canales y un destino de despliegue encima. `new` también puede generar uno de otros 7 starters incorporados (`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent`), cada uno añadiendo un poco de contenido preconfigurado (un gateway, un scheduler) sobre el mismo esqueleto, o saltarse el andamiaje por completo y crear el proyecto a partir de un repositorio de GitHub existente (`--repo=owner/repo`) o un paquete de ForgeBox (`--forgebox=<slug>`) en su lugar - ver la [Referencia de la CLI](../cli-reference.md#new) para la lista completa y cómo funciona cada uno. El agente se define por defecto con un `Agent.yml`; pasa `--class` para generar en su lugar el `Agent.bx` avanzado basado en clase (ver [Agent.bx](../conventions/agent-bx.md)).
 
-`Agent.yaml` se ve así (`--description` añade una línea `description:`):
+`Agent.yml` se ve así (`--description` añade una línea `description:`):
 
 ```yaml
 # Your agent. Most agents need nothing more than this file and instructions.md.
@@ -64,13 +64,13 @@ environments:
     model: mock/mock-model
 ```
 
-El agente es solo este archivo más `instructions.md`. Ver [Agent.yaml](../conventions/agent-yaml.md) para todas las claves.
+El agente es solo este archivo más `instructions.md`. Ver [Agent.yml](../conventions/agent-yaml.md) para todas las claves.
 
 Cada carpeta de convención se crea vacía - añade archivos a las que tu agente realmente necesite y elimina (o simplemente ignora) el resto.
 
 ## 2. Edita
 
-Abre `instructions.md` y escribe el system prompt del agente, y ajusta `name`, `description` o `model` en `Agent.yaml` a tu gusto. Añade una tool:
+Abre `instructions.md` y escribe el system prompt del agente, y ajusta `name`, `description` o `model` en `Agent.yml` a tu gusto. Añade una tool:
 
 ```javascript
 // tools/Greeter.bx
@@ -101,7 +101,7 @@ El `tests/specs/AgentSpec.bx` generado pasa de inmediato - construye tu agente c
 bxAgents build
 ```
 
-Ejecuta el [pipeline de build](../build-pipeline.md) completo - resolución de configuración, descubrimiento, validación, generación de código, normalización de manifest - y escribe una aplicación ColdBox real en `.build/app/`, más `.build/manifest.json`. Ejecuta `bxAgents build --environment=production` para construir contra un override de entorno de `Agent.yaml` (ver [Agent.yaml](../conventions/agent-yaml.md#entornos)).
+Ejecuta el [pipeline de build](../build-pipeline.md) completo - resolución de configuración, descubrimiento, validación, generación de código, normalización de manifest - y escribe una aplicación ColdBox real en `.build/app/`, más `.build/manifest.json`. Ejecuta `bxAgents build --environment=production` para construir contra un override de entorno de `Agent.yml` (ver [Agent.yml](../conventions/agent-yaml.md#entornos)).
 
 Si tu proyecto falla la validación (nombres de tool duplicados, un proveedor de modelo desconocido, una entrada de gateway con una ruta incorrecta, ...) `build` falla con todos los errores recopilados - no solo el primero.
 
@@ -158,7 +158,7 @@ Ver [El manifest](../manifest.md) y [Despliegue y secretos](../deployment-and-se
 bxAgents clean
 ```
 
-Elimina solo `.build/` y `dist/` - las convenciones fuente de tu proyecto (`Agent.yaml`, `tools/`, etc.) nunca se tocan.
+Elimina solo `.build/` y `dist/` - las convenciones fuente de tu proyecto (`Agent.yml`, `tools/`, etc.) nunca se tocan.
 
 ## Próximos pasos
 

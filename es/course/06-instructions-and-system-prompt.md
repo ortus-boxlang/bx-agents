@@ -11,8 +11,8 @@ tags: [course, conventions]
 `instructions.md` es **opcional** - `bxAgents new` crea uno inicial para que lo edites,
 pero tienes dos opciones igual de válidas sobre dónde vive el system prompt de tu agente:
 
-1. Definir `instructions` en línea en `Agent.yaml`.
-2. Colocar un archivo `instructions.md` junto a `Agent.yaml` y dejar que el build lo conecte.
+1. Definir `instructions` en línea en `Agent.yml`.
+2. Colocar un archivo `instructions.md` junto a `Agent.yml` y dejar que el build lo conecte.
 
 ## Dejar que gane el archivo
 
@@ -22,7 +22,7 @@ Si `instructions.md` existe, el build emite:
 withInstructions( fileRead( "instructions.md" ) )
 ```
 
-lo que gana frente a un `instructions` en línea en `Agent.yaml` (o a lo que hubiera fijado
+lo que gana frente a un `instructions` en línea en `Agent.yml` (o a lo que hubiera fijado
 una clase). En la práctica este es el patrón
 más habitual - mantiene el prompt como texto plano que puedes editar sin tocar código
 BoxLang, y es fácil de revisar en un pull request.

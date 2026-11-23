@@ -1,14 +1,14 @@
 ---
 title: "Lesson 12: Models and Profiles"
 icon: phosphor-duotone:brain
-summary: Choose the default model, set up other providers and name combinations such as fast and planner, all in Agent.yaml.
-description: Choose the default model, set up other providers and name combinations such as fast and planner, all in Agent.yaml.
+summary: Choose the default model, set up other providers and name combinations such as fast and planner, all in Agent.yml.
+description: Choose the default model, set up other providers and name combinations such as fast and planner, all in Agent.yml.
 tags: [course, conventions, models, profiles]
 ---
 
 # Models and Profiles
 
-You already pick a model with a slug, `model: openai/gpt-5` ([Lesson 5](05-agent-bx.md)). When you want more than one model in the same project, you name them: a **profile** is a provider, a model and a few settings under a name such as `fast` or `planner`. Everything lives in `Agent.yaml`; you never write a `boxlang.json`.
+You already pick a model with a slug, `model: openai/gpt-5` ([Lesson 5](05-agent-bx.md)). When you want more than one model in the same project, you name them: a **profile** is a provider, a model and a few settings under a name such as `fast` or `planner`. Everything lives in `Agent.yml`; you never write a `boxlang.json`.
 
 ```yaml
 provider: openai
@@ -33,7 +33,7 @@ A subagent picks one with `profile:`; an agent that says nothing uses the defaul
 - In the terminal chat, `/model` shows the model, `/profile` picks a profile from a list (or `/profile fast`) and `/default` goes back. The conversation, memory and tools stay.
 - A web chat entry or an agent API that lists `profiles` offers them as a picker. Only the listed ones can be chosen, and the page never sees a key.
 - `bxAgents models list` shows what the project can talk to, and `bxAgents models test --all` sends each model one tiny question and says whether it answered and how long it took. In the chat, `/ping` does the same.
-- Set `usage: true` in `Agent.yaml` and `bxAgents stats` (or `/stats`) shows what the model calls used, by model, provider, day or user. It keeps counts only.
+- Set `usage: true` in `Agent.yml` and `bxAgents stats` (or `/stats`) shows what the model calls used, by model, provider, day or user. It keeps counts only.
 
 ## Why bother
 

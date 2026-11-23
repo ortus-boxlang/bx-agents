@@ -184,14 +184,14 @@ bxAgents new my-agent --repo=owner/repo-name
 bxAgents new my-agent --forgebox=some-package-slug
 ```
 
-- With no `--model`, no `--repo` and no `--forgebox`, at a terminal, `new` runs the [wizard](guides/new-wizard.md). `--no-wizard` or `--yes` turns it off, `--wizard` turns it on even with a `--model`, and `--no-tui` asks the same questions as numbered lines. A `--model` on its own never starts it, since scripts have always had to pass one. The wizard's flags (`--with`, `--search`, `--files`, `--files-dir`, `--temperature`, `--max-tokens`, `--timeout`, `--memory`, `--mcp`, `--connectors`, `--channels`, `--web-auth`, `--guard`, `--prompt`, `--widgets`, `--widgets-bottom`, `--deploy` and the deploy details) are listed in the [wizard guide](guides/new-wizard.md#without-the-wizard); a bad value names the flag and what it accepts. They need `Agent.yaml`, so they cannot be combined with `--class`.
+- With no `--model`, no `--repo` and no `--forgebox`, at a terminal, `new` runs the [wizard](guides/new-wizard.md). `--no-wizard` or `--yes` turns it off, `--wizard` turns it on even with a `--model`, and `--no-tui` asks the same questions as numbered lines. A `--model` on its own never starts it, since scripts have always had to pass one. The wizard's flags (`--with`, `--search`, `--files`, `--files-dir`, `--temperature`, `--max-tokens`, `--timeout`, `--memory`, `--mcp`, `--connectors`, `--channels`, `--web-auth`, `--guard`, `--prompt`, `--widgets`, `--widgets-bottom`, `--deploy` and the deploy details) are listed in the [wizard guide](guides/new-wizard.md#without-the-wizard); a bad value names the flag and what it accepts. They need `Agent.yml`, so they cannot be combined with `--class`.
 - `--template`, `--repo`, and `--forgebox` name three different project SOURCES - exactly one applies. Combining any two of them is an error.
 - **`--template` mode** (the default when no source flag is passed at all - `minimal`):
   - `--model` is **required** when no questions are asked - a `provider/model` slug (see [the model slug](conventions/agent-bx.md#the-model-slug)).
   - `--name` defaults to the target directory's own basename.
-  - Refuses to run if the target already contains an `Agent.yaml` or an `Agent.bx`.
-  - Creates [`Agent.yaml`](conventions/agent-yaml.md), `instructions.md`, a root [`Application.bx`](conventions/application-bx.md) (extends the class every build generates; never overwritten), every convention folder (empty), a root [`box.json`](conventions/box-json.md) (`testbox` as a development dependency, installed into `lib/testbox`), a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/specs/AgentSpec.bx`), a `.env` (commented API key stubs only; it deliberately does not set `BOXLANG_HOME`), a `.gitignore` (`.env` and `.env.*`, `.build/`, `dist/`, `data/chat.db*`, `lib/`, `boxlang_modules/`, `.agents/skills/`, editor files), and the standard dotfiles `.editorconfig`, `.gitattributes`, `.bxlint.json`, `.markdownlint.json` and a `.boxlang.json` listing every bx-ai setting at its default (the BoxLang runtime reads it when run from the project root; edit the values there). Never overwrites a file that already exists. BoxLang and `boxlang-miniserver` load a `.env` from the project root themselves, so the file also works for your API keys; BxAgents never reads, copies or packages it.
-  - `--class` (a bare boolean flag, like the others described above) writes the class-based [`Agent.bx`](conventions/agent-bx.md) instead of the default `Agent.yaml`, for agents whose definition needs code (hooks, dynamic instructions). It applies to the root and to any subagents a template scaffolds, and only to `--template` mode - not to `--repo`/`--forgebox`.
+  - Refuses to run if the target already contains an `Agent.yml` or an `Agent.bx`.
+  - Creates [`Agent.yml`](conventions/agent-yaml.md), `instructions.md`, a root [`Application.bx`](conventions/application-bx.md) (extends the class every build generates; never overwritten), every convention folder (empty), a root [`box.json`](conventions/box-json.md) (`testbox` as a development dependency, installed into `lib/testbox`), a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/specs/AgentSpec.bx`), a `.env` (commented API key stubs only; it deliberately does not set `BOXLANG_HOME`), a `.gitignore` (`.env` and `.env.*`, `.build/`, `dist/`, `data/chat.db*`, `lib/`, `boxlang_modules/`, `.agents/skills/`, editor files), and the standard dotfiles `.editorconfig`, `.gitattributes`, `.bxlint.json`, `.markdownlint.json` and a `.boxlang.json` listing every bx-ai setting at its default (the BoxLang runtime reads it when run from the project root; edit the values there). Never overwrites a file that already exists. BoxLang and `boxlang-miniserver` load a `.env` from the project root themselves, so the file also works for your API keys; BxAgents never reads, copies or packages it.
+  - `--class` (a bare boolean flag, like the others described above) writes the class-based [`Agent.bx`](conventions/agent-bx.md) instead of the default `Agent.yml`, for agents whose definition needs code (hooks, dynamic instructions). It applies to the root and to any subagents a template scaffolds, and only to `--template` mode - not to `--repo`/`--forgebox`.
   - `--template` picks one of 8 built-in starters, each layering a bit of pre-wired content on top of the base skeleton above (see [Agent Templates](agent-templates.md) for every generated file in full, plus how `--repo`/`--forgebox` sources work and how to publish your own):
     - `minimal` - the bare skeleton, nothing extra.
     - `webui-chat` - adds a `gateways/webui.bx` exposing the [web chat UI](conventions/gateways/index.md) at `/chat`.
@@ -200,10 +200,10 @@ bxAgents new my-agent --forgebox=some-package-slug
     - `github-bot` - adds a `gateways/github.bx` channel adapter, plus matching `GITHUB_TOKEN`/`GITHUB_WEBHOOK_SECRET`/`GITHUB_BOT_NAME` stub lines in `.env`.
     - `mcp-server` - adds an example `mcp/exampleServer.bx` tool server and a `gateways/mcpExpose.bx` entry exposing it as an MCP server at `/mcp`.
     - `scheduled` - adds a [`schedules/Example.bx`](conventions/schedules.md) scheduler calling the agent on a daily cron schedule.
-    - `multi-agent` - adds a `subAgents` list to the root `Agent.yaml` declaring two [subagents](conventions/subagents.md) (`researcher`, `writer`), each scaffolded as its own real `subagents/<name>/Agent.yaml` + `instructions.md`.
+    - `multi-agent` - adds a `subAgents` list to the root `Agent.yml` declaring two [subagents](conventions/subagents.md) (`researcher`, `writer`), each scaffolded as its own real `subagents/<name>/Agent.yml` + `instructions.md`.
   - Also runs `box install` in the new project root, so `bxAgents test` works immediately with no separate install step. This is best-effort: if `box` isn't on `PATH` or the install fails, `new` still succeeds - the message just tells you to run it yourself. Pass `--skipInstall` to opt out of this step entirely.
-- **`--repo` mode** (`--repo=owner/repo-name` or a full URL): clones the repo via a bundled [JGit](https://www.eclipse.org/jgit/) dependency - no `git` binary needs to be installed. Always clones shallow (depth 1) and always strips the resulting `.git` folder afterward, so the new project starts with a clean history rather than staying tied to the template repo's own remote. Refuses to run into a directory that already exists and is non-empty, and fails clearly if no `Agent.yaml` or `Agent.bx` is found in the cloned repo.
-- **`--forgebox` mode** (`--forgebox=<slug>`): installs a [ForgeBox](https://www.forgebox.io) package by talking to ForgeBox's own REST API directly (no `box` CLI required). Fails clearly if the slug doesn't exist, the download fails, or the installed package has no `Agent.yaml` or `Agent.bx` at its root (unwrapping one level of nesting first, since many ForgeBox archives wrap their contents in a single top-level folder).
+- **`--repo` mode** (`--repo=owner/repo-name` or a full URL): clones the repo via a bundled [JGit](https://www.eclipse.org/jgit/) dependency - no `git` binary needs to be installed. Always clones shallow (depth 1) and always strips the resulting `.git` folder afterward, so the new project starts with a clean history rather than staying tied to the template repo's own remote. Refuses to run into a directory that already exists and is non-empty, and fails clearly if no `Agent.yml` or `Agent.bx` is found in the cloned repo.
+- **`--forgebox` mode** (`--forgebox=<slug>`): installs a [ForgeBox](https://www.forgebox.io) package by talking to ForgeBox's own REST API directly (no `box` CLI required). Fails clearly if the slug doesn't exist, the download fails, or the installed package has no `Agent.yml` or `Agent.bx` at its root (unwrapping one level of nesting first, since many ForgeBox archives wrap their contents in a single top-level folder).
 - Only `--template` mode needs `--model`; `--repo`/`--forgebox` never require it, since the source project already defines its own.
 - `--name`/`--description` are ignored (with a warning in the output) when `--repo`/`--forgebox` is used - the cloned/installed project defines its own.
 - The `box install` convenience step (and `--skipInstall`) only ever apply to `--template` mode - a cloned/installed project's own `box.json` (if it has one at all) is left untouched.
@@ -293,7 +293,7 @@ A phrase is never written as a five-field `.cron()`: on BoxLang 1.19.0 that does
 
 #### `add mcp`
 
-Adds an MCP server in either direction: one the agent **calls** (written into `Agent.yaml`), or one the project **hosts** (`mcp/<name>.bx`).
+Adds an MCP server in either direction: one the agent **calls** (written into `Agent.yml`), or one the project **hosts** (`mcp/<name>.bx`).
 
 ```bash
 bxAgents add mcp client github                 # a server from the catalog the new wizard uses (or --direction=client)
@@ -308,9 +308,9 @@ bxAgents add mcp                                # asks which way
 |---|---|
 | `--server=<name>` | A catalog server by name, instead of the positional. |
 | `--url=<address>` | A server not in the catalog. An address with a user name, password or key in it is refused: the secret belongs in an environment variable. |
-| `--name=<label>` | A label for `Agent.yaml`; it is not sent to the server. |
+| `--name=<label>` | A label for `Agent.yml`; it is not sent to the server. |
 | `--auth=none\|bearer\|header\|basic` | How it signs you in. `bearer` writes `token`, `header` writes `headers` (name it with `--header=`), `basic` writes `user` (with `--user=`) and `password`. |
-| `--env=<NAME>` | The environment variable that holds the key or password. Only the name goes in `Agent.yaml`, as `${env.NAME}`; an empty `NAME=` is added to `.env` for you to fill in. |
+| `--env=<NAME>` | The environment variable that holds the key or password. Only the name goes in `Agent.yml`, as `${env.NAME}`; an empty `NAME=` is added to `.env` for you to fill in. |
 | `--timeout=<ms>` | Optional. |
 | `--agent=<subagent>` | Which agent uses it; `.` (the default) is the root agent. |
 
@@ -326,7 +326,7 @@ bxAgents add mcp                                # asks which way
 
 The tool list is written out when you run the command, so a tool added later has to be added to `mcp/<name>.bx`. The served route has no authentication of its own: keep it off public networks or put it behind a proxy that checks a credential.
 
-- `Agent.yaml` is edited by inserting lines only, so its comments and layout stay as they are. If the list cannot be extended that way (written on one line, say), or the definition is a class-based `Agent.bx`, nothing is changed and the error carries the entry to paste.
+- `Agent.yml` is edited by inserting lines only, so its comments and layout stay as they are. If the list cannot be extended that way (written on one line, say), or the definition is a class-based `Agent.bx`, nothing is changed and the error carries the entry to paste.
 - A server the agent already uses, by name or address, is refused.
 
 #### `add gateway`
@@ -347,13 +347,13 @@ The platforms are the ones the new wizard offers: `telegram`, `slack`, `discord`
 |---|---|
 | `--name=<name>` | The file, `gateways/<name>.bx`, or the second positional. Defaults to the type. A name in use is refused. |
 | `--env=<config=NAME,...>` | Chat platforms: which variable holds which credential, for example `botTokenEnvVar=ACME_BOT`. Without it the usual names are used (`SLACK_BOT_TOKEN`, ...). Only names go in the gateway file; an empty stub for each goes in `.env`. |
-| `--policy=queue\|reject\|steer\|interrupt` | Chat platforms: what to do with a message that arrives while the agent is still answering. Written to Agent.yaml's `gatewaySession` unless it is the default `queue`. |
+| `--policy=queue\|reject\|steer\|interrupt` | Chat platforms: what to do with a message that arrives while the agent is still answering. Written to Agent.yml's `gatewaySession` unless it is the default `queue`. |
 | `--path=<path>` | `web` and `api`: where it is served (`/chat` and `/api/chat` by default). A path another gateway uses is refused. |
 | `--auth=open\|key\|users` | `web`: anyone who can reach it, a random shared key kept in `.env` as `CHAT_UI_API_KEY`, or named users. Default `key`. |
 | `--profiles=a,b` | `web`: the project's profiles people can pick in the chat (see [Choosing the model](conventions/web-ui.md#choosing-the-model)). Asked only when the project has profiles; none keeps the page on the agent's own model. |
 | `--users=<name:hash,...>` | `web` with `users`: each hash comes from `bxAgents hash-password`. A password is never taken as a flag; at a terminal you type it, hidden, and only its hash is stored. |
 
-After a chat platform is added, the output lists the steps that happen outside the project (creating the bot, a public address, a daemon) and which `.env` variables to fill in; `bxAgents doctor` reports any that are still not set. The HTTP API route has no authentication unless `agentApi.tokenEnvVar` is set in `Agent.yaml`.
+After a chat platform is added, the output lists the steps that happen outside the project (creating the bot, a public address, a daemon) and which `.env` variables to fill in; `bxAgents doctor` reports any that are still not set. The HTTP API route has no authentication unless `agentApi.tokenEnvVar` is set in `Agent.yml`.
 
 #### `add subagent`
 
@@ -373,7 +373,7 @@ bxAgents add subagent checker --model=claude --parent=writer --with=search --sea
 | `--profile=<name>` | Use one of the project's [profiles](conventions/models.md#profiles) instead of a model, as the main agent can with `profile:`. At a terminal, a project that has profiles is asked which to use. |
 | `--description`, `--with`, `--search`, `--files`, `--files-dir`, `--memory`, `--mcp`, `--guard` | The same as [`new`](#new). |
 
-Writes `subagents/<name>/Agent.yaml` (with the `environments.test` mock model, so `bxAgents test` needs no key) and `instructions.md`, and adds an empty `.env` stub for each key the choices need. The name is inserted into the parent's `subAgents` without rewriting the file, so comments and order stay as they were. If the parent is a class, or its list is written in a shape that cannot be extended by inserting, nothing in it is changed and the line to add is printed. Packages a choice needs (`bx-playwright` for browsing) are named for you to add to `box.json`. `--temperature`, `--max-tokens` and `--timeout` are refused here: they are settings of the whole app, so they go in the project's own `Agent.yaml`.
+Writes `subagents/<name>/Agent.yml` (with the `environments.test` mock model, so `bxAgents test` needs no key) and `instructions.md`, and adds an empty `.env` stub for each key the choices need. The name is inserted into the parent's `subAgents` without rewriting the file, so comments and order stay as they were. If the parent is a class, or its list is written in a shape that cannot be extended by inserting, nothing in it is changed and the line to add is printed. Packages a choice needs (`bx-playwright` for browsing) are named for you to add to `box.json`. `--temperature`, `--max-tokens` and `--timeout` are refused here: they are settings of the whole app, so they go in the project's own `Agent.yml`.
 
 #### `add skill`
 
@@ -393,7 +393,7 @@ Skills are not wired to an agent: every skill in the build is available to the m
 
 #### `add provider`
 
-Adds the settings every call to one provider starts from, under `providers:` in the root `Agent.yaml` (bx-ai's `providers` setting): the temperature, longest answer and timeout, whichever model or profile is used.
+Adds the settings every call to one provider starts from, under `providers:` in the root `Agent.yml` (bx-ai's `providers` setting): the temperature, longest answer and timeout, whichever model or profile is used.
 
 ```bash
 bxAgents add provider openai --temperature=0.2 --timeout=60
@@ -405,11 +405,11 @@ bxAgents add provider                           # asks
 | `--provider=<id>`, or the first positional | A provider bx-ai knows (`openai` when nothing is asked and none is given). One that already has settings is refused. |
 | `--temperature`, `--max-tokens`, `--timeout` | At least one is needed. Written as `params` (`temperature`, `max_tokens`) and `options` (`timeout`). |
 
-The provider's key is never asked for: its usual variable (`OPENAI_API_KEY`) gets an empty stub in `.env`. The entry is inserted without rewriting the file, so comments and order stay. Needs an `Agent.yaml` at the root.
+The provider's key is never asked for: its usual variable (`OPENAI_API_KEY`) gets an empty stub in `.env`. The entry is inserted without rewriting the file, so comments and order stay. Needs an `Agent.yml` at the root.
 
 #### `add profile`
 
-Adds a named combination of provider, model, settings and key variable under `profiles:` in the root `Agent.yaml` (bx-ai's `profiles` setting). An agent picks it with `profile: <name>`, and `defaultProfile` names the one the app starts on.
+Adds a named combination of provider, model, settings and key variable under `profiles:` in the root `Agent.yml` (bx-ai's `profiles` setting). An agent picks it with `profile: <name>`, and `defaultProfile` names the one the app starts on.
 
 ```bash
 bxAgents add profile fast --provider=openai --model=gpt-5-mini --temperature=0.2 --default
@@ -430,7 +430,7 @@ Adds an empty `.env` stub for the key variable. Check the result with `bxAgents 
 
 #### `add capability`
 
-Sets the default provider and model for one thing besides chat, in the root `Agent.yaml` with bx-ai's own names. One command for all four; it asks only the questions that capability has.
+Sets the default provider and model for one thing besides chat, in the root `Agent.yml` with bx-ai's own names. One command for all four; it asks only the questions that capability has.
 
 ```bash
 bxAgents add capability embeddings --provider=openai --model=text-embedding-3-small
@@ -525,7 +525,7 @@ bxAgents test
 ```
 
 - Requires TestBox installed in `lib/testbox` (`box install` in the project root; `tests/testbox` is also found).
-- Builds your agent against the `mock` provider by default (the `test` environment override in `Agent.yaml`, or `test()` in a class-based `Agent.bx`) - no API key or network access needed.
+- Builds your agent against the `mock` provider by default (the `test` environment override in `Agent.yml`, or `test()` in a class-based `Agent.bx`) - no API key or network access needed.
 - Prints pass/fail/error/skipped counts plus one line per failure, and exits non-zero if anything failed.
 
 ### `serve`
@@ -613,7 +613,7 @@ Every chat is a conversation, listed in the project's [shared chat database](con
 | `/info` | Agent, model, conversation, message count, notes and database |
 | `/context` | How big the context is right now and what it is made of: the system prompt, the tool definitions, the notes and this conversation's messages, each with its size, the total, and the share of the model's context window when the project [says it](conventions/models.md#what-the-project-knows-about-a-model). The largest tools are named. Worked out locally; no model is called |
 | `/prompt [style]` | How the message box looks, for this chat: `/prompt` shows the choices, `/prompt box` switches style, `/prompt top +git -clock` changes the widgets. Only at the terminal |
-| `/stats` | What the model calls used: `/stats` for the last 30 days by model, `/stats 7 --by=day` for another span or grouping. Only at the terminal. When usage is not recorded it says how to turn it on, and `/stats enable` writes `usage: true` into `Agent.yaml` for you (rebuild for it to take effect) |
+| `/stats` | What the model calls used: `/stats` for the last 30 days by model, `/stats 7 --by=day` for another span or grouping. Only at the terminal. When usage is not recorded it says how to turn it on, and `/stats enable` writes `usage: true` into `Agent.yml` for you (rebuild for it to take effect) |
 
 `--continue` opens the most recent conversation when the chat starts, and `--session=<number or id>` opens a particular one. Both show the earlier messages first. Over `--connect` the server keeps the list and the messages, under the name of your [token](conventions/agent-bx.md#access-tokens-for-a-deployed-agent); a server without a chat database says it keeps no list.
 
@@ -631,7 +631,7 @@ The message box has five looks, each with a top bar that carries a label and sma
 
 The widgets are `agent`, `profile`, `folder`, `user`, `clock`, `machine`, `git`, `date`, `session`, `elapsed` and `ctx`. They sit in the top bar (after the label) or at the bottom (on the hint row, or inside the lower bar); when the line is too narrow the last ones drop off. A widget with nothing to show, such as `git` outside a repository, is left out. By default the top bar shows `agent`, `folder`, `user` and `clock`, and the bottom shows `ctx` and `profile`.
 
-Set the start in [`Agent.yaml`](conventions/agent-yaml.md#settings) or with `bxAgents new` (`--prompt=box --widgets=agent,git --widgets-bottom=ctx`, or the "Look and feel" step of the wizard), and change it while you chat with `/prompt`: `/prompt` shows the style and widgets in use and everything on offer, `/prompt box` switches style, `/prompt top agent clock` sets the top widgets, `/prompt top +git -clock` adds and removes, and `/prompt bottom none` clears a place. A change lasts for that chat.
+Set the start in [`Agent.yml`](conventions/agent-yaml.md#settings) or with `bxAgents new` (`--prompt=box --widgets=agent,git --widgets-bottom=ctx`, or the "Look and feel" step of the wizard), and change it while you chat with `/prompt`: `/prompt` shows the style and widgets in use and everything on offer, `/prompt box` switches style, `/prompt top agent clock` sets the top widgets, `/prompt top +git -clock` adds and removes, and `/prompt bottom none` clears a place. A change lasts for that chat.
 
 ```yaml
 tui:
@@ -653,9 +653,9 @@ The chat can change the model it talks to without losing the conversation: the m
 | `/ping [profile]` | Test that the model answers, with one tiny question: it says how long it took, or why it did not (no key, a wrong model name, the service unreachable). A result is kept for 30 seconds, so a repeat is not another request |
 | `/profile` | Pick a profile from a list: its provider and model, its description, which is the default and which is in use |
 | `/profile <name>` | Switch straight to one. A profile whose provider has no key set is switched to with a warning, since the next message would fail |
-| `/default` | Go back to the app's default: the `defaultProfile`, else the provider and model at the top of `Agent.yaml` |
+| `/default` | Go back to the app's default: the `defaultProfile`, else the provider and model at the top of `Agent.yml` |
 
-A chat on `--connect` or `--server` can switch only among the profiles the server lists in [`agentApi.profiles`](conventions/agent-bx.md#agentapi) (`GET /__bxagents/profiles`), sent as `options.profile` with each message; a server that lists none says so and changes nothing. There is no `/provider`: a profile already names its provider, and the providers' own settings are in `Agent.yaml` (see [`add provider`](#add-provider)).
+A chat on `--connect` or `--server` can switch only among the profiles the server lists in [`agentApi.profiles`](conventions/agent-bx.md#agentapi) (`GET /__bxagents/profiles`), sent as `options.profile` with each message; a server that lists none says so and changes nothing. There is no `/provider`: a profile already names its provider, and the providers' own settings are in `Agent.yml` (see [`add provider`](#add-provider)).
 
 #### Notes in the chat
 
@@ -697,7 +697,7 @@ Two prefixes in the message box run something on **your own machine**, never on 
 
 `!` must be followed at once by the command (`! hello` is a message) and `#` by a call (`# A heading` and `#hashtag` are messages). A call is **only** a call: a string (`'..'` or `".."`), number, `true`, `false`, `null`, array, struct or nested call as an argument, positional or named, and nothing else. There are no variables, operators, `.` access or statements, and a name that is not a registered built-in function is refused before anything runs. What waits for the next message shows in `/context` (as *Attached*) and in the status bar, and is gone once the message is sent.
 
-The two are yours to switch off or narrow, in a file that belongs to you and not to any project, `~/.bxagents/bxAgents.yml` (`BXAGENTS_USER_CONFIG` names another file):
+The two are yours to switch off or narrow, in a file that belongs to you and not to any project, `~/.bxagents/Agent.yml` (`BXAGENTS_USER_CONFIG` names another file). It is the same file that [layers every other setting](conventions/layered-settings.md); `chat:` is valid only there:
 
 ```yaml
 chat:
@@ -849,7 +849,7 @@ bxAgents users member --name=ada
 
 ### `notes`
 
-The notes an agent keeps, read from the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`, or the file named by `BXAGENTS_DB`). Limits come from the [`notes`](conventions/agent-yaml.md#notes) block of `Agent.yaml`.
+The notes an agent keeps, read from the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`, or the file named by `BXAGENTS_DB`). Limits come from the [`notes`](conventions/agent-yaml.md#notes) block of `Agent.yml`.
 
 ```bash
 bxAgents notes list [--scope=user|agent] [--user=NAME] [--json]
@@ -1043,7 +1043,7 @@ gpt-5-mini               38      71,200      16,100      87,300
 Counts only the calls whose provider reported usage.
 ```
 
-- **It is off unless you turn it on.** Add `usage: true` to the project's own `Agent.yaml` (see [`usage`](conventions/agent-yaml.md#settings)) and rebuild. Until then `stats` says how to turn it on, and `--enable` writes that line for you, then reminds you to run `bxAgents build` and restart a running server.
+- **It is off unless you turn it on.** Add `usage: true` to the project's own `Agent.yml` (see [`usage`](conventions/agent-yaml.md#settings)) and rebuild. Until then `stats` says how to turn it on, and `--enable` writes that line for you, then reminds you to run `bxAgents build` and restart a running server.
 - Only **counts** are kept: the time, who asked, the provider, the model and the tokens in and out. Nothing that was said is stored, and nothing leaves your database.
 - A call is counted when its provider reports usage. The `mock` provider and a few streaming calls do not, so they leave no row, and the totals are of the calls that did.
 - `--by` groups the rows by model (the default), provider, day or user, with the biggest first (newest first for `day`). `--days` is how far back to look, counting today (1 to 3650). `--user` limits it to one user's calls. `--json` prints the report for a script.
@@ -1106,7 +1106,7 @@ The report has these sections, in this order. `--section` takes any of the names
 - Color is used only at an interactive terminal. `NO_COLOR`, `TERM=dumb` and `--no-color` turn it off, a pipe or a file gets plain text, and `TERM=dumb` or `--ascii` also swaps the box-drawing characters for plain ones. Lines are fitted to `COLUMNS` (80 when it is not exported).
 - `--json` is the report itself, not the manifest. The manifest is a plain file at `.build/manifest.json`, described in [The Manifest](manifest.md).
 - `--md=FILE` is the only thing `inspect` ever writes. A relative file is created inside the project.
-- A folder with no `Agent.yaml` or `Agent.bx` is an error.
+- A folder with no `Agent.yml` or `Agent.bx` is an error.
 
 ### `extensions`
 
@@ -1139,8 +1139,8 @@ Remove a project's `.build/` and `dist/` output.
 bxAgents clean [--force]
 ```
 
-- Only ever removes `.build` and `dist` - source conventions (`Agent.yaml`, `tools/`, etc.) are never touched.
-- **Refuses to run unless the directory looks like a BxAgents project** (an `Agent.yaml`, an `Agent.bx` or a `.build/manifest.json`). `dist/` is a common build-output name across the wider ecosystem, so this stops a `clean` in the wrong directory from deleting something unrelated. `--force` skips the check when you genuinely mean it.
+- Only ever removes `.build` and `dist` - source conventions (`Agent.yml`, `tools/`, etc.) are never touched.
+- **Refuses to run unless the directory looks like a BxAgents project** (an `Agent.yml`, an `Agent.bx` or a `.build/manifest.json`). `dist/` is a common build-output name across the wider ecosystem, so this stops a `clean` in the wrong directory from deleting something unrelated. `--force` skips the check when you genuinely mean it.
 - Prints the absolute path of each directory before removing it.
 - Reports "Nothing to clean" if neither directory exists.
 

@@ -8,12 +8,12 @@ tags: [conventions, mcp, secrets]
 
 # Connect: services that ask each person to sign in
 
-> The seven ready-made services (GitHub, Stripe, Notion, Atlassian, Cloudflare, Supabase, Git) are [connectors](connectors.md) and need nothing in `Agent.yaml`. This page is for services you write yourself under `mcpServers`.
+> The seven ready-made services (GitHub, Stripe, Notion, Atlassian, Cloudflare, Supabase, Git) are [connectors](connectors.md) and need nothing in `Agent.yml`. This page is for services you write yourself under `mcpServers`.
 
-Some [MCP servers](mcp.md) do not take a fixed key. Mail, calendars and ticket systems ask **each person** to sign in with OAuth, and then accept a token that expires and is renewed. Add `oauth` to the server's entry in `Agent.yaml` and BX Agents does the rest: the person signs in once, their tokens are **sealed in the chat database** with the [vault](vault.md) key, and the agent uses **their** tokens when it acts for them. The model never sees a token.
+Some [MCP servers](mcp.md) do not take a fixed key. Mail, calendars and ticket systems ask **each person** to sign in with OAuth, and then accept a token that expires and is renewed. Add `oauth` to the server's entry in `Agent.yml` and BX Agents does the rest: the person signs in once, their tokens are **sealed in the chat database** with the [vault](vault.md) key, and the agent uses **their** tokens when it acts for them. The model never sees a token.
 
 ```yaml
-# Agent.yaml
+# Agent.yml
 mcpServers:
   - name: mail
     url: https://mail.example.com/mcp
@@ -50,7 +50,7 @@ Each way asks the same questions of the same place, so they never disagree about
 
 | Where | How |
 |---|---|
-| Web page | The **Connectors** page, **In Agent.yaml** tab: a row per service with *Connect* or *Disconnect*. The sign in opens in a new tab; the page notices when it worked |
+| Web page | The **Connectors** page, **In Agent.yml** tab: a row per service with *Connect* or *Disconnect*. The sign in opens in a new tab; the page notices when it worked |
 | Terminal chat | `/connect` lists the services, `/connect mail` prints an address and waits for the browser in the background, `/connect mail remove` forgets it |
 | Command line | `bxAgents connect` lists, `bxAgents connect mail` signs in, `bxAgents connect mail --remove` forgets. See [`connect`](../cli-reference.md#connect) |
 | Chat platforms | `/connect mail` sends an address that works once, for ten minutes. Open it in a browser and sign in |
