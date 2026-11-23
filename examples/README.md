@@ -8,7 +8,7 @@ Real, buildable BxAgents projects, each demonstrating one feature area. Every ex
 | [`simple-agent/`](simple-agent) | A baseline agent combining a tool and an HTTP exposure in one project. |
 | [`class-based-agent/`](class-based-agent) | The same agent as `minimal-agent`, but with everything - name, model, instructions - set directly in the class's own `init()`. No `configure()`, no `instructions.md`. |
 | [`http-gateway-agent/`](http-gateway-agent) | Exposing an agent over HTTP via `gateways/` + `toAi()`. |
-| [`scheduled-agent/`](scheduled-agent) | Waking an agent on a cron schedule via `schedules/`. |
+| [`scheduled-agent/`](scheduled-agent) | Waking an agent on a daily schedule via `schedules/`. |
 | [`mcp-agent/`](mcp-agent) | Hosting a local MCP server that re-exposes a tool via `mcp/`. |
 | [`multi-agent-team/`](multi-agent-team) | A root agent delegating to two `subagents/`. |
 | [`webui-agent/`](webui-agent) | The v1 web chat UI, via a `gateways/` entry with `exposes: "webui"`. |

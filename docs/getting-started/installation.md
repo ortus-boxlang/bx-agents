@@ -19,6 +19,9 @@ BxAgents is a BoxLang module. It needs two things on the machine that runs it:
 !!! info
     `serve`, `chat --server` and `invoke --server` additionally need the standalone [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) binary on `PATH`. Every other verb (`build`, plain `chat` and `invoke`, `package`, `inspect`, `clean`, `new`, ...) doesn't.
 
+!!! info
+    To run `bxAgents test` the project needs TestBox in `lib/testbox`. `new` fetches it by running `box install`, which needs [CommandBox](https://commandbox.ortusbooks.com) (the `box` command) on `PATH`. Without it the project is still created, `new` prints a warning with the command to run later, and `--skipInstall` leaves the step out. Nothing else in BxAgents needs CommandBox.
+
 ::: stepper
 ::: step "Install BoxLang"
 Follow the [official BoxLang installation guide](https://boxlang.ortusbooks.com/getting-started/installation). The quick installer also sets up `~/.boxlang/bin` on your `PATH`, which is where module-provided executables (like BxAgents' own `bxAgents` command, below) land.
