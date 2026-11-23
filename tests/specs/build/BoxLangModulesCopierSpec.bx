@@ -6,8 +6,9 @@ class extends="testbox.system.BaseSpec" {
 			beforeEach( function() {
 				variables.copier = new bxagents.models.build.generators.BoxLangModulesCopier();
 				variables.root = createTempDirectory( prefix = "bxagents-modcopy-" );
-				variables.app = root & "/.build/app";
-				directoryCreate( path = app, createPath = true );
+				variables.build = root & "/.build";
+				variables.app = build;
+				directoryCreate( path = build, createPath = true );
 			} );
 
 			afterEach( function() {
@@ -23,11 +24,25 @@ class extends="testbox.system.BaseSpec" {
 				}
 			}
 
-			it( "copies nothing, and creates nothing, when the project has no boxlang_modules", function() {
-				var result = copier.copy( root, app );
+			it( "copies nothing, and leaves an empty boxlang_modules, when the project has no boxlang_modules", function() {
+				var result = copier.copy( root, build );
 
 				expect( result.copied ).toBeEmpty();
-				expect( directoryExists( app & "/boxlang_modules" ) ).toBeFalse();
+				// the template's layout has the folder, and the engine config lists it as a module directory
+				expect( directoryExists( build & "/boxlang_modules" ) ).toBeTrue();
+				expect( directoryList( build & "/boxlang_modules" ) ).toBeEmpty();
+			} );
+
+			it( "replaces what an earlier build copied, so a module the project dropped does not stay behind", function() {
+				addModule( "bxold" );
+				copier.copy( root, build );
+				directoryDelete( root & "/boxlang_modules/bxold", true );
+				addModule( "bxnew" );
+
+				copier.copy( root, build );
+
+				expect( directoryExists( build & "/boxlang_modules/bxold" ) ).toBeFalse();
+				expect( directoryExists( build & "/boxlang_modules/bxnew" ) ).toBeTrue();
 			} );
 
 			it( "copies every installed module into the app, files and subfolders", function() {
@@ -36,11 +51,11 @@ class extends="testbox.system.BaseSpec" {
 				fileWrite( root & "/boxlang_modules/bxplaywright/models/Page.bx", "class {}" );
 				addModule( "bxother" );
 
-				var result = copier.copy( root, app );
+				var result = copier.copy( root, build );
 
 				expect( result.copied.sort( "text" ) ).toBe( [ "bxother", "bxplaywright" ] );
-				expect( fileExists( app & "/boxlang_modules/bxplaywright/models/Page.bx" ) ).toBeTrue();
-				expect( fileExists( app & "/boxlang_modules/bxother/ModuleConfig.bx" ) ).toBeTrue();
+				expect( fileExists( build & "/boxlang_modules/bxplaywright/models/Page.bx" ) ).toBeTrue();
+				expect( fileExists( build & "/boxlang_modules/bxother/ModuleConfig.bx" ) ).toBeTrue();
 			} );
 
 			it( "leaves out a module that is only a devDependency, matched by the slug in its own box.json", function() {
@@ -48,11 +63,11 @@ class extends="testbox.system.BaseSpec" {
 				addModule( "bxplaywright", { slug : "bx-playwright" } );
 				addModule( "helper", { slug : "bx-test-helper" } );
 
-				var result = copier.copy( root, app );
+				var result = copier.copy( root, build );
 
 				expect( result.copied ).toBe( [ "bxplaywright" ] );
 				expect( result.skipped ).toBe( [ "helper" ] );
-				expect( directoryExists( app & "/boxlang_modules/helper" ) ).toBeFalse();
+				expect( directoryExists( build & "/boxlang_modules/helper" ) ).toBeFalse();
 			} );
 
 			it( "falls back to the folder name when a module has no box.json", function() {
@@ -60,7 +75,7 @@ class extends="testbox.system.BaseSpec" {
 				addModule( "helper" );
 				addModule( "bxkeep" );
 
-				var result = copier.copy( root, app );
+				var result = copier.copy( root, build );
 
 				expect( result.skipped ).toBe( [ "helper" ] );
 				expect( result.copied ).toBe( [ "bxkeep" ] );
@@ -70,7 +85,7 @@ class extends="testbox.system.BaseSpec" {
 				fileWrite( root & "/box.json", '{ "dependencies": { "bx-both": "*" }, "devDependencies": { "bx-both": "*" } }' );
 				addModule( "both", { slug : "bx-both" } );
 
-				expect( copier.copy( root, app ).copied ).toBe( [ "both" ] );
+				expect( copier.copy( root, build ).copied ).toBe( [ "both" ] );
 			} );
 
 		} );

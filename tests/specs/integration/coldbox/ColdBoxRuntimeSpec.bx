@@ -102,6 +102,47 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			/**
+			 * The layout, from inside the booted app: the app is the `/app` mapping and the web root `/` is public/, the module list is the
+			 * bxagents module and its nested modules and nothing else, and the settings of config/Coldbox.bx took effect. That file
+			 * was never loaded on a case-sensitive file system while it was called ColdBox.bx, and assigned `coldbox = {` where BoxLang
+			 * makes it local to configure(), so the generated app name and qb grammar had never applied.
+			 */
+			describe( "the layout of the served app", function() {
+
+				it( "serves public/ as the web root and keeps the app in .build/app", function() {
+					expect( expandPath( "/" ) ).toMatch( "[\\/]\.build[\\/]public[\\/]?$" );
+					expect( expandPath( "/app" ) ).toMatch( "[\\/]\.build[\\/]app$" );
+					expect( new "models.util.AppRoot@bxagents"().path() ).toBe( expandPath( "/app" ) );
+					expect( controller.getSetting( "ApplicationPath" ) ).toMatch( "[\\/]\.build[\\/]app[\\/]?$" );
+				} );
+
+				it( "loads the bxagents module from the app's own runtime, and no module from the machine", function() {
+					var service = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getInstance().getModuleService();
+					var names = [];
+					for ( var key in service.getModuleNames() ) {
+						names.append( toString( key ) );
+					}
+					expect( names ).toInclude( "bxagents" );
+					expect( service.getModuleRecord( createObject( "java", "ortus.boxlang.runtime.scopes.Key" ).of( "bxagents" ) ).physicalPath.toString() ).toMatch( "[\\/]\.build[\\/]runtime[\\/]modules[\\/]bxagents$" );
+					// bxagents and the modules bundled inside it: nothing else
+					expect( names.sort( "text" ) ).toBe( [ "bxMarkdown", "bxagents", "bxai", "ftp", "mail", "sqlite", "yaml" ].sort( "text" ) );
+				} );
+
+				it( "applied config/Coldbox.bx: the app's name and qb's grammar", function() {
+					expect( controller.getSetting( "AppName" ) ).toBe( "e2e-coldbox-route-agent" );
+					var qb = controller.getSetting( "moduleSettings" ).qb;
+					expect( qb.defaultGrammar ).toBe( "SQLiteGrammar@qb" );
+					expect( controller.getSetting( "modulesExternalLocation" ) ).toBe( [ "/modules" ] );
+				} );
+
+				it( "answers an address nothing routes with a 404, from the generated NotFound handler", function() {
+					expect( controller.getSetting( "defaultEvent" ) ).toBe( "NotFound.index" );
+					expect( controller.getSetting( "invalidEventHandler" ) ).toBe( "NotFound.index" );
+				} );
+
+			} );
+
+			/**
 			 * A schedules/*.bx file is a BoxLang scheduler, registered through `this.schedulers` in the
 			 * generated base Application, and its task reaches the project's default agent. Proven by
 			 * letting it fire: src/test/resources/fixtures/e2e-coldbox-route/schedules/Heartbeat.bx
@@ -188,7 +229,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "instantiating GeneratedAgentFactory outside of WireBox (the way chat's direct-load path does) builds a behaviorally-equivalent agent to WireBox's singleton", function() {
 				var wireboxAgent = controller.getWireBox().getInstance( "GeneratedAgent" );
 
-				var factory = new "agent.GeneratedAgentFactory"();
+				var factory = new "app.agent.GeneratedAgentFactory"();
 				var directAgent = factory.buildAgent();
 
 				expect( directAgent.getName() ).toBe( wireboxAgent.getName() );

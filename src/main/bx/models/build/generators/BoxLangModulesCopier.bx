@@ -1,32 +1,40 @@
 /**
  * Copies the BoxLang modules a developer installed in the project (`boxlang_modules/`, put there
- * by CommandBox or `install-bx-module --local`) into the generated app, so `serve` and a
- * packaged `.bxa` carry them. BoxLang loads that folder from the project root during local work;
- * a built app has no project root, so the modules have to travel with it.
+ * by CommandBox or `install-bx-module --local`) into the built app's own `boxlang_modules/`
+ * (a sibling of `app/`, the folder the template's runtime/boxlang.json lists as a module directory),
+ * so `serve` and a packaged `.bxa` carry them. BoxLang loads that folder from the project root during
+ * local work; a built app has no project root, so the modules have to travel with it.
  *
  * A module that is only a devDependency in the project's `box.json` (a test helper, say) is left
  * out: the app does not need it to run. A module is matched to box.json by the `slug` in its own
  * `box.json`, or failing that by its folder name (`bxplaywright` for `bx-playwright`).
  */
+import bxModules.bxagents.models.util.TreeDelete;
+
 class {
 
 	/**
 	 * @projectRoot Absolute path to the project root
-	 * @appDir Absolute path to the generated app, e.g. "<projectRoot>/.build/app"
+	 * @buildDir Absolute path to the build folder, e.g. "<projectRoot>/.build"
 	 *
 	 * @return { copied : [ module folder names ], skipped : [ module folder names left out as devDependencies ] }
 	 */
-	struct function copy( required string projectRoot, required string appDir ) {
+	struct function copy( required string projectRoot, required string buildDir ) {
 		var root = arguments.projectRoot.reReplace( "[\\/]+$", "" )
 		var source = root & "/boxlang_modules"
 		var result = { copied : [], skipped : [] }
+		var target = arguments.buildDir.reReplace( "[\\/]+$", "" ) & "/boxlang_modules"
+		// what an earlier build copied must not outlive the project's own folder: replaced, never merged
+		if ( directoryExists( target ) ) {
+			TreeDelete::tree( target )
+		}
+		directoryCreate( path = target, createPath = true, ignoreExists = true )
 		if ( !directoryExists( source ) ) {
 			return result
 		}
 
 		var boxJson = new "models.build.ProjectBoxJson@bxagents"()
 		var devOnly = boxJson.devOnly( boxJson.read( root ) )
-		var target = arguments.appDir.reReplace( "[\\/]+$", "" ) & "/boxlang_modules"
 
 		for ( var folder in directoryList( path = source, recurse = false, type = "dir", listInfo = "name" ) ) {
 			if ( isDevOnly( source & "/" & folder, folder, devOnly ) ) {

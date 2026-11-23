@@ -9,10 +9,12 @@ import bxModules.bxagents.models.util.TreeDelete;
  *   router, tools/skills copy, scheduler) -> normalize + write the internal
  *   manifest.
  *
- * Deliberately produces ONLY `.build/app/` + `.build/manifest.json` -
- * packaging (`.bxa`) is a separate step (see PackagerService / the
- * `package` CLI verb), so a fast dev loop (`build` -> inspect -> `build`
- * again) never pays the packaging cost it doesn't need.
+ * Produces `.build/`, laid out like the ColdBox BoxLang application template (see models/build/layout/BuildLayout):
+ * `app/` (the generated code), `public/` (the only folder a server serves), `lib/` (ColdBox and its modules), `runtime/`
+ * (the engine config and the one module the app loads, `bxagents`), `boxlang_modules/`, `miniserver.json`, and
+ * `.build/manifest.json` beside them. Packaging (`.bxa`) is a separate step (see PackagerService / the
+ * `package` CLI verb), so a fast dev loop (`build` -> inspect -> `build` again) never pays the packaging cost it
+ * doesn't need.
  */
 import bxModules.bxagents.models.connect.OAuthServers;
 import bxModules.bxagents.models.connectors.ConnectorSettings;
@@ -45,6 +47,12 @@ class {
 		variables.validator = new "models.build.ProjectValidator@bxagents"()
 		variables.manifestNormalizer = new "models.build.ManifestNormalizer@bxagents"( arguments.generatorVersion )
 		variables.coldboxAppGenerator = new "models.build.generators.ColdBoxAppGenerator@bxagents"()
+		variables.templateAssembler = new "models.build.layout.TemplateAssembler@bxagents"()
+		variables.moduleCopier = new "models.build.layout.ModuleCopier@bxagents"()
+		variables.miniServerJson = new "models.build.layout.MiniServerJson@bxagents"()
+		variables.moduleDir = new "models.build.layout.ModuleCopier@bxagents"().sourceDir()
+		variables.libsDir = ""
+		variables.applicationVariant = ""
 		variables.toolsSkillsCopier = new "models.build.generators.ToolsSkillsCopier@bxagents"()
 		variables.projectFilesCopier = new "models.build.generators.ProjectFilesCopier@bxagents"()
 		variables.runtimeLibsCopier = new "models.build.generators.RuntimeLibsCopier@bxagents"()
@@ -57,6 +65,31 @@ class {
 		variables.schedulerGenerator = new "models.build.generators.SchedulerGenerator@bxagents"()
 		variables.extensionsGenerator = new "models.build.generators.ExtensionsGenerator@bxagents"()
 		variables.mcpGenerator = new "models.build.generators.McpGenerator@bxagents"()
+		return this
+	}
+
+	/**
+	 * For tests and the dev harness: which folder is copied into `runtime/modules/bxagents`, and the lib/ the ColdBox
+	 * libraries come from. Not set, they are the ones inside the installed module this code runs from; a source
+	 * checkout has neither, and the build says so rather than failing.
+	 *
+	 * @moduleDir The module folder (named bxagents) to copy into the app's runtime
+	 * @libsDir The module's lib/ folder (coldbox, modules/*)
+	 */
+	function setModuleSource( string moduleDir = "", string libsDir = "" ) {
+		variables.moduleDir = arguments.moduleDir
+		variables.libsDir = arguments.libsDir
+		return this
+	}
+
+	/**
+	 * Which shape `public/Application.bx` takes: "template" (the template's own file plus fenced insertions) or "stub" (a
+	 * thin class extending a generated base). Not set, ColdBoxAppGenerator's defaultVariant() decides.
+	 *
+	 * @variant "template" or "stub"
+	 */
+	function setApplicationVariant( required string variant ) {
+		variables.applicationVariant = arguments.variant
 		return this
 	}
 
@@ -113,12 +146,14 @@ class {
 	 * @cliEnvironment Optional environment name, e.g. from a CLI flag
 	 * @onProgress Called with one human-readable line per phase/interaction as the build proceeds - defaults to a no-op, so callers that don't care (every existing caller, before `build --verbose`) pay nothing extra. Passing a closure that collects into an array (rather than printing) is how this is unit-tested - see BuildPipelineSpec.bx
 	 *
-	 * @return { projectRoot, buildDir, appDir, manifestPath, manifest, warnings }
+	 * @return { projectRoot, buildDir, appDir, publicDir, libDir, runtimeDir, manifestPath, manifest, warnings, template : { version, tag, commit }, module : { copied, reason } }
 	 */
 	struct function build( required string projectRoot, string cliEnvironment = "", any onProgress = function( required string message ) {} ) {
 		var root = Strings::normalizePath( arguments.projectRoot )
-		var buildDir = root & "/.build"
-		var appDir = buildDir & "/app"
+		var layout = new "models.build.layout.BuildLayout@bxagents"().of( root )
+		var buildDir = layout.buildDir
+		var appDir = layout.appDir
+		var publicDir = layout.publicDir
 		var buildStart = getTickCount()
 
 		restoreSkills( root, arguments.onProgress )
@@ -168,6 +203,11 @@ class {
 		}
 		directoryCreate( path = appDir, createPath = true, ignoreExists = true )
 
+		// The template's public/ (replaced), runtime/boxlang.json and app/Application.bx guard, then the empty folders its
+		// conventions name. From the snapshot this module carries: nothing is fetched.
+		var template = variables.templateAssembler.assemble( buildDir )
+		arguments.onProgress( "+ Laying out .build like the ColdBox BoxLang template (v#template.version#, #left( template.commit, 8 )#)..." )
+
 		arguments.onProgress( "+ Splitting interceptors (agent vs runtime scope)..." )
 		// The splitter adds the "interceptors" folder itself: handing it
 		// `<appDir>/interceptors` put the files in `interceptors/interceptors/`, where
@@ -208,7 +248,7 @@ class {
 		arguments.onProgress( "    #agentApiResult.written ? 'written' : 'off (agentApi.enabled is false)'#" )
 
 		arguments.onProgress( "+ Generating the web chat UI (if any gateways/* entry exposes it)..." )
-		var webUiResult = variables.webUiGenerator.generate( discovery, appDir, config )
+		var webUiResult = variables.webUiGenerator.generate( discovery, appDir, config, publicDir )
 		arguments.onProgress( "    webui=#( webUiResult.hasWebUi ? 'yes' : 'no' )#, signIn=#( webUiResult.webUiHasUsers ?: false ? 'yes' : 'no' )#, database=#( webUiResult.webUiDatabase.datasource ?: '-' )#" )
 
 		var toolScanStatements = []
@@ -217,7 +257,8 @@ class {
 			// (unlike skillsDirectory) - the app must call aiToolRegistry().scan()
 			// itself at startup so tool-by-name lookups (M10's local MCP server
 			// wiring, any future tool reference) resolve.
-			toolScanStatements.append( 'aiToolRegistry().scan( "tools" )' )
+			// `app.tools`: the web root `/` is public/ now, so a bare "tools" would look for public/tools and find nothing, silently
+			toolScanStatements.append( 'aiToolRegistry().scan( "app.tools" )' )
 		}
 
 		// Every name here is a PER-REQUEST interceptor (preProcess and friends),
@@ -296,8 +337,15 @@ class {
 			// Registered through this.schedulers in the generated base Application
 			schedulerClasses      = variables.schedulerGenerator.classPaths( discovery ),
 			// The developer's own Application.bx, copied as it is; absent, the app gets one that only extends the base
-			userApplicationPath   = fileExists( root & "/Application.bx" ) ? root & "/Application.bx" : ""
+			userApplicationPath   = fileExists( root & "/Application.bx" ) ? root & "/Application.bx" : "",
+			publicDir             = publicDir,
+			applicationVariant    = variables.applicationVariant
 		)
+		arguments.onProgress( "    public/Application.bx: #coldboxResult.variant# variant" )
+		for ( var note in coldboxResult.warnings ) {
+			arguments.onProgress( "    ! " & note )
+			validation.warnings.append( note )
+		}
 		var agentNames = coldboxResult.agentNodes.map( function( n ) { return n.name } )
 		arguments.onProgress( "    agents registered in WireBox (getInstance-able by name): #agentNames.toList( ', ' )#" )
 
@@ -308,19 +356,33 @@ class {
 
 		// BoxLang modules the developer installed in the project (boxlang_modules/, by CommandBox or
 		// `install-bx-module --local`) travel with the app, so `serve` and a packaged .bxa carry them
-		var modulesResult = variables.boxLangModulesCopier.copy( root, appDir )
+		var modulesResult = variables.boxLangModulesCopier.copy( root, buildDir )
 		if ( modulesResult.copied.len() || modulesResult.skipped.len() ) {
-			arguments.onProgress( "+ Copying boxlang_modules/ into the app..." )
+			arguments.onProgress( "+ Copying boxlang_modules/ into .build..." )
 			arguments.onProgress( "    copied=#modulesResult.copied.toList( ', ' )#" & ( modulesResult.skipped.len() ? ", left out (devDependencies)=#modulesResult.skipped.toList( ', ' )#" : "" ) )
 		}
 
 		arguments.onProgress( "+ Copying bundled ColdBox runtime libraries..." )
-		var libsResult = variables.runtimeLibsCopier.copy( appDir = appDir, projectRoot = root )
+		var libsResult = variables.runtimeLibsCopier.copy( libDir = layout.libDir, projectRoot = root, bundledLibsDir = variables.libsDir )
 		if ( libsResult.bundled ) {
 			arguments.onProgress( "    #libsResult.copied.toList( ', ' )#" )
 		} else {
 			arguments.onProgress( "    ! this BX Agents install has no bundled lib/ (source checkout?) - ColdBox and its modules must already be resolvable" )
 		}
+
+		// Only the bxagents module goes into runtime/modules: the one module the served app needs, with the modules nested in it.
+		// Never the machine's own module folder, which would load every module installed there.
+		var moduleResult = variables.moduleCopier.copy( variables.moduleDir, layout.runtimeDir )
+		if ( moduleResult.reason == "copied" ) {
+			arguments.onProgress( "+ Copied the bxagents module into .build/runtime/modules" )
+		} else if ( moduleResult.reason == "unchanged" ) {
+			arguments.onProgress( "+ The bxagents module in .build/runtime/modules is up to date" )
+		} else {
+			arguments.onProgress( "    ! no installed bxagents module to copy (source checkout?) - a served app needs .build/runtime/modules/bxagents" )
+		}
+
+		// The server config a deployed or packaged copy starts from; `serve` writes its own with the port and host asked for
+		variables.miniServerJson.write( buildDir, 8080, "127.0.0.1" )
 
 		var schedulerResult = variables.schedulerGenerator.generate( discovery, appDir )
 		if ( schedulerResult.schedulers.len() ) {
@@ -341,6 +403,11 @@ class {
 			projectRoot  : root,
 			buildDir     : buildDir,
 			appDir       : appDir,
+			publicDir    : publicDir,
+			libDir       : layout.libDir,
+			runtimeDir   : layout.runtimeDir,
+			template     : template,
+			module       : moduleResult,
 			manifestPath : manifestPath,
 			manifest     : manifest,
 			warnings     : validation.warnings

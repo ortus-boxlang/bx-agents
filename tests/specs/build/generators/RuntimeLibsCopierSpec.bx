@@ -34,9 +34,9 @@ class extends="testbox.system.BaseSpec" {
 				return lib;
 			}
 
-			it( "copies coldbox/ and every modules/<name>/ into the app", function() {
+			it( "copies coldbox/ and every modules/<name>/ into the build's lib folder", function() {
 				var app = newDir( "bxagents-app-" );
-				var result = copier.copy( appDir = app, bundledLibsDir = newBundle() );
+				var result = copier.copy( libDir = app, bundledLibsDir = newBundle() );
 
 				expect( result.bundled ).toBeTrue();
 				expect( fileRead( app & "/coldbox/system/Bootstrap.cfc" ) ).toBe( "bundled-coldbox" );
@@ -51,7 +51,7 @@ class extends="testbox.system.BaseSpec" {
 				var app = newDir( "bxagents-app-" );
 				directoryCreate( app & "/modules/qb", true );
 				fileWrite( app & "/modules/qb/stale.txt", "old" );
-				copier.copy( appDir = app, bundledLibsDir = newBundle() );
+				copier.copy( libDir = app, bundledLibsDir = newBundle() );
 
 				expect( fileExists( app & "/modules/qb/stale.txt" ) ).toBeFalse();
 				expect( fileExists( app & "/modules/qb/ModuleConfig.cfc" ) ).toBeTrue();
@@ -65,7 +65,7 @@ class extends="testbox.system.BaseSpec" {
 				directoryCreate( project & "/lib/modules/extra", true );
 				fileWrite( project & "/lib/modules/extra/ModuleConfig.cfc", "project-extra" );
 
-				var result = copier.copy( appDir = app, projectRoot = project, bundledLibsDir = newBundle() );
+				var result = copier.copy( libDir = app, projectRoot = project, bundledLibsDir = newBundle() );
 
 				expect( fileRead( app & "/modules/qb/ModuleConfig.cfc" ) ).toBe( "project-qb" );
 				expect( fileRead( app & "/modules/extra/ModuleConfig.cfc" ) ).toBe( "project-extra" );
@@ -75,7 +75,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "reports no bundle, and copies nothing, when the module has no lib/", function() {
 				var app = newDir( "bxagents-app-" );
-				var result = copier.copy( appDir = app, bundledLibsDir = app & "/nope" );
+				var result = copier.copy( libDir = app, bundledLibsDir = app & "/nope" );
 
 				expect( result.bundled ).toBeFalse();
 				expect( result.copied ).toBeEmpty();

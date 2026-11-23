@@ -1,4 +1,22 @@
+/**
+ * The generated wiring, as the "stub" variant writes it: one base class, bxagents/Application.bx, that boots ColdBox from its own
+ * onApplicationStart(). The "template" variant (the default) is covered by ColdBoxAppVariantsSpec, which also proves the two
+ * carry the same wiring; this spec keeps the established assertions on the base class's shape.
+ */
 class extends="testbox.system.BaseSpec" {
+
+	function beforeAll() {
+		variables.savedVariant = new bxagents.models.util.Env().get( "BXAGENTS_APPLICATION_VARIANT" );
+		createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_APPLICATION_VARIANT", "stub" );
+	}
+
+	function afterAll() {
+		if ( len( variables.savedVariant ) ) {
+			createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_APPLICATION_VARIANT", variables.savedVariant );
+		} else {
+			createObject( "java", "java.lang.System" ).clearProperty( "BXAGENTS_APPLICATION_VARIANT" );
+		}
+	}
 
 	function run() {
 		describe( "ColdBoxAppGenerator", function() {
@@ -19,10 +37,12 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			// the app folder of a throwaway build: `public/` is made beside it, so nothing is written outside the temp folder
 			private function newBuildDir() {
-				var dir = createTempDirectory( prefix = "bxagents-coldbox-app-" );
-				tempDirs.append( dir );
-				return dir;
+				var root = createTempDirectory( prefix = "bxagents-coldbox-app-" );
+				tempDirs.append( root );
+				directoryCreate( root & "/app" );
+				return root & "/app";
 			}
 
 			private function generateFor( required string projectRoot, required string buildDir ) {
@@ -44,11 +64,20 @@ class extends="testbox.system.BaseSpec" {
 				return count;
 			}
 
-			it( "writes an index.bxm as the physical web-server rewrite target", function() {
+			it( "leaves the web-server rewrite target to the template's public/index.bxm, and writes none into the app", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );
 
-				expect( fileExists( result.index ) ).toBeTrue();
+				expect( fileExists( buildDir & "/index.bxm" ) ).toBeFalse();
+				expect( result.keyExists( "index" ) ).toBeFalse();
+			} );
+
+			it( "writes public/Application.bx beside the app folder, never into the app", function() {
+				var buildDir = newBuildDir();
+				var result = generateFor( fixtures & "/full-project", buildDir );
+
+				expect( result.applicationBx ).toBe( getDirectoryFromPath( buildDir ) & "public/Application.bx" );
+				expect( fileExists( buildDir & "/Application.bx" ) ).toBeFalse();
 			} );
 
 			it( "copies every node's instructions.md into the app and resolves it relative to the factory", function() {
@@ -103,11 +132,11 @@ class extends="testbox.system.BaseSpec" {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );
 
-				expect( fileRead( result.applicationBx ) ).toInclude( 'class extends="bxagents.Application" {' );
+				expect( fileRead( result.applicationBx ) ).toInclude( 'class extends="app.bxagents.Application" {' );
 				expect( fileRead( result.applicationBx ) ).notToInclude( "onApplicationStart" );
 			} );
 
-			it( "copies the project's own Application.bx as it is", function() {
+			it( "copies the project's own Application.bx, pointing its extends at the class the build generates", function() {
 				var buildDir = newBuildDir();
 				var own = createTempDirectory( prefix = "bxagents-ownapp-" ) & "/Application.bx";
 				fileWrite( own, 'class extends="bxagents.Application" {' & char( 10 ) & "	// mine" & char( 10 ) & "}" & char( 10 ) );
@@ -120,7 +149,7 @@ class extends="testbox.system.BaseSpec" {
 					userApplicationPath = own
 				);
 
-				expect( fileRead( result.applicationBx ) ).toBe( fileRead( own ) );
+				expect( fileRead( result.applicationBx ) ).toBe( 'class extends="app.bxagents.Application" {' & char( 10 ) & "	// mine" & char( 10 ) & "}" & char( 10 ) );
 			} );
 
 			it( "writes the path of the web UI next to the connectors key, so a chat platform can say where to connect a token", function() {
@@ -191,7 +220,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( base ).toInclude( 'getInstance( "GeneratedAgent" )' );
 			} );
 
-			it( "writes a valid config/ColdBox.bx", function() {
+			it( "writes a valid config/Coldbox.bx, the file name ColdBox loads on a case-sensitive file system", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );
 
@@ -202,7 +231,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( "full-project-agent" );
 			} );
 
-			it( "never declares agent-scope interceptors in config/ColdBox.bx's own interceptors array - that array never reaches ColdBox's InterceptorService on a real boot", function() {
+			it( "never declares agent-scope interceptors in config/Coldbox.bx's own interceptors array - that array never reaches ColdBox's InterceptorService on a real boot", function() {
 				var buildDir = newBuildDir();
 				var config = resolver.resolve( projectRoot = fixtures & "/full-project" );
 				var result = generator.generate( fixtures & "/full-project", buildDir, config, [ "AgentAudit", "OtherInterceptor" ] );
@@ -220,14 +249,14 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( "onApplicationStart" );
 
 				for ( var name in [ "AgentAudit", "OtherInterceptor" ] ) {
-					var needle = 'getWireBox().getInstance( "interceptors.#name#" )';
+					var needle = 'getWireBox().getInstance( "app.interceptors.#name#" )';
 					expect( countOccurrences( content, needle ) ).toBe( 1 );
 					expect( content ).toInclude( 'getInterceptorService().register(' );
 					expect( content ).toInclude( 'name: "#name#"' );
 				}
 			} );
 
-			it( "forwards Agent.bx's resolved security block verbatim into config/ColdBox.bx's module settings", function() {
+			it( "forwards Agent.bx's resolved security block verbatim into config/Coldbox.bx's module settings", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/with-security", buildDir );
 
@@ -238,12 +267,12 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileRead( result.coldboxConfig ) ).notToInclude( "bxai" );
 			} );
 
-			it( "always sets bxai's skillsDirectory to /skills, so bx-ai's own auto-discovery finds BX Agents' copied skills folder", function() {
+			it( "always sets bxai's skillsDirectory to /app/skills (the web root is public/), so bx-ai's own auto-discovery finds BX Agents' copied skills folder", function() {
 				var buildDir = newBuildDir();
 				var result = generateFor( fixtures & "/full-project", buildDir );
 
 				var settings = jsonDeserialize( fileRead( getDirectoryFromPath( result.coldboxConfig ) & "bxai-settings.json" ) );
-				expect( settings.skillsDirectory ).toBe( "/skills" );
+				expect( settings.skillsDirectory ).toBe( "/app/skills" );
 				expect( settings.keyExists( "security" ) ).toBeFalse();
 			} );
 
@@ -358,11 +387,15 @@ class extends="testbox.system.BaseSpec" {
 				var content = fileRead( result.baseApplicationBx );
 				expect( content ).toInclude( 'aiGatewayRegistry().register( aiGateway( "mock", {} ) )' );
 
-				var startPos = content.find( "onApplicationStart" );
+				// the statements are the body of after(), which onApplicationStart() calls once ColdBox has loaded
+				var afterPos = content.find( "function after()" );
 				var registerPos = content.find( "aiGatewayRegistry().register" );
+				var startPos = content.find( "function onApplicationStart()" );
 				var loadColdboxPos = content.find( "loadColdbox()" );
+				var callPos = content.find( "after()", loadColdboxPos );
+				expect( afterPos > 0 && afterPos < registerPos ).toBeTrue();
 				expect( startPos < loadColdboxPos ).toBeTrue();
-				expect( loadColdboxPos < registerPos ).toBeTrue();
+				expect( loadColdboxPos < callPos ).toBeTrue( "after() runs once ColdBox has loaded" );
 			} );
 
 			it( "registers the gateways before the statements that look them up, such as the gateway session", function() {
@@ -651,7 +684,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( factory ).toInclude( 'new "models.notes.NotesWiring@bxagents"().attach( agent, {' );
 				expect( factory ).toInclude( '"limit" : 900' );
 				expect( factory ).toInclude( '"approveForget" : false' );
-				var appSource = fileRead( buildDir & "/bxagents/Application.bx" );
+				var appSource = fileRead( result.baseApplicationBx );
 				expect( appSource ).toInclude( 'this.datasources[ "bxagents" ]' );
 				expect( appSource ).toInclude( 'new "models.store.ChatStore@bxagents"( "" ).migrate()' );
 			} );
@@ -692,11 +725,11 @@ class extends="testbox.system.BaseSpec" {
 				expect( factory.reMatch( 'RoutineWiring@bxagents"\(\)\.attach\(' ) ).toHaveLength( 1 );
 				expect( factory ).toInclude( '"minInterval" : "10m"' );
 				var beat = fileRead( buildDir & "/bxagents/RoutinesScheduler.bx" );
-				expect( beat ).toInclude( 'extends="bxagents.Scheduler"' );
+				expect( beat ).toInclude( 'extends="app.bxagents.Scheduler"' );
 				expect( beat ).toInclude( '"timezone"' );
 				expect( beat ).notToInclude( "__ROUTINES__" );
-				var appSource = fileRead( buildDir & "/bxagents/Application.bx" );
-				expect( appSource ).toInclude( '"bxagents.RoutinesScheduler"' );
+				var appSource = fileRead( result.baseApplicationBx );
+				expect( appSource ).toInclude( '"app.bxagents.RoutinesScheduler"' );
 				expect( appSource ).toInclude( 'new "models.store.ChatStore@bxagents"( "" ).migrate()' );
 			} );
 
@@ -705,7 +738,7 @@ class extends="testbox.system.BaseSpec" {
 				var result = generateFor( fixtures & "/with-routines-off", buildDir );
 
 				expect( fileExists( buildDir & "/bxagents/RoutinesScheduler.bx" ) ).toBeFalse();
-				expect( fileRead( buildDir & "/bxagents/Application.bx" ) ).notToInclude( "RoutinesScheduler" );
+				expect( fileRead( result.baseApplicationBx ) ).notToInclude( "RoutinesScheduler" );
 			} );
 
 			it( "leaves routines out entirely when the agent has no routines block", function() {
@@ -721,7 +754,7 @@ class extends="testbox.system.BaseSpec" {
 				var result = generateFor( fixtures & "/with-vault", buildDir );
 
 				expect( fileRead( result.agentFactory ) ).toInclude( 'new "models.vault.VaultWiring@bxagents"().attach( agent, {' );
-				var appSource = fileRead( buildDir & "/bxagents/Application.bx" );
+				var appSource = fileRead( result.baseApplicationBx );
 				expect( appSource ).toInclude( 'this.datasources[ "bxagents" ]' );
 				expect( appSource ).toInclude( 'new "models.store.ChatStore@bxagents"( "" ).migrate()' );
 			} );
@@ -750,7 +783,7 @@ class extends="testbox.system.BaseSpec" {
 				var factory = fileRead( result.agentFactory );
 				expect( factory ).toInclude( "${vault.MAIL_TOKEN}" );
 				expect( factory ).notToInclude( "VaultWiring" );
-				expect( fileRead( buildDir & "/bxagents/Application.bx" ) ).toInclude( 'this.datasources[ "bxagents" ]' );
+				expect( fileRead( result.baseApplicationBx ) ).toInclude( 'this.datasources[ "bxagents" ]' );
 			} );
 
 			it( "keeps notes out of an agent that keeps none, while its memory lives in the shared database", function() {
@@ -759,7 +792,7 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( fileRead( result.agentFactory ) ).notToInclude( "NotesWiring" );
 				expect( fileRead( result.agentFactory ) ).toInclude( "MemoryWiring" );
-				expect( fileRead( buildDir & "/bxagents/Application.bx" ) ).toInclude( "this.datasources" );
+				expect( fileRead( result.baseApplicationBx ) ).toInclude( "this.datasources" );
 			} );
 
 			it( "gives every agent that names no memory the default one, under its own name", function() {
@@ -895,7 +928,7 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			/**
-			 * config/ColdBox.bx's OWN `moduleSettings.cbauth.userServiceClass`
+			 * config/Coldbox.bx's OWN `moduleSettings.cbauth.userServiceClass`
 			 * (the ColdBox-documented way to set it) never reaches cbauth on a
 			 * real boot - confirmed directly: with only that struct present,
 			 * cbauth's AuthenticationService still throws IncompleteConfiguration
@@ -923,7 +956,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( content ).toInclude( 'arguments.settings.userServiceClass = "UserService"' );
 				expect( content ).toInclude( "return arguments.settings" );
 
-				expect( fileRead( buildDir & "/config/ColdBox.bx" ) ).notToInclude( "cbauth" );
+				expect( fileRead( buildDir & "/config/Coldbox.bx" ) ).notToInclude( "cbauth" );
 			} );
 
 			it( "writes no config/modules/cbauth.bx when no webui entry declares users", function() {
@@ -995,7 +1028,7 @@ class extends="testbox.system.BaseSpec" {
 				// configSettings - verified in a real boot, both inside the literal
 				// and as a later assignment - so it is registered at startup via
 				// setSetting() instead. See WebUiGenerator/WebUiIdentity.
-				var content = fileRead( buildDir & "/config/ColdBox.bx" );
+				var content = fileRead( buildDir & "/config/Coldbox.bx" );
 				expect( content ).notToInclude( "identifierProvider" );
 			} );
 

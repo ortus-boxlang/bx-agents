@@ -76,9 +76,12 @@ class extends="testbox.system.BaseSpec" {
 			it( "installed the web app module at the gateway's path, with its settings", function() {
 				// Read from disk rather than fetched over HTTP - see this file's
 				// docblock on why loopback requests deadlock here.
-				var root = expandPath( "/" );
+				var root = expandPath( "/app" ) & "/";
 				expect( fileExists( root & "chat/index.html" ) ).toBeFalse();
 				expect( fileExists( root & "modules/bxagentsui/ModuleConfig.bx" ) ).toBeTrue();
+				// the page's scripts and styles are in the web root, where they are served; the module's code is not
+				expect( directoryExists( expandPath( "/" ) & "includes/bxagentsui/build/assets" ) ).toBeTrue();
+				expect( fileExists( expandPath( "/" ) & "modules/bxagentsui/ModuleConfig.bx" ) ).toBeFalse();
 
 				var settings = controller.getSetting( "modules" ).bxagentsui.settings;
 				expect( settings.basePath ).toBe( "/chat" );

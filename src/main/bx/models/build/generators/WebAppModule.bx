@@ -2,12 +2,15 @@ import bxModules.bxagents.models.util.Strings;
 import bxModules.bxagents.models.util.TreeDelete;
 
 /**
- * Puts the web app module (src/main/bx/bxagentsui: handlers, router, layouts, views and the Vite build) into a generated
- * app: copied to <app>/modules/bxagentsui, its icon set beside it, and its settings in config/bxagentsui.json from the web
- * UI gateway's configure(). The module reads that file when ColdBox registers it: its entry point (basePath) mounts it.
+ * Puts the web app module (src/main/bx/bxagentsui: handlers, router, layouts, views and the Vite build) into a built
+ * app: copied to <app>/modules/bxagentsui (code, views, the Vite manifest and its icon set, none of it served), its
+ * settings in <app>/config/bxagentsui.json from the web UI gateway's configure(), and ONLY the files the browser
+ * loads (the built scripts and styles) into <public>/includes/bxagentsui, where the web root serves them. The module
+ * reads the settings file when ColdBox registers it: its entry point (basePath) mounts it.
  *
  * With BXAGENTS_UI_LINK=true (what ui/scripts/stack.mjs sets) the module is linked instead of copied, so a change to a
- * view or a handler shows on the next request, without a build. BXAGENTS_UI_SOURCE names the folder to link (the
+ * view or a handler shows on the next request, without a build; <public>/includes/bxagentsui is then a link to the
+ * module's includes folder. BXAGENTS_UI_SOURCE names the folder to link (the
  * repository's src/main/bx/bxagentsui), since the running bxagents module may be a packaged copy.
  */
 class {
@@ -35,6 +38,7 @@ class {
 	 *
 	 * @entry The web UI gateway entry
 	 * @appDir The generated app
+	 * @publicDir The web root, e.g. "<projectRoot>/.build/public". Defaults to `public/` beside the app folder
 	 * @apiBase Where the agent API is served
 	 * @themeCss The gateway's theme as CSS custom properties
 	 * @customCss The project's own theme.css
@@ -45,7 +49,8 @@ class {
 		required string apiBase,
 		string themeCss = "",
 		string customCss = "",
-		array disable = []
+		array disable = [],
+		string publicDir = ""
 	) {
 		var target = Strings::normalizePath( arguments.appDir ) & "/modules/bxagentsui"
 		var source = sourceDir()
@@ -63,6 +68,7 @@ class {
 			}
 		}
 		fileCopy( getDirectoryFromPath( getCurrentTemplatePath() ) & "webui/vendor/icons.svg", target & "/includes/icons.svg" )
+		publishIncludes( target, len( arguments.publicDir ) ? Strings::normalizePath( arguments.publicDir ) : getDirectoryFromPath( Strings::normalizePath( arguments.appDir ) ).reReplace( "[\\/]+$", "" ) & "/public", link )
 
 		var config = arguments.entry.config
 		var path = Strings::normalizePath( config.path ?: "" )
@@ -97,13 +103,44 @@ class {
 			"extensionScripts" : extensions.scriptHrefs,
 			"showReasoning" : isNull( config.showReasoning ?: javacast( "null", "" ) ) ? true : !!config.showReasoning,
 			"showTools"   : isNull( config.showToolCalls ?: javacast( "null", "" ) ) ? true : !!config.showToolCalls,
-			"includesUrl" : "/modules/bxagentsui/includes",
+			// the browser's address of public/includes/bxagentsui (see publishIncludes()); the module's own folder is not served
+			"includesUrl" : "/includes/bxagentsui",
 			// the /_kit page of partials: only where the module is linked for development
 			"kit"         : link
 		}
 		// read by the module's ModuleConfig when ColdBox registers it (a JSON file: data, never code)
 		directoryCreate( Strings::normalizePath( arguments.appDir ) & "/config", true, true )
 		fileWrite( Strings::normalizePath( arguments.appDir ) & "/config/bxagentsui.json", jsonSerialize( settings ) )
+	}
+
+	/**
+	 * Puts what the browser loads where the web root serves it: the Vite build's `assets` (scripts and styles) go to
+	 * `<public>/includes/bxagentsui/build/assets`. The manifest (read on the server by Vite.bx) and the icon sprite
+	 * (read on the server by sprite.bxm) stay inside the app, where nothing serves them. A linked module is linked as a
+	 * whole, for the dev stack, which also serves its dev server's `hot` note.
+	 *
+	 * @installed <app>/modules/bxagentsui
+	 * @publicDir The web root
+	 * @link Whether the module was linked rather than copied
+	 */
+	private void function publishIncludes( required string installed, required string publicDir, required boolean link ) {
+		var served = arguments.publicDir & "/includes/bxagentsui"
+		var files = createObject( "java", "java.nio.file.Files" )
+		directoryCreate( path = arguments.publicDir & "/includes", createPath = true, ignoreExists = true )
+		if ( files.isSymbolicLink( pathOf( served ) ) ) {
+			files.delete( pathOf( served ) )
+		} else if ( directoryExists( served ) ) {
+			TreeDelete::tree( served )
+		}
+		if ( arguments.link ) {
+			files.createSymbolicLink( pathOf( served ), pathOf( arguments.installed & "/includes" ), [] )
+			return
+		}
+		var built = arguments.installed & "/includes/build/assets"
+		if ( directoryExists( built ) ) {
+			directoryCreate( path = served & "/build", createPath = true, ignoreExists = true )
+			directoryCopy( built, served & "/build/assets", true )
+		}
 	}
 
 	/**

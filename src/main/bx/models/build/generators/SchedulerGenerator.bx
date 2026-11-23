@@ -29,10 +29,11 @@ class {
 	/**
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .schedules is used)
 	 *
-	 * @return The class path of each scheduler, relative to the app, e.g. [ "schedules.Nightly" ]
+	 * @return The class path of each scheduler, through the template's `/app` mapping, e.g. [ "app.schedules.Nightly" ]
+	 *         (measured: a bare `schedules.Nightly` is "not located in the bx resolver")
 	 */
 	array function classPaths( required struct discovery ) {
-		return ( arguments.discovery.schedules ?: [] ).map( e => "schedules." & e.name )
+		return ( arguments.discovery.schedules ?: [] ).map( e => "app.schedules." & e.name )
 	}
 
 	/**
@@ -60,14 +61,15 @@ class {
 		for ( var entry in entries ) {
 			var target = schedulesDir & "/" & entry.name & ".bx"
 			fileWrite( target, withBase( fileRead( entry.path, "UTF-8" ), entry.name ) )
-			written.append( { name : entry.name, classPath : "schedules." & entry.name, path : target } )
+			written.append( { name : entry.name, classPath : "app.schedules." & entry.name, path : target } )
 		}
 
 		return { schedulers : written }
 	}
 
 	/**
-	 * Adds `extends="bxagents.Scheduler"` to the scheduler class unless it already names a parent. The class
+	 * Adds `extends="app.bxagents.Scheduler"` to the scheduler class unless it already names a parent. A parent written
+	 * `bxagents.Scheduler` (the name the docs have always used for it) is the generated class too, through the `/app` mapping. The class
 	 * declaration is found in the code only, so a `class {` shown in a comment or a string is left alone.
 	 *
 	 * @source The scheduler file's source
@@ -89,10 +91,13 @@ class {
 		var opening = code.find( "{", afterKeyword )
 		var header = opening ? code.mid( afterKeyword, opening - afterKeyword ) : ""
 		if ( reFindNoCase( "\bextends\s*=", header ) ) {
-			return arguments.source
+			// the header as written: `code` has the inside of the quotes blanked, so the name is read from the original
+			var written = arguments.source.mid( afterKeyword, len( header ) )
+			var named = written.reReplaceNoCase( "(\bextends\s*=\s*)([""'])bxagents\.Scheduler\2", "\1\2app.bxagents.Scheduler\2" )
+			return named == written ? arguments.source : arguments.source.left( afterKeyword - 1 ) & named & arguments.source.mid( afterKeyword + len( written ), len( arguments.source ) )
 		}
 
-		return arguments.source.left( afterKeyword - 1 ) & ' extends="bxagents.Scheduler"' & arguments.source.mid( afterKeyword, len( arguments.source ) )
+		return arguments.source.left( afterKeyword - 1 ) & ' extends="app.bxagents.Scheduler"' & arguments.source.mid( afterKeyword, len( arguments.source ) )
 	}
 
 }

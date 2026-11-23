@@ -10,8 +10,8 @@
 import { defineConfig } from "vite";
 import coldbox from "coldbox-vite-plugin";
 
-// where a built agent serves the module's includes folder (the module is copied to <app>/modules/bxagentsui)
-process.env.ASSET_URL ??= "/modules/bxagentsui/includes";
+// where a built agent serves the module's built assets (copied to <public>/includes/bxagentsui)
+process.env.ASSET_URL ??= "/includes/bxagentsui";
 
 export default defineConfig( {
 	plugins : [
