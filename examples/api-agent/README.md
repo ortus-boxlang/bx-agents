@@ -23,4 +23,4 @@ boxlang client.bxs
 curl -H "x-bxagents-token: $TOKEN_FOR_ADMIN" http://127.0.0.1:8080/__bxagents/openapi
 ```
 
-`client.bxs` is the short tour of `AgentApiClient`. The `mock` model answers with canned text; put a real `provider/model` slug in `Agent.yaml` to talk to a real model.
+`client.bxs` is the short tour of `AgentApiClient`. The `mock` model answers with canned text; put a real `provider/model` slug in `Agent.yml` to talk to a real model.

@@ -1,5 +1,5 @@
 /**
- * The person's own settings for the chat tool, from one file on their machine: `~/.bxagents/bxAgents.yml`
+ * The person's own settings for the chat tool, from one file on their machine: `~/.bxagents/Agent.yml`
  * (`BXAGENTS_USER_CONFIG` names another file, for tests and unusual setups). It belongs to the person, not
  * to any project, so a project can never switch these on for them.
  *
@@ -13,13 +13,13 @@
  *       sql:run: "%"
  *     sources:           # the name of an extension's @name:query source, by id
  *       jira:ticket: issue
- *   tui:                 # how the chat looks and behaves, for every agent (see TuiSettings); an agent's own settings.yml wins over it
+ *   tui:                 # how the chat looks and behaves, for every agent (see TuiSettings); an agent's own Agent.yml wins over it
  *     fullscreen: true
  *   extensions:          # values for extensions, by name, and what to turn off (see ExtensionSettings)
  *     disable: [ roll ]
  *     hello: { greeting: Hi }
  *
- * A missing file means the defaults. A key it does not know is reported (`problems()`), not ignored, so a
+ * A missing file means the defaults. A setting it does not know is reported (`problems()`), not ignored, so a
  * typo does not quietly leave a switch where the person thought it was.
  */
 class {
@@ -33,7 +33,7 @@ class {
 	 */
 	function init( string file = "" ) {
 		var named = len( arguments.file ) ? arguments.file : trim( getSystemSetting( "BXAGENTS_USER_CONFIG", "" ) )
-		variables.file = len( named ) ? named : createObject( "java", "java.lang.System" ).getProperty( "user.home" ) & "/.bxagents/bxAgents.yml"
+		variables.file = len( named ) ? named : createObject( "java", "java.lang.System" ).getProperty( "user.home" ) & "/.bxagents/Agent.yml"
 		variables.loaded = false
 		variables.data = {}
 		variables.problems = []
@@ -153,9 +153,13 @@ class {
 			return
 		}
 		variables.data = parsed
+		// the person's file is an Agent.yml like the author's: it may set any setting (SettingsLayers decides what it means
+		// and whether it is valid), so only a name that is no setting at all is reported here
+		var known = new "models.build.AgentYamlLoader@bxagents"().keys().append( "chat" )
 		for ( var key in parsed ) {
-			if ( ![ "chat", "tui", "extensions" ].contains( lCase( key ) ) ) {
-				variables.problems.append( "#variables.file# has an unknown setting [#key#]; the sections are: chat, tui, extensions" )
+			var base = reReplace( key, "[+\-]$", "" )
+			if ( !known.containsNoCase( base ) ) {
+				variables.problems.append( "#variables.file# has an unknown setting [#key#]. Valid settings: #known.toList( ', ' )#" )
 			}
 		}
 		if ( parsed.keyExists( "tui" ) ) {

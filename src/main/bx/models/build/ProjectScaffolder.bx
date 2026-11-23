@@ -64,14 +64,14 @@ class {
 	}
 
 	/**
-	 * @targetDir Absolute path to the new project directory (created if missing; refuses to run if it already contains an Agent.yaml or Agent.bx)
+	 * @targetDir Absolute path to the new project directory (created if missing; refuses to run if it already contains an Agent.yml or Agent.bx)
 	 * @name The agent's name
 	 * @model The agent's provider/model slug, e.g. "openai/gpt-5"
 	 * @description Optional agent description
 	 * @template One of TEMPLATES - "minimal" (the bare skeleton) unless the caller asks for one of the other 7 starters
-	 * @classBased False (the default) writes an Agent.yaml; true writes a class-based Agent.bx instead, for projects that need code in their agent definition (hooks, dynamic instructions, tools registered in code). Applies to every subagent a template scaffolds too.
+	 * @classBased False (the default) writes an Agent.yml; true writes a class-based Agent.bx instead, for projects that need code in their agent definition (hooks, dynamic instructions, tools registered in code). Applies to every subagent a template scaffolds too.
 	 *
-	 * @features What the user asked the project to be able to do, beyond the template: tools, MCP servers, memory, channels, a deploy target and so on. Written by FeatureWriter; see its docblock for the shape. Needs the default Agent.yaml, so it cannot be combined with `classBased`.
+	 * @features What the user asked the project to be able to do, beyond the template: tools, MCP servers, memory, channels, a deploy target and so on. Written by FeatureWriter; see its docblock for the shape. Needs the default Agent.yml, so it cannot be combined with `classBased`.
 	 *
 	 * @return { projectRoot, agentDefinition, instructions, testsBoxJson, agentSpec, template }
 	 */
@@ -79,7 +79,7 @@ class {
 		if ( arguments.classBased && arguments.features.count() ) {
 			throw(
 				type    = "BxAgents.FeaturesNeedYaml",
-				message = "Tools, MCP servers, memory and the other options the wizard offers are written to Agent.yaml, so they cannot be combined with --class. Use the default Agent.yaml, or add them to your Agent.bx by hand."
+				message = "Tools, MCP servers, memory and the other options the wizard offers are written to Agent.yml, so they cannot be combined with --class. Use the default Agent.yml, or add them to your Agent.bx by hand."
 			)
 		}
 		var featureWriter = new "models.wizard.FeatureWriter@bxagents"()
@@ -96,13 +96,13 @@ class {
 		if ( new "models.build.AgentDefinitionLocator@bxagents"().exists( dir ) ) {
 			throw(
 				type    = "BxAgents.ProjectAlreadyExists",
-				message = "[#dir#] already contains an Agent.yaml or Agent.bx - refusing to overwrite an existing project"
+				message = "[#dir#] already contains an Agent.yml or Agent.bx - refusing to overwrite an existing project"
 			)
 		}
 
 		directoryCreate( path = dir, createPath = true, ignoreExists = true )
 
-		var agentDefinitionPath = dir & ( arguments.classBased ? "/Agent.bx" : "/Agent.yaml" )
+		var agentDefinitionPath = dir & ( arguments.classBased ? "/Agent.bx" : "/Agent.yml" )
 		var instructionsPath = dir & "/instructions.md"
 
 		// "multi-agent" is the one template that changes the ROOT definition
@@ -207,7 +207,7 @@ class {
 					if ( arguments.classBased ) {
 						fileWrite( subAgentDir & "/Agent.bx", renderSubagentBx( subAgentName ) )
 					} else {
-						fileWrite( subAgentDir & "/Agent.yaml", renderSubagentYaml( subAgentName ) )
+						fileWrite( subAgentDir & "/Agent.yml", renderSubagentYaml( subAgentName ) )
 					}
 					fileWrite( subAgentDir & "/instructions.md", renderSubagentInstructions( subAgentName ) )
 				}
@@ -359,7 +359,7 @@ class {
 	}
 
 	/**
-	 * Renders the default Agent.yaml: the same settings an Agent.bx's
+	 * Renders the default Agent.yml: the same settings an Agent.bx's
 	 * `configure()` returns, as plain YAML. The `environments.test` block is the
 	 * YAML spelling of the `test()` override the class form carries, so a fresh
 	 * project's `bxAgents test` needs no API key or network access.
@@ -370,7 +370,7 @@ class {
 	 * @subAgents `subagents/` folder names to declare (the "multi-agent" template only)
 	 * @extraLines Sections the features add (tools, mcpServers, memory ...), already rendered; written after the model and before `environments`
 	 *
-	 * @return The rendered Agent.yaml source
+	 * @return The rendered Agent.yml source
 	 */
 	private string function renderAgentYaml( required string name, required string model, required string description, array subAgents = [], array extraLines = [] ) {
 		var lines = [
@@ -664,7 +664,7 @@ class {
 	/**
 	 * @name The subagent's own name
 	 *
-	 * @return The rendered subagents/<name>/Agent.yaml source
+	 * @return The rendered subagents/<name>/Agent.yml source
 	 */
 	private string function renderSubagentYaml( required string name ) {
 		var lines = [

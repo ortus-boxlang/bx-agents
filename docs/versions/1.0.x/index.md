@@ -57,7 +57,7 @@ Pick the problem, write one file. Most of these have a working example in
 |---|---|---|
 | Answer people where they are | [`gateways/slack.bx`](conventions/gateways/index.md) | A Slack bot over Socket Mode (also Telegram, Discord, Teams, WhatsApp, Twilio SMS, GitHub, Signal and email) |
 | Run a job every morning | [`schedules/Digest.bx`](conventions/schedules.md) | A task with `.everyDayAt()` that calls `run()`, started with the app, no cron daemon |
-| Let other systems call it | [`agentApi` in `Agent.yaml`](guides/agent-api.md) | One HTTP API at `/__bxagents` with an OpenAPI document and a BoxLang client, open on your machine or behind tokens; plus [`gateways/expose.bx`](conventions/gateways/index.md) for a REST path of your choosing, or an MCP server |
+| Let other systems call it | [`agentApi` in `Agent.yml`](guides/agent-api.md) | One HTTP API at `/__bxagents` with an OpenAPI document and a BoxLang client, open on your machine or behind tokens; plus [`gateways/expose.bx`](conventions/gateways/index.md) for a REST path of your choosing, or an MCP server |
 | Keep a human in the loop | a tool that needs approval | The run waits for approve or reject, in the terminal, the [web app](conventions/web-ui.md) or a gateway |
 | Let people schedule their own work | [`routines: enabled: true`](conventions/routines.md) | A person asks, the agent makes a routine, a heartbeat runs it, reports are saved, and a summary can go to a gateway chat |
 | Give each specialist a seat | [`subagents/researcher/`](conventions/subagents.md) | A sub-agent in the web app's Talk to menu and `/agent`, with its own memory |
@@ -73,7 +73,7 @@ Discovery, validation and code generation run **once**, not on every boot. What 
 afterwards is a plain ColdBox app.
 :::
 ::: card title="Folders are the API" icon="phosphor-duotone:tree-structure" href="conventions/agent-yaml.md"
-`Agent.yaml` and `instructions.md` are the only required files. Every other convention folder
+`Agent.yml` and `instructions.md` are the only required files. Every other convention folder
 is optional and only shapes the output if it exists.
 :::
 ::: card title="Tools and skills" icon="phosphor-duotone:wrench" href="conventions/tools.md"
@@ -188,7 +188,7 @@ Your convention tree, and the plain ColdBox application `build` turns it into.
 ```text
 your-agent/
 ├── Application.bx     # your settings and hooks
-├── Agent.yaml         # name, model, description
+├── Agent.yml         # name, model, description
 ├── instructions.md    # the system prompt
 ├── tools/             # @AITool functions
 ├── skills/            # SKILL.md capabilities
@@ -236,17 +236,17 @@ into the request path.
 ::: columns
 ::: column
 !!! tip "Start with one file"
-    Only `Agent.yaml` is required. `instructions.md` is optional - set `instructions` directly
+    Only `Agent.yml` is required. `instructions.md` is optional - set `instructions` directly
     in the YAML, or drop the file in and let the build wire it in. Every other folder only
     affects the generated output if it exists **and** has content in it - so you add
     conventions as you actually need them.
 :::
 ::: column
 !!! faq "YAML by default, a class when you need code"
-    `Agent.yaml` holds the agent's settings - most agents are a few lines of it. When the
+    `Agent.yml` holds the agent's settings - most agents are a few lines of it. When the
     definition needs code (hooks, dynamic instructions, tools registered in code), `Agent.bx`
     extends BX AI's own `AiAgent` directly - the build instantiates your class, so what you
-    write is what runs. See [Agent.yaml](conventions/agent-yaml.md) and
+    write is what runs. See [Agent.yml](conventions/agent-yaml.md) and
     [Agent.bx](conventions/agent-bx.md).
 :::
 :::

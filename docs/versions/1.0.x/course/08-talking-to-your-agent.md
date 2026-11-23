@@ -31,7 +31,7 @@ What you can do in it:
 
 - **Keys.** Enter sends, Alt+Enter adds a line, Up and Down walk your history, Esc stops the
   agent, and a message typed while it works steers it. `?` or `/keys` lists every key, and you
-  can rebind them in `~/.bxagents/bxAgents.yml`.
+  can rebind them in `~/.bxagents/Agent.yml`.
 - **Slash commands.** Type `/` for a menu: `/help`, `/tools`, `/model`, `/info` and more. Every
   command is listed in [Slash commands](../guides/slash-commands.md).
 - **Sessions.** Every chat is a conversation kept in `data/chat.db`, the same list the web chat
@@ -39,7 +39,7 @@ What you can do in it:
   it, `/fork` copies it and carries on in the copy, and `/export` saves it as Markdown or HTML.
   `bxAgents chat --continue` reopens the latest one. The messages themselves last as long as the
   agent's memory does, so use a `file` memory if you want them after a restart.
-- **Notes.** With a `notes:` block in `Agent.yaml`, `/remember <text>` and `/notes` keep short
+- **Notes.** With a `notes:` block in `Agent.yml`, `/remember <text>` and `/notes` keep short
   notes about you that the agent reads at the start of each conversation.
 - **Context.** The hint row under the box shows how much of the model's window is used, such as
   `ctx ~12.4k / 128k 9%`. `/context` shows what it is made of.
@@ -90,7 +90,7 @@ compiled-class cache stays isolated.
 
 Every one of these needs a real model to talk to a real provider - but you don't need
 one yet. (`bxAgents models test` later sends each model one tiny question, so a wrong key or
-model name shows before a chat does.) Add a `test` environment override to `Agent.yaml` (covered fully in
+model name shows before a chat does.) Add a `test` environment override to `Agent.yml` (covered fully in
 [Lesson 19](19-testing-your-agent.md)):
 
 ```yaml

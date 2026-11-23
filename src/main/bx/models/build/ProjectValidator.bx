@@ -68,7 +68,7 @@ class {
 		validateTools( arguments.resolvedConfig, errors, "The project's own agent definition" )
 		validateToolOptions( arguments.resolvedConfig, errors, "The project's own agent definition" )
 		validateModelProvider( arguments.resolvedConfig, arguments.discovery, errors )
-		validateAiSettings( arguments.resolvedConfig, errors, "Agent.yaml" )
+		validateAiSettings( arguments.resolvedConfig, errors, "Agent.yml" )
 		var ignoredModel = new "models.build.AiSettings@bxagents"().ignoredModelNote( arguments.resolvedConfig )
 		if ( len( ignoredModel ) ) {
 			warnings.append( ignoredModel )
@@ -394,7 +394,7 @@ class {
 	 *
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover()
 	 * @errors Accumulator array - append() any validation errors found
-	 * @profileNames The profile names the root Agent.yaml declares, for a `profiles` list a web UI offers
+	 * @profileNames The profile names the root Agent.yml declares, for a `profiles` list a web UI offers
 	 */
 	private void function validateGateways( required struct discovery, required array errors, array profileNames = [], required any types, string apiBase = ApiPath::default() ) {
 		var seenPaths = {}
@@ -815,7 +815,7 @@ class {
 	 *
 	 * @where How to name the owner in a message
 	 * @config The entry or block holding the list
-	 * @profileNames The profile names the root Agent.yaml declares
+	 * @profileNames The profile names the root Agent.yml declares
 	 * @errors Accumulator array - append() any validation errors found
 	 */
 	private void function validateOfferedProfiles( required string where, required struct config, required array profileNames, required array errors ) {
@@ -834,7 +834,7 @@ class {
 			if ( !isSimpleValue( name ) || !len( trim( name ) ) ) {
 				arguments.errors.append( "#arguments.where# 'profiles' holds an entry that is not a profile name" )
 			} else if ( !known.contains( name.lcase() ) ) {
-				arguments.errors.append( "#arguments.where# offers profile [#name#], which Agent.yaml does not declare. Declared: #arguments.profileNames.len() ? arguments.profileNames.toList( ', ' ) : 'none'#" )
+				arguments.errors.append( "#arguments.where# offers profile [#name#], which Agent.yml does not declare. Declared: #arguments.profileNames.len() ? arguments.profileNames.toList( ', ' ) : 'none'#" )
 			} else if ( seen.keyExists( name.lcase() ) ) {
 				arguments.errors.append( "#arguments.where# lists the profile [#name#] more than once" )
 			}
@@ -1422,7 +1422,7 @@ class {
 		var modelValue = arguments.resolvedConfig.model ?: ""
 
 		if ( !len( modelValue ) ) {
-			// A subagent that says nothing uses the default the root Agent.yaml sets
+			// A subagent that says nothing uses the default the root Agent.yml sets
 			if ( arguments.inheritsDefault ) {
 				return
 			}
@@ -1459,10 +1459,10 @@ class {
 	 */
 	private void function validateAiSettings( required struct config, required array errors, required string label, array profileNames = [], boolean isRoot = true ) {
 		if ( !arguments.isRoot ) {
-			// bx-ai's settings are global to the app, so these belong to the root Agent.yaml
+			// bx-ai's settings are global to the app, so these belong to the root Agent.yml
 			for ( var key in [ "params", "options", "providers", "profiles", "defaultProfile", "embeddings", "speech", "transcription", "image", "usage", "tui", "extensions", "data", "volumes" ] ) {
 				if ( arguments.config.keyExists( key ) ) {
-					arguments.errors.append( "#arguments.label#: '#key#' applies to the whole app, so it belongs in the project's own Agent.yaml. A subagent can set model or profile" )
+					arguments.errors.append( "#arguments.label#: '#key#' applies to the whole app, so it belongs in the project's own Agent.yml. A subagent can set model or profile" )
 				}
 			}
 		}

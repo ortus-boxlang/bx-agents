@@ -26,7 +26,7 @@ import java.util.List;
  */
 public interface PromptStyle {
 
-	/** @return the name used in {@code Agent.yaml} and {@code /prompt}, lower case, such as {@code bars} */
+	/** @return the name used in {@code Agent.yml} and {@code /prompt}, lower case, such as {@code bars} */
 	String name();
 
 	/** @return one line saying what it looks like, for the wizard and {@code /prompt} */

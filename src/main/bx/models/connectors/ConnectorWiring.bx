@@ -14,6 +14,28 @@ class {
 
 
 	/**
+	 * The `config` attach() takes, from an agent's settings: its `connectors` key, the names of its own MCP servers (an
+	 * entry of the same name replaces the connector, at run time too) and where the web app is served. One place, so the
+	 * source the build writes and an app that reads its settings when it starts give attach() the same thing.
+	 *
+	 * @settings The agent's settings
+	 * @webPath Where the web app is served, "" for none
+	 *
+	 * @return { connectors?, mcpServers?, webPath? }
+	 */
+	struct function configFrom( required struct settings, string webPath = "" ) {
+		var config = arguments.settings.keyExists( "connectors" ) ? { "connectors" : arguments.settings.connectors } : {}
+		var own = ( arguments.settings.mcpServers ?: [] ).filter( entry => isStruct( entry ) && len( entry.name ?: "" ) ).map( entry => { "name" : toString( entry.name ) } )
+		if ( own.len() ) {
+			config[ "mcpServers" ] = own
+		}
+		if ( len( arguments.webPath ) ) {
+			config[ "webPath" ] = arguments.webPath
+		}
+		return config
+	}
+
+	/**
 	 * The parts, made on first use.
 	 *
 	 * @agent The AiAgent that gets the connectors' tools

@@ -1,5 +1,5 @@
 /**
- * Turns the AI keys of an Agent.yaml into what bx-ai understands, so a project never needs a
+ * Turns the AI keys of an Agent.yml into what bx-ai understands, so a project never needs a
  * boxlang.json to choose a model.
  *
  *   provider, model, params, options   the default provider and model ( `model: openai/gpt-5` still works )
@@ -79,7 +79,7 @@ class {
 
 	/**
 	 * @config A resolved config (root or subagent)
-	 * @label How to name it in a message, for example "Agent.yaml"
+	 * @label How to name it in a message, for example "Agent.yml"
 	 * @profileNames The profile names the whole project declares, for `profile` references
 	 *
 	 * @return [ problems ], empty when the AI keys are fine
@@ -342,40 +342,77 @@ class {
 		if ( !len( c.defaultProfile ?: "" ) || c.defaultProfile == static.DEFAULT_PROFILE || !len( c.model ?: "" ) || len( c.profile ?: "" ) ) {
 			return ""
 		}
-		return "Agent.yaml sets model [#c.model#] and defaultProfile [#c.defaultProfile#]. The default profile is the default model, so the agent uses [#c.defaultProfile#] and the model line is ignored. Remove one of them."
+		return "Agent.yml sets model [#c.model#] and defaultProfile [#c.defaultProfile#]. The default profile is the default model, so the agent uses [#c.defaultProfile#] and the model line is ignored. Remove one of them."
 	}
 
 	/**
-	 * The `aiModel(...)` call for an agent. A profile wins; else a provider/model slug gives the
-	 * call every build has always produced; else the default profile. The project's own agent is the exception: when
-	 * the app has a defaultProfile, that profile is its model, whatever top-level model is written beside it.
+	 * Which model a node's own settings pick: a profile, else its provider/model slug, else nothing. The one place that
+	 * decides, so the source the build writes (expression) and the model the app builds at start (modelFor) never differ.
 	 *
-	 * @config The node's resolved config
+	 * @config The node's settings
+	 *
+	 * @return { kind : "profile", profile } | { kind : "model", provider, model } | { kind : "none" }
+	 */
+	struct function choice( required struct config ) {
+		var c = arguments.config
+		if ( len( c.profile ?: "" ) ) {
+			return { kind : "profile", profile : c.profile }
+		}
+		// the project's own agent, when the app has a default profile: that profile is the default model, so a
+		// top-level model next to it does not decide what the agent uses (see ignoredModelNote)
+		if ( len( c.defaultProfile ?: "" ) && c.defaultProfile != static.DEFAULT_PROFILE ) {
+			return { kind : "profile", profile : c.defaultProfile }
+		}
+		var slug = c.model ?: ""
+		if ( !len( slug ) ) {
+			return { kind : "none" }
+		}
+		var parsed = slug.find( "/" ) ? variables.parser.parse( slug ) : { provider : slug, model : "" }
+		return { kind : "model", provider : parsed.provider, model : parsed.model }
+	}
+
+	/**
+	 * The `aiModel( ... )` call for a node, as BoxLang source.
+	 *
+	 * @config The node's settings
 	 * @literal A function ( struct ) returning the BoxLang literal for a struct
 	 * @bx A function ( text ) escaping text for a BoxLang string
 	 *
 	 * @return BoxLang source, or an empty string when the node says nothing about its model
 	 */
 	string function expression( required struct config, required any literal, required any bx ) {
-		var c = arguments.config
-		if ( len( c.profile ?: "" ) ) {
-			return 'aiModel( profile : "#arguments.bx( c.profile )#" )'
+		var picked = choice( arguments.config )
+		if ( picked.kind == "profile" ) {
+			return 'aiModel( profile : "#arguments.bx( picked.profile )#" )'
 		}
-		// the project's own agent, when the app has a default profile: that profile is the default model, so a
-		// top-level model next to it does not decide what the agent uses (see ignoredModelNote)
-		if ( len( c.defaultProfile ?: "" ) && c.defaultProfile != static.DEFAULT_PROFILE ) {
-			return 'aiModel( profile : "#arguments.bx( c.defaultProfile )#" )'
-		}
-		var slug = c.model ?: ""
-		if ( !len( slug ) ) {
+		if ( picked.kind == "none" ) {
 			return ""
 		}
-		var parsed = slug.find( "/" ) ? variables.parser.parse( slug ) : { provider : slug, model : "" }
-		var parts = [ 'provider : "#arguments.bx( parsed.provider )#"' ]
-		if ( len( parsed.model ) ) {
-			parts.append( 'params : { model : "#arguments.bx( parsed.model )#" }' )
+		var parts = [ 'provider : "#arguments.bx( picked.provider )#"' ]
+		if ( len( picked.model ) ) {
+			parts.append( 'params : { model : "#arguments.bx( picked.model )#" }' )
 		}
 		return "aiModel( " & parts.toList( ", " ) & " )"
+	}
+
+	/**
+	 * The same model as expression() writes, built now: for an app that reads its settings when it starts.
+	 *
+	 * @config The node's settings
+	 *
+	 * @return The aiModel, or an empty string when the node says nothing about its model
+	 */
+	any function modelFor( required struct config ) {
+		var picked = choice( arguments.config )
+		if ( picked.kind == "profile" ) {
+			return aiModel( profile : picked.profile )
+		}
+		if ( picked.kind == "none" ) {
+			return ""
+		}
+		return len( picked.model )
+			? aiModel( provider : picked.provider, params : { model : picked.model } )
+			: aiModel( provider : picked.provider )
 	}
 
 }

@@ -1,5 +1,9 @@
 /**
- * /settings: how the terminal chat looks and behaves (see TuiSettings in the tui package). With nothing after it, it opens the settings
+ * /settings: how the terminal chat looks and behaves (see TuiSettings in the tui package), and any other setting of the agent.
+ * A name that is not one of the chat's own settings is a setting of the agent's Agent.yml, `/settings model ollama/qwen3`, and
+ * it is written to the agent's own file, or with --global to the person's file for every agent (see SettingsFileEditor). It
+ * applies the next time the agent starts. A name with a marker (`tools+`) or a block (`params.temperature`) is always one of those.
+ * With nothing after it, it opens the settings
  * panel. `/settings header` shows one setting, `/settings header compact` changes it and saves it for this agent in its data home, and
  * `/settings header compact --global` saves it for every agent in the person's own file. `/settings header reset` takes the agent's own
  * value out, so the global one, then the project's, then the default applies.
@@ -38,6 +42,9 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 		}
 		var terminal = arguments.context.terminal()
 		var found = terminal.settingsTable().filter( s => s.name == words[ 1 ] )
+		if ( !found.len() ) {
+			return anySetting( arguments.context, words[ 1 ], trim( replace( arguments.args, "--global", "", "all" ) ), scope )
+		}
 		if ( words.len() == 1 ) {
 			if ( !found.len() ) {
 				return reply.warn( "There is no setting [#words[ 1 ]#]. Type /settings to see them." )
@@ -50,6 +57,37 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 				return reply.ok( terminal.resetSetting( words[ 1 ], scope ) )
 			}
 			return reply.ok( terminal.changeSetting( words[ 1 ], words[ 2 ], scope ) )
+		} catch ( any e ) {
+			return reply.warn( e.message )
+		}
+	}
+
+	/**
+	 * Any setting of an Agent.yml, written to the agent's own file or the person's.
+	 *
+	 * @name The setting, `model`, `tools+`, `params.temperature`
+	 * @text The arguments without --global: the name and then the value or reset
+	 * @scope "agent" or "global"
+	 */
+	private any function anySetting( required any context, required string name, required string text, required string scope ) {
+		var reply = arguments.context.reply()
+		var file = arguments.context.terminal().settingsFile( arguments.scope )
+		if ( !len( file ) ) {
+			return reply.warn( "There is no #arguments.scope == "global" ? "file for every agent" : "project for this agent to keep its own file in"# to save to." )
+		}
+		var value = trim( arguments.text.mid( len( arguments.name ) + 1, len( arguments.text ) ) )
+		var editor = new "models.settings.SettingsFileEditor@bxagents"()
+		try {
+			if ( !len( value ) ) {
+				var current = editor.valueOf( file, arguments.name )
+				return len( current )
+					? reply.text( "#arguments.name# is #current# in #file#." )
+					: reply.warn( "There is no setting [#arguments.name#] in the chat, and #file# does not set it. Type /settings to see the chat's own settings." )
+			}
+			if ( lCase( value ) == "reset" ) {
+				return reply.ok( editor.reset( file, arguments.name ) )
+			}
+			return reply.ok( editor.set( file, arguments.name, value ) )
 		} catch ( any e ) {
 			return reply.warn( e.message )
 		}

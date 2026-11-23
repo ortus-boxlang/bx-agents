@@ -48,7 +48,7 @@ final class KeysPanel {
 	 * @param keys    The keys, as people read them
 	 * @param does    What they do
 	 * @param was     What the keys were before the person changed them, empty when they were not changed
-	 * @param id      The name to use for the action under {@code chat: keys:} in {@code bxAgents.yml}, empty for what cannot be changed
+	 * @param id      The name to use for the action under {@code chat: keys:} in {@code Agent.yml}, empty for what cannot be changed
 	 */
 	record Entry( String section, String keys, String does, String was, String id ) {
 	}
@@ -105,7 +105,7 @@ final class KeysPanel {
 		add( "This panel", "F1, Ctrl+/, ?", "Open it. ? works on an empty box, the others while you type" );
 		add( "This panel", "Type", "Narrow the list; Esc clears the filter, then closes" );
 		add( "This panel", "Up, Down, PgUp, PgDn", "Scroll" );
-		add( "This panel", "bxAgents.yml", "To change a key, list its name (the grey word) under chat: keys: in ~/.bxagents/bxAgents.yml" );
+		add( "This panel", "Agent.yml", "To change a key, list its name (the grey word) under chat: keys: in ~/.bxagents/Agent.yml" );
 	}
 
 	/**

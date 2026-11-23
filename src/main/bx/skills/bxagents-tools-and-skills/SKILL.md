@@ -31,7 +31,7 @@ class {
 
 ### Tools from modules
 
-Tools that modules register (bx-ai built-ins, `bx-playwright`) are not attached automatically. Name them in `Agent.yaml`:
+Tools that modules register (bx-ai built-ins, `bx-playwright`) are not attached automatically. Name them in `Agent.yml`:
 
 ```yaml
 tools:

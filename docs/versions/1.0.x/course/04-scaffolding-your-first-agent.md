@@ -20,7 +20,7 @@ parsed in [Lesson 5](05-agent-bx.md)). Pass it for a script-friendly run: withou
 `--model`, at a terminal, `new` asks you questions instead (see [`new` wizard](../guides/new-wizard.md)).
 `--name` and `--description` are optional;
 `--name` defaults to the target directory's own name. `new` refuses to run if the
-target already contains an `Agent.yaml` or `Agent.bx`.
+target already contains an `Agent.yml` or `Agent.bx`.
 
 ## The wizard
 
@@ -37,7 +37,7 @@ repeat it. Pass `--model` (or `--no-wizard`) to skip the questions. See the
 
 ```text
 my-agent/
-├── Agent.yaml
+├── Agent.yml
 ├── box.json
 ├── instructions.md
 ├── tools/
@@ -63,7 +63,7 @@ Every convention folder is created **empty**. You add files to the ones your age
 actually needs and leave the rest alone - an empty `tools/` folder has zero effect on
 the generated app.
 
-## `Agent.yaml` looks like this
+## `Agent.yml` looks like this
 
 (Pass `--description` and `new` adds a `description:` line.)
 
@@ -106,4 +106,4 @@ files by hand: `bxAgents add tool`, `add skill`, `add subagent`, `add gateway`, 
 the other `add` kinds ask a few questions and write the files for you (`--dry-run` shows them
 first). The next four lessons walk through what's actually required to run it.
 
-Next: [Lesson 5 - The Agent Definition: Agent.yaml](05-agent-bx.md)
+Next: [Lesson 5 - The Agent Definition: Agent.yml](05-agent-bx.md)

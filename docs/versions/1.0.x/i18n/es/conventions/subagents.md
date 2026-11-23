@@ -8,22 +8,22 @@ tags: [conventions, subagents]
 
 # subagents/
 
-`subagents/` contiene agentes anidados, cada uno un proyecto BxAgents ordinario propio - un `Agent.yaml` + `instructions.md` (y opcionalmente sus propios `tools/`, `skills/`, etc.). El `tools/` de un subagente es solo suyo y su lista `tools:` es propia; nada se hereda ni se comparte con el padre:
+`subagents/` contiene agentes anidados, cada uno un proyecto BxAgents ordinario propio - un `Agent.yml` + `instructions.md` (y opcionalmente sus propios `tools/`, `skills/`, etc.). El `tools/` de un subagente es solo suyo y su lista `tools:` es propia; nada se hereda ni se comparte con el padre:
 
 ```text
 my-agent/
-├── Agent.yaml            # subAgents: [ researcher ]
+├── Agent.yml            # subAgents: [ researcher ]
 ├── instructions.md
 └── subagents/
     └── researcher/
-        ├── Agent.yaml
+        ├── Agent.yml
         └── instructions.md
 ```
 
-Un subagente se conecta a su padre por nombre, declarado en la lista `subAgents` del `Agent.yaml` del padre - el nombre de la CARPETA `subagents/` a conectar en tiempo de build:
+Un subagente se conecta a su padre por nombre, declarado en la lista `subAgents` del `Agent.yml` del padre - el nombre de la CARPETA `subagents/` a conectar en tiempo de build:
 
 ```yaml
-# Agent.yaml
+# Agent.yml
 name: my-agent
 model: openai/gpt-5
 subAgents:
@@ -84,10 +84,10 @@ Los subagentes se construyen **de hojas primero** (de abajo hacia arriba): si `A
 
 ## Validación
 
-- Un nombre de subagente en `subAgents` que no corresponda a una carpeta `subagents/{name}/` real (con un `Agent.yaml` o `Agent.bx`) falla la validación con un error claro de "references unknown subagent [...]" - esto aplica a la lista `subAgents` de **cada** nodo, incluyendo la propia definición del proyecto raíz, no solo los subagentes anidados.
+- Un nombre de subagente en `subAgents` que no corresponda a una carpeta `subagents/{name}/` real (con un `Agent.yml` o `Agent.bx`) falla la validación con un error claro de "references unknown subagent [...]" - esto aplica a la lista `subAgents` de **cada** nodo, incluyendo la propia definición del proyecto raíz, no solo los subagentes anidados.
 - **Las referencias circulares** (`A` → `B` → `A`) se rechazan en tiempo de validación, con la ruta completa del ciclo reportada (por ejemplo, `A -> B -> A`), antes de que ocurra cualquier generación de código.
 - Una forma de "diamante" - dos subagentes ambos dependiendo del mismo descendiente compartido - no es un ciclo y se construye bien; solo se rechazan los ciclos genuinos.
-- Un `Agent.yaml`/`Agent.bx` faltante dentro de una carpeta `subagents/*` descubierta se reporta como su propio error de validación, y también una carpeta que contiene ambos (`BxAgents.AmbiguousAgentDefinition`) - una carpeta contiene una sola definición.
+- Un `Agent.yml`/`Agent.bx` faltante dentro de una carpeta `subagents/*` descubierta se reporta como su propio error de validación, y también una carpeta que contiene ambos (`BxAgents.AmbiguousAgentDefinition`) - una carpeta contiene una sola definición.
 - El propio `name` DECLARADO de cada nodo (raíz + la definición propia de cada subagente) debe ser único en todo el proyecto - ver abajo.
 
 ## Retrieving an agent from `schedules/Scheduler.bx`

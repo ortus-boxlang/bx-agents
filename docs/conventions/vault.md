@@ -44,7 +44,7 @@ A secret has a **name** (letters, digits and underscores), an optional **descrip
 
 ## Using a secret
 
-**In `Agent.yaml`**, write `${vault.NAME}` wherever `${env.NAME}` works, such as an MCP server's token or headers:
+**In `Agent.yml`**, write `${vault.NAME}` wherever `${env.NAME}` works, such as an MCP server's token or headers:
 
 ```yaml
 mcpServers:
@@ -106,5 +106,5 @@ Every add, change, removal and use is written to an audit table (`bxAgents vault
 ## Limits
 
 - A static key or token only. OAuth sign-in and token refresh are not part of the vault yet.
-- Secrets used in `Agent.yaml` are read when the app starts: change one and restart.
+- Secrets used in `Agent.yml` are read when the app starts: change one and restart.
 - A deployed server should have an [access token or sign-in](agent-bx.md#access-tokens-for-a-deployed-agent): on an open server anyone who can reach the page is the admin.

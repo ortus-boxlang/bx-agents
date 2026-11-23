@@ -96,6 +96,9 @@ class {
 		variables.projectVolumes = isStruct( arguments.resolvedConfig.volumes ?: "" ) ? arguments.resolvedConfig.volumes : {}
 		variables.projectAgentName = arguments.resolvedConfig.name ?: ""
 		variables.projectDataHome = ( isStruct( arguments.resolvedConfig.data ?: "" ) ? arguments.resolvedConfig.data : {} ).home ?: ""
+		// A project built with the person's files in mind (the real build) reads the root agent's settings when the app
+		// starts, so a person's Agent.yml can change them; a config handed in without that keeps every value as a literal.
+		variables.readsSettingsAtStart = isStruct( arguments.resolvedConfig.personLayers ?: "" )
 
 		var applicationPath  = appDir & "/Application.bx"
 		var baseApplicationPath = appDir & "/bxagents/Application.bx"
@@ -193,6 +196,26 @@ class {
 		)
 		fileWrite( coldboxPath, renderColdboxConfig( appName, arguments.hasEmailGateway, database.datasource ?: "" ) )
 		fileWrite( appDir & "/config/bxai-settings.json", jsonSerialize( bxaiSettings( arguments.resolvedConfig ) ) )
+		// what the app needs to merge the person's files over the author's settings when it starts (models.runtime.RuntimeSettings)
+		if ( isStruct( arguments.resolvedConfig.personLayers ?: "" ) ) {
+			// An instructions.md beside the agent is the author's instructions, so a person's `instructions:` replaces it and
+			// `instructions+:` adds to it; both need its text in the settings the app starts from.
+			var authorSettings = duplicate( arguments.resolvedConfig.personLayers.author )
+			var bakedSettings = duplicate( arguments.resolvedConfig )
+			if ( fileExists( arguments.projectRoot & "/instructions.md" ) ) {
+				authorSettings[ "instructions" ] = fileRead( arguments.projectRoot & "/instructions.md", "UTF-8" )
+				bakedSettings[ "instructions" ] = authorSettings.instructions
+			}
+			fileWrite(
+				appDir & "/config/agent-settings.json",
+				new "models.runtime.RuntimeSettings@bxagents"().bake(
+					authorSettings,
+					bakedSettings,
+					resolveAgentName( arguments.resolvedConfig ),
+					( isStruct( arguments.resolvedConfig.data ?: "" ) ? arguments.resolvedConfig.data : {} ).home ?: ""
+				)
+			)
+		}
 		fileWrite( wireboxPath, renderWireBox( agentFactory.nodes ) )
 		fileWrite( agentFactoryPath, agentFactory.source )
 
@@ -237,7 +260,7 @@ class {
 	 * @datasourceName Non-empty only when the web UI's chat store needs one (see `generate()`'s `webUiDatabase`) - registers it as a NAMED SQLite `this.datasources[...]` entry AND as `this.datasource` (the app default), so an unqualified query always resolves rather than failing with "No default datasource defined"
 	 * @databasePath Only used alongside `datasourceName` - the SQLite file path, relative to the app folder, for that datasource's `"database"` key
 	 * @agentName The agent's name, which names the conventional data home (~/.bxagents/<name>)
-	 * @dataHome `data.home` from Agent.yaml, stamped into the app so the data home is the same one `serve` and `chat` use. Blank when it is not set
+	 * @dataHome `data.home` from Agent.yml, stamped into the app so the data home is the same one `serve` and `chat` use. Blank when it is not set
 	 * @schedulerClasses Class paths of the project's schedulers, registered through `this.schedulers` so they start and stop with the app
 	 *
 	 * @return The rendered bxagents/Application.bx source: the base class the app's own Application.bx extends
@@ -386,7 +409,7 @@ class {
 		lines.append( "	}" )
 		lines.append( "" )
 		lines.append( "	/**" )
-		lines.append( "	 * Where the app keeps everything: BXAGENTS_HOME, else `data.home` from Agent.yaml, else ~/.bxagents/<agent name>." )
+		lines.append( "	 * Where the app keeps everything: BXAGENTS_HOME, else `data.home` from Agent.yml, else ~/.bxagents/<agent name>." )
 		lines.append( "	 */" )
 		lines.append( "	private any function dataHome() {" )
 		lines.append( '		return new "models.data.DataHome@bxagents"( projectRoot : expandPath( "/" ), configured : "#Strings::bxLiteral( arguments.dataHome )#", agentName : "#Strings::bxLiteral( arguments.agentName )#" )' )
@@ -806,7 +829,7 @@ class {
 			"	function buildAgent() {",
 			"		// bx-ai's settings (default model, profiles, capability defaults) have to be in place before an agent is built, whoever builds it: chat, invoke, a test or ColdBox",
 			'		new "models.runtime.ModuleSettings@bxagents"().apply( "bxai", resolveAppPath( "../config/bxai-settings.json", "#Strings::bxLiteral( Strings::normalizePath( arguments.appDir ) & "/config/bxai-settings.json" )#" ) )',
-			'		// usage recording is off unless Agent.yaml says usage: true',
+			'		// usage recording is off unless Agent.yml says usage: true',
 			'		new "models.usage.UsageRecorder@bxagents"().start()',
 			body,
 			"",
@@ -814,28 +837,41 @@ class {
 			"	}",
 			""
 		]
+		if ( variables.readsSettingsAtStart ) {
+			// the Agent.yml files of the person who runs this app, as they are now, over what was baked: what bx-ai reads
+			// applies here, what only a build can change is reported, and the root agent below is built from the result
+			lines.insertAt(
+				lines.findNoCase( "		// usage recording is off unless Agent.yml says usage: true" ),
+				'		var rootSettings = new "models.runtime.RuntimeSettings@bxagents"().startAndRequire( resolveAppPath( "../config/agent-settings.json", "#Strings::bxLiteral( Strings::normalizePath( arguments.appDir ) & "/config/agent-settings.json" )#" ) ).config'
+			)
+		}
 		// the skills that ship with the app (its skills/ folder) join bx-ai's global skills first: bx-ai reads its skills
 		// folder when the runtime starts, before this app's settings are applied, so it never sees them
 		lines.insertAt(
-			lines.findNoCase( "		// usage recording is off unless Agent.yaml says usage: true" ),
+			lines.findNoCase( "		// usage recording is off unless Agent.yml says usage: true" ),
 			'		new "models.skills.SkillWiring@bxagents"().loadShipped( resolveAppPath( "../skills", "#Strings::bxLiteral( Strings::normalizePath( arguments.appDir ) & "/skills" )#" ) )'
 		)
 		// the skills project extensions carry join bx-ai's global skills, before any agent is built
 		var skillsLine = extensionSkillsLine( arguments.projectRoot, arguments.resolvedConfig )
 		if ( len( skillsLine ) ) {
-			lines.insertAt( lines.findNoCase( "		// usage recording is off unless Agent.yaml says usage: true" ), skillsLine )
+			lines.insertAt( lines.findNoCase( "		// usage recording is off unless Agent.yml says usage: true" ), skillsLine )
 		}
 		// then the skills bxAgents itself ships, available on request and not in the context: after the project's and the
 		// extensions' so theirs win a name, before the agent's own so it cannot take one. skills.builtin: false leaves them out.
-		if ( new "models.skills.SkillWiring@bxagents"().wantsBuiltin( isStruct( arguments.resolvedConfig.skills ?: "" ) ? arguments.resolvedConfig.skills : {} ) ) {
+		if ( variables.readsSettingsAtStart ) {
 			lines.insertAt(
-				lines.findNoCase( "		// usage recording is off unless Agent.yaml says usage: true" ),
+				lines.findNoCase( "		// usage recording is off unless Agent.yml says usage: true" ),
+				'		if ( new "models.skills.SkillWiring@bxagents"().wantsBuiltin( isStruct( rootSettings.skills ?: "" ) ? rootSettings.skills : {} ) ) { new "models.skills.SkillWiring@bxagents"().loadBuiltin() }'
+			)
+		} else if ( new "models.skills.SkillWiring@bxagents"().wantsBuiltin( isStruct( arguments.resolvedConfig.skills ?: "" ) ? arguments.resolvedConfig.skills : {} ) ) {
+			lines.insertAt(
+				lines.findNoCase( "		// usage recording is off unless Agent.yml says usage: true" ),
 				'		new "models.skills.SkillWiring@bxagents"().loadBuiltin()'
 			)
 		}
 		// then the skills the agent saved in its data home, after the project's and the extensions' so theirs win
 		lines.insertAt(
-			lines.findNoCase( "		// usage recording is off unless Agent.yaml says usage: true" ),
+			lines.findNoCase( "		// usage recording is off unless Agent.yml says usage: true" ),
 			'		new "models.skills.SkillWiring@bxagents"().load( "#Strings::bxLiteral( variables.projectDataHome )#", "#Strings::bxLiteral( resolveAgentName( arguments.resolvedConfig ) )#" )'
 		)
 
@@ -977,14 +1013,19 @@ class {
 		}
 
 		statements.append( renderAgentStatement( arguments.varName, arguments.nodePath, arguments.resolvedConfig, subAgentVarNames, arguments.discovery, thisName, arguments.defaultMemory, arguments.appDir, arguments.nodeRelativePath ) )
-		if ( structKeyExists( arguments.resolvedConfig, "notes" ) && isStruct( arguments.resolvedConfig.notes ) ) {
+		// the root agent of a built app reads these from the settings the app started with, so a person's Agent.yml can turn them on, off or change them
+		var rootAtStart = variables.readsSettingsAtStart && arguments.accessorPath.isEmpty()
+		if ( rootAtStart ) {
+			statements.append( 'if ( isStruct( rootSettings.notes ?: "" ) ) { new "models.notes.NotesWiring@bxagents"().attach( #arguments.varName#, rootSettings.notes, "#Strings::bxLiteral( thisName )#" ) }' )
+		} else if ( structKeyExists( arguments.resolvedConfig, "notes" ) && isStruct( arguments.resolvedConfig.notes ) ) {
 			// the notes this agent keeps: a prompt block and the note_remember and note_forget tools
 			statements.append( 'new "models.notes.NotesWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.notes )#, "#Strings::bxLiteral( thisName )#" )' )
 		}
 
 		if ( arguments.accessorPath.isEmpty() ) {
 			// the root agent may save skills of its own (subagents never do): the skill_save tool, unless skills.agentCanSave is false
-			statements.append( 'new "models.skills.SkillWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( isStruct( arguments.resolvedConfig.skills ?: "" ) ? arguments.resolvedConfig.skills : {} )#, "#Strings::bxLiteral( thisName )#", "#Strings::bxLiteral( variables.projectDataHome )#" )' )
+			var skillsArgument = rootAtStart ? 'isStruct( rootSettings.skills ?: "" ) ? rootSettings.skills : {}' : renderLiteral( isStruct( arguments.resolvedConfig.skills ?: "" ) ? arguments.resolvedConfig.skills : {} )
+			statements.append( 'new "models.skills.SkillWiring@bxagents"().attach( #arguments.varName#, #skillsArgument#, "#Strings::bxLiteral( thisName )#", "#Strings::bxLiteral( variables.projectDataHome )#" )' )
 		}
 
 		if ( arguments.accessorPath.isEmpty() && isStruct( arguments.resolvedConfig.routines ?: "" ) ) {
@@ -992,9 +1033,19 @@ class {
 			statements.append( 'new "models.routines.RoutineWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.routines )#, "#Strings::bxLiteral( thisName )#", "#Strings::bxLiteral( variables.projectDataHome )#" )' )
 		}
 
-		if ( structKeyExists( arguments.resolvedConfig, "vault" ) && isStruct( arguments.resolvedConfig.vault ) ) {
+		if ( rootAtStart ) {
+			statements.append( 'if ( isStruct( rootSettings.vault ?: "" ) ) { new "models.vault.VaultWiring@bxagents"().attach( #arguments.varName#, rootSettings.vault, "#Strings::bxLiteral( thisName )#" ) }' )
+		} else if ( structKeyExists( arguments.resolvedConfig, "vault" ) && isStruct( arguments.resolvedConfig.vault ) ) {
 			// the vault tools: vault_list and vault_request (never a value)
 			statements.append( 'new "models.vault.VaultWiring@bxagents"().attach( #arguments.varName#, #renderLiteral( arguments.resolvedConfig.vault )#, "#Strings::bxLiteral( thisName )#" )' )
+		}
+
+		if ( rootAtStart ) {
+			// services that ask each person to sign in, and the connectors: read from the settings the app started with
+			statements.append( 'var #arguments.varName#SignIn = new "models.connect.ConnectionWiring@bxagents"().signInEntries( rootSettings.mcpServers ?: [] )' )
+			statements.append( 'if ( #arguments.varName#SignIn.len() ) { new "models.connect.ConnectionWiring@bxagents"().attach( #arguments.varName#, #arguments.varName#SignIn ) }' )
+			statements.append( 'new "models.connectors.ConnectorWiring@bxagents"().attach( #arguments.varName#, new "models.connectors.ConnectorWiring@bxagents"().configFrom( rootSettings, "#Strings::bxLiteral( webUiPathOf( arguments.discovery ) )#" ) )' )
+			return { statements : statements, nodes : nodes }
 		}
 
 		var signInServers = []
@@ -1091,13 +1142,10 @@ class {
 	 * @return A BoxLang `aiMemory( memory: "type", config: {...} )` expression string
 	 */
 	private string function renderCheckpointerExpression( required struct resolvedConfig ) {
-		var checkpointer = arguments.resolvedConfig.checkpointer ?: { type: "cache" }
-		var type = trim( checkpointer.type ?: "cache" )
-		var rest = duplicate( checkpointer )
-		rest.delete( "type" )
+		var picked = new "models.build.MemoryChoice@bxagents"().checkpointer( arguments.resolvedConfig.checkpointer ?: { type: "cache" } )
 		// aiMemory()'s first param is named `memory`, not `type` - all-named-args here
 		// because BoxLang doesn't allow mixing positional and named arguments in one call.
-		return 'aiMemory( memory: "#Strings::bxLiteral( type )#", config: #renderLiteral( rest )# )'
+		return 'aiMemory( memory: "#Strings::bxLiteral( picked.type )#", config: #renderLiteral( picked.config )# )'
 	}
 
 	/**
@@ -1123,33 +1171,14 @@ class {
 	 * @return A BoxLang `aiMemory( ... )` or MemoryWiring expression string, or "" to omit the argument entirely
 	 */
 	private string function renderMemoryExpression( required struct resolvedConfig, string defaultMemory = "" ) {
-		var declared = arguments.resolvedConfig.memory ?: {}
-
-		if ( isSimpleValue( declared ) && len( trim( declared ) ) ) {
-			declared = { type: trim( declared ) }
-		}
-
-		var type = isStruct( declared ) ? trim( declared.type ?: "" ) : ""
-		if ( !len( type ) ) {
-			type = arguments.defaultMemory
-		}
-		if ( !len( type ) ) {
+		var picked = new "models.build.MemoryChoice@bxagents"().memory( arguments.resolvedConfig.memory ?: {}, arguments.defaultMemory, arguments.resolvedConfig.name ?: "" )
+		if ( picked.kind == "wiring" ) {
 			// No memory named anywhere: the agent remembers its conversations in the chat database, one row per
 			// person and conversation under its own name (see MemoryWiring). `maxMessages` and `keepRecent` tune it.
-			var settings = isStruct( declared ) ? duplicate( declared ) : {}
-			settings.delete( "key" )
-			return 'new "models.memory.MemoryWiring@bxagents"().memory( "#Strings::bxLiteral( arguments.resolvedConfig.name ?: "" )#", #renderLiteral( settings )# )'
+			return 'new "models.memory.MemoryWiring@bxagents"().memory( "#Strings::bxLiteral( arguments.resolvedConfig.name ?: "" )#", #renderLiteral( picked.settings )# )'
 		}
-
-		var rest = isStruct( declared ) ? duplicate( declared ) : {}
-		rest.delete( "type" )
-		// A memory that outlives the process names its storage after its key, and bx-ai makes a new random key every
-		// time one is built. Without a stable one, a file memory is never found again on the next start, and
-		// `sessions export`, `fork` and a resumed chat see nothing. The agent's own name is the default.
-		var key = trim( rest.key ?: ( arguments.resolvedConfig.name ?: "" ) )
-		rest.delete( "key" )
-		var keyArgument = len( key ) ? ' key: "#Strings::bxLiteral( key )#",' : ""
-		return 'aiMemory( memory: "#Strings::bxLiteral( type )#",#keyArgument# config: #renderLiteral( rest )# )'
+		var keyArgument = len( picked.key ) ? ' key: "#Strings::bxLiteral( picked.key )#",' : ""
+		return 'aiMemory( memory: "#Strings::bxLiteral( picked.type )#",#keyArgument# config: #renderLiteral( picked.config )# )'
 	}
 
 	/**
@@ -1216,7 +1245,7 @@ class {
 		}
 
 		// An instructions.md beside the agent wins; `instructions:` inline in an
-		// Agent.yaml is the fallback, so the file stays the more deliberate choice.
+		// Agent.yml is the fallback, so the file stays the more deliberate choice.
 		var instructionsPath = arguments.nodePath & "/instructions.md"
 		var inlineInstructions = arguments.resolvedConfig.instructions ?: ""
 		var instructionsExpression = ""
@@ -1228,15 +1257,19 @@ class {
 		} else {
 			throw(
 				type    = "BxAgents.MissingInstructions",
-				message = "No instructions.md found at [#instructionsPath#] (and no `instructions:` in the agent's Agent.yaml)"
+				message = "No instructions.md found at [#instructionsPath#] (and no `instructions:` in the agent's Agent.yml)"
 			)
 		}
 
 		var description = arguments.resolvedConfig.description ?: ""
 
+		// The root agent of a built app reads these from the settings the app resolved when it started (rootSettings, set at
+		// the top of buildAgent), so a person's Agent.yml can change them. Everything else keeps its literal.
+		var atStart = variables.readsSettingsAtStart && !len( arguments.nodeRelativePath )
+
 		// A profile, else the provider/model written in this node's own config, else what the
-		// root Agent.yaml set as the default (a subagent that says nothing inherits it)
-		var modelExpression = renderModelExpression( arguments.resolvedConfig )
+		// root Agent.yml set as the default (a subagent that says nothing inherits it)
+		var modelExpression = atStart ? "agentModel" : renderModelExpression( arguments.resolvedConfig )
 		if ( !len( modelExpression ) ) {
 			modelExpression = "aiModel()"
 		}
@@ -1245,16 +1278,25 @@ class {
 		var memoryExpression = renderMemoryExpression( arguments.resolvedConfig, arguments.defaultMemory )
 
 		var lines = renderToolsLines( arguments.varName, arguments.nodePath, arguments.resolvedConfig, arguments.name, arguments.appDir, arguments.nodeRelativePath )
+		if ( atStart ) {
+			lines.append( 'var agentModel = new "models.build.AiSettings@bxagents"().modelFor( rootSettings )' )
+			lines.append( 'if ( isSimpleValue( agentModel ) ) { agentModel = aiModel() }' )
+		}
 		lines.append( "var #arguments.varName# = aiAgent(" )
 		lines.append( '	name : "#Strings::bxLiteral( arguments.name )#",' )
-		lines.append( '	description : "#Strings::bxLiteral( description )#",' )
-		lines.append( '	instructions : #instructionsExpression#,' )
+		lines.append( atStart ? '	description : rootSettings.description ?: "",' : '	description : "#Strings::bxLiteral( description )#",' )
+		lines.append( atStart ? '	instructions : rootSettings.instructions ?: "",' : '	instructions : #instructionsExpression#,' )
 		lines.append( '	model : #modelExpression#,' )
 		lines.append( "	tools : #arguments.varName#Tools," )
-		if ( len( memoryExpression ) ) {
-			lines.append( "	memory : #memoryExpression#," )
+		if ( atStart ) {
+			lines.append( '	memory : new "models.build.MemoryChoice@bxagents"().memoryFor( rootSettings.memory ?: {}, "#Strings::bxLiteral( arguments.defaultMemory )#", "#Strings::bxLiteral( arguments.name )#" ),' )
+			lines.append( '	checkpointer : new "models.build.MemoryChoice@bxagents"().checkpointerFor( rootSettings.checkpointer ?: {} ),' )
+		} else {
+			if ( len( memoryExpression ) ) {
+				lines.append( "	memory : #memoryExpression#," )
+			}
+			lines.append( "	checkpointer : #checkpointerExpression#," )
 		}
-		lines.append( "	checkpointer : #checkpointerExpression#," )
 
 		if ( arguments.subAgentVarNames.len() ) {
 			lines.append( "	subAgents : [ #arguments.subAgentVarNames.toList( ", " )# ]," )
@@ -1262,8 +1304,12 @@ class {
 			lines.append( "	subAgents : []," )
 		}
 
-		var mcpServers = renderMcpServersExpression( arguments.resolvedConfig, arguments.name )
-		lines.append( "	mcpServers : #len( mcpServers ) ? mcpServers : '[]'#" )
+		if ( atStart ) {
+			lines.append( '	mcpServers : new "models.build.McpServerResolver@bxagents"().resolvedList( rootSettings.mcpServers ?: [], "mcpServers of #Strings::bxLiteral( arguments.name )#" )' )
+		} else {
+			var mcpServers = renderMcpServersExpression( arguments.resolvedConfig, arguments.name )
+			lines.append( "	mcpServers : #len( mcpServers ) ? mcpServers : '[]'#" )
+		}
 
 		lines.append( ")" )
 
@@ -1417,45 +1463,13 @@ class {
 	}
 
 	/**
-	 * Gives an agent that lists bx-ai's file tools the project's volumes to use them over, unless it names folders of
-	 * its own with `toolOptions.bxai.allowedPaths`. The tools are then fenced into volumes and speak in volume names.
+	 * @toolOptions The node's `toolOptions`
+	 * @declared The `tools:` entries
 	 *
-	 * @toolOptions The agent's own `toolOptions`
-	 * @declared The agent's `tools:` entries
-	 *
-	 * @return The `toolOptions` to generate, with `bxai.volumes` and `bxai.dataHome` added where they apply
+	 * @return The options with the project's volumes added for bx-ai's file tools (see ToolOptions)
 	 */
 	private struct function withVolumes( required any toolOptions, required any declared ) {
-		var options = isStruct( arguments.toolOptions ) ? arguments.toolOptions : {}
-		if ( !isArray( arguments.declared ) || !listsFileTools( arguments.declared ) ) {
-			return options
-		}
-		if ( isStruct( options.bxai ?: "" ) && options.bxai.keyExists( "allowedPaths" ) ) {
-			return options
-		}
-		var merged = duplicate( options )
-		merged.bxai = isStruct( merged.bxai ?: "" ) ? merged.bxai : {}
-		merged.bxai.volumes = variables.projectVolumes
-		if ( len( variables.projectDataHome ) ) {
-			merged.bxai.dataHome = variables.projectDataHome
-		}
-		merged.bxai.agentName = variables.projectAgentName
-		return merged
-	}
-
-	/**
-	 * @declared The `tools:` entries, each item@module
-	 *
-	 * @return True when one of them is a bx-ai file tool, or all of bx-ai's tools
-	 */
-	private boolean function listsFileTools( required array declared ) {
-		var fileTools = WizardCatalog::FILE_TOOLS_READ.duplicate().append( WizardCatalog::FILE_TOOLS_WRITE, true ).map( function( tool ) {
-			return tool.name
-		} )
-		return arguments.declared.some( function( entry ) {
-			var parts = toString( entry ).listToArray( "@" )
-			return parts.len() == 2 && parts[ 2 ] == "bxai" && ( parts[ 1 ] == "*" || fileTools.contains( parts[ 1 ] ) )
-		} )
+		return new "models.build.ToolOptions@bxagents"().withVolumes( arguments.toolOptions, arguments.declared, variables.projectVolumes, variables.projectDataHome, variables.projectAgentName )
 	}
 
 	/**
@@ -1497,7 +1511,9 @@ class {
 		var extensionTools = len( arguments.nodeRelativePath ) ? [] : new "models.extensions.ExtensionBundles@bxagents"().folders( arguments.nodePath, "tools" )
 		if ( len( ownToolsRelative ) && extensionTools.len() ) {
 			var folderLiterals = extensionTools.map( f => '{ extension : "#Strings::bxLiteral( f.extension )#", path : resolveAppPath( "#Strings::bxLiteral( f.relative )#", "#Strings::bxLiteral( f.source )#" ) }' )
-			var disableLiteral = renderLiteral( new "models.extensions.ExtensionSettings@bxagents"().disableList( isStruct( arguments.resolvedConfig.extensions ?: "" ) ? arguments.resolvedConfig.extensions : {} ) )
+			var disableLiteral = variables.readsSettingsAtStart && !len( arguments.nodeRelativePath )
+				? 'new "models.extensions.ExtensionSettings@bxagents"().disableList( isStruct( rootSettings.extensions ?: "" ) ? rootSettings.extensions : {} )'
+				: renderLiteral( new "models.extensions.ExtensionSettings@bxagents"().disableList( isStruct( arguments.resolvedConfig.extensions ?: "" ) ? arguments.resolvedConfig.extensions : {} ) )
 			lines.append( 'var #arguments.varName#OwnTools = new "models.build.ToolRegistryLoader@bxagents"().loadWithExtensions( resolveAppPath( "#Strings::bxLiteral( ownToolsRelative )#", "#Strings::bxLiteral( ownToolsFallback )#" ), [ #folderLiterals.toList( ", " )# ], #disableLiteral# )' )
 		} else if ( len( ownToolsRelative ) ) {
 			lines.append( 'var #arguments.varName#OwnTools = new "models.build.ToolRegistryLoader@bxagents"().load( resolveAppPath( "#Strings::bxLiteral( ownToolsRelative )#", "#Strings::bxLiteral( ownToolsFallback )#" ) )' )
@@ -1506,6 +1522,14 @@ class {
 		}
 
 		var declared = arguments.resolvedConfig.tools ?: []
+		if ( variables.readsSettingsAtStart ) {
+			// the volumes are the person's to add to as well, so every agent's file tools read them from the settings the app started with
+			var toolsExpression = len( arguments.nodeRelativePath ) ? "[ #( isArray( declared ) ? declared.map( entry => '"#Strings::bxLiteral( toString( entry ) )#"' ) : [] ).toList( ", " )# ]" : "rootSettings.tools ?: []"
+			var optionsExpression = len( arguments.nodeRelativePath ) ? renderLiteral( isStruct( arguments.resolvedConfig.toolOptions ?: "" ) ? arguments.resolvedConfig.toolOptions : {} ) : "rootSettings.toolOptions ?: {}"
+			lines.append( 'var #arguments.varName#Declared = #toolsExpression#' )
+			lines.append( 'var #arguments.varName#Tools = new "models.build.ToolSelector@bxagents"().select( #arguments.varName#Declared, #arguments.varName#OwnTools, "#Strings::bxLiteral( arguments.name )#", new "models.build.ToolOptions@bxagents"().withVolumes( #optionsExpression#, #arguments.varName#Declared, rootSettings.volumes ?: {}, ( isStruct( rootSettings.data ?: "" ) ? rootSettings.data : {} ).home ?: "", "#Strings::bxLiteral( variables.projectAgentName )#" ) )' )
+			return lines
+		}
 		var quoted = isArray( declared ) ? declared.map( entry => '"#Strings::bxLiteral( toString( entry ) )#"' ) : []
 		var toolOptions = withVolumes( arguments.resolvedConfig.toolOptions ?: {}, declared )
 		var toolOptionsArgument = isStruct( toolOptions ) && toolOptions.len() ? ", #renderLiteral( toolOptions )#" : ""
@@ -1640,7 +1664,7 @@ class {
 	/**
 	 * What the app tells bx-ai: where the skills are, `security` (passed through, bx-ai builds the
 	 * middleware), and the provider, default params, providers, profiles and capability defaults
-	 * from the root Agent.yaml. Subagents inherit them because bx-ai's settings are global.
+	 * from the root Agent.yml. Subagents inherit them because bx-ai's settings are global.
 	 *
 	 * @resolvedConfig The root resolved config
 	 *
@@ -1685,36 +1709,9 @@ class {
 	 * @return A BoxLang expression for the list, or "" when the node declares none
 	 */
 	private string function renderMcpServersExpression( required struct resolvedConfig, required string name ) {
-		var entries = arguments.resolvedConfig.mcpServers ?: []
-		var servers = []
-		var needsResolving = false
-
-		for ( var entry in entries ) {
-			if ( isStruct( entry ) ) {
-				if ( !len( entry.url ?: "" ) && !entry.keyExists( "command" ) ) {
-					throw(
-						type    = "BxAgents.InvalidMcpServer",
-						message = "An mcpServers entry is missing a 'url' or a 'command'"
-					)
-				}
-				// `name` only labels the entry in the file; bx-ai's connection settings do not take it
-				var connection = duplicate( entry )
-				connection.delete( "name" )
-				if ( connection.len() == 1 && connection.keyExists( "url" ) ) {
-					servers.append( connection.url )
-				} else {
-					servers.append( connection )
-					needsResolving = true
-				}
-			} else if ( isSimpleValue( entry ) && len( entry ) ) {
-				servers.append( toString( entry ) )
-			} else {
-				throw(
-					type    = "BxAgents.InvalidMcpServer",
-					message = "An mcpServers entry must be a URL string or a { url, name } struct"
-				)
-			}
-		}
+		var found = new "models.build.McpServerResolver@bxagents"().connections( arguments.resolvedConfig.mcpServers ?: [] )
+		var servers = found.servers
+		var needsResolving = found.needsResolving
 
 		if ( !servers.len() ) {
 			return ""

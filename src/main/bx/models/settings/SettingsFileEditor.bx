@@ -1,0 +1,95 @@
+/**
+ * Changes one setting in an Agent.yml on disk: for `/settings model ollama/qwen3`, which writes the agent's own file, and
+ * `/settings model ollama/qwen3 --global`, which writes the person's file for every agent.
+ *
+ * The edit is SettingsFileWriter's, on the lines of the file. This class adds the file and the check: the file is read, the
+ * entry changed, the result written, and then read back with the same rules the build and the app use (SettingsLayers). A
+ * file that would not pass is put back as it was and the message names it, so a typo here never breaks the next start.
+ */
+class {
+
+	/**
+	 * @file The Agent.yml to change; it and its folder are made when they are not there
+	 * @path The setting: `model`, `tools+`, `params.temperature`
+	 * @value The value as written after the colon in the file (`ollama/qwen3`, `[ a, b ]`, `true`)
+	 *
+	 * @return A sentence about what was saved and where
+	 *
+	 * @throws BxAgents.InvalidSettings When the value is not YAML or the file would not be valid with it
+	 */
+	string function set( required string file, required string path, required string value ) {
+		var value = trim( arguments.value )
+		if ( !len( value ) ) {
+			throw( type = "BxAgents.InvalidSettings", message = "There is no value for [#arguments.path#]. Write it after the name, or use reset to take it out of the file." )
+		}
+		try {
+			yamlDeserialize( arguments.path & ": " & value )
+		} catch ( any e ) {
+			throw( type = "BxAgents.InvalidSettings", message = "[#value#] is not valid YAML: #e.message#" )
+		}
+		var edited = new "models.settings.SettingsFileWriter@bxagents"().set( existing( arguments.file ), arguments.path, value )
+		if ( !edited.ok ) {
+			throw( type = "BxAgents.InvalidSettings", message = edited.reason )
+		}
+		save( arguments.file, edited.text )
+		return "#arguments.path#: #value# #edited.action == "added" ? "added to" : "changed in"# #arguments.file#. It applies the next time the agent starts."
+	}
+
+	/**
+	 * Takes a setting out of the file, so the layer below it applies again.
+	 *
+	 * @file The Agent.yml to change
+	 * @path The setting
+	 *
+	 * @return A sentence about what happened
+	 */
+	string function reset( required string file, required string path ) {
+		var text = existing( arguments.file )
+		var edited = new "models.settings.SettingsFileWriter@bxagents"().unset( text, arguments.path )
+		if ( !edited.ok ) {
+			throw( type = "BxAgents.InvalidSettings", message = edited.reason )
+		}
+		if ( edited.action == "unchanged" ) {
+			return "#arguments.path# is not in #arguments.file#, so there is nothing to reset."
+		}
+		save( arguments.file, edited.text )
+		return "#arguments.path# taken out of #arguments.file#. The layer below it applies the next time the agent starts."
+	}
+
+	/**
+	 * @file The Agent.yml
+	 * @path The setting
+	 *
+	 * @return What the file says for it, or "" when it does not
+	 */
+	string function valueOf( required string file, required string path ) {
+		return new "models.settings.SettingsFileWriter@bxagents"().valueOf( existing( arguments.file ), arguments.path )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private string function existing( required string file ) {
+		return fileExists( arguments.file ) ? fileRead( arguments.file, "UTF-8" ) : ""
+	}
+
+	/**
+	 * Writes the text, checks the file the way the app will read it, and puts the old text back when it does not pass.
+	 */
+	private void function save( required string file, required string text ) {
+		var before = existing( arguments.file )
+		var existed = fileExists( arguments.file )
+		directoryCreate( path = getDirectoryFromPath( arguments.file ), createPath = true, ignoreExists = true )
+		fileWrite( arguments.file, arguments.text, "UTF-8" )
+		try {
+			new "models.settings.SettingsLayers@bxagents"( arguments.file ).load()
+		} catch ( any e ) {
+			if ( existed ) {
+				fileWrite( arguments.file, before, "UTF-8" )
+			} else {
+				fileDelete( arguments.file )
+			}
+			rethrow
+		}
+	}
+
+}

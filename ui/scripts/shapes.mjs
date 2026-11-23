@@ -70,7 +70,7 @@ const mountOf = gateway => ( gateway.match( /path\s*:\s*"([^"]+)"/ ) || [
 ] )[ 1 ];
 
 /**
- * @param {string} yaml The text of Agent.yaml
+ * @param {string} yaml The text of Agent.yml
  * @returns {string} The path of the agent API
  */
 const apiOf = yaml => ( yaml.match( /^agentApi:\n(?:[ ]{2}.*\n)*?[ ]{2}path:\s*(\S+)/m ) || [
@@ -87,24 +87,24 @@ const shapes = fs.readdirSync( shapesDir ).filter( n => fs.existsSync( path.join
 
 for ( const shape of shapes ) {
 	if ( build ) {
-		// the dev agent, then the shape's own files over it, then its Agent.yaml changes
+		// the dev agent, then the shape's own files over it, then its Agent.yml changes
 		fs.rmSync( shape.project, { recursive: true, force: true } );
 		fs.cpSync( path.join( ui, "dev/agent" ), shape.project, { recursive: true, filter: src => !src.includes( `${ path.sep }.build` ) } );
 		fs.cpSync( path.join( shapesDir, shape.name ), shape.project, { recursive: true, filter: src => !src.endsWith( "shape.json" ) } );
-		let yaml = fs.readFileSync( path.join( shape.project, "Agent.yaml" ), "utf8" );
+		let yaml = fs.readFileSync( path.join( shape.project, "Agent.yml" ), "utf8" );
 		for ( const [
 			from,
 			to
 		] of shape.spec.agentYaml || [] ) {
 			if ( !yaml.includes( from ) ) {
-				throw new Error( "[shapes] " + shape.name + ": Agent.yaml has no [" + from + "]" );
+				throw new Error( "[shapes] " + shape.name + ": Agent.yml has no [" + from + "]" );
 			}
 			yaml = yaml.replace( from, to );
 		}
-		fs.writeFileSync( path.join( shape.project, "Agent.yaml" ), yaml );
+		fs.writeFileSync( path.join( shape.project, "Agent.yml" ), yaml );
 	}
 	shape.base = mountOf( fs.readFileSync( path.join( shape.project, "gateways/chat.bx" ), "utf8" ) );
-	shape.apiBase = apiOf( fs.readFileSync( path.join( shape.project, "Agent.yaml" ), "utf8" ) );
+	shape.apiBase = apiOf( fs.readFileSync( path.join( shape.project, "Agent.yml" ), "utf8" ) );
 	shape.env = {
 		...process.env,
 		...( shape.spec.env || {} ),

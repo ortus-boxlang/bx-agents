@@ -1,0 +1,198 @@
+/**
+ * Writes one setting into an Agent.yml, on the lines of the file. What the person wrote is kept: other settings, comments,
+ * the order, the line endings. Only the entry that is set or reset is touched.
+ *
+ * A setting is a path of one or two names: `model`, `tools+`, `params.temperature`. The value is the text as it would
+ * follow the colon in the file (`ollama/qwen3`, `[ a, b ]`, `true`), so the person's own quoting is kept.
+ *
+ *   set     the entry is replaced where it is (a trailing comment of a one line entry stays), or added at the end of the
+ *           file, or at the end of its block when the path has two names
+ *   unset   the entry is taken out
+ *
+ * A block written in flow style (`params: { temperature: 0.2 }`) is not edited line by line: the writer says so and the
+ * person edits that line by hand. This class works on text; reading and writing the file is SettingsFileEditor's job.
+ */
+class {
+
+	/**
+	 * @text The file's text
+	 * @path The setting: `name`, `name+`, `name-`, or `block.name`
+	 * @value The value as written after the colon
+	 *
+	 * @return { ok : true, text, action : added|changed } or { ok : false, reason }
+	 */
+	struct function set( required string text, required string path, required string value ) {
+		var parts = parsePath( arguments.path )
+		if ( !parts.ok ) {
+			return parts
+		}
+		var eol = eolOf( arguments.text )
+		var lines = split( arguments.text )
+
+		if ( parts.names.len() == 1 ) {
+			var top = entryAt( lines, 1, 0, parts.names[ 1 ] )
+			if ( top.found ) {
+				return replaceEntry( lines, top, parts.names[ 1 ], arguments.value, "", eol )
+			}
+			return { ok : true, action : "added", text : appendLines( lines, [ parts.names[ 1 ] & ": " & arguments.value ], eol ) }
+		}
+
+		var block = entryAt( lines, 1, 0, parts.names[ 1 ] )
+		if ( !block.found ) {
+			return { ok : true, action : "added", text : appendLines( lines, [ parts.names[ 1 ] & ":", "  " & parts.names[ 2 ] & ": " & arguments.value ], eol ) }
+		}
+		if ( reFind( "^[^:]+:\s*[^\s##]", lines[ block.start ] ) ) {
+			return { ok : false, reason : "#parts.names[ 1 ]# is written on one line (#trim( reReplace( lines[ block.start ], "^[^:]+:", "" ) )#), so it can not be edited line by line. Edit that line in the file." }
+		}
+		var indent = childIndent( lines, block )
+		var child = entryAt( lines, block.start + 1, len( indent ), parts.names[ 2 ], block.finish )
+		if ( child.found ) {
+			return replaceEntry( lines, child, parts.names[ 2 ], arguments.value, indent, eol )
+		}
+		lines.insertAt( block.finish + 1, indent & parts.names[ 2 ] & ": " & arguments.value )
+		return { ok : true, action : "added", text : lines.toList( eol ) }
+	}
+
+	/**
+	 * @text The file's text
+	 * @path The setting
+	 *
+	 * @return { ok : true, text, action : removed|unchanged } or { ok : false, reason }
+	 */
+	struct function unset( required string text, required string path ) {
+		var parts = parsePath( arguments.path )
+		if ( !parts.ok ) {
+			return parts
+		}
+		var eol = eolOf( arguments.text )
+		var lines = split( arguments.text )
+		var found = entryAt( lines, 1, 0, parts.names[ 1 ] )
+		if ( found.found && parts.names.len() == 2 ) {
+			var indent = childIndent( lines, found )
+			found = entryAt( lines, found.start + 1, len( indent ), parts.names[ 2 ], found.finish )
+		}
+		if ( !found.found ) {
+			return { ok : true, action : "unchanged", text : arguments.text }
+		}
+		for ( var i = found.finish; i >= found.start; i-- ) {
+			lines.deleteAt( i )
+		}
+		return { ok : true, action : "removed", text : lines.toList( eol ) }
+	}
+
+	/**
+	 * @text The file's text
+	 * @path The setting
+	 *
+	 * @return The value as written after the colon, or "" when the file does not set it
+	 */
+	string function valueOf( required string text, required string path ) {
+		var parts = parsePath( arguments.path )
+		if ( !parts.ok ) {
+			return ""
+		}
+		var lines = split( arguments.text )
+		var found = entryAt( lines, 1, 0, parts.names[ 1 ] )
+		if ( found.found && parts.names.len() == 2 ) {
+			found = entryAt( lines, found.start + 1, len( childIndent( lines, found ) ), parts.names[ 2 ], found.finish )
+		}
+		return found.found ? trim( reReplace( reReplace( lines[ found.start ], "^\s*[^:]+:", "" ), "\s+##.*$", "" ) ) : ""
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return { ok, names } for a path of one or two names
+	 */
+	private struct function parsePath( required string path ) {
+		var names = listToArray( trim( arguments.path ), "." )
+		if ( !names.len() || names.len() > 2 || names.some( name => !reFind( "^[A-Za-z][A-Za-z0-9_]*[+-]?$", name ) ) ) {
+			return { ok : false, reason : "[#arguments.path#] is not a setting name. Use a name like model, tools+ or params.temperature." }
+		}
+		return { ok : true, names : names }
+	}
+
+	/**
+	 * Where an entry starts and ends: the key line, and the lines under it that belong to it (indented, or list items at
+	 * the same indent). Comments and blank lines after it belong to what follows, so they are left out.
+	 *
+	 * @from The first line to look at
+	 * @indent The indent of the entry's key
+	 * @name The key
+	 * @upTo The last line to look at
+	 *
+	 * @return { found, start, finish }
+	 */
+	private struct function entryAt( required array lines, required numeric from, required numeric indent, required string name, numeric upTo = 0 ) {
+		var last = arguments.upTo ? arguments.upTo : arguments.lines.len()
+		var pad = repeatString( " ", arguments.indent )
+		var key = reReplace( arguments.name, "([+\-])", "\\\1", "all" )
+		for ( var i = arguments.from; i <= last; i++ ) {
+			if ( reFind( "^" & pad & "[""']?" & key & "[""']?\s*:", arguments.lines[ i ] ) && !reFind( "^\s{" & ( arguments.indent + 1 ) & ",}", arguments.lines[ i ] ) ) {
+				var finish = i
+				for ( var j = i + 1; j <= last; j++ ) {
+					var line = arguments.lines[ j ]
+					var belongs = !len( trim( line ) ) || reFind( "^\s{" & ( arguments.indent + 1 ) & ",}\S", line ) || ( reFind( "^" & pad & "-\s", line ) )
+					if ( !belongs ) {
+						break
+					}
+					if ( len( trim( line ) ) && left( trim( line ), 1 ) != "##" ) {
+						finish = j
+					}
+				}
+				return { found : true, start : i, finish : finish }
+			}
+		}
+		return { found : false, start : 0, finish : 0 }
+	}
+
+	/**
+	 * @return The indent the children of a block use, two spaces when it has none yet
+	 */
+	private string function childIndent( required array lines, required struct block ) {
+		for ( var i = arguments.block.start + 1; i <= arguments.block.finish; i++ ) {
+			var found = reFind( "^(\s+)\S", arguments.lines[ i ], 1, true )
+			if ( found.pos.len() > 1 && left( trim( arguments.lines[ i ] ), 1 ) != "##" ) {
+				return arguments.lines[ i ].mid( found.pos[ 2 ], found.len[ 2 ] )
+			}
+		}
+		return "  "
+	}
+
+	private struct function replaceEntry( required array lines, required struct entry, required string name, required string value, required string indent, required string eol ) {
+		var old = arguments.lines[ arguments.entry.start ]
+		// a comment at the end of a one line entry stays with it
+		var comment = ""
+		if ( arguments.entry.start == arguments.entry.finish ) {
+			var found = reFind( "\s+##.*$", old, 1, true )
+			if ( found.pos.len() && found.pos[ 1 ] > 0 && !reFind( "[""'].*##.*[""']\s*$", old ) ) {
+				comment = old.mid( found.pos[ 1 ], found.len[ 1 ] )
+			}
+		}
+		var copy = duplicate( arguments.lines )
+		for ( var i = arguments.entry.finish; i > arguments.entry.start; i-- ) {
+			copy.deleteAt( i )
+		}
+		copy[ arguments.entry.start ] = arguments.indent & arguments.name & ": " & arguments.value & comment
+		return { ok : true, action : "changed", text : copy.toList( arguments.eol ) }
+	}
+
+	private string function appendLines( required array lines, required array added, required string eol ) {
+		var copy = duplicate( arguments.lines )
+		// the file's last line break is not a line
+		if ( copy.len() && !len( copy[ copy.len() ] ) ) {
+			copy.deleteAt( copy.len() )
+		}
+		copy.append( arguments.added, true )
+		return copy.toList( arguments.eol ) & arguments.eol
+	}
+
+	private array function split( required string text ) {
+		return arguments.text.replace( char( 13 ) & char( 10 ), char( 10 ), "all" ).listToArray( char( 10 ), true )
+	}
+
+	private string function eolOf( required string text ) {
+		return arguments.text.find( char( 13 ) & char( 10 ) ) ? char( 13 ) & char( 10 ) : char( 10 )
+	}
+
+}

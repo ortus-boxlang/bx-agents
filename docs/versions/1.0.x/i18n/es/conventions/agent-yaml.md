@@ -1,14 +1,14 @@
 ---
-title: Agent.yaml
+title: Agent.yml
 icon: phosphor-duotone:file-text
 summary: "La forma predeterminada de definir un agente - ajustes sencillos en un archivo YAML, sin código."
 description: "La forma predeterminada de definir un agente - ajustes sencillos en un archivo YAML, sin código."
 tags: [conventions, configuration]
 ---
 
-# Agent.yaml
+# Agent.yml
 
-`Agent.yaml` es la forma predeterminada de definir un agente. Es un archivo YAML sencillo - un nombre, un modelo y cualquiera de los ajustes opcionales de abajo - y el build lo convierte en un agente en ejecución. La mayoría de los agentes no necesitan más que este archivo y un [`instructions.md`](#instrucciones) a su lado.
+`Agent.yml` es la forma predeterminada de definir un agente. Es un archivo YAML sencillo - un nombre, un modelo y cualquiera de los ajustes opcionales de abajo - y el build lo convierte en un agente en ejecución. La mayoría de los agentes no necesitan más que este archivo y un [`instructions.md`](#instrucciones) a su lado.
 
 ```yaml
 name: support
@@ -23,7 +23,7 @@ environments:
 `bxAgents new` genera el andamiaje exactamente con esta forma. Cuando la definición necesita código real (hooks, instrucciones dinámicas, tools registradas en código), usa la opción avanzada: un [`Agent.bx`](agent-bx.md) basado en clase, que se genera con `bxAgents new --class`.
 
 !!! info
-    Una carpeta contiene **una** definición de agente. Un `Agent.yaml` (o `Agent.yml`) junto con un `Agent.bx` en la misma carpeta es un error - dos definiciones de un mismo agente dejarían ambiguo qué ajustes ganan - y `build` falla y nombra ambos archivos para que conserves uno. Esto aplica a la raíz del proyecto y a cada carpeta de [subagente](subagents.md), y un proyecto puede mezclar los dos: una raíz YAML con un subagente basado en clase, o al revés.
+    Una carpeta contiene **una** definición de agente. Un `Agent.yml` junto con un `Agent.bx` en la misma carpeta es un error - dos definiciones de un mismo agente dejarían ambiguo qué ajustes ganan - y `build` falla y nombra ambos archivos para que conserves uno. Esto aplica a la raíz del proyecto y a cada carpeta de [subagente](subagents.md), y un proyecto puede mezclar los dos: una raíz YAML con un subagente basado en clase, o al revés.
 
 ## Ajustes
 
@@ -52,8 +52,8 @@ environments:
 | `gatewaySession` | mapa | `{ policy, maxQueueDepth, attachments, commands }`, todos opcionales. `policy` es `queue` (por defecto), `reject`, `steer` o `interrupt`. `attachments: false` desactiva las imágenes y archivos enviados en apps de chat. `commands` es `{ enabled, prefix, prefixes, conversation, allow, admins }`. Ver [Gateways](gateways/index.md#comandos-en-un-gateway). |
 | `agentApi` | mapa | `{ enabled, access, tokenEnvVar, tokens, profiles, path, allowedIPs, rateLimit, manageTokens }`, todos opcionales. `enabled` es `true` por defecto, `access` es `open` (o `token` cuando se define `tokenEnvVar` o `tokens`), `tokens` y `manageTokens` son `false`, y `path` es `/__bxagents`. Ver [`agentApi`](agent-bx.md#agentapi) para cada clave. |
 | `notes` | mapa | Notas cortas que el agente guarda sobre el usuario y sobre su propio trabajo. `notes: {}` las activa con los valores por defecto. Ver [Notas](#notas). |
-| `usage` | booleano | Registra lo que usó cada llamada al modelo (la hora, quién, el proveedor, el modelo y los tokens), para [`bxAgents stats`](../cli-reference.md#stats) y `/stats`. **Desactivado por defecto**: pon `usage: true` para activarlo. Solo recuentos, nunca lo que se dijo. Solo en el `Agent.yaml` propio del proyecto. Recompila tras cambiarlo. |
-| `extensions` | mapa | Valores de las [extensiones](extensions.md) del proyecto, por nombre de extensión, y qué desactivar: `{ disable: [ roll, "deploy:deploy" ], deploy: { target: production } }`. El bloque de cada extensión se fusiona sobre los valores por defecto que define su `configure()`. Solo en el `Agent.yaml` del propio proyecto. |
+| `usage` | booleano | Registra lo que usó cada llamada al modelo (la hora, quién, el proveedor, el modelo y los tokens), para [`bxAgents stats`](../cli-reference.md#stats) y `/stats`. **Desactivado por defecto**: pon `usage: true` para activarlo. Solo recuentos, nunca lo que se dijo. Solo en el `Agent.yml` propio del proyecto. Recompila tras cambiarlo. |
+| `extensions` | mapa | Valores de las [extensiones](extensions.md) del proyecto, por nombre de extensión, y qué desactivar: `{ disable: [ roll, "deploy:deploy" ], deploy: { target: production } }`. El bloque de cada extensión se fusiona sobre los valores por defecto que define su `configure()`. Solo en el `Agent.yml` del propio proyecto. |
 | `environments` | mapa | Sobreescrituras por entorno. Ver [Entornos](#entornos). |
 
 Son los mismos ajustes que devuelve el `configure()` de un `Agent.bx`, así que todo el comportamiento documentado para ellos aplica sin cambios.
@@ -166,11 +166,11 @@ Gestiónalas tú con `/remember` y `/notes` en [`chat`](../cli-reference.md#chat
 
 ## Instrucciones
 
-Las instrucciones del agente son su system prompt. Ponlas en un `instructions.md` junto a `Agent.yaml`, la opción habitual porque el archivo es Markdown sencillo y fácil de editar:
+Las instrucciones del agente son su system prompt. Ponlas en un `instructions.md` junto a `Agent.yml`, la opción habitual porque el archivo es Markdown sencillo y fácil de editar:
 
 ```text
 my-agent/
-├── Agent.yaml
+├── Agent.yml
 └── instructions.md
 ```
 
@@ -212,19 +212,19 @@ Solo se aplica el bloque del entorno activo, encima de los ajustes de nivel supe
 `bxAgents test` hace el build contra el entorno `test`, y por eso un proyecto generado lleva un bloque `test` que apunta al proveedor `mock`: sus tests no necesitan clave de API ni red.
 
 !!! note
-    Un `Agent.yaml` no puede calcular su entorno. El método `detectEnvironment()` descrito en [Overrides de entorno](agent-bx.md#overrides-de-entorno) necesita código, así que un proyecto que lo necesite usa un `Agent.bx`.
+    Un `Agent.yml` no puede calcular su entorno. El método `detectEnvironment()` descrito en [Overrides de entorno](agent-bx.md#overrides-de-entorno) necesita código, así que un proyecto que lo necesite usa un `Agent.bx`.
 
 Las sobreescrituras se fusionan luego con `boxlang.json`, `boxlang-{environment}.json`, `miniserver.json` y `miniserver-{environment}.json` exactamente como se describe en [Semántica de fusión](agent-bx.md#semántica-de-fusión).
 
 ## Requisitos
 
-Leer YAML necesita el módulo `bx-yaml`, **1.1.0 o posterior**. BxAgents lo incluye, así que no hay nada que instalar. Las etiquetas YAML globales (como `!!java.io.File`) se rechazan, de modo que el `Agent.yaml` de un proyecto clonado no puede hacer que el build instancie clases Java arbitrarias.
+Leer YAML necesita el módulo `bx-yaml`, **1.1.0 o posterior**. BxAgents lo incluye, así que no hay nada que instalar. Las etiquetas YAML globales (como `!!java.io.File`) se rechazan, de modo que el `Agent.yml` de un proyecto clonado no puede hacer que el build instancie clases Java arbitrarias.
 
 ## ¿YAML o Agent.bx?
 
 | Usa | Cuándo |
 |---|---|
-| `Agent.yaml` | El agente es configuración: un nombre, un modelo, instrucciones, memoria, subagentes. Es casi todo agente. |
+| `Agent.yml` | El agente es configuración: un nombre, un modelo, instrucciones, memoria, subagentes. Es casi todo agente. |
 | [`Agent.bx`](agent-bx.md) | La definición misma necesita código: hooks, instrucciones dinámicas, tools registradas en código, un método sobreescrito o `detectEnvironment()`. |
 
-Puedes empezar con YAML y cambiar después: crea el `Agent.bx`, pasa los ajustes y borra el `Agent.yaml`.
+Puedes empezar con YAML y cambiar después: crea el `Agent.bx`, pasa los ajustes y borra el `Agent.yml`.

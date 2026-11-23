@@ -1,0 +1,44 @@
+/**
+ * The /info lines about what a person's own Agent.yml files changed.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "SettingsInfo", function() {
+
+			beforeEach( function() {
+				variables.info = new bxagents.models.settings.SettingsInfo();
+			} );
+
+			it( "says nothing when no file changed anything", function() {
+				expect( info.rows( { active : true, changed : [], needsRebuild : [] } ) ).toBeEmpty();
+				expect( info.rows( {} ) ).toBeEmpty();
+			} );
+
+			it( "has one line per setting, with what was done and the file", function() {
+				var rows = info.rows( {
+					changed      : [
+						{ path : "model", op : "set", layer : "global", file : "/h/.bxagents/Agent.yml", value : "x" },
+						{ path : "tools", op : "append", layer : "agent", file : "/h/.bxagents/bot/Agent.yml", value : [] },
+						{ path : "mcpServers", op : "delete", layer : "global", file : "/h/.bxagents/Agent.yml", value : "" }
+					],
+					needsRebuild : []
+				} );
+				expect( rows ).toHaveLength( 3 );
+				expect( rows[ 1 ] ).toBe( [ "From your files", "model set in /h/.bxagents/Agent.yml" ] );
+				expect( rows[ 2 ][ 2 ] ).toBe( "tools added to in /h/.bxagents/bot/Agent.yml" );
+				expect( rows[ 3 ][ 2 ] ).toBe( "mcpServers removed in /h/.bxagents/Agent.yml" );
+			} );
+
+			it( "marks a setting that needs a rebuild", function() {
+				var rows = info.rows( {
+					changed      : [ { path : "agentApi.enabled", op : "set", layer : "global", file : "/f.yml", value : false } ],
+					needsRebuild : [ { path : "agentApi.enabled", layer : "global", file : "/f.yml" } ]
+				} );
+				expect( rows[ 1 ][ 2 ] ).toBe( "agentApi.enabled set in /f.yml (needs a rebuild)" );
+			} );
+
+		} );
+	}
+
+}

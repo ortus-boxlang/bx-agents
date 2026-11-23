@@ -83,10 +83,10 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "says what is wrong with an extensions block", function() {
-				expect( tools.problems( { disable : [ "a" ], hello : { x : 1 } }, "Agent.yaml" ) ).toBeEmpty();
-				expect( tools.problems( "nope", "Agent.yaml" ) ).toHaveLength( 1 );
-				expect( tools.problems( { hello : "text" }, "Agent.yaml" )[ 1 ] ).toInclude( "extensions.hello" );
-				expect( tools.problems( { disable : { a : 1 } }, "Agent.yaml" )[ 1 ] ).toInclude( "disable" );
+				expect( tools.problems( { disable : [ "a" ], hello : { x : 1 } }, "Agent.yml" ) ).toBeEmpty();
+				expect( tools.problems( "nope", "Agent.yml" ) ).toHaveLength( 1 );
+				expect( tools.problems( { hello : "text" }, "Agent.yml" )[ 1 ] ).toInclude( "extensions.hello" );
+				expect( tools.problems( { disable : { a : 1 } }, "Agent.yml" )[ 1 ] ).toInclude( "disable" );
 			} );
 
 		} );
@@ -670,7 +670,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( isNull( served.lookup( "mine" ) ) ).toBeTrue();
 			} );
 
-			it( "loads the example project: every example adds what it says, and the project's values beat the person's", function() {
+			it( "loads the example project: every example adds what it says, and the person's values beat the project's", function() {
 				var service = new bxagents.models.extensions.ExtensionService( projectRoot : example, userConfig : userConfig, transport : "web", moduleFolders : [] );
 				var commands = new bxagents.models.chat.commands.CommandCatalog().standard();
 				service.install( commands );
@@ -679,8 +679,8 @@ class extends="testbox.system.BaseSpec" {
 
 				// the person turned roll off; the project did not turn it back on
 				expect( isNull( commands.lookup( "roll" ) ) ).toBeTrue();
-				// the project's greeting wins over the person's
-				expect( text( "/hello Ada" ) ).toBe( "Welcome aboard, Ada!" );
+				// the person's greeting wins over the project's: the person who runs the agent has the last word
+				expect( text( "/hello Ada" ) ).toBe( "From the person, Ada!" );
 				expect( text( "/deploy" ) ).toInclude( "production" );
 				expect( text( "/standup" ) ).toInclude( "team-standup" );
 				expect( service.problems() ).toBeEmpty();
@@ -719,7 +719,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( text( "/dice" ) ).toBe( "1d6: 4 = 4" );
 				expect( text( "/roll banana" ) ).toInclude( "like /roll 2d6" );
 				expect( text( "/roll 99d6" ) ).toInclude( "Between 1 and 20" );
-				// the freeze extension of the example stops /coin, as Agent.yaml lists it
+				// the freeze extension of the example stops /coin, as Agent.yml lists it
 				expect( text( "/coin" ) ).toBe( "That command is frozen for now." );
 				service.unload();
 			} );

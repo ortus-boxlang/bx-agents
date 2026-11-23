@@ -8,7 +8,7 @@ tags: [conventions, data]
 
 # Data and volumes
 
-An agent keeps its state in one place, the **data home**, and reaches the rest of your machine only through **volumes**: folders you name in `Agent.yaml`. `bxAgents data` shows both, and `bxAgents backup` and `restore` keep the data safe.
+An agent keeps its state in one place, the **data home**, and reaches the rest of your machine only through **volumes**: folders you name in `Agent.yml`. `bxAgents data` shows both, and `bxAgents backup` and `restore` keep the data safe.
 
 ## The data home
 
@@ -21,20 +21,20 @@ An agent keeps its state in one place, the **data home**, and reaches the rest o
   routines/      reports saved by routines, one folder each (see routines)
   logs/          what the agent logs, one file per area (see logs)
   backups/       written by bxAgents backup
-  settings.yml   your own settings for how the terminal chat looks, for this agent (see Settings), made when you first save one
+  Agent.yml      your own settings for this agent on this machine: how the chat looks and any other setting (see layered settings), made when you first save one
 ```
 
 There is always a home. Where it is, first match wins:
 
 1. The environment variable `BXAGENTS_HOME`.
-2. `data.home` in `Agent.yaml`.
+2. `data.home` in `Agent.yml`.
 3. The folder of `BXAGENTS_DB` when that names a file called `chat.db` (what `serve` and `chat` set).
 4. `data/` in the project, when it already holds a `chat.db`. A project from before this convention keeps its data.
 5. **`~/.bxagents/<agent name>`**, the convention. It is outside the project and outside the build, so a new build never replaces it, and it is the same place in development and when deployed.
 6. `data/` in the project, only for an agent that has no name.
 
 ```yaml
-# Agent.yaml
+# Agent.yml
 name: nanobox
 data:
   home: ~/.nanobox      # an absolute path, one starting with ~, or one relative to the project
@@ -51,7 +51,7 @@ The folders and the README are made the first time the app or `chat` starts. Not
 A volume is a folder on this machine that the agent's file tools may use, under a name.
 
 ```yaml
-# Agent.yaml
+# Agent.yml
 volumes:
   notes:
     path: ~/Notes

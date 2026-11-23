@@ -36,7 +36,7 @@ function configure() {
 }
 ```
 
-Léelo en el comando como `settings.greeting`. `Agent.yaml` (o tu propio `~/.bxagents/bxAgents.yml`) puede cambiarlo sin tocar el código:
+Léelo en el comando como `settings.greeting`. `Agent.yml` (o tu propio `~/.bxagents/Agent.yml`) puede cambiarlo sin tocar el código:
 
 ```yaml
 extensions:

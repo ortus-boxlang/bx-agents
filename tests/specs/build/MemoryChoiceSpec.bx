@@ -1,0 +1,42 @@
+/**
+ * Which memory and checkpointer an agent gets from its settings: the one decision the generated source and an app
+ * that reads its settings when it starts both follow.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "MemoryChoice", function() {
+
+			beforeEach( function() {
+				variables.choice = new bxagents.models.build.MemoryChoice();
+			} );
+
+			it( "gives the chat-database memory when no type is named anywhere, without the key", function() {
+				var picked = choice.memory( { maxMessages : 50, key : "x" }, "", "bot" );
+				expect( picked.kind ).toBe( "wiring" );
+				expect( picked.settings ).toBe( { maxMessages : 50 } );
+				expect( choice.memory( {}, "", "bot" ).kind ).toBe( "wiring" );
+			} );
+
+			it( "reads a bare text as the memory type, and keys it by the agent's name", function() {
+				expect( choice.memory( "window", "", "bot" ) ).toBe( { kind : "aiMemory", type : "window", key : "bot", config : {} } );
+			} );
+
+			it( "reads a mapping as { type, key, ...config }", function() {
+				var picked = choice.memory( { type : "file", key : "keeper", directoryPath : "./m" }, "", "bot" );
+				expect( picked ).toBe( { kind : "aiMemory", type : "file", key : "keeper", config : { directoryPath : "./m" } } );
+			} );
+
+			it( "uses the build-wide default type when the agent names none", function() {
+				expect( choice.memory( {}, "session", "bot" ).type ).toBe( "session" );
+			} );
+
+			it( "defaults the checkpointer to cache and keeps the rest as its config", function() {
+				expect( choice.checkpointer( {} ) ).toBe( { type : "cache", config : {} } );
+				expect( choice.checkpointer( { type : "file", path : "./c" } ) ).toBe( { type : "file", config : { path : "./c" } } );
+			} );
+
+		} );
+	}
+
+}

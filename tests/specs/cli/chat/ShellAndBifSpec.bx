@@ -18,8 +18,8 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			function configWith( required string yaml ) {
-				fileWrite( dir & "/bxAgents.yml", yaml );
-				return new bxagents.models.cli.UserConfig( dir & "/bxAgents.yml" );
+				fileWrite( dir & "/Agent.yml", yaml );
+				return new bxagents.models.cli.UserConfig( dir & "/Agent.yml" );
 			}
 
 			it( "turns both on when there is no file", function() {
@@ -49,6 +49,12 @@ class extends="testbox.system.BaseSpec" {
 				var config = configWith( "chat:" & char( 10 ) & "  keys: ctrl+n" & char( 10 ) );
 				expect( config.problems().toList( "|" ) ).toInclude( "chat.keys must be a mapping" );
 				expect( config.keys() ).toBe( {} );
+			} );
+
+			it( "accepts any setting an Agent.yml has, with or without a marker, since the person's file is one", function() {
+				var config = configWith( "model: ollama/qwen3" & char( 10 ) & "tools+: [ now@bxai ]" & char( 10 ) & "mcpServers: ~" & char( 10 ) & "chat:" & char( 10 ) & "  shell: false" & char( 10 ) );
+				expect( config.problems() ).toBeEmpty();
+				expect( config.chat().shell ).toBeFalse();
 			} );
 
 			it( "reports a key it does not know instead of ignoring it", function() {

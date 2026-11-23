@@ -1,7 +1,7 @@
 /**
  * What the answers of a `new` run turn into on disk. The last spec scaffolds a project
  * with every feature on and runs it through the real validator, which is the check that
- * counts: an Agent.yaml or gateway that the rest of BX Agents would refuse is a bug here.
+ * counts: an Agent.yml or gateway that the rest of BX Agents would refuse is a bug here.
  */
 class extends="testbox.system.BaseSpec" {
 
@@ -136,7 +136,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "writes the connectors a person left out, and none, and the loader and validator accept both", function() {
 				var some = parent & "/connectors-some";
 				scaffolder.scaffold( some, "some", "claude/claude-sonnet-5", "x", "minimal", false, { connectors : { exclude : [ "stripe", "cloudflare" ] } } );
-				var parsed = new bxagents.models.build.AgentYamlLoader().load( some & "/Agent.yaml" );
+				var parsed = new bxagents.models.build.AgentYamlLoader().load( some & "/Agent.yml" );
 
 				expect( parsed.config.connectors ).toBe( { exclude : [ "stripe", "cloudflare" ] } );
 				expect( bxagents.models.connectors.ConnectorSettings::problems( parsed.config ) ).toBeEmpty();
@@ -144,7 +144,7 @@ class extends="testbox.system.BaseSpec" {
 
 				var off = parent & "/connectors-none";
 				scaffolder.scaffold( off, "off", "claude/claude-sonnet-5", "x", "minimal", false, { connectors : "none" } );
-				var none = new bxagents.models.build.AgentYamlLoader().load( off & "/Agent.yaml" );
+				var none = new bxagents.models.build.AgentYamlLoader().load( off & "/Agent.yml" );
 
 				expect( none.config.connectors ).toBe( "none" );
 				expect( bxagents.models.connectors.ConnectorSettings::resolve( none.config ).available ).toBeEmpty();
@@ -172,7 +172,7 @@ class extends="testbox.system.BaseSpec" {
 					deploy : { id : "docker", config : { target : "docker", registry : { type : "ghcr", repository : "me/full" }, tag : "latest" } }
 				} );
 
-				var parsed = new bxagents.models.build.AgentYamlLoader().load( dir & "/Agent.yaml" );
+				var parsed = new bxagents.models.build.AgentYamlLoader().load( dir & "/Agent.yml" );
 				expect( parsed.config.tools ).toHaveLength( 4 );
 				expect( parsed.config.tools[ 4 ] ).toBe( "*@bxplaywright" );
 				expect( parsed.config.toolOptions.bxai.allowedPaths ).toBe( [ "tmp", "cwd" ] );

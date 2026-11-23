@@ -8,13 +8,13 @@ tags: [guides, examples, tools, skills]
 
 # Example: A Minimal Agent
 
-The smallest complete BxAgents project is [`examples/minimal-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/minimal-agent) - a few files that show the whole shape of a project: an `Agent.yaml`, instructions, one [tool](../conventions/tools.md), and one [skill](../conventions/skills.md). Every other example in this guide series builds on exactly this shape.
+The smallest complete BxAgents project is [`examples/minimal-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/minimal-agent) - a few files that show the whole shape of a project: an `Agent.yml`, instructions, one [tool](../conventions/tools.md), and one [skill](../conventions/skills.md). Every other example in this guide series builds on exactly this shape.
 
 ## The project
 
 ```text
 minimal-agent/
-├── Agent.yaml
+├── Agent.yml
 ├── instructions.md
 ├── tools/
 │   └── Greeter.bx
@@ -23,7 +23,7 @@ minimal-agent/
         └── SKILL.md
 ```
 
-`Agent.yaml` declares a name, description, and model - the `provider/model` slug (see [The model slug](../conventions/agent-bx.md#the-model-slug)) - and nothing else is required. Need code in the definition (hooks, dynamic instructions)? The class-based [`Agent.bx`](../conventions/agent-bx.md) is the advanced alternative.
+`Agent.yml` declares a name, description, and model - the `provider/model` slug (see [The model slug](../conventions/agent-bx.md#the-model-slug)) - and nothing else is required. Need code in the definition (hooks, dynamic instructions)? The class-based [`Agent.bx`](../conventions/agent-bx.md) is the advanced alternative.
 
 ```yaml
 name: minimal-agent
@@ -87,7 +87,7 @@ bxAgents chat
 My name is Ada.
 ```
 
-The model should reach for the `sayHello` tool and reply warmly, per the skill's guidance - both from a single sentence of instructions plus a small tool and a one-line skill. With the `mock` model this example ships with, the reply is a fixed one: set a real `provider/model` in `Agent.yaml` to see the tool called. `bxAgents inspect` lists the agent, its tool and its skill without a build.
+The model should reach for the `sayHello` tool and reply warmly, per the skill's guidance - both from a single sentence of instructions plus a small tool and a one-line skill. With the `mock` model this example ships with, the reply is a fixed one: set a real `provider/model` in `Agent.yml` to see the tool called. `bxAgents inspect` lists the agent, its tool and its skill without a build.
 
 ## Where to go next
 

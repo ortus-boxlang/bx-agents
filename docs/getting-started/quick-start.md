@@ -25,14 +25,14 @@ At a terminal this asks what the agent should do (its model, tools, MCP servers,
 bxAgents new my-agent --model=openai/gpt-5
 ```
 
-`--model` is a `provider/model` slug (written to `Agent.yaml` as separate `provider:` and `model:` lines) - see [the model slug](../conventions/agent-bx.md#the-model-slug) for how it's parsed. `--name` and `--description` are optional; `--name` defaults to the target directory's own name.
+`--model` is a `provider/model` slug (written to `Agent.yml` as separate `provider:` and `model:` lines) - see [the model slug](../conventions/agent-bx.md#the-model-slug) for how it's parsed. `--name` and `--description` are optional; `--name` defaults to the target directory's own name.
 
 This creates:
 
 ```text
 my-agent/
 ├── Application.bx
-├── Agent.yaml
+├── Agent.yml
 ├── instructions.md
 ├── tools/
 ├── skills/
@@ -50,9 +50,9 @@ my-agent/
 
 Plus a root [`Application.bx`](../conventions/application-bx.md) that extends the class every build generates (add your own settings and hooks there), a `.env` (secrets live here, so put your provider API keys in it and keep it out of source control), a `.gitignore` and a few dotfiles (`.editorconfig`, `.gitattributes`, `.bxlint.json`, `.markdownlint.json`, `.boxlang.json`). BoxLang loads the `.env` from the project root itself. The root `box.json` lists `testbox` as a development dependency.
 
-This is the `minimal` starter - the default when `--template` is omitted. A template is a preset: the wizard (and flags such as `--with`, `--channels` and `--deploy`) add tools, channels and a deploy target on top of it. `new` can also scaffold one of 7 other built-in starters (`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent`), each adding a bit of pre-wired content (a gateway, a scheduler) on top of the same skeleton, or skip scaffolding entirely and create the project from an existing GitHub repo (`--repo=owner/repo`) or a ForgeBox package (`--forgebox=<slug>`) instead - see the [CLI Reference](../cli-reference.md#new) for the full list and how each one works. The agent is defined by an `Agent.yaml` by default; pass `--class` to scaffold the advanced, class-based `Agent.bx` instead (see [Agent.bx](../conventions/agent-bx.md)).
+This is the `minimal` starter - the default when `--template` is omitted. A template is a preset: the wizard (and flags such as `--with`, `--channels` and `--deploy`) add tools, channels and a deploy target on top of it. `new` can also scaffold one of 7 other built-in starters (`--template=webui-chat|slack-bot|telegram-bot|github-bot|mcp-server|scheduled|multi-agent`), each adding a bit of pre-wired content (a gateway, a scheduler) on top of the same skeleton, or skip scaffolding entirely and create the project from an existing GitHub repo (`--repo=owner/repo`) or a ForgeBox package (`--forgebox=<slug>`) instead - see the [CLI Reference](../cli-reference.md#new) for the full list and how each one works. The agent is defined by an `Agent.yml` by default; pass `--class` to scaffold the advanced, class-based `Agent.bx` instead (see [Agent.bx](../conventions/agent-bx.md)).
 
-`Agent.yaml` looks like this (`--description` adds a `description:` line):
+`Agent.yml` looks like this (`--description` adds a `description:` line):
 
 ```yaml
 # Your agent. Most agents need nothing more than this file and instructions.md.
@@ -69,13 +69,13 @@ environments:
     model: mock/mock-model
 ```
 
-The agent is just this file plus `instructions.md`. See [Agent.yaml](../conventions/agent-yaml.md) for every key.
+The agent is just this file plus `instructions.md`. See [Agent.yml](../conventions/agent-yaml.md) for every key.
 
 Every convention folder is created empty - add files to the ones your agent actually needs and delete (or just ignore) the rest.
 
 ## 2. Edit
 
-Open `instructions.md` and write the agent's system prompt, and adjust `name`, `description` or `model` in `Agent.yaml` as you like. Add a tool:
+Open `instructions.md` and write the agent's system prompt, and adjust `name`, `description` or `model` in `Agent.yml` as you like. Add a tool:
 
 ```javascript
 // tools/Greeter.bx
@@ -106,7 +106,7 @@ The scaffolded `tests/specs/AgentSpec.bx` passes out of the box - it builds your
 bxAgents build
 ```
 
-Runs the full [build pipeline](../build-pipeline.md) - config resolution, discovery, validation, code generation, manifest normalization - and writes a real ColdBox application to `.build/app/`, plus `.build/manifest.json`. Run `bxAgents build --environment=production` to build against an `Agent.yaml` environment override (see [Agent.yaml](../conventions/agent-yaml.md#environments)).
+Runs the full [build pipeline](../build-pipeline.md) - config resolution, discovery, validation, code generation, manifest normalization - and writes a real ColdBox application to `.build/app/`, plus `.build/manifest.json`. Run `bxAgents build --environment=production` to build against an `Agent.yml` environment override (see [Agent.yml](../conventions/agent-yaml.md#environments)).
 
 If your project fails validation (duplicate tool names, an unknown model provider, a gateway entry with a bad path, ...) `build` fails with every collected error - not just the first one.
 
@@ -163,7 +163,7 @@ See [The Manifest](../manifest.md) and [Deployment & Secrets](../deployment-and-
 bxAgents clean
 ```
 
-Removes `.build/` and `dist/` only - your source conventions (`Agent.yaml`, `tools/`, etc.) are never touched.
+Removes `.build/` and `dist/` only - your source conventions (`Agent.yml`, `tools/`, etc.) are never touched.
 
 ## Next steps
 

@@ -23,7 +23,7 @@ import java.util.Map;
 
 /**
  * The look the user chose for the prompt: the style and which widgets sit where. Immutable; a change makes a new one.
- * Built from the {@code tui:} block of {@code Agent.yaml}, where a name that is not known is left out rather than
+ * Built from the {@code tui:} block of {@code Agent.yml}, where a name that is not known is left out rather than
  * failing, because the build has already refused it.
  *
  * @param style  a {@link PromptStyles} name

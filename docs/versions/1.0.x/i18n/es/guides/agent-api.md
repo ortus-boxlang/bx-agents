@@ -22,7 +22,7 @@ El proyecto en [`examples/api-agent/`](https://github.com/ortus-boxlang/bx-agent
 
 ## Abierta o con token
 
-Dos maneras de ejecutar, elegidas con `agentApi` en `Agent.yaml`.
+Dos maneras de ejecutar, elegidas con `agentApi` en `Agent.yml`.
 
 | | Ajustes | Quién puede llamar |
 |---|---|---|
@@ -140,8 +140,8 @@ Todas las rutas cuelgan de `/__bxagents` (o de tu `agentApi.path`). Hay 76 rutas
 | `GET /skills/read` | Quien llama | One skill's SKILL.md text with its origin, size and when it was saved. |
 | `GET /skills` | Quien llama | The skills the agent can load: name, description and whether the project or the agent wrote it. |
 | `GET /agent/composition` | Admin | How the agent is put together in one call: what comes in, its parts, the agent tree, what goes out and the tools that ask first. |
-| `GET /agent/files` | Admin | The project's own files that are safe to show (Agent.yaml, instructions, tools, skills, subagents, gateways), by relative path and size. |
-| `GET /agent/file` | Admin | One of those files as text, read only; secrets in Agent.yaml are shown as stars and a long file is cut. |
+| `GET /agent/files` | Admin | The project's own files that are safe to show (Agent.yml, instructions, tools, skills, subagents, gateways), by relative path and size. |
+| `GET /agent/file` | Admin | One of those files as text, read only; secrets in Agent.yml are shown as stars and a long file is cut. |
 | `GET /agent` | Quien llama | The agent in full: model, window, tools, the agent tree (agents, each sub-agent a caller may talk to directly) and what this server can do (capabilities). |
 | `GET /usage` | Admin | Tokens by day and by model: a small snapshot, off until usage is turned on (then enabled is false). |
 | `GET /data/backups` | Admin | The backups of the data home, newest first, and the restore waiting for the next start. |

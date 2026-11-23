@@ -16,7 +16,7 @@
 
 <p>&nbsp;</p>
 
-**BxAgents** is a conventions-based framework for building AI agents your team can ship, powered by [BoxLang AI](https://ai.boxlang.io). It is built for BoxLang and ColdBox developers, and for any team that wants agents as ordinary code it can read. Skip the glue code for tools, memory, web apps, Slack bots, routines and schedulers: describe an agent with a handful of files and folders - `Agent.yaml`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/` it actually needs - and BxAgents assembles a full MVC application from it **at build time** (a thirteen-page web app, an API with OpenAPI, gateways, routines and scheduled jobs included), ready to serve, chat with, or package as a portable `.bxa`.
+**BxAgents** is a conventions-based framework for building AI agents your team can ship, powered by [BoxLang AI](https://ai.boxlang.io). It is built for BoxLang and ColdBox developers, and for any team that wants agents as ordinary code it can read. Skip the glue code for tools, memory, web apps, Slack bots, routines and schedulers: describe an agent with a handful of files and folders - `Agent.yml`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/` it actually needs - and BxAgents assembles a full MVC application from it **at build time** (a thirteen-page web app, an API with OpenAPI, gateways, routines and scheduled jobs included), ready to serve, chat with, or package as a portable `.bxa`.
 
 ## What you can build
 
@@ -26,7 +26,7 @@ Pick the problem, write one file.
 |---|---|---|
 | Answer people where they are | [`gateways/slack.bx`](docs/conventions/gateways/index.md) | A Slack bot over Socket Mode (also Telegram, Discord, Teams, WhatsApp, Twilio SMS, GitHub, Signal and email) |
 | Run a job every morning | [`schedules/Digest.bx`](docs/conventions/schedules.md) | A task with `.cron()` that calls `run()`, started with the app, no cron daemon |
-| Let other systems call it | [`agentApi` in `Agent.yaml`](docs/guides/agent-api.md) | One HTTP API at `/__bxagents` with an OpenAPI document and a BoxLang client, open on your machine or behind tokens; plus [`gateways/expose.bx`](docs/conventions/gateways/index.md) for a REST path of your choosing, or an MCP server |
+| Let other systems call it | [`agentApi` in `Agent.yml`](docs/guides/agent-api.md) | One HTTP API at `/__bxagents` with an OpenAPI document and a BoxLang client, open on your machine or behind tokens; plus [`gateways/expose.bx`](docs/conventions/gateways/index.md) for a REST path of your choosing, or an MCP server |
 | Keep a human in the loop | a tool that needs approval | The run waits for approve or reject, in the terminal, the [web app](docs/conventions/web-ui.md) or a gateway |
 | Let people schedule their own work | [`routines: enabled: true`](docs/conventions/routines.md) | A person asks, the agent makes a routine, a heartbeat runs it, reports are saved, and a summary can go to a gateway chat |
 | Give each specialist a seat | [`subagents/researcher/`](docs/conventions/subagents.md) | A sub-agent you can talk to directly, with its own memory |

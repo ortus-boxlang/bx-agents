@@ -1,0 +1,44 @@
+/**
+ * The options a node's module tools get, with the project's volumes added for bx-ai's file tools.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ToolOptions", function() {
+
+			beforeEach( function() {
+				variables.options = new bxagents.models.build.ToolOptions();
+				variables.volumes = { notes : { path : "/tmp/notes", mode : "rw" } };
+			} );
+
+			it( "adds the volumes, the data home and the agent name when the node lists a file tool", function() {
+				var result = options.withVolumes( {}, [ "readFile@bxai" ], volumes, "/data/bot", "bot" );
+				expect( result.bxai.volumes ).toBe( volumes );
+				expect( result.bxai.dataHome ).toBe( "/data/bot" );
+				expect( result.bxai.agentName ).toBe( "bot" );
+			} );
+
+			it( "adds them for every bx-ai tool", function() {
+				expect( options.withVolumes( {}, [ "*@bxai" ], volumes, "", "bot" ).bxai.volumes ).toBe( volumes );
+			} );
+
+			it( "leaves the options alone when no file tool is listed", function() {
+				var given = { bxplaywright : { headless : true } };
+				expect( options.withVolumes( given, [ "now@bxai", "*@bxplaywright" ], volumes, "", "bot" ) ).toBe( given );
+			} );
+
+			it( "leaves the options alone when the node names its own folders", function() {
+				var given = { bxai : { allowedPaths : [ "/tmp/x" ] } };
+				expect( options.withVolumes( given, [ "readFile@bxai" ], volumes, "", "bot" ) ).toBe( given );
+			} );
+
+			it( "does not change the options it was given", function() {
+				var given = { bxai : { other : 1 } };
+				options.withVolumes( given, [ "readFile@bxai" ], volumes, "", "bot" );
+				expect( given.bxai.keyExists( "volumes" ) ).toBeFalse();
+			} );
+
+		} );
+	}
+
+}

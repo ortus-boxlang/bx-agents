@@ -7,22 +7,22 @@
  *
  * Where it looks, weakest first:
  *   modules   `extensions/` of every installed BoxLang module that has one
- *   user      `~/.bxagents/extensions` (next to the person's bxAgents.yml). Only the terminal chat: a served
+ *   user      `~/.bxagents/extensions` (next to the person's Agent.yml). Only the terminal chat: a served
  *             agent or a chat platform never reads a developer's home folder.
  *   project   `<project>/extensions`
  *
- * What the people said: the `extensions:` block of the person's `bxAgents.yml` and, over it, the project's
- * `Agent.yaml` (see ExtensionSettings). Whatever is wrong in either (an extension that will not load, a
+ * What the people said: the `extensions:` block of the project's `Agent.yml` and, over it, the person's own
+ * `Agent.yml`, because the person who runs the agent has the last word (see ExtensionSettings). Whatever is wrong in either (an extension that will not load, a
  * file that is not YAML) is returned by `problems()`; it never stops the chat from starting.
  */
 class {
 
 	/**
 	 * @projectRoot The project's folder; blank for none
-	 * @userConfig The person's UserConfig; ~/.bxagents/bxAgents.yml when not given
+	 * @userConfig The person's UserConfig; ~/.bxagents/Agent.yml when not given
 	 * @transport "tui", "web" or "gateway"; only "tui" reads the user layer
 	 * @moduleFolders The `extensions/` folders of installed modules; found from the runtime when not given
-	 * @projectSettings The project's `extensions:` block; read from Agent.yaml when not given
+	 * @projectSettings The project's `extensions:` block; read from Agent.yml when not given
 	 * @projectFolder The project layer's folder; `<projectRoot>/extensions` when not given. A served app keeps its copy elsewhere.
 	 */
 	function init( string projectRoot = "", any userConfig, string transport = "tui", array moduleFolders, struct projectSettings, string projectFolder = "" ) {
@@ -57,7 +57,7 @@ class {
 	 */
 	function install( required any commands ) {
 		variables.commands = arguments.commands
-		var settings = new "models.extensions.ExtensionSettings@bxagents"().combine( [ variables.userConfig.extensions(), projectBlock() ] )
+		var settings = new "models.extensions.ExtensionSettings@bxagents"().combine( [ projectBlock(), variables.userConfig.extensions() ] )
 		variables.registry = new "models.extensions.ExtensionRegistry@bxagents"( arguments.commands, settings )
 		for ( var folder in variables.moduleFolders ) {
 			variables.registry.addLayer( "modules", folder )

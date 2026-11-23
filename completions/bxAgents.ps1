@@ -31,7 +31,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'serve' = 'Serve a built project via boxlang-miniserver'
 		'sessions' = 'List, rename, fork, delete, clear, export and import the conversations in the chat...'
 		'skills' = 'Skills from skills.boxlang.io: skills <find|install|list|show|update|remove>'
-		'stats' = 'What the model calls used: tokens by model, provider, day or user, once Agent.yaml says...'
+		'stats' = 'What the model calls used: tokens by model, provider, day or user, once Agent.yml says...'
 		'test' = 'Run a project''s own tests/specs via TestBox'
 		'token' = 'Issue, list and revoke access tokens for a deployed agent'
 		'users' = 'The sign-in accounts of the web page and who is an admin'

@@ -7,7 +7,7 @@ class {
 
 	/**
 	 * @agent The AiAgent
-	 * @entries The `mcpServers` entries that have an `oauth` key, as written in Agent.yaml
+	 * @entries The `mcpServers` entries that have an `oauth` key, as written in Agent.yml
 	 * @apiPath Where the agent API is served, which the callback address is built from
 	 *
 	 * @return The agent
@@ -18,6 +18,15 @@ class {
 			arguments.agent.withMiddleware( new "models.connect.ConnectionMiddleware@bxagents"( service ) )
 		}
 		return arguments.agent
+	}
+
+	/**
+	 * @mcpServers The `mcpServers` setting
+	 *
+	 * @return The entries that ask each person to sign in (they have an `oauth` key)
+	 */
+	array function signInEntries( required array mcpServers ) {
+		return arguments.mcpServers.filter( entry => isStruct( entry ) && entry.keyExists( "oauth" ) )
 	}
 
 	/**

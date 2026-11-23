@@ -8,13 +8,13 @@ tags: [guides, examples, tools, skills]
 
 # Ejemplo: un agente mínimo
 
-El proyecto BxAgents completo más pequeño es [`examples/minimal-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/minimal-agent) - unos pocos archivos que muestran la forma completa de un proyecto: un `Agent.yaml`, unas instrucciones, una [tool](../conventions/tools.md) y una [skill](../conventions/skills.md). Todos los demás ejemplos de esta serie de guías parten exactamente de esta forma.
+El proyecto BxAgents completo más pequeño es [`examples/minimal-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/minimal-agent) - unos pocos archivos que muestran la forma completa de un proyecto: un `Agent.yml`, unas instrucciones, una [tool](../conventions/tools.md) y una [skill](../conventions/skills.md). Todos los demás ejemplos de esta serie de guías parten exactamente de esta forma.
 
 ## El proyecto
 
 ```text
 minimal-agent/
-├── Agent.yaml
+├── Agent.yml
 ├── instructions.md
 ├── tools/
 │   └── Greeter.bx
@@ -23,7 +23,7 @@ minimal-agent/
         └── SKILL.md
 ```
 
-`Agent.yaml` declara un nombre, una descripción y un modelo - el slug `provider/model` (consulta [El slug del modelo](../conventions/agent-bx.md#the-model-slug)) - y no hace falta nada más. ¿Necesitas código en la definición (hooks, instrucciones dinámicas)? El [`Agent.bx`](../conventions/agent-bx.md) basado en clase es la alternativa avanzada.
+`Agent.yml` declara un nombre, una descripción y un modelo - el slug `provider/model` (consulta [El slug del modelo](../conventions/agent-bx.md#the-model-slug)) - y no hace falta nada más. ¿Necesitas código en la definición (hooks, instrucciones dinámicas)? El [`Agent.bx`](../conventions/agent-bx.md) basado en clase es la alternativa avanzada.
 
 ```yaml
 name: minimal-agent
@@ -87,7 +87,7 @@ bxAgents chat
 My name is Ada.
 ```
 
-El modelo debería recurrir a la tool `sayHello` y responder con calidez, siguiendo la orientación de la skill - todo ello a partir de una sola frase de instrucciones más una tool pequeña y una skill de una línea. Con el modelo `mock` con el que viene este ejemplo, la respuesta es fija: define un `provider/model` real en `Agent.yaml` para ver la tool llamada. `bxAgents inspect` lista el agente, su tool y su skill sin hacer build.
+El modelo debería recurrir a la tool `sayHello` y responder con calidez, siguiendo la orientación de la skill - todo ello a partir de una sola frase de instrucciones más una tool pequeña y una skill de una línea. Con el modelo `mock` con el que viene este ejemplo, la respuesta es fija: define un `provider/model` real en `Agent.yml` para ver la tool llamada. `bxAgents inspect` lista el agente, su tool y su skill sin hacer build.
 
 ## Dónde ir a continuación
 

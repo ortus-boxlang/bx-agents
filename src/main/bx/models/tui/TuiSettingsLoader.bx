@@ -3,9 +3,9 @@
  * that has a value for a setting wins:
  *
  *   1. a flag of this run: --inline or --fullscreen
- *   2. the agent's own file in its data home: <data home>/settings.yml, `tui:`
- *   3. the person's file for every agent: ~/.bxagents/bxAgents.yml, `tui:`
- *   4. the project's Agent.yaml, `tui:`
+ *   2. the agent's own file in its data home: <data home>/Agent.yml, `tui:`
+ *   3. the person's file for every agent: ~/.bxagents/Agent.yml, `tui:`
+ *   4. the project's Agent.yml, `tui:`
  *   5. the default of the registry
  *
  * The same `tui:` block, with the same names, is read in all three files. The message box's look (`prompt:` and `widgets:`) is layered
@@ -14,7 +14,7 @@
 class {
 
 	/**
-	 * @projectRoot The project's folder, to find Agent.yaml and the agent's data home; blank when the chat talks to a server somewhere else
+	 * @projectRoot The project's folder, to find Agent.yml and the agent's data home; blank when the chat talks to a server somewhere else
 	 * @userConfig The person's file (UserConfig); the usual one when not given
 	 * @flags The options of the run: inline and fullscreen
 	 */
@@ -33,7 +33,7 @@ class {
 			return ""
 		}
 		try {
-			return new "models.data.ProjectData@bxagents"().of( variables.root ).home.path() & "/settings.yml"
+			return new "models.data.ProjectData@bxagents"().of( variables.root ).home.path() & "/Agent.yml"
 		} catch ( any e ) {
 			return ""
 		}
@@ -56,7 +56,7 @@ class {
 		var problems = []
 		var layers = []
 		if ( len( variables.root ) ) {
-			layers.append( { name : "Agent.yaml", values : new "models.tui.TuiLook@bxagents"().forProject( variables.root ) } )
+			layers.append( { name : "Agent.yml", values : new "models.tui.TuiLook@bxagents"().forProject( variables.root ) } )
 		}
 		layers.append( { name : "your file", values : variables.userConfig.tui() } )
 		var agent = agentFile()

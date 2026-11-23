@@ -1,6 +1,6 @@
 /**
  * `connect` CLI verb - sign in to the MCP servers of a project that ask each person to sign in (an `mcpServers`
- * entry with an `oauth` key in Agent.yaml).
+ * entry with an `oauth` key in Agent.yml).
  *
  *   bxAgents connect                      lists the connectors and the servers, and whether you are connected
  *   bxAgents connect github               connects a connector: the risk, then your token in a hidden box
@@ -41,13 +41,13 @@ class {
 		var entries = OAuthServers::of( config )
 		var offered = ConnectorSettings::resolve( config ).available.len() > 0
 		if ( !entries.len() && !offered ) {
-			return { exitCode : 1, message : "This project offers no connectors (`connectors: none`) and no mcpServers entry has an `oauth` key, so there is nothing to connect to. Add one to Agent.yaml, for example `oauth: true`." }
+			return { exitCode : 1, message : "This project offers no connectors (`connectors: none`) and no mcpServers entry has an `oauth` key, so there is nothing to connect to. Add one to Agent.yml, for example `oauth: true`." }
 		}
 
 		var file = new "models.store.ChatStorePath@bxagents"().forProject( projectRoot )
 		directoryCreate( getDirectoryFromPath( file ), true, true )
 		var wiring = new "models.vault.VaultWiring@bxagents"().pin( file )
-		// the connectors and everything typed after the first word go through the console, unless the first word is a service written in Agent.yaml
+		// the connectors and everything typed after the first word go through the console, unless the first word is a service written in Agent.yml
 		if ( offered && !entries.some( e => e.name == name ) ) {
 			return new "models.connectors.ConnectTerminal@bxagents"().run( arguments.options, config, subject, wiring, entries )
 		}

@@ -1,14 +1,14 @@
 ---
-title: Agent.yaml
+title: Agent.yml
 icon: phosphor-duotone:file-text
 summary: "The default way to define an agent - plain settings in a YAML file, no code."
 description: "The default way to define an agent - plain settings in a YAML file, no code."
 tags: [conventions, configuration]
 ---
 
-# Agent.yaml
+# Agent.yml
 
-`Agent.yaml` is the default way to define an agent. It is a plain YAML file - a name, a model, and any of the optional settings below - and the build turns it into a running agent. Most agents need nothing more than this file and an [`instructions.md`](#instructions) beside it.
+`Agent.yml` is the default way to define an agent. It is a plain YAML file - a name, a model, and any of the optional settings below - and the build turns it into a running agent. Most agents need nothing more than this file and an [`instructions.md`](#instructions) beside it.
 
 ```yaml
 name: support
@@ -23,7 +23,7 @@ environments:
 `bxAgents new` scaffolds exactly this shape. When the definition needs real code (hooks, dynamic instructions, tools registered in code), use the advanced option instead: a class-based [`Agent.bx`](agent-bx.md), scaffolded with `bxAgents new --class`.
 
 !!! info
-    A folder holds **one** agent definition. An `Agent.yaml` (or `Agent.yml`) together with an `Agent.bx` in the same folder is an error - two definitions of one agent would leave it ambiguous which settings win - and `build` fails and names both files so you can keep one. This applies to the project root and to every [subagent](subagents.md) folder, and a project can mix the two: a YAML root with a class-based subagent, or the other way round.
+    A folder holds **one** agent definition. An `Agent.yml` together with an `Agent.bx` in the same folder is an error - two definitions of one agent would leave it ambiguous which settings win - and `build` fails and names both files so you can keep one. This applies to the project root and to every [subagent](subagents.md) folder, and a project can mix the two: a YAML root with a class-based subagent, or the other way round.
 
 ## Settings
 
@@ -56,11 +56,11 @@ environments:
 | `vault` | mapping | Gives the agent `vault_list` and `vault_request` and scrubs vault secrets from tool results. `vault: {}` turns it on. See [the vault](vault.md). |
 | `routines` | mapping | Prompts the agent runs on a schedule, made by asking it. Off unless `enabled: true`. `maxPerUser`, `minInterval`, `maxParallel`, `maxPromptLength`, `approvalTimeout`, `timezone`, `summaryLength`, `maxReportSize` and `maxReportFiles` set the limits. See [routines](routines.md). |
 | `skills` | mapping | Skills the agent saves for itself. `agentCanSave` (default `true`) gives the root agent a `skill_save` tool; `autoApprove` (default `false`) skips the person's approval of each save; `builtin` (default `true`) keeps the six skills that bxAgents ships available to the agent, and `false` leaves them out. Saved skills live in the data home and are in the agent's skill list at once. See [data and volumes](data.md#skills-the-agent-saves). |
-| `data` | mapping | Where the agent keeps everything: `data: { home: ~/.nanobox }`. See [data and volumes](data.md). Only in the project's own `Agent.yaml`. |
-| `volumes` | mapping | Host folders the agent's file tools may use, by name: `volumes: { notes: { path: ~/Notes, mode: rw } }`. See [data and volumes](data.md#volumes). Only in the project's own `Agent.yaml`. |
-| `usage` | boolean | Records what each model call used (the time, who, the provider, the model and the tokens), for [`bxAgents stats`](../cli-reference.md#stats) and `/stats`. **Off by default**: set `usage: true` to turn it on. Counts only, never what was said. Only in the project's own `Agent.yaml`. Rebuild after changing it. |
+| `data` | mapping | Where the agent keeps everything: `data: { home: ~/.nanobox }`. See [data and volumes](data.md). `data.home` can not be set in a person's file, because it decides where the agent's own file lives. |
+| `volumes` | mapping | Host folders the agent's file tools may use, by name: `volumes: { notes: { path: ~/Notes, mode: rw } }`. See [data and volumes](data.md#volumes). A person can add volumes in their own files: see [layered settings](layered-settings.md). |
+| `usage` | boolean | Records what each model call used (the time, who, the provider, the model and the tokens), for [`bxAgents stats`](../cli-reference.md#stats) and `/stats`. **Off by default**: set `usage: true` to turn it on. Counts only, never what was said. A person can turn it on in their own files, and it applies when the app starts. |
 | `tui` | mapping | How the terminal chat looks and behaves: `{ prompt, widgets: { top, bottom }, fullscreen, header, spacing, theme, animations, thinking, tools, markdown, menuRows, notify, terminalTitle }`, all optional. The settings after `widgets` are listed in [Settings](../guides/terminal-ui.md#settings); this block is the project's suggestion, and a person's own files win over it. `prompt` is `bars` (default), `bars-hints`, `rule`, `box` or `panel`; `widgets` list what goes in the top bar and at the bottom (`agent`, `profile`, `folder`, `user`, `clock`, `machine`, `git`, `date`, `session`, `elapsed`, `ctx`). A wrong name is refused and the valid ones are listed. See [The prompt and the tables](../cli-reference.md#the-prompt-and-the-tables). |
-| `extensions` | mapping | Values for the project's [extensions](extensions.md), by extension name, and what to turn off: `{ disable: [ roll, "deploy:deploy" ], deploy: { target: production } }`. Each extension's block is merged over the defaults its `configure()` sets. Only in the project's own `Agent.yaml`. |
+| `extensions` | mapping | Values for the project's [extensions](extensions.md), by extension name, and what to turn off: `{ disable: [ roll, "deploy:deploy" ], deploy: { target: production } }`. Each extension's block is merged over the defaults its `configure()` sets. A person's own files can set values too, and theirs win. |
 | `environments` | mapping | Per-environment overrides. See [Environments](#environments). |
 
 These are the same settings an `Agent.bx`'s `configure()` returns, so every behavior documented for them applies unchanged.
@@ -69,6 +69,9 @@ These are the same settings an `Agent.bx`'s `configure()` returns, so every beha
     An **unknown key is an error**, and the message lists the valid ones. A typo such as `modle:` would otherwise do nothing, quietly. Anything free-form belongs in an `Agent.bx`.
 
 A value of the wrong type (a text where a list belongs, say) and an empty value (`model:` with nothing after it) are errors too.
+
+!!! tip "The person who installs your agent can change these"
+    Every setting except `name` and `data.home` can be overridden or added to from `~/.bxagents/Agent.yml` (every agent) and `~/.bxagents/<agent>/Agent.yml` (one agent), when the agent is built and again when a built app starts. See [layered settings](layered-settings.md).
 
 ## Tools
 
@@ -172,11 +175,11 @@ Manage them yourself with `/remember` and `/notes` in [`chat`](../cli-reference.
 
 ## Instructions
 
-The agent's instructions are its system prompt. Put them in an `instructions.md` beside `Agent.yaml`, the usual choice because the file is plain Markdown and easy to edit:
+The agent's instructions are its system prompt. Put them in an `instructions.md` beside `Agent.yml`, the usual choice because the file is plain Markdown and easy to edit:
 
 ```text
 my-agent/
-├── Agent.yaml
+├── Agent.yml
 └── instructions.md
 ```
 
@@ -218,19 +221,19 @@ Only the block for the active environment is applied, on top of the top-level se
 `bxAgents test` builds against the `test` environment, which is why a scaffolded project carries a `test` block pointing at the `mock` provider: its tests need no API key or network access.
 
 !!! note
-    An `Agent.yaml` cannot compute its environment. The `detectEnvironment()` method described under [Environment overrides](agent-bx.md#environment-overrides) needs code, so a project that needs it uses an `Agent.bx`.
+    An `Agent.yml` cannot compute its environment. The `detectEnvironment()` method described under [Environment overrides](agent-bx.md#environment-overrides) needs code, so a project that needs it uses an `Agent.bx`.
 
 The overrides then merge with `boxlang.json`, `boxlang-{environment}.json`, `miniserver.json` and `miniserver-{environment}.json` exactly as described in [Merge semantics](agent-bx.md#merge-semantics).
 
 ## Requirements
 
-Reading YAML needs the `bx-yaml` module, **1.1.0 or later**. BxAgents bundles it, so there is nothing to install. Global YAML tags (such as `!!java.io.File`) are rejected, so a cloned project's `Agent.yaml` cannot make the build instantiate arbitrary Java classes.
+Reading YAML needs the `bx-yaml` module, **1.1.0 or later**. BxAgents bundles it, so there is nothing to install. Global YAML tags (such as `!!java.io.File`) are rejected, so a cloned project's `Agent.yml` cannot make the build instantiate arbitrary Java classes.
 
 ## YAML or Agent.bx?
 
 | Use | When |
 |---|---|
-| `Agent.yaml` | The agent is configuration: a name, a model, instructions, memory, subagents. This is almost every agent. |
+| `Agent.yml` | The agent is configuration: a name, a model, instructions, memory, subagents. This is almost every agent. |
 | [`Agent.bx`](agent-bx.md) | The definition itself needs code: hooks, dynamic instructions, tools registered in code, an overridden method, or `detectEnvironment()`. |
 
-You can start with YAML and switch later: create the `Agent.bx`, move the settings across, and delete the `Agent.yaml`.
+You can start with YAML and switch later: create the `Agent.bx`, move the settings across, and delete the `Agent.yml`.

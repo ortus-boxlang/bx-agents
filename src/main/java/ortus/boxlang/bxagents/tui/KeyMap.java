@@ -218,7 +218,7 @@ public final class KeyMap {
 			String clash = usedBy( c, x.id() );
 			if ( clash != null ) {
 				problems.add( "[" + x.id() + "]: " + c.label() + " is already used by [" + clash + "], so it was left out. Give [" + x.id()
-				    + "] another key under chat: keys: in your bxAgents.yml." );
+				    + "] another key under chat: keys: in your Agent.yml." );
 				continue;
 			}
 			extra.get( x.id() ).add( c );

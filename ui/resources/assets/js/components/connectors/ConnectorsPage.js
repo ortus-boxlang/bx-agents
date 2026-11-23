@@ -2,7 +2,7 @@ import { keepInAddress } from "../../utils/address.js";
 
 /**
  * The Connectors page: the services the agent can use for a person. The catalog connectors (GET /connectors) and the
- * services a developer wrote into Agent.yaml (GET /connect, their own tab) are kept apart on purpose. A token is sent
+ * services a developer wrote into Agent.yml (GET /connect, their own tab) are kept apart on purpose. A token is sent
  * once and cleared from the page at once; nothing here keeps it. Connect, the sign in and the tools drawer: POST
  * /connectors/connect, /connectors/disconnect, /connectors/tools, GET /connectors/tools, POST /connect, /connect/remove.
  */
@@ -123,7 +123,7 @@ export function connectorsPage() {
 		failed  : "",
 		/** @type {object|null} What GET /connectors answered */
 		data    : null,
-		/** @type {Array<object>|null} What GET /connect answered (services in Agent.yaml), or null when not offered */
+		/** @type {Array<object>|null} What GET /connect answered (services in Agent.yml), or null when not offered */
 		servers : null,
 		/** @type {{ url: string, name: string }} A sign in link to open, and what it is for */
 		signIn  : { url: "", name: "" },
@@ -152,7 +152,7 @@ export function connectorsPage() {
 				{ id: "attention", label: "Needs attention", icon: "warning-circle", count: connectorRows( this.rows, "attention", "" ).length }
 			];
 			if ( this.servers ) {
-				tabs.push( { id: "agent", label: "In Agent.yaml", icon: "file-text", count: this.servers.length } );
+				tabs.push( { id: "agent", label: "In Agent.yml", icon: "file-text", count: this.servers.length } );
 			}
 			return tabs;
 		},
@@ -165,7 +165,7 @@ export function connectorsPage() {
 			return { all: "This agent offers no connectors.", connected: "You have not connected any connector yet.", attention: "Nothing needs your attention." }[ this.tab ] || "";
 		},
 
-		/** @returns {Array<object>} The services in Agent.yaml that match the search */
+		/** @returns {Array<object>} The services in Agent.yml that match the search */
 		get shownServers() {
 			const term = this.query.trim().toLowerCase();
 			return ( this.servers || [] ).filter( s => !term || s.name.toLowerCase().includes( term ) );
@@ -181,7 +181,7 @@ export function connectorsPage() {
 		/** @returns {string} Where the catalog is set, and what it leaves out */
 		get policyDetail() {
 			const left = ( ( this.data && this.data.policy ) || {} ).excluded || [];
-			return "Set in Agent.yaml under connectors:." + ( left.length ? " Left out: " + left.join( ", " ) + "." : "" );
+			return "Set in Agent.yml under connectors:." + ( left.length ? " Left out: " + left.join( ", " ) + "." : "" );
 		},
 
 		/** @returns {object} How many tools are on, and the warning line */
@@ -226,7 +226,7 @@ export function connectorsPage() {
 			this.stopWatching();
 		},
 
-		/** Reads the connectors and the services in Agent.yaml. */
+		/** Reads the connectors and the services in Agent.yml. */
 		async load() {
 			const [
 				connectors,
@@ -466,7 +466,7 @@ export function connectorsPage() {
 		},
 
 		/**
-		 * Starts the sign in to a service written in Agent.yaml.
+		 * Starts the sign in to a service written in Agent.yml.
 		 *
 		 * @param {{ name: string }} server The service
 		 */

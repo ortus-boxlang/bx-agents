@@ -11,7 +11,7 @@
  *   connect github options key=value  change the option values of one connector
  *
  * A token is never an argument: it is typed in a hidden box, or read from an environment variable the person names
- * (`--token-env=NAME`). The services written in Agent.yaml (mcpServers with oauth) are listed after the connectors and
+ * (`--token-env=NAME`). The services written in Agent.yml (mcpServers with oauth) are listed after the connectors and
  * connected by name through `signIns`.
  */
 class {
@@ -19,7 +19,7 @@ class {
 	/**
 	 * @source A LocalConnectorSource or a RemoteConnectorSource
 	 * @io What the console writes to and asks through: text( line ), warn( line ), ok( line ), canAsk(), ask( question, options ), askSecret( question, help ), confirm( question ), choose( question, choices )
-	 * @signIns The services written in Agent.yaml: available(), list(), start( name ), remove( name ); or nothing
+	 * @signIns The services written in Agent.yml: available(), list(), start( name ), remove( name ); or nothing
 	 * @hooks { afterSignIn : ( id, address ) => nothing }: what the terminal does once a sign in address has been shown, such as opening the browser and waiting for it to come back
 	 */
 	function init( required any source, required any io, any signIns = "", struct hooks = {} ) {
@@ -71,7 +71,7 @@ class {
 	// ---- the list ------------------------------------------------------------------
 
 	/**
-	 * Every connector with its state, then the services written in Agent.yaml.
+	 * Every connector with its state, then the services written in Agent.yml.
 	 */
 	private void function showAll() {
 		var rows = []
@@ -91,7 +91,7 @@ class {
 			}
 		}
 		if ( !isSimpleValue( variables.signIns ) && variables.signIns.available() ) {
-			variables.io.text( "In Agent.yaml:" )
+			variables.io.text( "In Agent.yml:" )
 			for ( var service in variables.signIns.list() ) {
 				variables.io.text( "  #service.name#  #service.connected ? 'connected' : 'not connected'#  #service.url#" )
 				if ( len( service.result ?: "" ) ) {
@@ -145,7 +145,7 @@ class {
 	}
 
 	/**
-	 * @return The names of the services written in Agent.yaml
+	 * @return The names of the services written in Agent.yml
 	 */
 	private array function signInNames() {
 		return variables.signIns.list().map( s => s.name )
@@ -397,7 +397,7 @@ class {
 		}
 	}
 
-	// ---- the services written in Agent.yaml ----------------------------------------------
+	// ---- the services written in Agent.yml ----------------------------------------------
 
 	/**
 	 * @name The service's name

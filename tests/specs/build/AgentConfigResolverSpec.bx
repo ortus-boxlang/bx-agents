@@ -16,7 +16,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( config.environment ).toBe( "development" );
 			} );
 
-			it( "resolves an Agent.yaml the same way as a descriptor Agent.bx", function() {
+			it( "resolves an Agent.yml the same way as a descriptor Agent.bx", function() {
 				var config = resolver.resolve( projectRoot = fixtures & "/yaml-minimal" );
 
 				expect( config.name ).toBe( "yaml-agent" );
@@ -26,7 +26,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( config.classBasedAgent ).toBeFalse();
 			} );
 
-			it( "applies the matching environments: block of an Agent.yaml", function() {
+			it( "applies the matching environments: block of an Agent.yml", function() {
 				var dev = resolver.resolve( projectRoot = fixtures & "/yaml-environments" );
 				var prod = resolver.resolve( projectRoot = fixtures & "/yaml-environments", cliEnvironment = "production" );
 
@@ -36,7 +36,82 @@ class extends="testbox.system.BaseSpec" {
 				expect( prod.keyExists( "environments" ) ).toBeFalse();
 			} );
 
-			it( "refuses a folder with both an Agent.yaml and an Agent.bx", function() {
+			describe( "the person's files", function() {
+
+				beforeEach( function() {
+					variables.nl = char( 10 )
+					variables.scratch = createTempDirectory( prefix = "bxagents-person-" )
+					variables.home = scratch & "/home"
+					directoryCreate( home )
+					variables.project = scratch & "/project"
+					directoryCreate( project )
+					fileWrite(
+						project & "/Agent.yml",
+						[
+							"name: layered",
+							"model: openai/gpt-5",
+							"tools: [ now@bxai ]",
+							"data:",
+							"  home: " & home,
+							"environments:",
+							"  production:",
+							"    model: openai/gpt-5-mini"
+						].toList( nl ) & nl
+					)
+					variables.globalFile = scratch & "/global.yml"
+				} );
+
+				afterEach( function() {
+					if ( directoryExists( scratch ) ) {
+						directoryDelete( scratch, true )
+					}
+				} );
+
+				it( "leaves the author's settings alone unless asked for the person's files", function() {
+					fileWrite( globalFile, "model: ollama/qwen3" & nl )
+					var config = resolver.resolve( projectRoot = project, globalFile = globalFile )
+					expect( config.model ).toBe( "openai/gpt-5" )
+					expect( config.keyExists( "personLayers" ) ).toBeFalse()
+				} );
+
+				it( "puts the global file over the project, over its environment override, and the agent's own file over both", function() {
+					fileWrite( globalFile, [ "model: global/m", "tools+: [ extra@bxai ]" ].toList( nl ) & nl )
+					var withGlobal = resolver.resolve( projectRoot = project, cliEnvironment = "production", withPerson = true, globalFile = globalFile )
+					expect( withGlobal.model ).toBe( "global/m" )
+					expect( withGlobal.tools ).toBe( [ "now@bxai", "extra@bxai" ] )
+
+					fileWrite( home & "/Agent.yml", "model: ollama/qwen3" & nl )
+					var withAgent = resolver.resolve( projectRoot = project, withPerson = true, globalFile = globalFile )
+					expect( withAgent.model ).toBe( "ollama/qwen3" )
+					expect( withAgent.tools ).toBe( [ "now@bxai", "extra@bxai" ] )
+				} );
+
+				it( "says which settings came from which file", function() {
+					fileWrite( globalFile, "tools-: [ now@bxai ]" & nl )
+					fileWrite( home & "/Agent.yml", [ "agentApi:", "  enabled: false" ].toList( nl ) & nl )
+					var config = resolver.resolve( projectRoot = project, withPerson = true, globalFile = globalFile )
+					expect( config.tools ).toBeEmpty()
+					expect( config.personLayers.changed.map( e => e.path & "@" & e.layer ) ).toBe( [ "agentApi@agent", "tools@global" ] )
+					expect( config.personLayers.buildOnly.map( e => e.path ) ).toBe( [ "agentApi" ] )
+					expect( config.personLayers.files.map( e => e.file ) ).toBe( [ globalFile, home & "/Agent.yml" ] )
+				} );
+
+				it( "reads the model the person set like any other, so a profile of theirs is normalized", function() {
+					fileWrite( globalFile, "model: anthropic/claude-sonnet-4-5" & nl )
+					var config = resolver.resolve( projectRoot = project, withPerson = true, globalFile = globalFile )
+					expect( config.model ).toBe( "anthropic/claude-sonnet-4-5" )
+				} );
+
+				it( "refuses a bad person's file and names it", function() {
+					fileWrite( globalFile, "modle: x" & nl )
+					expect( function() {
+						resolver.resolve( projectRoot = project, withPerson = true, globalFile = globalFile )
+					} ).toThrow( regex = "global\.yml" );
+				} );
+
+			} );
+
+			it( "refuses a folder with both an Agent.yml and an Agent.bx", function() {
 				expect( function() {
 					resolver.resolve( projectRoot = fixtures & "/yaml-and-bx" );
 				} ).toThrow( type = "BxAgents.AmbiguousAgentDefinition" );

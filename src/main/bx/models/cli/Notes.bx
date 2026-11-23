@@ -12,7 +12,7 @@
  *   bxAgents notes import --file=notes.json
  *
  * The scope defaults to the notes about the user, the user to the operating system user. The notes of the
- * agent belong to the agent's name in Agent.yaml. Limits come from the agent's `notes` block.
+ * agent belong to the agent's name in Agent.yml. Limits come from the agent's `notes` block.
  */
 import bxModules.bxagents.models.api.Caller;
 
@@ -156,11 +156,11 @@ class {
 	}
 
 	/**
-	 * @return The `notes` block of the project's Agent.yaml, empty when there is none
+	 * @return The `notes` block of the project's Agent.yml, empty when there is none
 	 */
 	private struct function notesConfig( required string root ) {
 		try {
-			var agent = new "models.build.AgentYamlLoader@bxagents"().load( arguments.root & "/Agent.yaml" ).config
+			var agent = new "models.build.AgentYamlLoader@bxagents"().load( arguments.root & "/Agent.yml" ).config
 			return isStruct( agent.notes ?: "" ) ? agent.notes : {}
 		} catch ( any e ) {
 			return {}
@@ -169,7 +169,7 @@ class {
 
 	private string function agentNameOf( required string root ) {
 		try {
-			var agent = new "models.build.AgentYamlLoader@bxagents"().load( arguments.root & "/Agent.yaml" ).config
+			var agent = new "models.build.AgentYamlLoader@bxagents"().load( arguments.root & "/Agent.yml" ).config
 			return agent.name ?: listLast( arguments.root, "/" )
 		} catch ( any e ) {
 			return listLast( arguments.root, "/" )

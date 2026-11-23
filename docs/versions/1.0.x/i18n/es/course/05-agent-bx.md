@@ -1,14 +1,14 @@
 ---
-title: "Lección 5: La definición del agente - Agent.yaml"
+title: "Lección 5: La definición del agente - Agent.yml"
 icon: phosphor-duotone:robot
 summary: El único archivo obligatorio - un archivo YAML simple que dice qué es tu agente.
 description: El único archivo obligatorio - un archivo YAML simple que dice qué es tu agente.
 tags: [course, conventions]
 ---
 
-# La definición del agente - Agent.yaml
+# La definición del agente - Agent.yml
 
-`Agent.yaml` es el **único archivo obligatorio** de un proyecto BxAgents (además de las
+`Agent.yml` es el **único archivo obligatorio** de un proyecto BxAgents (además de las
 instrucciones a las que apunta). Son ajustes en texto plano - un nombre, un modelo y
 cualquier extra opcional - y el build los convierte en un
 [agente real de BX AI](https://ai.ortusbooks.com/main-components/agents/class-based-agents).
@@ -27,7 +27,7 @@ Eso es un agente completo. `bxAgents new` crea esta forma por ti (consulta la
 `instructions.md` a su lado (consulta la [Lección 6](06-instructions-and-system-prompt.md)).
 
 !!! info
-    Una carpeta contiene **una** definición de agente. Un `Agent.yaml` junto con un
+    Una carpeta contiene **una** definición de agente. Un `Agent.yml` junto con un
     `Agent.bx` (o un `Agent.yml`) en la misma carpeta es un error, y el build nombra ambos
     archivos para que conserves uno.
 
@@ -47,7 +47,7 @@ Eso es un agente completo. `bxAgents new` crea esta forma por ti (consulta la
 | `gatewaySession` | Cómo los gateways de chat ponen en cola los mensajes, qué comandos de barra responden y si leen adjuntos (consulta la [Lección 14](14-connecting-chat-platforms.md)). |
 | `agentApi` | La API de agente siempre activa: quién puede llamarla (tokens, direcciones permitidas, límite de frecuencia) y dónde se sirve (consulta la [Lección 13](13-exposing-http-and-mcp.md)). |
 | `environments` | Sobrescrituras por entorno (ver abajo). |
-| `provider`, `params`, `options`, `providers`, `profiles`, `notes` (notas cortas que guarda el agente), `usage` (registra los recuentos de tokens para `bxAgents stats`), `tui` (el aspecto del chat de terminal), `extensions` y más | Más ajustes, todos listados en la referencia de [Agent.yaml](../conventions/agent-yaml.md). |
+| `provider`, `params`, `options`, `providers`, `profiles`, `notes` (notas cortas que guarda el agente), `usage` (registra los recuentos de tokens para `bxAgents stats`), `tui` (el aspecto del chat de terminal), `extensions` y más | Más ajustes, todos listados en la referencia de [Agent.yml](../conventions/agent-yaml.md). |
 
 Una **clave desconocida es un error** que lista las válidas, así que un error tipográfico
 como `modle:` nunca puede no hacer nada en silencio. Los tipos incorrectos y los valores
@@ -108,11 +108,11 @@ encima de las claves de primer nivel. Usarás este mismo mecanismo para el prove
 en tus pruebas ([Lección 19](19-testing-your-agent.md)), por eso `bxAgents new` ya te da un
 bloque `test`.
 
-Referencia completa: [Agent.yaml](../conventions/agent-yaml.md).
+Referencia completa: [Agent.yml](../conventions/agent-yaml.md).
 
 ## Cuando necesitas código: Agent.bx
 
-`Agent.yaml` cubre casi todos los agentes. Recurre a la forma avanzada basada en clase,
+`Agent.yml` cubre casi todos los agentes. Recurre a la forma avanzada basada en clase,
 `Agent.bx`, solo cuando la propia definición necesita código: hooks, instrucciones
 dinámicas, tools registradas por código, un método sobrescrito, o calcular el entorno con
 `detectEnvironment()`. Es una clase real que extiende el `AiAgent` de bx-ai, y que el build
@@ -135,7 +135,7 @@ class extends="bxModules.bxai.models.runnables.AiAgent" {
 ```
 
 Crea uno con `bxAgents new --class`, o empieza en YAML y cambia más tarde: crea el
-`Agent.bx`, traslada los ajustes y borra el `Agent.yaml`. Referencia completa:
+`Agent.bx`, traslada los ajustes y borra el `Agent.yml`. Referencia completa:
 [Agent.bx](../conventions/agent-bx.md).
 
 Siguiente: [Lección 6 - instructions.md y el system prompt](06-instructions-and-system-prompt.md)

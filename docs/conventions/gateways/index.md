@@ -93,7 +93,7 @@ Installs the web app (a ColdBox module, `bxagentsui`) at `<path>`, and the app c
 
 The web UI is a subsystem rather than a single exposure switch - the store, conversations and preferences, branding and theming, sign-in and how the page uses the agent API are all on its own page: **[The web chat UI](../web-ui.md)**.
 
-**Validation:** `exposes` must be `agent`, `mcp`, or `webui`; `path` is required and must be unique across every exposure entry; an `mcp` exposure's `target` is required and must match a real `mcp/*` entry's file name; `webui`'s `apiKeyEnvVar` is entirely optional, with no required-field check (see below). A `webui` entry may list `profiles` for the page's model picker (see [Choosing the model](../web-ui.md#choosing-the-model)); each must be declared in `Agent.yaml`, and no other kind of entry may list them.
+**Validation:** `exposes` must be `agent`, `mcp`, or `webui`; `path` is required and must be unique across every exposure entry; an `mcp` exposure's `target` is required and must match a real `mcp/*` entry's file name; `webui`'s `apiKeyEnvVar` is entirely optional, with no required-field check (see below). A `webui` entry may list `profiles` for the page's model picker (see [Choosing the model](../web-ui.md#choosing-the-model)); each must be declared in `Agent.yml`, and no other kind of entry may list them.
 
 ## 2. Channel-adapter gateways (`type: "mock" | "cli" | "http"`)
 
@@ -237,10 +237,10 @@ application.bxaiGatewaySession = gatewaySession
 !!! warning
     The `aiGatewayRegistry().get(...)` key is always the gateway TYPE string ("telegram", "slack", "discord", "email", ...) - confirmed against bx-ai's real `GatewayRegistry.register()` source, which always keys by the gateway class's own fixed `getName()`, never anything caller-supplied. A real consequence: **two `gateways/*` entries of the same push-style type collide on the same registry slot project-wide** - the second registration silently overwrites the first. There's no per-entry alias today; use a distinct type per additional platform account, or wait for multi-instance support.
 
-Control `GatewaySession`'s policy via an optional `gatewaySession` block on the root project's `Agent.yaml`:
+Control `GatewaySession`'s policy via an optional `gatewaySession` block on the root project's `Agent.yml`:
 
 ```yaml
-# Agent.yaml
+# Agent.yml
 gatewaySession:       # both optional - these are the defaults
   policy: queue
   maxQueueDepth: 50
@@ -258,7 +258,7 @@ A message that is one of the session's slash commands is answered by BxAgents it
 By default a safe set is on: `/help`, `/tools`, `/model`, `/info`, `/ping`, `/remember`, `/notes` and `/connect`. They need no conversation of their own and change nothing shared (`/connect` only gives the person who sends it a link to sign in to a service: see [connect](../connect.md#trying-it-on-a-chat-platform)). Narrow it, widen it or switch it off in the same `gatewaySession` block:
 
 ```yaml
-# Agent.yaml
+# Agent.yml
 gatewaySession:
   commands:
     enabled: true            # false switches commands off

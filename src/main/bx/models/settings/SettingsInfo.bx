@@ -1,0 +1,28 @@
+/**
+ * The lines `/info` shows about the settings that came from a person's own Agent.yml files, one per setting with its file.
+ *
+ * The file for every agent can add tools, MCP servers and volumes to any agent, so the chat says what it did: a person
+ * who installed a ready-made agent can see what changed it, and which of those need a rebuild to apply.
+ */
+class {
+
+	/**
+	 * @result What RuntimeSettings.start() resolved: { active, changed, needsRebuild }
+	 *
+	 * @return [ [ label, value ] ]; none when no file changed anything
+	 */
+	array function rows( required struct result ) {
+		var rows = []
+		var needs = {}
+		for ( var entry in ( arguments.result.needsRebuild ?: [] ) ) {
+			needs[ entry.path ] = true
+		}
+		for ( var entry in ( arguments.result.changed ?: [] ) ) {
+			var verb = { set : "set", append : "added to", remove : "removed from", delete : "removed" }[ entry.op ] ?: entry.op
+			var note = needs.keyExists( entry.path ) ? " (needs a rebuild)" : ""
+			rows.append( [ "From your files", "#entry.path# #verb# in #entry.file##note#" ] )
+		}
+		return rows
+	}
+
+}

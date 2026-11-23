@@ -51,7 +51,7 @@ ciclo real de `build`/`serve`/`package`. El agente construido se expone como `ag
 ## Probar no necesita ninguna clave de API
 
 Por defecto, `bxAgents test` construye tu agente usando una sobrescritura de entorno `test`
-en `Agent.yaml`, creada automáticamente por `new`:
+en `Agent.yml`, creada automáticamente por `new`:
 
 ```yaml
 environments:

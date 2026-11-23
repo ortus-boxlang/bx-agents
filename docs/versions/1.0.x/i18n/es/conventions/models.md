@@ -1,14 +1,14 @@
 ---
 title: Modelos y perfiles
 icon: phosphor-duotone:brain
-summary: El modelo por defecto, otros proveedores, perfiles con nombre y los valores por defecto de las capacidades, todo en Agent.yaml.
-description: El modelo por defecto, otros proveedores, perfiles con nombre y los valores por defecto de las capacidades, todo en Agent.yaml.
+summary: El modelo por defecto, otros proveedores, perfiles con nombre y los valores por defecto de las capacidades, todo en Agent.yml.
+description: El modelo por defecto, otros proveedores, perfiles con nombre y los valores por defecto de las capacidades, todo en Agent.yml.
 tags: [conventions, models, profiles]
 ---
 
 # Modelos y perfiles
 
-El modelo que usa un agente se escribe en `Agent.yaml`. El build lo traduce a los ajustes de bx-ai, así que nunca escribes un `boxlang.json` para esto. Los nombres son los de bx-ai: `provider`, `model`, `params`, `options`, `providers`, `profiles`.
+El modelo que usa un agente se escribe en `Agent.yml`. El build lo traduce a los ajustes de bx-ai, así que nunca escribes un `boxlang.json` para esto. Los nombres son los de bx-ai: `provider`, `model`, `params`, `options`, `providers`, `profiles`.
 
 ```yaml
 provider: openai                 # el modelo por defecto
@@ -48,7 +48,7 @@ Un perfil es una combinación con nombre: un proveedor, un modelo, params, optio
 | `description` | Para personas y para los selectores de la terminal y la web. |
 | `provider`, `model` | Sobre qué se ejecuta. Un perfil sin proveedor usa el proveedor por defecto. |
 | `params`, `options` | Se superponen a los del proveedor y a los por defecto: `params` del valor por defecto, luego el proveedor, luego el perfil. |
-| `apiKeyEnv` | El **nombre** de la variable que guarda la clave. Una clave nunca se escribe en `Agent.yaml`; un perfil que la tenga se rechaza. |
+| `apiKeyEnv` | El **nombre** de la variable que guarda la clave. Una clave nunca se escribe en `Agent.yml`; un perfil que la tenga se rechaza. |
 | `contextWindow`, `vision` | Lo que el proyecto sabe del modelo, ver abajo. |
 
 Un perfil no puede llamarse `default` ni como un proveedor (`openai`, `claude`, ...), porque ambos se eligen por nombre. `defaultProfile` elige qué perfil se usa cuando nada pide otro: es el modelo por defecto. Si el archivo también tiene un `model` de nivel superior, gana el perfil y la compilación y `doctor` avisan de que la línea `model` se ignora. Sin `defaultProfile`, el `provider` y el `model` de nivel superior son el valor por defecto. `bxAgents add profile` escribe un perfil (y `--default` el `defaultProfile`) sin tocar el resto del archivo; consulta [`add profile`](../cli-reference.md#add-profile).
@@ -79,12 +79,12 @@ profiles:
 Un agente usa su propio `profile:`, si no su propio `model:` (un slug `provider/model`), si no el valor por defecto. Todo subagente hereda los ajustes de la raíz y puede fijar su propio `model` o `profile`:
 
 ```yaml
-# subagents/planner/Agent.yaml
+# subagents/planner/Agent.yml
 name: planner
 profile: planner
 ```
 
-`providers`, `profiles`, `defaultProfile`, `params` y las claves de capacidades se aplican a toda la app, así que van en el `Agent.yaml` propio del proyecto; un subagente que las fije falla la validación.
+`providers`, `profiles`, `defaultProfile`, `params` y las claves de capacidades se aplican a toda la app, así que van en el `Agent.yml` propio del proyecto; un subagente que las fije falla la validación.
 
 ## Valores por defecto de capacidades
 

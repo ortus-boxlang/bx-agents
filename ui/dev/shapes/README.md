@@ -10,4 +10,4 @@ Each folder is the dev agent (`ui/dev/agent`) with a few files changed, built an
 | `nested-api` | `/team/assistant` | none | the agent API at `/team/api` instead of `/__bxagents` |
 
 The dev agent itself (accounts, at `/chat`) is what `npm run e2e` drives. A shape's `shape.json` says which lines of
-`Agent.yaml` it changes and which environment variables its server gets.
+`Agent.yml` it changes and which environment variables its server gets.

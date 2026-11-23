@@ -40,17 +40,20 @@ class {
 	/**
 	 * Resolve a project's full build-time configuration.
 	 *
-	 * @projectRoot Absolute path to the project root (containing Agent.yaml or Agent.bx)
+	 * @projectRoot Absolute path to the project root (containing Agent.yml or Agent.bx)
 	 * @cliEnvironment Optional environment name passed explicitly (e.g. via a CLI flag)
 	 * @boxContext The current BoxLang execution context. Defaults to the shared runtime context; only override this if you have a more specific one (e.g. from a CLI's main()).
+	 * @withPerson True to layer the person's files over the result (SettingsLayers): `~/.bxagents/Agent.yml` and the agent's own `Agent.yml` in its data home. Only the build of the root agent asks for it, so a command that only reads the author's settings (add, usage, doctor) and every subagent still see the author's file alone
+	 * @flags Settings of one run, in the shape of the file, applied last; only with withPerson
+	 * @globalFile The person's file for every agent, for a test; `BXAGENTS_USER_CONFIG` and then ~/.bxagents/Agent.yml when not given
 	 *
-	 * @return The fully merged config struct, plus a resolved "environment" key
+	 * @return The fully merged config struct, plus a resolved "environment" key. With withPerson, a `personLayers` key lists what the person's files changed
 	 */
-	struct function resolve( required string projectRoot, string cliEnvironment = "", any boxContext ) {
+	struct function resolve( required string projectRoot, string cliEnvironment = "", any boxContext, boolean withPerson = false, struct flags = {}, string globalFile = "" ) {
 		var normalizedRoot = arguments.projectRoot.reReplace( "[\\/]+$", "" )
 		var context = isNull( arguments.boxContext ) ? getDefaultContext() : arguments.boxContext
 
-		// Agent.yaml is the default definition, Agent.bx the advanced one; having
+		// Agent.yml is the default definition, Agent.bx the advanced one; having
 		// both (or neither) is an error the locator words for us.
 		var locator = new "models.build.AgentDefinitionLocator@bxagents"()
 		var definition = locator.locate( normalizedRoot )
@@ -100,6 +103,25 @@ class {
 		config = deepMerge( config, readJsonConfig( normalizedRoot, "miniserver", environment ) )
 
 		config[ "environment" ] = environment
+
+		// The person's files win over everything the author set, environments and boxlang.json included: they are the
+		// last word of the person who runs the agent. Before the model is normalized, so a model they set is read like any other.
+		var personLayers = {}
+		if ( arguments.withPerson ) {
+			var agentName = len( config.name ?: "" ) ? config.name : ( isClassBased ? agentDescriptor.getAgentName() : "" )
+			var dataHome = new "models.data.DataHome@bxagents"(
+				projectRoot : normalizedRoot,
+				configured  : ( isStruct( config.data ?: "" ) ? config.data : {} ).home ?: "",
+				agentName   : agentName
+			)
+			var layers = new "models.settings.SettingsLayers@bxagents"( arguments.globalFile, dataHome.path() & "/Agent.yml", arguments.flags )
+			// kept for the app: at start it merges the person's files over the author's settings again (RuntimeSettings),
+			// and doing that over the settings that already hold them would add a `+` list twice
+			var author = duplicate( config )
+			config = layers.merged( config, definition.path )
+			personLayers = { files : layers.files(), changed : layers.fromPerson(), buildOnly : layers.buildOnly(), author : author }
+		}
+
 		// provider + model into one slug, and every profile on the mock provider under `test`
 		config = new "models.build.AiSettings@bxagents"().normalize( config )
 
@@ -109,6 +131,9 @@ class {
 		// built from an explicit allowlist of four fields (ManifestNormalizer's
 		// buildAgentSummary), not by stripping - so nothing here can leak into it.
 		config[ "classBasedAgent" ] = isClassBased
+		if ( arguments.withPerson ) {
+			config[ "personLayers" ] = personLayers
+		}
 		if ( isClassBased ) {
 			// Only the checkpointer needs a runtime look at the instance: it is
 			// the one thing the build injects a default for even when the config

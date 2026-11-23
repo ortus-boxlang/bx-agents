@@ -1,17 +1,17 @@
 ---
 name: bxagents-build-agent
 description: >
-  How a bxAgents project is laid out, what the Agent.yaml keys do, and the CLI verbs to create, check, build, run and serve an agent. Use it when asked to create a new agent, change its settings or model, or build and start it.
+  How a bxAgents project is laid out, what the Agent.yml keys do, and the CLI verbs to create, check, build, run and serve an agent. Use it when asked to create a new agent, change its settings or model, or build and start it.
 ---
 # Building a bxAgents agent
 
-An agent is a folder. `Agent.yaml` plus `instructions.md` is enough; the build turns the folder into a running app in `.build/app/`.
+An agent is a folder. `Agent.yml` plus `instructions.md` is enough; the build turns the folder into a running app in `.build/app/`.
 
 ## Project layout
 
 ```text
 my-agent/
-├── Agent.yaml        # the definition (or a class-based Agent.bx, never both)
+├── Agent.yml        # the definition (or a class-based Agent.bx, never both)
 ├── instructions.md   # the system prompt
 ├── tools/            # @AITool functions
 ├── skills/           # your SKILL.md folders
@@ -27,9 +27,9 @@ my-agent/
 └── box.json
 ```
 
-Every folder is optional except the definition. A folder holds one definition: `Agent.yaml` and `Agent.bx` together is a build error. Use `Agent.bx` only when you need code (hooks, dynamic instructions); `bxAgents new --class` scaffolds it.
+Every folder is optional except the definition. A folder holds one definition: `Agent.yml` and `Agent.bx` together is a build error. Use `Agent.bx` only when you need code (hooks, dynamic instructions); `bxAgents new --class` scaffolds it.
 
-## A minimal Agent.yaml
+## A minimal Agent.yml
 
 ```yaml
 name: support
@@ -43,7 +43,7 @@ environments:
 
 An unknown key is a build error, so typos fail loudly. `name` must be unique across the root and every subagent.
 
-## Agent.yaml keys
+## Agent.yml keys
 
 | Key | What it does |
 |---|---|
@@ -109,6 +109,6 @@ bxAgents chat            # try it (--server for the full app)
 bxAgents serve           # HTTP API at /__bxagents
 ```
 
-Change `Agent.yaml`, then run `bxAgents build` again; a running chat or server must be restarted to see it. Provider keys (for example `OPENAI_API_KEY`) go in the environment or `.env`, never in `Agent.yaml`.
+Change `Agent.yml`, then run `bxAgents build` again; a running chat or server must be restarted to see it. Provider keys (for example `OPENAI_API_KEY`) go in the environment or `.env`, never in `Agent.yml`.
 
 More: docs/conventions/agent-yaml.md, docs/cli-reference.md, docs/guides/new-wizard.md

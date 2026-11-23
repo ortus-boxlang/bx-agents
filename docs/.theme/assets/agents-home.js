@@ -49,7 +49,7 @@
 
 	/* hero: folder -> generated output */
 	var T = {
-		agent: { k: "The agent", h: "Agent.yaml is the agent", p: "A name, a model and any settings you need, in plain YAML. Need code? Use a class-based Agent.bx instead.", g: [["agent/GeneratedAgentFactory.bx", "builds your agent"]] },
+		agent: { k: "The agent", h: "Agent.yml is the agent", p: "A name, a model and any settings you need, in plain YAML. Need code? Use a class-based Agent.bx instead.", g: [["agent/GeneratedAgentFactory.bx", "builds your agent"]] },
 		instructions: { k: "The system prompt", h: "instructions.md", p: "Optional. Set instructions in the class, or drop the file in and let the build wire it in.", g: [["wired in at build", "read once, not per request"]] },
 		tools: { k: "Tools", h: "Functions become tools", p: "Any class with an @AITool annotated function is callable by the agent, with no registration step.", g: [["tools/", "every @AITool discovered"]] },
 		skills: { k: "Skills", h: "Model-selected guidance", p: "A SKILL.md folder is offered to the model on demand. It is separate from the always-on instructions.", g: [["skills/", "one folder per skill"]] },
@@ -144,7 +144,7 @@
 			[3, "03-installing-bxagents", "Installing BxAgents", "Install BoxLang, bx-ai and BxAgents, and verify the bxAgents command works."],
 			[4, "04-scaffolding-your-first-agent", "Scaffolding Your First Agent", "Run bxAgents new and see exactly what it creates for you."]]],
 		["The agent", "Write and run it", [
-			[5, "05-agent-bx", "Agent.yaml, the Agent Itself", "The one required file: a name, a model and your settings in plain YAML."],
+			[5, "05-agent-bx", "Agent.yml, the Agent Itself", "The one required file: a name, a model and your settings in plain YAML."],
 			[6, "06-instructions-and-system-prompt", "instructions.md and the System Prompt", "The optional file that becomes your agent's system prompt."],
 			[7, "07-building-your-agent", "Building Your Agent", "bxAgents build and the five-phase pipeline that turns your project into an app."],
 			[8, "08-talking-to-your-agent", "Talking to Your Agent", "chat, invoke and serve: three ways to run the exact same built agent."]]],
@@ -152,14 +152,14 @@
 			[9, "09-giving-your-agent-tools", "Giving Your Agent Tools", "Any @AITool annotated function under tools/ becomes a callable tool."],
 			[10, "10-packaging-skills", "Packaging Skills", "Claude Agent Skills: one subfolder per SKILL.md, loaded on demand."],
 			[11, "11-composing-subagents", "Composing Subagents", "Nested agents, each an ordinary BxAgents project of its own, wired as callable tools."],
-			[12, "12-named-model-configs", "Named Model Configs", "Reusable named model configurations, referenced from Agent.yaml by name."]]],
+			[12, "12-named-model-configs", "Named Model Configs", "Reusable named model configurations, referenced from Agent.yml by name."]]],
 		["Reach users", "HTTP, chat, web", [
 			[13, "13-exposing-http-and-mcp", "Exposing Your Agent over HTTP and MCP", "gateways/ entries with an exposes key turn your agent into a real HTTP route."],
 			[14, "14-connecting-chat-platforms", "Connecting Chat Platforms", "Channel adapter gateways: nine chat platforms plus http, cli and mock, all one GatewaySession."],
 			[15, "15-the-generated-web-chat-ui", "The Generated Web Chat UI", "A complete browser chat client: sidebar, streaming, approvals, SQLite store."]]],
 		["Beyond chat", "Run on its own", [
 			[16, "16-scheduling-background-work", "Scheduling Background Work", "schedules/*.bx, BoxLang schedulers with cron syntax, one file each."],
-			[17, "17-hosting-mcp-servers", "Hosting and Consuming MCP Servers", "MCP in both directions: consume remote servers from Agent.yaml, host your own under mcp/."],
+			[17, "17-hosting-mcp-servers", "Hosting and Consuming MCP Servers", "MCP in both directions: consume remote servers from Agent.yml, host your own under mcp/."],
 			[18, "18-interceptors-and-modules", "Interceptors and Module Dependencies", "ColdBox lifecycle hooks scoped by @scope, and BoxLang module dependencies under modules/."]]],
 		["Ship it", "Test and deploy", [
 			[19, "19-testing-your-agent", "Testing Your Agent", "A ready to run TestBox suite, mockResponses(), and matchers built for agent behavior."],
@@ -263,7 +263,7 @@
 		curT = t; $$("button", list).forEach(function (b) { b.setAttribute("aria-selected", b.getAttribute("data-t") === t ? "true" : "false"); });
 		$("#ex-t").textContent = t;
 		var first = renderTree(t), d = STARTERS[t];
-		openFile(first || d.files.filter(function (f) { return f.path === "Agent.yaml"; })[0]);
+		openFile(first || d.files.filter(function (f) { return f.path === "Agent.yml"; })[0]);
 	}
 	if (list && tree && STARTERS.minimal) {
 		ORDER.forEach(function (t) {

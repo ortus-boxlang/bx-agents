@@ -1,0 +1,91 @@
+/**
+ * Changing one setting in an Agent.yml on disk, and putting the file back when the result would not be valid.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "SettingsFileEditor", function() {
+
+			beforeEach( function() {
+				variables.nl = char( 10 )
+				variables.dir = createTempDirectory( prefix = "bxagents-editor-" )
+				variables.editor = new bxagents.models.settings.SettingsFileEditor()
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true )
+				}
+			} );
+
+			it( "makes the file and its folder when they are not there, and says where it saved", function() {
+				var file = dir & "/bot/Agent.yml"
+				var said = editor.set( file, "model", "ollama/qwen3" )
+				expect( fileRead( file ) ).toBe( "model: ollama/qwen3" & nl )
+				expect( said ).toInclude( file )
+				expect( said ).toInclude( "applies the next time" )
+			} );
+
+			it( "changes only the line it is asked to and keeps the comments", function() {
+				var file = dir & "/Agent.yml"
+				fileWrite( file, "## mine" & nl & "model: a   ## why" & nl & "usage: true" & nl )
+				editor.set( file, "model", "ollama/qwen3" )
+				expect( fileRead( file ) ).toBe( "## mine" & nl & "model: ollama/qwen3   ## why" & nl & "usage: true" & nl )
+			} );
+
+			it( "writes a list addition, which is a setting like any other", function() {
+				var file = dir & "/Agent.yml"
+				editor.set( file, "tools+", "[ now@bxai ]" )
+				expect( fileRead( file ) ).toBe( "tools+: [ now@bxai ]" & nl )
+			} );
+
+			it( "puts the file back as it was when the value would make it invalid, and names the file", function() {
+				var file = dir & "/Agent.yml"
+				fileWrite( file, "model: a" & nl )
+				var message = ""
+				try {
+					editor.set( file, "tools", "not-a-list" )
+				} catch ( any e ) {
+					message = e.message
+				}
+				expect( message ).toInclude( file )
+				expect( fileRead( file ) ).toBe( "model: a" & nl )
+			} );
+
+			it( "does not leave a file behind when a new one would be invalid", function() {
+				var file = dir & "/new/Agent.yml"
+				expect( () => editor.set( file, "modle", "x" ) ).toThrow()
+				expect( fileExists( file ) ).toBeFalse()
+			} );
+
+			it( "refuses name and data.home, which a person's file can not set", function() {
+				var file = dir & "/Agent.yml"
+				expect( () => editor.set( file, "name", "other" ) ).toThrow( regex = "can not be set here" )
+				expect( () => editor.set( file, "data.home", "/tmp/x" ) ).toThrow( regex = "can not be set here" )
+				expect( fileExists( file ) ).toBeFalse()
+			} );
+
+			it( "refuses a value that is not YAML and a missing value", function() {
+				expect( () => editor.set( dir & "/Agent.yml", "model", "[ a" ) ).toThrow( regex = "not valid YAML" )
+				expect( () => editor.set( dir & "/Agent.yml", "model", "  " ) ).toThrow( regex = "no value" )
+			} );
+
+			it( "takes a setting out, or says there is nothing to take out", function() {
+				var file = dir & "/Agent.yml"
+				fileWrite( file, "model: a" & nl & "usage: true" & nl )
+				expect( editor.reset( file, "usage" ) ).toInclude( "taken out" )
+				expect( fileRead( file ) ).toBe( "model: a" & nl )
+				expect( editor.reset( file, "usage" ) ).toInclude( "nothing to reset" )
+			} );
+
+			it( "reads back what the file says", function() {
+				var file = dir & "/Agent.yml"
+				fileWrite( file, "model: a" & nl )
+				expect( editor.valueOf( file, "model" ) ).toBe( "a" )
+				expect( editor.valueOf( file, "usage" ) ).toBe( "" )
+			} );
+
+		} );
+	}
+
+}

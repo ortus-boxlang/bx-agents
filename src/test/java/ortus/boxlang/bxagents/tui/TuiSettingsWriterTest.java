@@ -56,7 +56,7 @@ class TuiSettingsWriterTest {
 	@Test
 	@DisplayName( "a file that is not there is made, with its folder, holding the tui block" )
 	void makesTheFile() throws IOException {
-		Path file = dir.resolve( "home" ).resolve( "agent" ).resolve( "settings.yml" );
+		Path file = dir.resolve( "home" ).resolve( "agent" ).resolve( "Agent.yml" );
 		TuiSettingsWriter.set( file, "fullscreen", "false" );
 		assertThat( Files.readString( file ) ).isEqualTo( "tui:\n  fullscreen: false\n" );
 	}
@@ -64,7 +64,7 @@ class TuiSettingsWriterTest {
 	@Test
 	@DisplayName( "a file with other sections gets the block at the end, and nothing else changes" )
 	void appendsTheBlock() throws IOException {
-		Path file = file( "bxAgents.yml", "chat:", "  shell: false   # no shell", "extensions:", "  disable: [ roll ]" );
+		Path file = file( "Agent.yml", "chat:", "  shell: false   # no shell", "extensions:", "  disable: [ roll ]" );
 		TuiSettingsWriter.set( file, "header", "compact" );
 		assertThat( Files.readString( file ) ).isEqualTo( "chat:\n  shell: false   # no shell\nextensions:\n  disable: [ roll ]\n\ntui:\n  header: compact\n" );
 	}

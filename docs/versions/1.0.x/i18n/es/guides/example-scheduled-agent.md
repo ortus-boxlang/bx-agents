@@ -14,13 +14,13 @@ tags: [guides, examples, schedules]
 
 ```text
 scheduled-agent/
-├── Agent.yaml
+├── Agent.yml
 ├── instructions.md
 └── schedules/
     └── Scheduler.bx
 ```
 
-`Agent.yaml` tiene la misma forma que en todos los demás ejemplos - no hace falta nada especial en el lado del agente para que lo dirija una programación:
+`Agent.yml` tiene la misma forma que en todos los demás ejemplos - no hace falta nada especial en el lado del agente para que lo dirija una programación:
 
 ```yaml
 name: scheduled-agent
@@ -47,7 +47,7 @@ class extends="coldbox.system.web.tasks.ColdBoxScheduler" {
 
 Como `build` copia este archivo a la aplicación generada esencialmente tal cual (consulta [`schedules/`](../conventions/schedules.md)), tienes disponible el DSL completo de scheduler de ColdBox - `everyDayAt()`, `everyMinute()`, `withNoOverlaps()`, `onFailure()`, y todo lo demás que soporte el propio scheduler de ColdBox, no un subconjunto reimplementado por BxAgents.
 
-`getInstance( "scheduled-agent" )` resuelve por el `name` declarado en el propio `Agent.yaml` de este proyecto - cada agente del árbol de un proyecto queda registrado con su propio nombre en WireBox, no solo la raíz, y eso es lo que hace que esta línea funcione sin ningún cableado adicional.
+`getInstance( "scheduled-agent" )` resuelve por el `name` declarado en el propio `Agent.yml` de este proyecto - cada agente del árbol de un proyecto queda registrado con su propio nombre en WireBox, no solo la raíz, y eso es lo que hace que esta línea funcione sin ningún cableado adicional.
 
 ## Instrucciones para el prompt programado
 

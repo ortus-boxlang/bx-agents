@@ -64,7 +64,7 @@ Necesita más de un [perfil](../conventions/models.md#perfiles) en el proyecto.
 
 ## 4. Notas que guarda el agente
 
-Necesita un bloque [`notes`](../conventions/agent-yaml.md#notas) en `Agent.yaml`.
+Necesita un bloque [`notes`](../conventions/agent-yaml.md#notas) en `Agent.yml`.
 
 1. `/remember I prefer short answers` guarda una nota sobre ti. El agente la ve en cada conversación.
 2. `/notes` abre la pantalla de notas. **a** añade, **e** edita, **d** elimina (tras un sí), **Tab** alterna entre tus notas y las del agente, **Esc** vuelve.
@@ -80,11 +80,11 @@ Necesita un bloque [`notes`](../conventions/agent-yaml.md#notas) en `Agent.yaml`
 
 ## 6. Hacer el chat tuyo
 
-1. `/prompt` muestra el aspecto y los widgets del cuadro de mensaje. `/prompt box` cambia el aspecto y `/prompt top +git -clock` cambia la barra superior, solo para este chat. Para fijarlo en el proyecto, usa un [bloque `tui:`](terminal-ui.md#el-aspecto-del-cuadro-de-mensaje) en `Agent.yaml`.
-2. `?` solo, o `/keys`, lista cada tecla con el nombre de su acción. Para cambiar una, ponla en `~/.bxagents/bxAgents.yml`: `chat:`, luego `keys:` y, por ejemplo, `newline: ctrl+n`. Consulta [Cambiar una tecla](terminal-ui.md#cambiar-una-tecla).
+1. `/prompt` muestra el aspecto y los widgets del cuadro de mensaje. `/prompt box` cambia el aspecto y `/prompt top +git -clock` cambia la barra superior, solo para este chat. Para fijarlo en el proyecto, usa un [bloque `tui:`](terminal-ui.md#el-aspecto-del-cuadro-de-mensaje) en `Agent.yml`.
+2. `?` solo, o `/keys`, lista cada tecla con el nombre de su acción. Para cambiar una, ponla en `~/.bxagents/Agent.yml`: `chat:`, luego `keys:` y, por ejemplo, `newline: ctrl+n`. Consulta [Cambiar una tecla](terminal-ui.md#cambiar-una-tecla).
 3. `/extensions` lista lo que añadieron las [extensiones](first-extension.md): comandos, teclas y más. Tras editar una, `/reload` la carga de nuevo sin salir del chat.
 4. `/record demo.cast` empieza a guardar la pantalla como un archivo asciicast, y `/record stop` lo termina. O empieza con `bxAgents chat --record=demo.cast`.
-5. `/stats` muestra los tokens que usaron las llamadas al modelo, una vez que `usage: true` está definido en `Agent.yaml`. `/stats enable` escribe esa línea por ti.
+5. `/stats` muestra los tokens que usaron las llamadas al modelo, una vez que `usage: true` está definido en `Agent.yml`. `/stats enable` escribe esa línea por ti.
 
 ## El asistente con el mismo estilo
 

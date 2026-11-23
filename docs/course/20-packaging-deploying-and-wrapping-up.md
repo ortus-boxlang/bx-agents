@@ -98,7 +98,7 @@ Removes only `.build/` and `dist/` - your source conventions are never touched.
 
 A deployed agent is no longer on your own machine, so decide who may call it. The agent API is open
 by default, which is right on a laptop and wrong on the internet. Before you deploy, set `agentApi`
-in `Agent.yaml` ([Lesson 13](13-exposing-http-and-mcp.md)): a shared secret in an environment
+in `Agent.yml` ([Lesson 13](13-exposing-http-and-mcp.md)): a shared secret in an environment
 variable, `tokens: true` for per-person tokens, and `allowedIPs` or `rateLimit` where they fit.
 Run `token` where the agent's database is (on the server), make one for each person or program,
 and talk to the deployment from your own terminal:

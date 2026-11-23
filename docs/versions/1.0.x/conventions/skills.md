@@ -83,11 +83,11 @@ The rules between the levels:
 
 - **Yours wins over installed.** A skill in `skills/` and an installed one with the same name or folder: the one in `skills/` is used.
 - **The agent never replaces the first two.** `skill_save` refuses the name of an installed skill or one that ships with the agent. It can save over a skill it wrote itself, to improve it.
-- **bxAgents' own come last.** A skill of yours with the same name as one of the six that bxAgents ships wins, and `skill_save` cannot take their names. They are available on request like every skill: only a name and a description are in the context until the model asks for one. `skills.builtin: false` in `Agent.yaml` leaves them out.
+- **bxAgents' own come last.** A skill of yours with the same name as one of the six that bxAgents ships wins, and `skill_save` cannot take their names. They are available on request like every skill: only a name and a description are in the context until the model asks for one. `skills.builtin: false` in `Agent.yml` leaves them out.
 - **A link is followed.** The app gets a copy of what the link points at, so a deployed app does not depend on the global folder.
 - **The app tells levels 1 and 2 apart** by `skills/.installed.json`, which the build writes beside the skills. `/skills` and `GET /skills` use it to show each skill's level.
 
-Level 3 is described in [data and volumes](data.md#skills-the-agent-saves): approval of each save, the limits, and the `skills` setting in `Agent.yaml`.
+Level 3 is described in [data and volumes](data.md#skills-the-agent-saves): approval of each save, the limits, and the `skills` setting in `Agent.yml`.
 
 ## Skills from the registry
 

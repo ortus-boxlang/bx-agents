@@ -26,7 +26,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * The prompt styles, their registry and the look read from Agent.yaml.
+ * The prompt styles, their registry and the look read from Agent.yml.
  */
 @DisplayName( "Prompt styles" )
 class PromptStylesTest {

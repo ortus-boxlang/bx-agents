@@ -16,13 +16,13 @@ Este es el único ejemplo de esta serie de guías con capturas de pantalla reale
 
 ```text
 webui-agent/
-├── Agent.yaml
+├── Agent.yml
 ├── instructions.md
 └── gateways/
     └── chat.bx
 ```
 
-`Agent.yaml` tiene la misma forma que en todos los demás ejemplos:
+`Agent.yml` tiene la misma forma que en todos los demás ejemplos:
 
 ```yaml
 name: webui-agent
@@ -136,7 +136,7 @@ La página carga bien en ambos casos, pero enviar un mensaje sin la clave corres
 
 ## Tokens de acceso para administradores
 
-Con `agentApi: { tokens: true, manageTokens: true }` en `Agent.yaml`, quien llama con un token `admin` ve la página **Access** (`/chat/access/tokens`). Su pestaña **Tokens** lista los tokens, crea uno (un nombre, un alcance `chat` o `admin` y cuánto dura, por ejemplo `90d`), muestra el secreto una sola vez para que lo copies y revoca tokens. `manageTokens` está desactivado por defecto y un token `chat` recibe `403`. Lo mismo desde un shell es `bxAgents token create|list|revoke`.
+Con `agentApi: { tokens: true, manageTokens: true }` en `Agent.yml`, quien llama con un token `admin` ve la página **Access** (`/chat/access/tokens`). Su pestaña **Tokens** lista los tokens, crea uno (un nombre, un alcance `chat` o `admin` y cuánto dura, por ejemplo `90d`), muestra el secreto una sola vez para que lo copies y revoca tokens. `manageTokens` está desactivado por defecto y un token `chat` recibe `403`. Lo mismo desde un shell es `bxAgents token create|list|revoke`.
 
 ![El panel de tokens de acceso: la lista de tokens, un secreto nuevo mostrado una vez y el formulario de creación](../assets/webui/webui-access.png)
 
