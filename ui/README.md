@@ -29,6 +29,16 @@ Sass or a JS change shows on save; a handler or model change needs a restart.
 for a plain answer. The agent keeps its data in `.stack/home`: delete it to start fresh. `UI_AGENT_PORT` and
 `UI_LLM_PORT` move the ports (8780 and 8080).
 
+## The screenshots in the docs
+
+```bash
+npm run docs:shots                          # every web app screenshot in docs/assets (the trailer's demo agent, seeded)
+npm run docs:shots -- --only=webui/login    # some of them
+../tools/demo/terminal/docs-shots.sh        # the terminal screenshots, GIFs and the two CLI SVGs (docs/assets/tui)
+```
+
+Both run offline with the scripted model and put the pictures where the docs read them, so a refresh is one command each.
+
 ## Build and lint
 
 ```bash
