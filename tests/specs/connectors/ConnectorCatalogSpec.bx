@@ -62,7 +62,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "puts no token, key or password in any file", function() {
 				var dir = catalog.folder();
-				for ( var path in directoryList( dir, false, "path", "*.yaml" ) ) {
+				for ( var path in directoryList( dir, false, "path", "*.yml" ) ) {
 					var text = fileRead( path );
 					expect( text ).notToMatch( "(ghp_|github_pat_|sk_live_|rk_live_|AKIA[0-9A-Z]{16}|BEGIN .*PRIVATE KEY)" );
 				}
@@ -117,8 +117,8 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "accepts a complete web connector and a complete program connector", function() {
-				put( "demo.yaml", web() );
-				put( "tool.yaml", program() );
+				put( "demo.yml", web() );
+				put( "tool.yml", program() );
 
 				var result = new bxagents.models.connectors.ConnectorCatalog( dir ).check();
 
@@ -134,18 +134,18 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "explains YAML that does not parse, with the colon and space hint", function() {
-				put( "demo.yaml", web().replace( "summary: A demo connector", "summary: A demo: with a colon" ) );
+				put( "demo.yml", web().replace( "summary: A demo connector", "summary: A demo: with a colon" ) );
 
 				var problems = errors();
 
 				expect( problems ).toHaveLength( 1 );
-				expect( problems[ 1 ].file ).toBe( "demo.yaml" );
+				expect( problems[ 1 ].file ).toBe( "demo.yml" );
 				expect( problems[ 1 ].message ).toMatch( "not valid YAML" );
 				expect( problems[ 1 ].message ).toMatch( "colon followed by a space" );
 			} );
 
 			it( "explains a key that appears twice", function() {
-				put( "demo.yaml", web() & "name: Again" & char( 10 ) );
+				put( "demo.yml", web() & "name: Again" & char( 10 ) );
 
 				var problems = errors();
 
@@ -155,13 +155,13 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "refuses a file that is a list instead of a mapping", function() {
-				put( "demo.yaml", "- one" & char( 10 ) & "- two" & char( 10 ) );
+				put( "demo.yml", "- one" & char( 10 ) & "- two" & char( 10 ) );
 
 				expect( errors()[ 1 ].message ).toMatch( "must be a mapping" );
 			} );
 
 			it( "names every missing required field", function() {
-				put( "demo.yaml", web().replace( "risk: low" & char( 10 ), "" ).replace( "riskNote: Reads things." & char( 10 ), "" ) );
+				put( "demo.yml", web().replace( "risk: low" & char( 10 ), "" ).replace( "riskNote: Reads things." & char( 10 ), "" ) );
 
 				var fields = errors().map( e => e.field );
 
@@ -170,7 +170,7 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "names a field that is not part of a connector, so a typo is caught", function() {
-				put( "demo.yaml", web() & "sumary: oops" & char( 10 ) );
+				put( "demo.yml", web() & "sumary: oops" & char( 10 ) );
 
 				var problems = errors();
 
@@ -179,26 +179,26 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "requires the id to match the file name", function() {
-				put( "other.yaml", web() );
+				put( "other.yml", web() );
 
 				expect( errors().map( e => e.message ).toList( " " ) ).toMatch( "must match the file name" );
 			} );
 
 			it( "refuses an id that is not lowercase letters, digits and dashes", function() {
-				put( "Demo.yaml", web().replace( "id: demo", "id: Demo" ) );
+				put( "Demo.yml", web().replace( "id: demo", "id: Demo" ) );
 
 				expect( errors().map( e => e.field ).toList() ).toInclude( "id" );
 			} );
 
 			it( "refuses two files with the same id", function() {
-				put( "demo.yaml", web() );
-				put( "demo2.yaml", web() );
+				put( "demo.yml", web() );
+				put( "demo2.yml", web() );
 
-				expect( errors().map( e => e.message ).toList( " " ) ).toMatch( "already used by demo.yaml" );
+				expect( errors().map( e => e.message ).toList( " " ) ).toMatch( "already used by demo.yml" );
 			} );
 
 			it( "refuses a web address that is not https", function() {
-				put( "demo.yaml", web().replace( "https://example.com/mcp", "http://example.com/mcp" ) );
+				put( "demo.yml", web().replace( "https://example.com/mcp", "http://example.com/mcp" ) );
 
 				var problems = errors();
 
@@ -207,8 +207,8 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "refuses a query string or a user name in the address, where options belong", function() {
-				put( "demo.yaml", web().replace( "https://example.com/mcp", "https://example.com/mcp?read_only=true" ) );
-				put( "demo2.yaml", web().replace( "id: demo", "id: demo2" ).replace( "https://example.com/mcp", "https://me:pw@example.com/mcp" ) );
+				put( "demo.yml", web().replace( "https://example.com/mcp", "https://example.com/mcp?read_only=true" ) );
+				put( "demo2.yml", web().replace( "id: demo", "id: demo2" ).replace( "https://example.com/mcp", "https://me:pw@example.com/mcp" ) );
 
 				var problems = errors().filter( e => e.field == "url" );
 
@@ -216,7 +216,7 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "refuses a program connector without a command or the program it needs", function() {
-				put( "tool.yaml", program().replace( "command: [ run-tool, serve ]", "command: []" ).replace( "  program: run-tool" & char( 10 ) & "  help: Install it.", "  help: Install it." ) );
+				put( "tool.yml", program().replace( "command: [ run-tool, serve ]", "command: []" ).replace( "  program: run-tool" & char( 10 ) & "  help: Install it.", "  help: Install it." ) );
 
 				var fields = errors().map( e => e.field );
 
@@ -225,8 +225,8 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "refuses a sign in or token on a program, and no way in on a web connector", function() {
-				put( "tool.yaml", program().replace( "- type: none", "- type: bearer" & char( 10 ) & "    envVar: TOOL_KEY" ) );
-				put( "demo.yaml", web().replace( "- type: bearer", "- type: none" ).replace( "    envVar: DEMO_TOKEN" & char( 10 ), "" ) );
+				put( "tool.yml", program().replace( "- type: none", "- type: bearer" & char( 10 ) & "    envVar: TOOL_KEY" ) );
+				put( "demo.yml", web().replace( "- type: bearer", "- type: none" ).replace( "    envVar: DEMO_TOKEN" & char( 10 ), "" ) );
 
 				var messages = errors().map( e => e.message ).toList( " " );
 
@@ -235,7 +235,7 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "requires a bearer method to name an environment variable", function() {
-				put( "demo.yaml", web().replace( "envVar: DEMO_TOKEN", "envVar: not a name" ) );
+				put( "demo.yml", web().replace( "envVar: DEMO_TOKEN", "envVar: not a name" ) );
 
 				var problems = errors();
 
@@ -244,8 +244,8 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "requires every auth method to say verified, and why when it is not", function() {
-				put( "demo.yaml", web().replace( "    verified: true" & char( 10 ), "" ) );
-				put( "demo2.yaml", web().replace( "id: demo", "id: demo2" ).replace( "verified: true", "verified: false" ) );
+				put( "demo.yml", web().replace( "    verified: true" & char( 10 ), "" ) );
+				put( "demo2.yml", web().replace( "id: demo", "id: demo2" ).replace( "verified: true", "verified: false" ) );
 
 				var fields = errors().map( e => e.field );
 
@@ -254,19 +254,19 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "accepts an unverified method that says why", function() {
-				put( "demo.yaml", web().replace( "verified: true", "verified: false" & char( 10 ) & "    unverifiedNote: The header is not documented." ) );
+				put( "demo.yml", web().replace( "verified: true", "verified: false" & char( 10 ) & "    unverifiedNote: The header is not documented." ) );
 
 				expect( errors() ).toBeEmpty();
 			} );
 
 			it( "refuses a risk outside low, medium and high", function() {
-				put( "demo.yaml", web().replace( "risk: low", "risk: scary" ) );
+				put( "demo.yml", web().replace( "risk: low", "risk: scary" ) );
 
 				expect( errors()[ 1 ].message ).toMatch( "must be one of: low, medium, high" );
 			} );
 
 			it( "refuses a docs link that is not https and a date that is not a date", function() {
-				put( "demo.yaml", web().replace( "https://example.com/docs", "ftp://example.com/docs" ).replace( "verifiedOn: 2026-11-14", "verifiedOn: last week" ) );
+				put( "demo.yml", web().replace( "https://example.com/docs", "ftp://example.com/docs" ).replace( "verifiedOn: 2026-11-14", "verifiedOn: last week" ) );
 
 				var fields = errors().map( e => e.field );
 
@@ -282,7 +282,7 @@ class extends="testbox.system.BaseSpec" {
 					"  - key: c" & char( 10 ) & "    label: x" & char( 10 ) & "    type: text" & char( 10 ) & "    target: header" & char( 10 ) & "    name: Bad Header" & char( 10 ),
 					"  - key: d" & char( 10 ) & "    label: x" & char( 10 ) & "    type: text" & char( 10 ) & "    target: query" & char( 10 ) & "    onlyWith: oauth" & char( 10 )
 				];
-				put( "demo.yaml", web() & "options:" & char( 10 ) & options.toList( "" ) );
+				put( "demo.yml", web() & "options:" & char( 10 ) & options.toList( "" ) );
 
 				var fields = errors().map( e => e.field );
 
@@ -295,8 +295,8 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "refuses a secret anywhere in a file and never repeats it", function() {
 				var token = "ghp_" & repeatString( "a1B2", 8 );
-				put( "demo.yaml", web().replace( "help: A token.", "help: Use " & token & " here." ) );
-				put( "demo2.yaml", web().replace( "id: demo", "id: demo2" ).replace( "help: A token.", "help: key sk_live_" & repeatString( "Zx9", 6 ) ) );
+				put( "demo.yml", web().replace( "help: A token.", "help: Use " & token & " here." ) );
+				put( "demo2.yml", web().replace( "id: demo", "id: demo2" ).replace( "help: A token.", "help: key sk_live_" & repeatString( "Zx9", 6 ) ) );
 
 				var problems = errors();
 
@@ -309,8 +309,8 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "leaves a file that fails out of the catalog, and keeps the ones that pass", function() {
-				put( "demo.yaml", web() );
-				put( "bad.yaml", web().replace( "id: demo", "id: bad" ).replace( "risk: low", "risk: scary" ) );
+				put( "demo.yml", web() );
+				put( "bad.yml", web().replace( "id: demo", "id: bad" ).replace( "risk: low", "risk: scary" ) );
 
 				var catalog = new bxagents.models.connectors.ConnectorCatalog( dir );
 
@@ -319,7 +319,7 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "leaves a connector that can only sign a person in out of the wizard's view", function() {
-				put( "demo.yaml", web().replace( "- type: bearer", "- type: oauth" ).replace( "    envVar: DEMO_TOKEN" & char( 10 ), "" ).replace( "    help: A token." & char( 10 ), "" ) );
+				put( "demo.yml", web().replace( "- type: bearer", "- type: oauth" ).replace( "    envVar: DEMO_TOKEN" & char( 10 ), "" ).replace( "    help: A token." & char( 10 ), "" ) );
 
 				var catalog = new bxagents.models.connectors.ConnectorCatalog( dir );
 
