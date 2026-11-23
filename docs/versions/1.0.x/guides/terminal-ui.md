@@ -124,7 +124,7 @@ Ctrl+L (the `clearScreen` action) or `/cls` clears the screen above the message 
 
 ## Commands: type `/`
 
-A `/` at the start of the box opens a menu of every command, under a heading for each group: Conversation, Agent, Model, Screen and Memory, and one for each extension. It shows eight at a time and scrolls, with a counter such as `10/34`.
+A `/` at the start of the box opens a menu of every command, under a heading for each group: Conversation, Agent, Model, Screen and Memory, and one for each extension. It shows eight at a time and scrolls, with a counter such as `10/36`.
 
 | Key | Does in the menu |
 |---|---|

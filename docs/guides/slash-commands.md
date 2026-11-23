@@ -1,8 +1,8 @@
 ---
 title: "Slash commands"
 icon: phosphor-duotone:command
-summary: "All 33 chat commands: what each does, where it works (terminal, web page, chat platforms) and an example."
-description: "All 33 chat commands: what each does, where it works (terminal, web page, chat platforms) and an example."
+summary: "All 36 chat commands: what each does, where it works (terminal, web page, chat platforms) and an example."
+description: "All 36 chat commands: what each does, where it works (terminal, web page, chat platforms) and an example."
 tags: [guides, cli, tui, reference]
 ---
 
