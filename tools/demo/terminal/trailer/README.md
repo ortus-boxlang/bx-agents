@@ -1,6 +1,6 @@
 # Terminal UI trailer
 
-Makes `docs/assets/video/terminal-trailer.mp4` (with `.webm`, `.vtt` captions and `-poster.png`), the narrated trailer of the terminal chat and the `new` wizard. It runs about 1 minute 55: an intro card, one scene per feature, and a closing card with the call to action.
+Makes `docs/assets/video/terminal-trailer.mp4` (with `.webm`, `.vtt` captions and `-poster.png`), the narrated trailer of the terminal chat and the `new` wizard. It runs about 2 minutes 15: an intro card, one scene per feature, and a closing card with the call to action.
 
 Everything runs offline, the way [the web trailer](../../webui/trailer/README.md) does: the model is scripted (`../../fakellm.bxs` with `model.json`), the voice is [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) (the same `../../narration/voice.json`), the music and mix are [bx-audio](https://github.com/ortus-boxlang/bx-audio) and the cards are drawn with [bx-playwright](https://bxplaywright.boxlang.io). The terminal is real: every scene is `bxAgents chat` (or `new`) driven in a pseudo terminal by `../../drive.bxs` and drawn by `../../render.bxs`.
 
