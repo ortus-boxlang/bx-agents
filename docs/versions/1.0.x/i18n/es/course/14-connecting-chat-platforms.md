@@ -106,7 +106,7 @@ Al agente se le dice quién escribe (la plataforma y su id allí, como `slack:U1
 conversación se trata: el chat, más su hilo cuando la plataforma los tiene (un tema de foro de
 Telegram, un hilo de Slack). Así la memoria, `/notes`, `/remember` y la lista de conversaciones se
 mantienen separadas por persona y por hilo. Dos personas en un canal no comparten memoria, ni
-tampoco dos chats en dos plataformas. La lista se guarda en el mismo `data/chat.db` que usa la
+tampoco dos chats en dos plataformas. La lista se guarda en el mismo `chat.db` (en la carpeta de datos del agente) que usa la
 página web, marcada con la plataforma en la que empezó; un admin puede verla con
 `GET /__bxagents/sessions?all=1`.
 

@@ -10,19 +10,21 @@ tags: [getting-started]
 
 Esto recorre el ciclo de vida completo de un proyecto BxAgents: generar el andamiaje, editar, construir, ejecutar.
 
+Antes de empezar necesitas BoxLang y el módulo instalados (ver [Instalación](installation.md)) y una clave de API del proveedor de modelo que elijas (`OPENAI_API_KEY` para `openai/gpt-5`). Para ejecutar `bxAgents test` necesitas además [CommandBox](https://commandbox.ortusbooks.com) (el comando `box`) en tu `PATH`: `new` ejecuta `box install` una vez para obtener TestBox. Sin `box` el proyecto se crea igualmente, `new` imprime un aviso con el comando que debes ejecutar después, y `--skipInstall` omite el paso.
+
 ## 1. Genera el andamiaje de un proyecto
 
 ```bash
 bxAgents new my-agent
 ```
 
-En una terminal esto pregunta qué debe hacer el agente (su modelo, tools, servidores MCP, canales, cómo llega la gente a él, dónde se despliega) y escribe el proyecto a la medida; ver [el asistente de new](../guides/new-wizard.md). Termina imprimiendo el comando de una línea que construye el mismo proyecto sin preguntas. Para omitir las preguntas, pasa un modelo:
+En una terminal esto pregunta qué debe hacer el agente (su modelo, tools, servidores MCP (servidores de tools externos que hablan el Model Context Protocol), canales, cómo llega la gente a él, dónde se despliega) y escribe el proyecto a la medida; ver [el asistente de new](../guides/new-wizard.md). Termina imprimiendo el comando de una línea que construye el mismo proyecto sin preguntas. Para omitir las preguntas, pasa un modelo:
 
 ```bash
 bxAgents new my-agent --model=openai/gpt-5
 ```
 
-`--model` es un slug `provider/model` - ver [el slug de modelo](../conventions/agent-bx.md#the-model-slug) para cómo se analiza. `--name` y `--description` son opcionales; `--name` por defecto toma el propio nombre del directorio destino.
+`--model` es un slug `provider/model` (se escribe en `Agent.yml` como líneas `provider:` y `model:` separadas) - ver [el slug de modelo](../conventions/agent-bx.md#the-model-slug) para cómo se analiza. `--name` y `--description` son opcionales; `--name` por defecto toma el propio nombre del directorio destino.
 
 Esto crea:
 
@@ -54,7 +56,8 @@ Este es el starter `minimal` - el predeterminado cuando se omite `--template`. U
 # Your agent. Most agents need nothing more than this file and instructions.md.
 # For code in the definition (hooks, dynamic instructions), scaffold with --class.
 name: my-agent
-model: openai/gpt-5
+provider: openai
+model: gpt-5
 
 environments:
   # `bxAgents test` builds against this override by default (see
@@ -66,7 +69,7 @@ environments:
 
 El agente es solo este archivo más `instructions.md`. Ver [Agent.yml](../conventions/agent-yaml.md) para todas las claves.
 
-Cada carpeta de convención se crea vacía - añade archivos a las que tu agente realmente necesite y elimina (o simplemente ignora) el resto.
+Cada carpeta de convención (una carpeta cuyo nombre dice a BxAgents qué son sus archivos, como `tools/` o `gateways/`) se crea vacía - añade archivos a las que tu agente realmente necesite y elimina (o simplemente ignora) el resto.
 
 ## 2. Edita
 
@@ -84,7 +87,7 @@ class {
 }
 ```
 
-Ver la sección de [Convenciones](../conventions/agent-yaml.md) para cada otra carpeta (`skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/`). No tienes que escribirlas a mano: `bxAgents add <kind>` (`tool`, `skill`, `subagent`, `gateway`, `schedule`, `interceptor`, `mcp`, `profile`, `provider`, `capability`, `extension`) hace unas cuantas preguntas y escribe los archivos, y `--dry-run` los muestra antes.
+Ver la sección de [Convenciones](../conventions/agent-yaml.md) para cada otra carpeta (`skills/`, `subagents/`, `gateways/` (un gateway es una puerta de entrada al agente: una plataforma de chat, una página web o una ruta HTTP), `schedules/`, `mcp/`, `interceptors/`, `modules/`). No tienes que escribirlas a mano: `bxAgents add <kind>` (`tool`, `skill`, `subagent`, `gateway`, `schedule`, `interceptor`, `mcp`, `profile` (una configuración de modelo con nombre a la que puedes cambiar en un chat), `provider`, `capability`, `extension`) hace unas cuantas preguntas y escribe los archivos, y `--dry-run` los muestra antes.
 
 ## 3. Pruébalo
 
@@ -111,11 +114,13 @@ Dos formas de hablar con el agente construido - ambas cargan exactamente el mism
 
 **De forma interactiva, desde la terminal:**
 
+Pon antes la clave de tu proveedor en `.env` (el archivo trae una línea comentada `OPENAI_API_KEY=sk-...` para descomentar y rellenar). Sin ella la llamada al modelo falla con el error "You didn't provide an API key" del proveedor.
+
 ```bash
 bxAgents chat
 ```
 
-En una terminal es un chat a pantalla completa que conserva tu scrollback: las respuestas llegan en streaming como Markdown con formato, las llamadas a tools se muestran mientras se ejecutan, Esc detiene al agente, y escribir `/` lista los comandos (`/sessions`, `/resume`, `/name`, `/fork`, `/export`, `/notes`, `/context` y más). Escribe `@` para adjuntar un archivo, o `@picture.png` para enviar una imagen. Las conversaciones se listan en `data/chat.db` (los mensajes duran lo mismo que la memoria del agente), así que `bxAgents chat --continue` puede retomar donde lo dejaste. Ver [la interfaz de terminal](../guides/terminal-ui.md) y [Comandos de barra](../guides/slash-commands.md). Para chatear contra la aplicación completa (schedulers, interceptores, gateways), usa `bxAgents chat --server`, o `--connect=<url>` para un servidor que ya está en marcha (añade `--token=<token>` si lo pide).
+En una terminal es un chat a pantalla completa que conserva tu scrollback: las respuestas llegan en streaming como Markdown con formato, las llamadas a tools se muestran mientras se ejecutan, Esc detiene al agente, y escribir `/` lista los comandos (`/sessions`, `/resume`, `/name`, `/fork`, `/export`, `/notes`, `/context` y más). Escribe `@` para adjuntar un archivo, o `@picture.png` para enviar una imagen. Las conversaciones se listan en el `chat.db` de la carpeta de datos del agente (su *data home*, `~/.bxagents/<nombre del agente>/` por defecto) (los mensajes duran lo mismo que la memoria del agente), así que `bxAgents chat --continue` puede retomar donde lo dejaste. Ver [la interfaz de terminal](../guides/terminal-ui.md) y [Comandos de barra](../guides/slash-commands.md). Para chatear contra la aplicación completa (schedulers, interceptores, gateways), usa `bxAgents chat --server`, o `--connect=<url>` para un servidor que ya está en marcha (añade `--token=<token>` si lo pide).
 
 **Sobre HTTP**, vía un proceso real de [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver):
 
@@ -137,7 +142,7 @@ Si creaste el andamiaje con `--template=webui-chat`, `bxAgents serve` sirve tamb
   <track kind="captions" src="/assets/video/web-trailer.vtt" srclang="en" label="English" default>
 </video>
 
-![La web app: el menú de la izquierda, una conversación con una llamada a una tool y una respuesta con formato, y el selector de modelo en la cabecera](../assets/webui/webui-chat.png)
+![La web app: el menú de la izquierda, una conversación con una llamada a una tool y una respuesta con formato, con el selector de modelo en la barra sobre la conversación](../assets/webui/webui-chat.png)
 
 Cada página tiene su propia dirección bajo `/chat` (`/chat/routines`, `/chat/settings`, ...), y una dirección allí que no es ninguna página responde `404`. Cada página se describe en la [guía de la web app](../conventions/web-ui.md#las-páginas).
 
@@ -146,7 +151,7 @@ Cada página tiene su propia dirección bajo `/chat` (`/chat/routines`, `/chat/s
 ```bash
 bxAgents doctor               # runtime, módulos, comprobaciones del proyecto y variables de entorno sin definir
 bxAgents inspect              # cómo está compuesto el agente: agentes, herramientas, variables, comprobaciones
-bxAgents package --version=1.0.0   # escribe dist/my-agent-1.0.0.bxa + .sha256
+bxAgents package --version=1.0.0   # escribe dist/my-agent-1.0.0.bxa + .sha256 (un .bxa es el agente construido en un solo archivo portátil)
 bxAgents deploy --destination=/path/to/somewhere   # copia el .bxa más nuevo allí
 ```
 

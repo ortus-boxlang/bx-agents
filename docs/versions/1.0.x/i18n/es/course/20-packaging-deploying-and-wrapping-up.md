@@ -109,8 +109,8 @@ bxAgents token create --name=laptop --expires=90d
 bxAgents chat --connect=https://agent.example.com --token=<the token>
 ```
 
-Las conversaciones, notas y tokens viven en un único archivo SQLite, `data/chat.db` (una app
-desplegada usa `database.path` dentro de la app salvo que `BXAGENTS_DB` nombre otro archivo).
+Las conversaciones, notas y tokens viven en un único archivo SQLite, `chat.db` en la carpeta de datos
+del agente (`~/.bxagents/<nombre del agente>/` por defecto, el mismo sitio en desarrollo y al desplegar; `BXAGENTS_DB` puede nombrar otro archivo).
 `bxAgents sessions list` y `bxAgents notes list` lo leen desde una shell, y `bxAgents stats` muestra
 lo que usaron las llamadas al modelo cuando `usage: true` está definido.
 

@@ -132,7 +132,7 @@ curl -X POST http://localhost:8080/api/chat/invoke \
   -d '{"input":"Hi there"}'
 ```
 
-(O sáltate `serve` por completo y usa `bxAgents invoke --message="Hi there" --server` de la
+(O sáltate `serve` por completo y usa `bxAgents invoke --message=Hello --server` de la
 [Lección 8](08-talking-to-your-agent.md), que ejercita exactamente esta misma ruta sin que
 tengas que gestionar tú el proceso del servidor.)
 

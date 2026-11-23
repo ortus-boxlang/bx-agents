@@ -19,6 +19,9 @@ BxAgents es un módulo de BoxLang. Necesita dos cosas en la máquina que lo ejec
 !!! info
     `serve`, `chat --server` e `invoke --server` necesitan además el binario independiente [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) en `PATH`. Los demás verbos (`build`, `chat` e `invoke` sin `--server`, `package`, `inspect`, `clean`, `new`, ...) no lo necesitan.
 
+!!! info
+    Para ejecutar `bxAgents test` el proyecto necesita TestBox en `lib/testbox`. `new` lo obtiene ejecutando `box install`, que necesita [CommandBox](https://commandbox.ortusbooks.com) (el comando `box`) en el `PATH`. Sin él el proyecto se crea igualmente, `new` imprime un aviso con el comando que debes ejecutar después, y `--skipInstall` omite el paso. Nada más en BxAgents necesita CommandBox.
+
 ::: stepper
 ::: step "Instalar BoxLang"
 Sigue la [guía de instalación oficial de BoxLang](https://boxlang.ortusbooks.com/getting-started/installation). El instalador rápido también configura `~/.boxlang/bin` en tu `PATH`, que es donde aterrizan los ejecutables provistos por módulos (como el propio comando `bxAgents` de BxAgents, abajo).
@@ -36,7 +39,7 @@ bxAgents --version
 bxAgents --help
 ```
 
-`--help` lista los 28 verbos (`new`, `add`, `build`, `test`, `serve`, `chat`, `invoke`, `package`, `deploy`, `inspect`, `clean`, `hash-password`, `token`, `users`, `notes`, `vault`, `connect`, `sessions`, `routines`, `stats`, `models`, `doctor`, `skills`, `extensions`, `data`, `logs`, `backup`, `restore`) con un resumen de una línea de cada uno.
+`--help` lista los 29 verbos (`new`, `add`, `build`, `test`, `serve`, `chat`, `invoke`, `package`, `deploy`, `inspect`, `clean`, `hash-password`, `token`, `users`, `notes`, `vault`, `connect`, `connectors`, `sessions`, `routines`, `stats`, `models`, `doctor`, `skills`, `extensions`, `data`, `logs`, `backup`, `restore`) con un resumen de una línea de cada uno.
 :::
 :::
 

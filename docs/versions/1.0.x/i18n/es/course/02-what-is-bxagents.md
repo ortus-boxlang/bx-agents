@@ -73,11 +73,14 @@ your-agent/
 ```text
 .build/app/
 ├── Application.bx
+├── bxagents/
+│   ├── Application.bx
+│   └── Scheduler.bx
 ├── config/
 │   ├── ColdBox.bx
 │   ├── WireBox.bx
-│   ├── Router.bx
-│   └── Scheduler.bx
+│   └── Router.bx
+├── schedules/
 ├── agent/
 │   └── GeneratedAgentFactory.bx
 ├── tools/  skills/  mcp/

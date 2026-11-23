@@ -16,6 +16,8 @@ Una [extensión](../conventions/extensions.md) añade cosas al chat y a la app s
 bxAgents add extension standup --with=command,key --layout=file --description="Standup diario"
 ```
 
+(Con el launcher de BoxLang 1.19.0 un valor entre comillas con espacios se parte en los espacios; ver [Comillas en los valores de los flags](../cli-reference.md#comillas-en-los-valores-de-los-flags).)
+
 Eso escribe `extensions/standup.bx`: una clase con un comando `/standup` y una tecla, cada uno con un `TODO` por completar. Sin `--with` o `--layout`, en una terminal pregunta (qué traer, y un archivo o una carpeta). Si marcas un scheduler, gateway, tool, skill o archivos web, crea una carpeta (`extensions/standup/Extension.bx` más esos archivos).
 
 ## 2. Probarla

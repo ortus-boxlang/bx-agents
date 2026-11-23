@@ -33,11 +33,11 @@ instalado en absoluto.
 
 ![La UI web de chat generada, con marca propia y con una conversación de ejemplo](../assets/webui-chat-light.png)
 
-Esa es la página generada real y sin modificar - esta con la marca de la configuración
+Esa es la web app, aquí con la marca de la configuración
 `theme`/`title`/`icon` de
 [`examples/webui-agent`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent),
 llevando más lejos el concepto de exposición de la [Lección 13](13-exposing-http-and-mcp.md).
-Ejecutar `bxAgents build && bxAgents serve` en ese ejemplo te da esa misma página de verdad.
+Ejecutar `bxAgents build && bxAgents serve` en ese ejemplo sirve esa misma app.
 
 ## Qué puede hacer la página
 

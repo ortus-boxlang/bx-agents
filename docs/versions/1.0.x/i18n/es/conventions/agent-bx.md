@@ -384,7 +384,7 @@ bxAgents token revoke --name=laptop
 - El nombre es quien llama. Una ejecución pertenece al token que la inició, y un token no puede responder la aprobación pendiente de otro. El alcance (scope) es `chat` o `admin`.
 - Revocar surte efecto en la siguiente petición, sin reiniciar. Un token también puede caducar (`--expires=90d`, `12h`, `2w` o una fecha).
 - Con `tokens: true` y sin `tokenEnvVar`, un servidor que aún no tiene tokens rechaza a todos. Con ambos, el secreto compartido funciona como un token `admin`, así se puede llegar a un despliegue nuevo antes de que exista el primer token.
-- Los tokens viven en la [base de datos de chat compartida](web-ui.md#el-almacén-sqlite) (`data/chat.db`). En un servidor desplegado ejecuta `token` con `BXAGENTS_DB` apuntando al archivo que usa la app.
+- Los tokens viven en la [base de datos de chat compartida](web-ui.md#el-almacén-sqlite) (`chat.db` en la carpeta de datos del agente, `~/.bxagents/<nombre del agente>/` por defecto). Ejecuta `token` en el proyecto, o en un servidor desplegado con `BXAGENTS_DB` apuntando al archivo que usa la app.
 
 Pon HTTPS delante de cualquier servidor al que viaje un token: un token por HTTP simple se puede leer en la red.
 
