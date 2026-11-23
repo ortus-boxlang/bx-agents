@@ -16,7 +16,7 @@ Two commands draw a full terminal screen: [`bxAgents chat`](../cli-reference.md#
   <track kind="captions" src="/assets/video/terminal-trailer.vtt" srclang="en" label="English" default>
 </video>
 
-*The trailer, under two minutes, narrated, with captions: the chat, the commands, the keys, conversations, files, models, prompt styles, notes and the vault, export and record, and the wizard. The answers come from a scripted demo model, so they are canned.*
+*The trailer, about two minutes, narrated, with captions: the chat, the commands, the keys, conversations, files, models, prompt styles, settings, notes and the vault, export and record, and the wizard. The answers come from a scripted demo model, so they are canned.*
 
 <video controls preload="metadata" poster="/assets/video/chat-terminal-poster.png" style="max-width:100%">
   <source src="/assets/video/chat-terminal.mp4" type="video/mp4">
