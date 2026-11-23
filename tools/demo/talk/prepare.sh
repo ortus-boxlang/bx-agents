@@ -55,7 +55,7 @@ bxAgents new "$NAME" --model="$PROVIDER/$MODEL_A" --skipInstall
 cd "$PROJECT"
 bxAgents add gateway web --auth=open --yes
 
-cat >> Agent.yaml <<YAML
+cat >> Agent.yml <<YAML
 
 # For the demos: the date and time tool, two local models to switch between with /profile, and usage recording for the usage page
 tools:
