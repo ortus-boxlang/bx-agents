@@ -266,7 +266,7 @@
   lib/                 coldbox/, modules/ (qb, cbsecurity, cbauth, cbmailservices), java/
   runtime/             the BoxLang home
     boxlang.json       the template's engine config
-    modules/bxagents/  a copy of the bxagents module: the ONLY module the served app loads
+    modules/bx-agents/ a copy of the bxagents module, under its installed folder name: the ONLY module the served app loads
     global/  lib/  logs/
   boxlang_modules/     the project's own installed BoxLang modules
 </code></pre>
@@ -278,7 +278,7 @@
 <ul>
 <li><strong>Only <code>public/</code> is a web root.</strong> Nothing in <code>app/</code>, <code>lib/</code>, <code>runtime/</code> or <code>boxlang_modules/</code> can be fetched by its address: <code>/config/agent-settings.json</code>, <code>/project/Agent.yml</code>, <code>/agent/instructions.md</code> and a listing of <code>/config/</code> were all downloadable without a token before this layout, and answer 404 now. An address nothing routes is a small JSON <code>404</code>, not an error page.</li>
 <li><strong>Only <code>index.bxm</code> runs.</strong> The server's default runs any <code>.bx</code> or <code>.bxm</code> under the web root as a request; the <code>passPredicate</code> limits that to the front controller, so a class under <code>app/</code> is not callable by address.</li>
-<li><strong>Only the <code>bxagents</code> module loads.</strong> The module is copied into <code>runtime/modules/bxagents</code> (with the BoxLang modules bundled inside it), and <code>runtime/</code> is the BoxLang home, so the machine's own <code>~/.boxlang/modules</code> is never read. The copy is skipped while a stamp (the module's <code>box.json</code> and the hash of its jars) is unchanged.</li>
+<li><strong>Only the <code>bxagents</code> module loads.</strong> The module is copied into <code>runtime/modules</code> as it is installed, folder name included (<code>bx-module install bx-agents</code> makes it <code>bx-agents</code>; a dev build's <code>build/modules/bxagents</code> stays <code>bxagents</code>), with the BoxLang modules bundled inside it. Any other folder there, such as a copy under the other name, is removed, and <code>runtime/</code> is the BoxLang home, so the machine's own <code>~/.boxlang/modules</code> is never read. The copy is skipped while a stamp (the module's <code>box.json</code> and the hash of its jars) is unchanged.</li>
 <li><strong>The paths are relative</strong>, so a copy of <code>.build</code> anywhere (a packaged <code>.bxa</code> unzipped on another machine) is served by starting the server in it. A folder name with a space in it does not work: the <code>boxlang-miniserver</code> launcher script does not quote <code>BOXLANG_HOME</code>.</li>
 <li><code>public/includes/</code> shows its file names (the server lists a folder that has no index file, and <code>miniserver.json</code> has no switch for it); it holds only what the browser is meant to load.</li>
 </ul>
