@@ -78,6 +78,40 @@ test.describe( "Memory", () => {
 	} );
 } );
 
+test.describe( "Memory: clearing everyone's conversations", () => {
+	const rows = [
+		{ id: "c1", userId: "ada", title: "Plan", messageCount: 6, updatedAt: "2026-11-18T09:00:00Z" },
+		{ id: "c2", userId: "bob", title: "Notes", messageCount: 2, updatedAt: "2026-11-18T10:00:00Z" },
+		{ id: "c3", userId: "bob", title: "More", messageCount: 2, updatedAt: "2026-11-18T11:00:00Z" }
+	];
+
+	test( "an admin with no conversations of their own is told it clears everyone's, with the real totals", async( { page } ) => {
+		await page.route( "**/__bxagents/sessions?*", route => {
+			const all = new URL( route.request().url() ).searchParams.get( "all" ) === "1";
+			return route.fulfill( { json: all ? { total: 3, sessions: rows } : { total: 0, sessions: [] } } );
+		} );
+		let cleared = null;
+		await page.route( "**/__bxagents/memory/clear", route => {
+			cleared = route.request().postDataJSON();
+			return route.fulfill( { json: { success: true, data: { messages: 10, conversations: 3 } } } );
+		} );
+		await page.goto( APP + "/memory" );
+		await expect( page.getByText( "No conversations with this agent yet." ) ).toBeVisible();
+		await page.getByRole( "button", { name: "Clear everyone's conversation memory" } ).click();
+		await expect( page.locator( "#confirmTitle" ) ).toHaveText( "Clear everyone's conversation memory?" );
+		await expect( page.locator( "#confirmBody" ) ).toContainText( "all 3 conversations of all 2 people, not only yours" );
+		await page.locator( "#confirmDialog" ).getByRole( "button", { name: "Clear everyone's" } ).click();
+		await expect.poll( () => cleared ).toEqual( { all: true } );
+	} );
+
+	test( "a member does not get the button", async( { member } ) => {
+		await member.route( "**/__bxagents/sessions?*", route => route.fulfill( { json: { total: 1, sessions: [ rows[ 1 ] ] } } ) );
+		await member.goto( APP + "/memory" );
+		await expect( member.getByRole( "list", { name: "Conversation memory" } ).getByText( "2 messages" ) ).toBeVisible();
+		await expect( member.getByRole( "button", { name: /conversation memory/ } ) ).toHaveCount( 0 );
+	} );
+} );
+
 test.describe( "Agent", () => {
 	test( "shows the composition and keeps the moving lines switch", async( { page, errors } ) => {
 		await page.goto( APP + "/agent" );

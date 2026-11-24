@@ -26,6 +26,21 @@ export function notesSummary( part ) {
 	return n + ( n === 1 ? " note, " : " notes, " ) + used + " of " + ( part.stats.limit || 0 ) + " characters (about " + Math.ceil( used / 4 ) + " tokens in every conversation)";
 }
 
+/** How many of everyone's conversations one read takes, to count the people they belong to */
+const EVERYONE_LIMIT = 100;
+
+/**
+ * @param {Array<{ userId?: string }>} [rows] The rows of GET /sessions?all=1
+ * @param {number} [total] How many conversations match in all
+ * @returns {{ total: number, people: number|null }} The total, and the number of different people when every row was read (null when not)
+ */
+export function everyoneSummary( rows, total ) {
+	const list = rows || [];
+	const all = typeof total === "number" ? total : list.length;
+	const complete = list.length >= all;
+	return { total: all, people: complete ? new Set( list.map( r => r.userId ) ).size : null };
+}
+
 /**
  * @returns {object} Alpine component state and actions
  */
@@ -54,6 +69,10 @@ export function memoryPage() {
 		convTotal  : 0,
 		/** @type {string} Why they could not be read */
 		convFailed : "",
+		/** @type {number} Admin: conversations of everyone's, for the agent shown (what "clear all" clears) */
+		allTotal   : 0,
+		/** @type {number|null} Admin: how many people they belong to, or null when more than one read could hold */
+		allPeople  : null,
 
 		/** Loads the notes, and the conversation memory once the agents are known. */
 		async init() {
@@ -182,6 +201,21 @@ export function memoryPage() {
 			this.convFailed = "";
 			this.convs = result.data.sessions || [];
 			this.convTotal = typeof result.data.total === "number" ? result.data.total : this.convs.length;
+			await this.loadEveryone();
+		},
+
+		/** Admin: counts everyone's conversations of the agent shown, which is what "clear all" clears. */
+		async loadEveryone() {
+			if ( !this.admin ) {
+				return;
+			}
+			const result = await this.$api.get( "/sessions?all=1&limit=" + EVERYONE_LIMIT + ( this.agentKey ? "&agent=" + encodeURIComponent( this.agentKey ) : "" ) );
+			if ( !result.ok ) {
+				return;
+			}
+			const sum = everyoneSummary( result.data.sessions, result.data.total );
+			this.allTotal = sum.total;
+			this.allPeople = sum.people;
 		},
 
 		/** @returns {string} The Conversations page, filtered to the agent shown */
@@ -208,12 +242,14 @@ export function memoryPage() {
 			await this.loadConvs();
 		},
 
-		/** Forgets what was said in every conversation of the agent shown (admin). */
+		/** Forgets what was said in every conversation of everyone, for the agent shown (admin). */
 		async clearAllConvs() {
+			const f = this.$fmt;
+			const whose = this.allPeople === null ? "everyone" : "all " + f.countLabel( this.allPeople, "person", "people" );
 			const yes = await this.$confirm( {
-				title  : "Forget the messages of all " + this.convTotal + " conversations" + ( this.agentKey ? " of " + this.agentKey : "" ) + "?",
-				body   : "The conversations stay, empty. This cannot be undone.",
-				yes    : "Clear all",
+				title  : "Clear everyone's conversation memory" + ( this.agentKey ? " of " + this.agentKey : "" ) + "?",
+				body   : "This forgets the messages of all " + f.countLabel( this.allTotal, "conversation" ) + " of " + whose + ", not only yours. The conversations stay, empty. It cannot be undone.",
+				yes    : "Clear everyone's",
 				danger : true
 			} );
 			if ( !yes ) {
