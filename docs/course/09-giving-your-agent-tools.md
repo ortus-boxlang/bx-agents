@@ -1,5 +1,5 @@
 ---
-title: "Lesson 9: Giving Your Agent Tools"
+title: "Giving Your Agent Tools"
 icon: phosphor-duotone:wrench
 summary: Any @AITool-annotated function under tools/ becomes a callable tool.
 description: Any @AITool-annotated function under tools/ becomes a callable tool.
@@ -66,29 +66,70 @@ previous build.
 
 ## Try it
 
-Add a real tool to the agent you've been building:
+Acme support should know where an order is. First, see what the agent says today. It has no order tool, and the
+scripted model has a rule for an order number that says so when the tool is missing:
 
-```javascript
-// tools/GetTime.bx
+```bash title="Terminal 2"
+cd ~/bxagents-course/acme-support
+bxAgents invoke --message=48213
+```
+
+```text title="You see"
+I have no order tool yet, so I cannot look up order 48213.
+```
+
+Now write the tool. It returns a fixed answer, because the course has no order system; a real one would call yours.
+`bxAgents add tool Orders --function=orderStatus` writes the same file with a typed function for you to fill in:
+
+```javascript title="acme-support/tools/Orders.bx"
 class {
 
-	@AITool( "Get the current server time." )
-	function currentTime() {
-		return dateTimeFormat( now(), "yyyy-MM-dd HH:mm:ss" );
+	@AITool( "Look up an order by its number." )
+	function orderStatus( orderNumber ) {
+		return {
+			number  : arguments.orderNumber,
+			status  : "shipped",
+			carrier : "UPS"
+		};
 	}
 
 }
 ```
 
-Or let `bxAgents add tool GetTime --function=currentTime` scaffold the file with a typed `@AITool` function for you.
-Rebuild and chat with it:
+The agent also gets a tool from a module, without any code: bx-ai ships `now`, the current date and time. Name it in
+`Agent.yml` (add these lines at the end of the file):
 
-```bash
-bxAgents build
-bxAgents chat
-> What time is it?
+<!-- course: append -->
+```yaml title="acme-support/Agent.yml"
+
+tools:
+  - now@bxai
 ```
 
-Full reference: [tools/](../conventions/tools.md).
+Tools are found when you build, so rebuild and ask the scripted model what the agent can use. It has a rule that
+lists the tools the request carried (the word is `capabilities`):
 
-Next: [Lesson 10 - Packaging Skills](10-packaging-skills.md)
+```bash title="Terminal 2"
+bxAgents build
+bxAgents invoke --message=capabilities
+bxAgents invoke --message=48213
+```
+
+```text title="You see"
+Build succeeded: <anything>/acme-support/.build/app
+I can use these tools: <anything>
+Order **48213**: <anything>
+```
+
+The model decided to call `orderStatus` with the number, BxAgents ran your function, and the answer used what it
+returned. Open the terminal chat and ask again, and the tool call shows as a row above the answer.
+
+## Checkpoint
+
+`acme-support/` has `tools/Orders.bx` and a `tools:` list with `now@bxai`. `kit/resume.sh 09-giving-your-agent-tools`
+restores both; rebuild after.
+
+Full reference: [tools/](../conventions/tools.md). The web app lists every tool on its Registry page, which a later
+lesson visits.
+
+Next: [Packaging Skills](10-packaging-skills.md)

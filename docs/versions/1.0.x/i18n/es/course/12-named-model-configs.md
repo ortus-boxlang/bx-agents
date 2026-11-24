@@ -1,5 +1,5 @@
 ---
-title: "Lección 12: Modelos y perfiles"
+title: "Modelos y perfiles"
 icon: phosphor-duotone:brain
 summary: Elige el modelo por defecto, configura otros proveedores y da nombre a combinaciones como fast y planner, todo en Agent.yml.
 description: Elige el modelo por defecto, configura otros proveedores y da nombre a combinaciones como fast y planner, todo en Agent.yml.
@@ -8,7 +8,7 @@ tags: [course, conventions, models, profiles]
 
 # Modelos y perfiles
 
-Ya eliges un modelo con un slug, `model: openai/gpt-5` ([Lección 5](05-agent-bx.md)). Cuando quieres más de un modelo en el mismo proyecto, les pones nombre: un **perfil** es un proveedor, un modelo y algunos ajustes bajo un nombre como `fast` o `planner`. Todo vive en `Agent.yml`; nunca escribes un `boxlang.json`.
+Ya eliges un modelo con un slug, `model: openai/gpt-5` ([La definición del agente - Agent.yml](05-agent-bx.md)). Cuando quieres más de un modelo en el mismo proyecto, les pones nombre: un **perfil** es un proveedor, un modelo y algunos ajustes bajo un nombre como `fast` o `planner`. Todo vive en `Agent.yml`; nunca escribes un `boxlang.json`.
 
 ```yaml
 provider: openai
@@ -41,8 +41,8 @@ Un slug basta para la mayoría de los agentes. Recurre a los perfiles cuando var
 
 ## Pruébalo
 
-Añade un perfil `fast` que apunte a un modelo más pequeño que el de tu agente raíz, y dale a un subagente `profile: fast`, algo natural para el investigador de la [Lección 11](11-composing-subagents.md). Ejecuta `bxAgents inspect --section=ai` para ver el valor por defecto, los proveedores y los perfiles, y de qué variable sale cada clave.
+Añade un perfil `fast` que apunte a un modelo más pequeño que el de tu agente raíz, y dale a un subagente `profile: fast`, algo natural para el investigador de [Componer subagentes](11-composing-subagents.md). Ejecuta `bxAgents inspect --section=ai` para ver el valor por defecto, los proveedores y los perfiles, y de qué variable sale cada clave.
 
 Referencia completa: [Modelos y perfiles](../conventions/models.md).
 
-Siguiente: [Lección 13 - Exponer tu agente por HTTP y MCP](13-exposing-http-and-mcp.md)
+Siguiente: [La UI web de chat generada](15-the-generated-web-chat-ui.md)

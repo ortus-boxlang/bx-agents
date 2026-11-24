@@ -59,7 +59,7 @@ def count():
     gateways = (BX / "models" / "gateways" / "GatewayTypes.bx").read_text()
     push = re.findall(r"\{\s*type\s*:\s*\"([a-z-]+)\"", gateways)
     push += re.findall(r"type\s*:\s*\"([a-z-]+)\",\s*\n\s*class", gateways)
-    lessons = re.findall(r"^\s+- course/\d+", (ROOT / "docs" / "data" / "courses.yaml").read_text(), re.M)
+    lessons = re.findall(r"^\s+- course/[\w-]+", (ROOT / "docs" / "data" / "courses.yaml").read_text(), re.M)
 
     return {
         "verbs": len(classes(BX / "models" / "cli", skip=("UserConfig",))),

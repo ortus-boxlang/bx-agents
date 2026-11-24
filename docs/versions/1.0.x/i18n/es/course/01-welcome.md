@@ -1,5 +1,5 @@
 ---
-title: "Lección 1: Bienvenido a BxAgents"
+title: "Bienvenido a BxAgents"
 icon: phosphor-duotone:hand-waving
 summary: Qué cubre este curso, qué vas a construir, y cómo está organizada cada lección.
 description: Qué cubre este curso, qué vas a construir, y cómo está organizada cada lección.
@@ -62,4 +62,4 @@ Cada lección enlaza de vuelta a la referencia completa de [Convenciones](../con
 para todo lo que este curso solo resume - el curso es el camino guiado, y la sección de
 Convenciones es la referencia exhaustiva a la que volverás más adelante.
 
-Siguiente: [Lección 2 - ¿Qué es BxAgents?](02-what-is-bxagents.md)
+Siguiente: [¿Qué es BxAgents?](02-what-is-bxagents.md)

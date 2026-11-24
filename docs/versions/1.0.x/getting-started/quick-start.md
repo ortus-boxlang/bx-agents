@@ -171,6 +171,7 @@ Removes `.build/` and `dist/` only - your source conventions (`Agent.yml`, `tool
 
 ## Next steps
 
+- Build one agent end to end, with no account and no key, in the [Introduction to BxAgents](../course/index.md) course.
 - Walk through every convention folder in [Conventions](../conventions/agent-yaml.md).
 - Look at the working sample projects in [`examples/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples).
 - See every verb's flags in [CLI Reference](../cli-reference.md).

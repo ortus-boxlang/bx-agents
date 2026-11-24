@@ -1,5 +1,5 @@
 ---
-title: "Lección 15: La UI web de chat generada"
+title: "La UI web de chat generada"
 icon: phosphor-duotone:globe-hemisphere-west
 summary: Un cliente de chat completo para navegador - barra lateral, streaming, aprobaciones, almacén SQLite.
 description: Un cliente de chat completo para navegador - barra lateral, streaming, aprobaciones, almacén SQLite.
@@ -36,7 +36,7 @@ instalado en absoluto.
 Esa es la web app, aquí con la marca de la configuración
 `theme`/`title`/`icon` de
 [`examples/webui-agent`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent),
-llevando más lejos el concepto de exposición de la [Lección 13](13-exposing-http-and-mcp.md).
+llevando más lejos el concepto de exposición de [Exponer tu agente por HTTP y MCP](13-exposing-http-and-mcp.md).
 Ejecutar `bxAgents build && bxAgents serve` en ese ejemplo sirve esa misma app.
 
 ## Qué puede hacer la página
@@ -85,7 +85,7 @@ La página **Settings** tiene **Appearance**: cada visitante elige claro, oscuro
 color de acento, el tamaño del texto y la densidad, guardados en su propio navegador. Nunca cambia
 tu `theme`, que sigue siendo el valor por defecto. La página **Access** lista, crea y revoca tokens
 para admins, cuando el servidor define `agentApi.manageTokens: true`
-([Lección 13](13-exposing-http-and-mcp.md)).
+([Exponer tu agente por HTTP y MCP](13-exposing-http-and-mcp.md)).
 
 ## Sin cuentas: un único espacio de trabajo compartido
 
@@ -141,7 +141,7 @@ de la app en sí **no** están protegidas deliberadamente, ya que la navegación
 en el navegador no puede enviar una cabecera personalizada: la página pide el secreto en un
 diálogo **Password** que se abre solo cuando el servidor responde `401`, y con el botón de la
 llave de la cabecera. Para varias personas, usa tokens emitidos o lista `users`
-([la Lección 13](13-exposing-http-and-mcp.md) cubre tokens, `allowedIPs` y `rateLimit`).
+([Exponer tu agente por HTTP y MCP](13-exposing-http-and-mcp.md) cubre tokens, `allowedIPs` y `rateLimit`).
 
 ## Pruébalo
 
@@ -151,9 +151,9 @@ bxAgents serve --port=8080
 ```
 
 Abre `http://localhost:8080/chat` en un navegador (o solo `http://localhost:8080/`, que redirige ahí) y habla con tu agente - el mismo al que le
-has ido añadiendo tools, skills y subagentes desde la [Lección 9](09-giving-your-agent-tools.md).
+has ido añadiendo tools, skills y subagentes desde [Dar tools a tu agente](09-giving-your-agent-tools.md).
 
 Referencia completa: [La UI web de chat](../conventions/web-ui.md). Para cambiar la app misma, ver
 [Trabajar en la app web](../guides/ui-development.md).
 
-Siguiente: [Lección 16 - Programar trabajo en segundo plano](16-scheduling-background-work.md)
+Siguiente: [The Agent Asks First](approvals.md)

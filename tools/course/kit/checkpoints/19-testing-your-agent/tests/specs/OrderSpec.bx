@@ -1,0 +1,21 @@
+class extends="bxModules.bxagents.models.testing.BaseAgentSpec" {
+
+	function run() {
+		describe( "order lookups", function() {
+
+			it( "calls the order tool and reports the answer", function() {
+				mockResponses( [
+					{ toolCalls : [ { name : "orderStatus", arguments : { orderNumber : "48213" } } ] },
+					"Order 48213 has shipped."
+				] )
+
+				var response = agent.run( "Where is order 48213?" )
+
+				expect( agent ).toHaveCalledTool( "orderStatus" )
+				expect( response ).toContainText( "shipped" )
+			} )
+
+		} )
+	}
+
+}

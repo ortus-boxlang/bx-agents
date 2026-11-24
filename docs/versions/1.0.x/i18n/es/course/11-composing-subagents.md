@@ -1,5 +1,5 @@
 ---
-title: "Lección 11: Componer subagentes"
+title: "Componer subagentes"
 icon: phosphor-duotone:tree-structure
 summary: Agentes anidados, cada uno un proyecto BxAgents corriente por sí mismo, cableados como tools invocables.
 description: Agentes anidados, cada uno un proyecto BxAgents corriente por sí mismo, cableados como tools invocables.
@@ -85,4 +85,4 @@ el subagente investigador - es invocable exactamente igual que cualquier otra to
 
 Referencia completa: [subagents/](../conventions/subagents.md).
 
-Siguiente: [Lección 12 - Modelos y perfiles](12-named-model-configs.md)
+Siguiente: [Routines and Reports](routines-and-reports.md)

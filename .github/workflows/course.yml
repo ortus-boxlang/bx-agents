@@ -1,0 +1,46 @@
+name: Course replay
+
+# Replays every lesson of docs/course against the scripted model (tools/course/check-course.bxs): each command is run, each
+# output compared, and the checkpoints must match what the lessons produce. About 15 minutes, so it is started by hand
+# (and the static half of the same check runs on every push, in the Test Suites workflow as `verifyCourse`).
+#
+# NOT YET RUN IN CI: it was written from the checker's README and a replay on a developer machine. If it fails on the
+# first run, read tools/course/README.md; the usual causes are `boxlang-miniserver` not on the PATH or ports 8080 and 8791 in use.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  replay:
+    name: Replay the course
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Setup Java
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
+      - name: Setup BoxLang and CommandBox
+        uses: ortus-boxlang/setup-boxlang@main
+        with:
+          with-commandbox: true
+          modules: bx-cli
+
+      - name: Build the module
+        run: |
+          ./gradlew downloadBoxLang
+          ./gradlew shadowJar createModuleStructure --stacktrace --console=plain
+
+      - name: Put the built module where BoxLang finds it
+        run: |
+          mkdir -p "$HOME/.boxlang/modules"
+          rm -rf "$HOME/.boxlang/modules/bxagents"
+          cp -r build/modules/bxagents "$HOME/.boxlang/modules/bxagents"
+
+      - name: Replay
+        run: boxlang tools/course/check-course.bxs --network

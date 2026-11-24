@@ -1,0 +1,92 @@
+/**
+ * The scripted model (tools/demo/fakellm.bxs) that the course, the talk and the trailer stand on. It must keep doing what its
+ * header says: answer by rule, call a tool when the agent has it, say so when it does not (`noTool`), and name the tools it was
+ * offered (`{tools}`). The streamed answer is asserted on its number of deltas, because a reassembled answer alone passes
+ * just as well when the whole body was written at once.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function beforeAll() {
+		variables.dir = createObject( "java", "java.nio.file.Files" ).createTempDirectory( "fakellm-spec-", [] ).toString()
+		variables.port = findFreePort()
+		fileWrite( dir & "/model.json", jsonSerialize( {
+			thinkMs : 5,
+			chunkMs : 1,
+			default : "default from {model}",
+			rules   : [
+				{ when : "order", tool : "orderStatus", args : { orderNumber : "1" }, answer : "Order: {tool}", noTool : "No order tool." },
+				{ when : "tools", answer : "Tools: {tools}" }
+			]
+		} ) )
+		var javaBin = createObject( "java", "java.lang.System" ).getProperty( "java.home" ) & "/bin/java"
+		var jar = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" ).getClass().getProtectionDomain().getCodeSource().getLocation().getPath()
+		var builder = createObject( "java", "java.lang.ProcessBuilder" ).init( [ javaBin, "-cp", jar, "ortus.boxlang.runtime.BoxRunner", expandPath( "/tools" ) & "/demo/fakellm.bxs", "--port=" & port, "--script=" & dir & "/model.json" ] )
+		builder.redirectErrorStream( true )
+		builder.redirectOutput( createObject( "java", "java.io.File" ).init( dir & "/out.txt" ) )
+		variables.process = builder.start()
+		for ( var i = 1; i <= 60; i++ ) {
+			if ( fileExists( dir & "/out.txt" ) && findNoCase( "fakellm listening", fileRead( dir & "/out.txt" ) ) ) {
+				break
+			}
+			sleep( 500 )
+		}
+	}
+
+	function afterAll() {
+		if ( !isNull( variables.process ) ) {
+			variables.process.destroyForcibly()
+		}
+	}
+
+	private numeric function findFreePort() {
+		var socket = createObject( "java", "java.net.ServerSocket" ).init( 0 )
+		var found = socket.getLocalPort()
+		socket.close()
+		return found
+	}
+
+	private struct function ask( required string message, array tools = [], boolean stream = false, array extra = [] ) {
+		var messages = arguments.extra.len() ? arguments.extra : [ { role : "user", content : arguments.message } ]
+		var payload = { model : "m-1", messages : messages, stream : arguments.stream }
+		if ( arguments.tools.len() ) {
+			payload[ "tools" ] = arguments.tools.map( ( n ) => { return { type : "function", function : { name : n } } } )
+		}
+		var builder = createObject( "java", "java.net.http.HttpRequest" ).newBuilder( createObject( "java", "java.net.URI" ).create( "http://127.0.0.1:#port#/v1/chat/completions" ) )
+		builder.POST( createObject( "java", "java.net.http.HttpRequest$BodyPublishers" ).ofString( jsonSerialize( payload ) ) )
+		var answer = createObject( "java", "java.net.http.HttpClient" ).newHttpClient().send( builder.build(), createObject( "java", "java.net.http.HttpResponse$BodyHandlers" ).ofString() )
+		return { status : answer.statusCode(), body : answer.body() }
+	}
+
+	function run() {
+		describe( "The scripted model", function() {
+
+			it( "answers by rule, and by default with the model name it was asked for", function() {
+				expect( jsonDeserialize( ask( "anything" ).body ).choices[ 1 ].message.content ).toBe( "default from m-1" )
+			} )
+
+			it( "calls the tool of a rule when the agent has it", function() {
+				var message = jsonDeserialize( ask( "my order", [ "orderStatus" ] ).body ).choices[ 1 ].message
+
+				expect( message.tool_calls[ 1 ].function.name ).toBe( "orderStatus" )
+				expect( message.tool_calls[ 1 ].function.arguments ).toInclude( "orderNumber" )
+			} )
+
+			it( "answers with noTool when the agent has no such tool", function() {
+				expect( jsonDeserialize( ask( "my order" ).body ).choices[ 1 ].message.content ).toBe( "No order tool." )
+			} )
+
+			it( "names the tools it was offered in {tools}", function() {
+				expect( jsonDeserialize( ask( "tools", [ "a", "b" ] ).body ).choices[ 1 ].message.content ).toBe( "Tools: a, b" )
+			} )
+
+			it( "streams the answer as several deltas, not one", function() {
+				var body = ask( "anything", [], true ).body
+				var deltas = body.listToArray( char( 10 ) ).filter( ( l ) => l.startsWith( "data: {" ) && l.findNoCase( """content""" ) )
+
+				expect( deltas.len() ).toBeGTE( 3 )
+			} )
+
+		} )
+	}
+
+}

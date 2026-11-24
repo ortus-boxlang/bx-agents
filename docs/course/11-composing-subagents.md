@@ -1,5 +1,5 @@
 ---
-title: "Lesson 11: Composing Subagents"
+title: "Composing Subagents"
 icon: phosphor-duotone:tree-structure
 summary: Nested agents, each an ordinary BxAgents project of its own, wired as callable tools.
 description: Nested agents, each an ordinary BxAgents project of its own, wired as callable tools.
@@ -79,11 +79,76 @@ two agents share one.
 
 ## Try it
 
-Scaffold a `subagents/researcher/` folder as its own small BxAgents project (its own
-`Agent.yml` + `instructions.md`), then wire it into your root `Agent.yml`'s
-`subAgents` list. Rebuild and ask your root agent something that would naturally delegate
-to the researcher subagent - it's callable exactly like any other tool.
+Acme support gets two helpers: a **researcher** that looks things up and a **writer** that words the final reply.
+Each is a folder with its own `Agent.yml` and `instructions.md`, and each picks one of the profiles from
+[Models and Profiles](12-named-model-configs.md). (`bxAgents add subagent researcher --profile=fast` writes the
+same frame and wires it in for you.)
+
+```yaml title="acme-support/subagents/researcher/Agent.yml"
+name: researcher
+description: Looks things up and writes a short summary with sources.
+profile: fast
+```
+
+```markdown title="acme-support/subagents/researcher/instructions.md"
+You research a question and answer with a short summary and the sources you used.
+```
+
+```yaml title="acme-support/subagents/writer/Agent.yml"
+name: writer
+description: Turns facts into a friendly reply for a customer.
+profile: planner
+```
+
+```markdown title="acme-support/subagents/writer/instructions.md"
+You write the final reply to a customer from the facts you are given. Be brief and friendly.
+```
+
+Wire them to the root agent, with the folder names, at the end of `Agent.yml`:
+
+<!-- course: append -->
+```yaml title="acme-support/Agent.yml"
+
+subAgents: [ researcher, writer ]
+```
+
+Rebuild and look at what the root agent can use. Each subagent arrived as a tool called `delegate_to_<name>`:
+
+```bash title="Terminal 2"
+cd ~/bxagents-course/acme-support
+bxAgents build
+bxAgents invoke --message=capabilities
+```
+
+```text title="You see"
+Build succeeded: <anything>/acme-support/.build/app
+I can use these tools: <anything>delegate_to_researcher, delegate_to_writer<anything>
+```
+
+The scripted model has a rule for `research` and one for `write`: each delegates a task to that subagent. The
+subagent answers with the model of *its* profile, which the default answer names, so you can see who did the work:
+
+```bash title="Terminal 2"
+bxAgents invoke --message=research
+bxAgents invoke --message=write
+```
+
+```text title="You see"
+The researcher answered: I can help with orders, returns and shipping. (Answered by fast-model.)
+The writer answered: I can help with orders, returns and shipping. (Answered by planner-model.)
+```
+
+In the web app and in the terminal chat you can also talk to a subagent directly. The **Talk to** menu in the bar
+above the conversation lists the main agent and each subagent; pick one and the next message goes to it, a banner
+says who you are talking to, and every agent keeps its own memory. In the terminal the same thing is `/agent`.
+
+![Talk to with the researcher sub-agent picked and the banner that says so](../assets/webui/webui-talk-to.png)
+
+## Checkpoint
+
+`acme-support/subagents/` has `researcher/` and `writer/`, and `Agent.yml` ends with `subAgents: [ researcher, writer ]`.
+`kit/resume.sh 11-composing-subagents` restores them; rebuild after.
 
 Full reference: [subagents/](../conventions/subagents.md).
 
-Next: [Lesson 12 - Models and Profiles](12-named-model-configs.md)
+Next: [Routines and Reports](routines-and-reports.md)
