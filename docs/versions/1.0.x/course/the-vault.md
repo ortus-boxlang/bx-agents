@@ -9,3 +9,5 @@ tags: [course, security]
 # Secrets the Agent May Use
 
 TODO: this lesson is being written.
+
+Next: [Each Person's Own Settings](layered-settings.md)

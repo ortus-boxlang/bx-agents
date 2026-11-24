@@ -41,8 +41,50 @@ A slug is enough for most agents. Reach for profiles when several agents share a
 
 ## Try it
 
-Add a `fast` profile that points at a smaller model than your root agent's default, then give a subagent `profile: fast`, a natural fit for the researcher from [Composing Subagents](11-composing-subagents.md). Run `bxAgents inspect --section=ai` to see the default, the providers and the profiles, and which variable each key comes from.
+Give Acme support two models: a quick one for simple questions and a careful one for planning. Add the profiles at
+the end of `Agent.yml`. Both name the scripted model, which accepts any model name, so the answers can still tell
+them apart:
+
+<!-- course: append -->
+```yaml title="acme-support/Agent.yml"
+
+profiles:
+  fast:
+    description: Quick answers for simple questions
+    provider: openai-compatible
+    model: fast-model
+  planner:
+    description: Thinks it through before it answers
+    provider: openai-compatible
+    model: planner-model
+```
+
+```bash title="Terminal 2"
+cd ~/bxagents-course/acme-support
+bxAgents build
+bxAgents models list
+```
+
+```text title="You see"
+Build succeeded: <anything>/acme-support/.build/app
+default<anything>/fast-model<anything>
+fast<anything>openai-compatible/fast-model<anything>
+planner<anything>openai-compatible/planner-model<anything>
+```
+
+In the terminal chat, `/profile planner` switches the model in the middle of a conversation: same conversation,
+same tools, only the model changed. Ask `anything` before and after, and the answer ends with `(Answered by
+fast-model.)` and then `(Answered by planner-model.)`. `/model` shows which one is in use and `/default` goes back.
+Because the web app and the API list the profiles too, a person can pick one per message there.
+
+!!! note "`models test` and the scripted model"
+    `bxAgents models test` sends each model one tiny question. It does not work against the scripted model in this
+    course, so the course does not use it; with a real provider it is the quickest way to find a wrong key.
+
+## Checkpoint
+
+`Agent.yml` has the `profiles:` block. `kit/resume.sh 12-named-model-configs` restores it; rebuild after.
 
 Full reference: [Models and profiles](../conventions/models.md).
 
-Next: [Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md)
+Next: [The Generated Web Chat UI](15-the-generated-web-chat-ui.md)

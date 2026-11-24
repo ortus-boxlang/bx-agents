@@ -9,3 +9,5 @@ tags: [course, web-app]
 # What It Remembers, and for Whom
 
 TODO: this lesson is being written.
+
+Next: [Composing Subagents](11-composing-subagents.md)

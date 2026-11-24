@@ -9,3 +9,5 @@ tags: [course, settings]
 # Each Person's Own Settings
 
 TODO: this lesson is being written.
+
+Next: [Logs, Usage and Backups](operating-it.md)

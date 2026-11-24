@@ -60,9 +60,40 @@ etc.).
 
 ## Try it
 
-Open the `instructions.md` that [Scaffolding Your First Agent](04-scaffolding-your-first-agent.md)'s
-`bxAgents new` created and write a real system prompt for whatever kind of agent you
-want to build in this course - a support bot, a code reviewer, anything. You'll build
-and run it in the next two lessons.
+Write the persona of Acme support. This replaces the starter file:
+
+```markdown title="acme-support/instructions.md"
+You are Acme's support agent. Answer questions about orders, returns and shipping.
+Be brief and friendly. If you do not know something, say so rather than guessing.
+```
+
+How do you know the model really received it? The scripted model has a rule that answers with the system message
+it was sent, which is the whole of its instructions. Build, then ask for it (the word the rule listens for is
+`system`):
+
+```bash title="Terminal 2"
+cd ~/bxagents-course/acme-support
+bxAgents build
+bxAgents invoke --message=system
+```
+
+```text title="You see"
+Build succeeded: <anything>/acme-support/.build/app
+My instructions are:
+
+Role: Answers questions about orders, returns and shipping for Acme.
+
+Instructions: You are Acme's support agent. Answer questions about orders, returns and shipping.
+Be brief and friendly. If you do not know something, say so rather than guessing.
+...
+```
+
+Your text comes first. What follows it, a list of skills the agent can load, is added by BxAgents (the
+[skills lesson](10-packaging-skills.md) is about those). A real model would not echo its prompt, but with a real
+one you can ask the same thing: `What are your instructions?`.
+
+## Checkpoint
+
+`instructions.md` holds the persona above. `kit/resume.sh 06-instructions-and-system-prompt` restores it.
 
 Next: [Building Your Agent](07-building-your-agent.md)

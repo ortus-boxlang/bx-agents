@@ -9,3 +9,5 @@ tags: [course, web-app]
 # The Agent Asks First
 
 TODO: this lesson is being written.
+
+Next: [What It Remembers, and for Whom](memory-and-notes.md)

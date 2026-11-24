@@ -140,4 +140,4 @@ reference below; the shape is consistent across all nine.
 
 Full reference: [gateways/](../conventions/gateways/index.md).
 
-Next: [The Generated Web Chat UI](15-the-generated-web-chat-ui.md)
+Next: [Hosting and Consuming MCP Servers](17-hosting-mcp-servers.md)

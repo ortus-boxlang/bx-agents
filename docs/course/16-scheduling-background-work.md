@@ -74,4 +74,4 @@ runs and the agent. A cron expression you pass to `--when` is written as a six-f
 
 Full reference: [schedules/](../conventions/schedules.md).
 
-Next: [Hosting and Consuming MCP Servers](17-hosting-mcp-servers.md)
+Next: [Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md)

@@ -9,3 +9,5 @@ tags: [course, security]
 # Who Is Allowed
 
 TODO: this lesson is being written.
+
+Next: [Secrets the Agent May Use](the-vault.md)

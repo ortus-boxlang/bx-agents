@@ -8,15 +8,14 @@ tags: [course, getting-started]
 
 # Scaffolding Your First Agent
 
-With BoxLang and BxAgents installed ([Installing BxAgents](03-installing-bxagents.md)),
-scaffold your first project:
+In [A Model That Needs No Key](practice-model.md) you ran one command and got a project:
 
 ```bash
-bxAgents new my-agent --model=openai/gpt-5
+bxAgents new acme-support --model=openai-compatible/fast-model --skipInstall --no-banner
 ```
 
-`--model` is a `provider/model` slug (you'll see exactly how this gets
-parsed in [The Agent Definition - Agent.yml](05-agent-bx.md)). Pass it for a script-friendly run: without
+This lesson is the tour of what that command made. `--model` is a `provider/model` slug (you'll see exactly how
+this gets parsed in [The Agent Definition - Agent.yml](05-agent-bx.md)). Pass it for a script-friendly run: without
 `--model`, at a terminal, `new` asks you questions instead (see [`new` wizard](../guides/new-wizard.md)).
 `--name` and `--description` are optional;
 `--name` defaults to the target directory's own name. `new` refuses to run if the
@@ -36,7 +35,7 @@ repeat it. Pass `--model` (or `--no-wizard`) to skip the questions. See the
 ## What gets created
 
 ```text
-my-agent/
+acme-support/
 ├── Agent.yml
 ├── box.json
 ├── instructions.md
@@ -70,9 +69,9 @@ the generated app.
 ```yaml
 # Your agent. Most agents need nothing more than this file and instructions.md.
 # For code in the definition (hooks, dynamic instructions), scaffold with --class.
-name: my-agent
-provider: openai
-model: gpt-5
+name: acme-support
+provider: openai-compatible
+model: fast-model
 
 environments:
   # `bxAgents test` builds against this override by default (see
@@ -86,24 +85,38 @@ That is the whole agent definition - more on each key in [The Agent Definition -
 If you need code in the definition, pass `--class` and `new` scaffolds a class-based
 `Agent.bx` instead (also covered at the end of [The Agent Definition](05-agent-bx.md)).
 
-## The test suite runs itself
+## The test suite
 
-`new` also runs `box install` in the scaffolded project root (its `box.json` lists TestBox, installed into `lib/testbox`), so `bxAgents test`
-([Testing Your Agent](19-testing-your-agent.md)) works immediately with no separate step. This
-is best-effort - if `box` isn't on `PATH` or the install fails, `new` still succeeds
-and just tells you to run it yourself. Pass `--skipInstall` to opt out entirely.
+`new` can also run `box install` in the project root (its `box.json` lists TestBox, installed into `lib/testbox`),
+so `bxAgents test` ([Testing Your Agent](19-testing-your-agent.md)) works immediately. This is best-effort: if
+`box` isn't on `PATH` or the install fails, `new` still succeeds and tells you to run it yourself. You passed
+`--skipInstall`, so nothing was installed yet, and nothing in the next lessons needs it.
 
 ## Try it
 
-```bash
-bxAgents new my-agent --model=openai/gpt-5
-cd my-agent
+Look at what is there, then ask for a tool without writing it. `add` shows what it would write when you pass
+`--dry-run`, and writes nothing:
+
+```bash title="Terminal 2"
+cd ~/bxagents-course/acme-support
 ls
 ```
 
-You now have a real, if minimal, BxAgents project. Later you can add to it without editing
-files by hand: `bxAgents add tool`, `add skill`, `add subagent`, `add gateway`, `add schedule` and
-the other `add` kinds ask a few questions and write the files for you (`--dry-run` shows them
-first). The next four lessons walk through what's actually required to run it.
+```bash title="Terminal 2"
+bxAgents add tool Orders --function=orderStatus --dry-run
+```
 
-Next: [The Agent Definition: Agent.yml](05-agent-bx.md)
+```text title="You see"
+Would create tools/Orders.bx
+...
+```
+
+Later you can add to a project without editing files by hand: `bxAgents add tool`, `add skill`, `add subagent`,
+`add gateway`, `add schedule` and the other `add` kinds ask a few questions and write the files for you. The
+next lessons walk through what is actually required to run it.
+
+## Checkpoint
+
+Nothing changed in `acme-support/` in this lesson: it is the project from the last one.
+
+Next: [The Agent Definition - Agent.yml](05-agent-bx.md)

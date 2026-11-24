@@ -406,7 +406,7 @@ class {
 		var home = work & "/home"
 		var ws = home & "/bxagents-course"
 		var stemList = stems()
-		var checkpoints = variables.repoRoot & "/tools/course/checkpoints"
+		var checkpoints = variables.repoRoot & "/tools/course/kit/checkpoints"
 		var failures = []
 		var ran = 0
 		variables.work = work
@@ -473,7 +473,7 @@ class {
 					var problem = runStep( s, stemName )
 					if ( len( problem ) ) {
 						failures.append( "#stemName#, line #s.line#: #problem#" )
-						println( "   FAIL line #s.line#: #problem#" )
+						println( "   FAIL line #s.line#" )
 						break
 					}
 				}
@@ -492,7 +492,7 @@ class {
 						} else if ( !directoryExists( committed ) ) {
 							failures.append( "#stemName#: the lesson changes the project and has no checkpoint (run with --emit-checkpoints)" )
 						} else if ( !sameTree( work & "/snapshot-now", committed ) ) {
-							failures.append( "#stemName#: the project after the lesson differs from tools/course/checkpoints/#stemName# (run with --emit-checkpoints and review the diff)" )
+							failures.append( "#stemName#: the project after the lesson differs from tools/course/kit/checkpoints/#stemName# (run with --emit-checkpoints and review the diff)" )
 						}
 						if ( directoryExists( work & "/snapshot-prev" ) ) { treeDelete( work & "/snapshot-prev" ) }
 						directoryCopy( work & "/snapshot-now", work & "/snapshot-prev", true )
@@ -500,7 +500,7 @@ class {
 						if ( o.emit ) {
 							treeDelete( committed )
 						} else {
-							failures.append( "#stemName#: tools/course/checkpoints/#stemName# exists and the lesson no longer changes the project" )
+							failures.append( "#stemName#: tools/course/kit/checkpoints/#stemName# exists and the lesson no longer changes the project" )
 						}
 					}
 				}
@@ -563,9 +563,6 @@ class {
 		directoryCreate( arguments.ws, true )
 		directoryCopy( variables.repoRoot & "/tools/course/kit", arguments.ws & "/kit", true )
 		fileCopy( variables.repoRoot & "/tools/demo/fakellm.bxs", arguments.ws & "/kit/fakellm.bxs" )
-		if ( directoryExists( variables.repoRoot & "/tools/course/checkpoints" ) ) {
-			directoryCopy( variables.repoRoot & "/tools/course/checkpoints", arguments.ws & "/kit/checkpoints", true )
-		}
 		// the same answers, without the pauses that make a demo pleasant
 		var model = jsonDeserialize( fileRead( arguments.ws & "/kit/demos/model.json" ) )
 		model.thinkMs = 20
@@ -636,7 +633,12 @@ class {
 	}
 
 	private string function indent( required string text ) {
-		return arguments.text.listToArray( char( 10 ), true ).map( ( l ) => "    | " & l ).toList( char( 10 ) )
+		var lines = arguments.text.listToArray( char( 10 ), true )
+		var shown = lines.slice( 1, min( lines.len(), 24 ) ).map( ( l ) => "    | " & left( l, 200 ) )
+		if ( lines.len() > 24 ) {
+			shown.append( "    | ... (#lines.len() - 24# more lines)" )
+		}
+		return shown.toList( char( 10 ) )
 	}
 
 	/**
@@ -680,7 +682,7 @@ class {
 		env.put( "HOME", home )
 		env.put( "PATH", variables.work & "/bin:" & env.get( "PATH" ) )
 		env.put( "NO_COLOR", "1" )
-		env.put( "JAVA_TOOL_OPTIONS", ( env.containsKey( "JAVA_TOOL_OPTIONS" ) ? env.get( "JAVA_TOOL_OPTIONS" ) & " " : "" ) & "-Duser.home=" & home )
+		env.put( "JAVA_TOOL_OPTIONS", ( env.containsKey( "JAVA_TOOL_OPTIONS" ) ? env.get( "JAVA_TOOL_OPTIONS" ) & " " : "" ) & "-Duser.home=" & home & " -Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8" )
 		env.remove( "BXAGENTS_TOKEN" )
 		env.remove( "BXAGENTS_HOME" )
 	}

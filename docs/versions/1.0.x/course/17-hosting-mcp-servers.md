@@ -100,4 +100,4 @@ any outside MCP client, independent of your agent's own chat interface.
 `bxAgents add mcp server` writes the `mcp/` file and the `gateways/` entry for you. Full
 reference: [mcp/](../conventions/mcp.md).
 
-Next: [Interceptors and Module Dependencies](18-interceptors-and-modules.md)
+Next: [Who Is Allowed](users-roles-and-tokens.md)

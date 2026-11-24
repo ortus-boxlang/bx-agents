@@ -72,14 +72,41 @@ otherwise, so it costs nothing when you don't need it.
 
 ## Try it
 
-```bash
-cd my-agent
+```bash title="Terminal 2"
+cd ~/bxagents-course/acme-support
 bxAgents build --verbose
 ```
 
-You should see a `.build/` directory appear, with `app/` (the code) and `public/` (the
-only folder a server serves), and a manifest describing exactly what went into it. You'll talk to this built agent in the next lesson.
+```text title="You see"
+...
+Build succeeded: <anything>/acme-support/.build/app
+```
+
+You should see a `.build/` directory appear, with `app/` (the code) and `public/` (the only folder a server
+serves), and a manifest describing exactly what went into it. Two commands check a project without running it:
+`inspect` reports what the source says, and `doctor` checks the machine and the project:
+
+```bash title="Terminal 2"
+bxAgents doctor
+```
+
+```text title="You see"
+[ OK ] BoxLang <anything>
+[ OK ] bx-ai <anything>
+[ OK ] Agent definition found at [<anything>]
+[ OK ] Project structure validates cleanly
+[ OK ] Data home [<anything>] (convention) can be written
+
+Everything checks out.
+```
+
+`doctor` is the first thing to run when something does not work: it names a missing key, a bad `Agent.yml` or a
+folder it cannot write. You'll talk to this built agent in the next lesson.
 
 Full reference: [The Build Pipeline](../build-pipeline.md).
+
+## Checkpoint
+
+Nothing in the source changed; `acme-support/` is built.
 
 Next: [Talking to Your Agent](08-talking-to-your-agent.md)

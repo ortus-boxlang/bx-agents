@@ -150,4 +150,4 @@ you've been building tools, skills and subagents onto since [Giving Your Agent T
 Full reference: [The web chat UI](../conventions/web-ui.md). To change the app itself, see
 [Work on the web app](../guides/ui-development.md).
 
-Next: [Scheduling Background Work](16-scheduling-background-work.md)
+Next: [The Agent Asks First](approvals.md)
