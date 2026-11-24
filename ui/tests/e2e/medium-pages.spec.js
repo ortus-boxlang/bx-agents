@@ -170,6 +170,65 @@ test.describe( "Conversations", () => {
 		expect( errors ).toEqual( [] );
 	} );
 
+	const rows = n => Array.from( { length: n }, ( _, i ) => ( { id: "r" + i, title: "Chat " + ( i + 1 ), agent: "main", source: "web", messageCount: 1, updatedAt: "2026-11-18T09:00:00Z" } ) );
+
+	/** Answers GET /sessions the way the server would for q and offset, 7 rows with a page size of 3. */
+	async function routeSessions( page, all ) {
+		await page.route( "**/__bxagents/sessions?*", route => {
+			const url = new URL( route.request().url() );
+			const q = url.searchParams.get( "q" ) || "";
+			const offset = Number( url.searchParams.get( "offset" ) );
+			const limit = Number( url.searchParams.get( "limit" ) );
+			const hit = all.filter( r => r.title.includes( q ) );
+			return route.fulfill( { json: { total: hit.length, facets: {}, sessions: hit.slice( offset, offset + limit ) } } );
+		} );
+	}
+
+	test( "drops the selection when a search hides the selected rows", async( { page, errors } ) => {
+		await routeSessions( page, rows( 3 ) );
+		await page.goto( APP + "/conversations" );
+		await page.getByRole( "checkbox", { name: "Select Chat 1" } ).check();
+		await page.getByRole( "checkbox", { name: "Select Chat 2" } ).check();
+		await expect( page.getByText( "2 selected" ) ).toBeVisible();
+		await page.getByRole( "searchbox", { name: "Search conversation titles" } ).fill( "zzz-no-match" );
+		await expect( page.getByText( "No conversation matches those filters." ) ).toBeVisible();
+		await expect( page.getByText( "2 selected" ) ).toBeHidden();
+		await expect( page.getByRole( "button", { name: "Delete selected" } ) ).toBeHidden();
+		expect( errors ).toEqual( [] );
+	} );
+
+	test( "drops the selection on paging and on a page size change", async( { page } ) => {
+		await routeSessions( page, rows( 60 ) );
+		await page.goto( APP + "/conversations" );
+		await expect( page.getByText( "Showing 1 to 25 of 60" ) ).toBeVisible();
+		await page.getByRole( "checkbox", { name: "Select every conversation on this page" } ).check();
+		await expect( page.getByText( "25 selected" ) ).toBeVisible();
+		await page.getByRole( "button", { name: /Next/ } ).click();
+		await expect( page.getByText( "Showing 26 to 50 of 60" ) ).toBeVisible();
+		await expect( page.getByText( "25 selected" ) ).toBeHidden();
+
+		await page.getByRole( "checkbox", { name: "Select Chat 26" } ).check();
+		await expect( page.getByText( "1 selected" ) ).toBeVisible();
+		await page.getByLabel( "Conversations per page" ).selectOption( "50" );
+		await expect( page.getByText( "Showing 1 to 50 of 60" ) ).toBeVisible();
+		await expect( page.getByText( "1 selected" ) ).toBeHidden();
+	} );
+
+	test( "names the conversations in the delete confirmation", async( { page } ) => {
+		await routeSessions( page, rows( 7 ) );
+		await page.goto( APP + "/conversations" );
+		await page.getByRole( "checkbox", { name: "Select Chat 2" } ).check();
+		await page.getByRole( "checkbox", { name: "Select Chat 3" } ).check();
+		await page.getByRole( "button", { name: "Delete selected" } ).click();
+		await expect( page.locator( "#confirmTitle" ) ).toHaveText( "Delete 2 conversations?" );
+		await expect( page.locator( "#confirmBody" ) ).toContainText( "\u201cChat 2\u201d, \u201cChat 3\u201d." );
+		await page.locator( "#confirmDialog" ).getByRole( "button", { name: "Cancel" } ).click();
+
+		await page.getByRole( "checkbox", { name: "Select every conversation on this page" } ).check();
+		await page.getByRole( "button", { name: "Delete selected" } ).click();
+		await expect( page.locator( "#confirmBody" ) ).toContainText( "\u201cChat 5\u201d and 2 more." );
+	} );
+
 	test( "opens a conversation in the chat", async( { page } ) => {
 		await page.route( "**/__bxagents/sessions?*", route => route.fulfill( { json: page1 } ) );
 		await page.goto( APP + "/conversations" );
