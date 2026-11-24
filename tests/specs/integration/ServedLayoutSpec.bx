@@ -38,6 +38,25 @@ class extends="testbox.system.BaseSpec" {
 			processes.append( served.process );
 			variables.base = "http://127.0.0.1:#port#";
 			waitForHealth( base );
+
+			// the same project built as the stub variant of public/Application.bx, on a server of its own
+			variables.savedVariant = new bxagents.models.util.Env().get( "BXAGENTS_APPLICATION_VARIANT" );
+			system.setProperty( "BXAGENTS_APPLICATION_VARIANT", "stub" );
+			try {
+				variables.stubProject = newProject();
+				new bxagents.models.cli.Build().run( { projectRoot : stubProject } );
+			} finally {
+				if ( len( savedVariant ) ) {
+					system.setProperty( "BXAGENTS_APPLICATION_VARIANT", savedVariant );
+				} else {
+					system.clearProperty( "BXAGENTS_APPLICATION_VARIANT" );
+				}
+			}
+			variables.stubPort = freePort();
+			variables.stubServed = new bxagents.models.cli.Serve().run( { projectRoot : stubProject, port : stubPort } );
+			processes.append( stubServed.process );
+			variables.stubBase = "http://127.0.0.1:#stubPort#";
+			waitForHealth( stubBase );
 		}
 	}
 
@@ -174,6 +193,35 @@ class extends="testbox.system.BaseSpec" {
 				expect( answer.body ).notToInclude( "boxlang.json" );
 			} );
 
+			it( "runs the project's own Application.bx hook once ColdBox has loaded", function() {
+				if ( !ready ) {
+					return;
+				}
+				// after() of the project's class ran: the hook class extends the generated wiring and wrote this file when the app started
+				expect( fileExists( project & "/hook-ran.txt" ) ).toBeTrue();
+				expect( fileRead( project & "/hook-ran.txt" ) ).toBe( "after" );
+				// ...and it is the template's own Application.bx that created it
+				var source = fileRead( project & "/.build/public/Application.bx" );
+				expect( source ).toInclude( "_bx = new app.bxagents.UserApplication()" );
+				expect( source ).toInclude( "ColdBox Application" );
+			} );
+
+			it( "serves the stub variant the same way: health, the sign-in redirect, a 401, and the 404s", function() {
+				if ( !ready ) {
+					return;
+				}
+				expect( fileRead( stubProject & "/.build/public/Application.bx" ) ).toInclude( 'class extends="app.bxagents.Application"' );
+				expect( fileExists( stubProject & "/.build/app/bxagents/Wiring.bx" ) ).toBeFalse();
+				expect( get( stubBase & "/__bxagents/health" ).status ).toBe( 200 );
+				expect( get( stubBase & "/chat/" ).status ).toBe( 302 );
+				expect( post( stubBase & "/__bxagents/invoke", '{"input":"hello"}' ).status ).toBe( 401 );
+				expect( get( stubBase & "/config/agent-settings.json" ).status ).toBe( 404 );
+				expect( get( stubBase & "/app/tools/Greeter.bx" ).status ).toBe( 404 );
+				expect( get( stubBase & "/nothing-here" ).body ).toBe( '{"error":"not_found"}' );
+				// the project's own class IS the Application in this variant: its hook ran as well
+				expect( fileRead( stubProject & "/hook-ran.txt" ) ).toBe( "after" );
+			} );
+
 			it( "loads no module from the machine's own module directory: a decoy there does not load", function() {
 				if ( !ready ) {
 					return;
@@ -293,6 +341,13 @@ class extends="testbox.system.BaseSpec" {
 		fileCopy( expandPath( "/fixtures" ) & "/e2e-coldbox-route/tools/Greeter.bx", dir & "/tools/Greeter.bx" );
 		fileWrite( dir & "/instructions.md", "INSTRUCTIONS-MARKER: be helpful." );
 		fileWrite( dir & "/Agent.bx", 'class { function configure() { return { name : "layout-fixture-agent", model : "mock/mock-model" } } }' );
+		// the project's own Application.bx: a hook that proves it runs once ColdBox has loaded
+		fileWrite( dir & "/Application.bx", 'class extends="bxagents.Application" {' & char( 10 )
+			& '	function after() {' & char( 10 )
+			& '		super.after()' & char( 10 )
+			& '		fileWrite( "#dir.replace( "\", "/", "all" )#/hook-ran.txt", "after" )' & char( 10 )
+			& '	}' & char( 10 )
+			& '}' & char( 10 ) );
 		return dir;
 	}
 
