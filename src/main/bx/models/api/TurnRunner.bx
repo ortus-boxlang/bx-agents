@@ -12,9 +12,11 @@
  * Frames: thread { threadId }, chunk <what the model sent>, tool { id, name, arguments, status, ms },
  * suspended { threadId, pendingActions }, error { message }, done "[DONE]".
  *
- * A request is { input, conversationId?, threadId?, params?, options?, attachments?, images? }.
+ * A request is { input, conversationId?, threadId?, params?, options?, attachments?, images? }. Of `options` and `params`
+ * only `options.profile` is used, and `params` loses the keys TurnOptions refuses.
  */
 import bxModules.bxagents.models.api.Outcome;
+import bxModules.bxagents.models.api.TurnOptions;
 import bxModules.bxagents.models.logs.Logger;
 
 
@@ -52,8 +54,15 @@ class {
 	 */
 	any function prepareTurn( required any caller, required struct request ) {
 		var threadId = len( arguments.request.threadId ?: "" ) ? arguments.request.threadId : createUUID()
-		var supplied = arguments.request.options ?: {}
-		var options = isStruct( supplied ) ? duplicate( supplied ) : {}
+		// only what TurnOptions accepts reaches the agent: a caller's own `options` went through whole before, which let
+		// `_resumeContext` run tools with no approval and let `params.model` and `options.apiKey` pick a model
+		var cleanOptions = TurnOptions::ofOptions( arguments.request.options ?: {} )
+		var cleanParams = TurnOptions::ofParams( arguments.request.params ?: {} )
+		var ignored = cleanOptions.dropped.map( ( k ) => "options." & k ).append( cleanParams.dropped.map( ( k ) => "params." & k ), true )
+		if ( ignored.len() ) {
+			Logger::log( "agent", "warn", "Ignored what #arguments.caller.source()# sent in a turn request: #ignored.toList( ', ' )#" )
+		}
+		var options = cleanOptions.value
 		if ( !profileAllowed( options ) ) {
 			return Outcome::failed( "bad_profile", "profile is not offered here" )
 		}
@@ -96,7 +105,7 @@ class {
 		}
 
 		var thisAgent = variables.agent
-		var params = arguments.request.params ?: {}
+		var params = cleanParams.value
 		var tally = isNull( variables.conversations ) ? nullValue() : variables.conversations
 		var theCaller = arguments.caller
 		var theConversation = conversationId

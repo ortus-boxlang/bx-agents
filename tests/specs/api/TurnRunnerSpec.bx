@@ -37,6 +37,19 @@ class extends="testbox.system.BaseSpec" {
 				expect( agent.seen().options.conversationId ).toBe( "c-1" );
 			} );
 
+			it( "gives the agent only the options it allows and params without the refused ones", function() {
+				runner().stream( caller, {
+					input   : "hi",
+					threadId : "t-allow",
+					options : { profile : "", apiKey : "x", userId : "admin", _resumeContext : { a : 1 } },
+					params  : { model : "zz", messages : [], temperature : 0.3, top_p : 0.5, _x : 1 }
+				}, collect );
+
+				expect( agent.seen().options.keyArray().sort( "textnocase" ) ).toBe( [ "threadId", "userId" ] );
+				expect( agent.seen().options.userId ).toBe( "ada" );
+				expect( agent.seen().params ).toBe( { temperature : 0.3, top_p : 0.5 } );
+			} );
+
 			it( "notes the turn in the conversation list under the caller and where it came from", function() {
 				var r = runner();
 				r.stream( caller, { input : "where is my order", conversationId : "c-1" }, collect );
