@@ -1,0 +1,85 @@
+/**
+ * An image path in a turn request is a file on the server's disk. Only the in-process terminal may name one;
+ * a request that came over the wire carries pictures as attachments with base64 data.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.TurnRunner and image paths", function() {
+
+			beforeEach( function() {
+				variables.dir = replace( createTempDirectory( prefix = "bxagents-img-" ), "\", "/", "all" );
+				// a 1x1 png
+				variables.pngBytes = toBinary( "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" );
+				fileWrite( dir & "/secret.png", pngBytes );
+				variables.agent = new FakeAgent();
+				variables.api = new bxagents.models.api.Caller( id = "mallory", source = "api" );
+				variables.faked = new bxagents.models.api.Caller( id = "mallory", source = "terminal" );
+				variables.frames = [];
+				variables.collect = function( name, data ) { frames.append( { name : name, data : data } ); };
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function remote() {
+				return new bxagents.models.api.TurnRunner( agent );
+			}
+
+			function terminal() {
+				return new bxagents.models.api.TurnRunner( agent = agent, localImages = true );
+			}
+
+			function sentIsPlainText() {
+				return isSimpleValue( agent.seen().input );
+			}
+
+			it( "does not read an image path from a remote request", function() {
+				var outcome = remote().stream( api, { input : "look", images : [ { path : dir & "/secret.png" } ] }, collect );
+
+				expect( outcome.succeeded() ).toBeTrue();
+				expect( sentIsPlainText() ).toBeTrue();
+				expect( agent.seen().input ).toBe( "look" );
+			} );
+
+			it( "does not read it for a caller that only calls itself the terminal", function() {
+				remote().stream( faked, { input : "look", images : [ { path : dir & "/secret.png" } ] }, collect );
+
+				expect( sentIsPlainText() ).toBeTrue();
+			} );
+
+			it( "does not say whether a path exists", function() {
+				var outcome = remote().stream( api, { input : "look", images : [ { path : "/etc/passwd" }, { path : dir & "/nope.png" } ] }, collect );
+
+				expect( outcome.succeeded() ).toBeTrue();
+				expect( sentIsPlainText() ).toBeTrue();
+				expect( jsonSerialize( frames ) ).notToInclude( "passwd" );
+				expect( jsonSerialize( frames ) ).notToInclude( "nope.png" );
+			} );
+
+			it( "still attaches a local image for the in-process terminal", function() {
+				terminal().stream( faked, { input : "look", images : [ { path : dir & "/secret.png" } ] }, collect );
+
+				expect( sentIsPlainText() ).toBeFalse();
+			} );
+
+			it( "still takes base64 attachments over the wire", function() {
+				remote().stream( api, { input : "look", attachments : [ { name : "a.png", mime : "image/png", data : toBase64( pngBytes ) } ] }, collect );
+
+				expect( sentIsPlainText() ).toBeFalse();
+			} );
+
+			it( "does not use a path hidden in an attachment, and does not echo it", function() {
+				var outcome = remote().stream( api, { input : "look", attachments : [ { name : "a.png", mime : "image/png", path : dir & "/secret.png", data : "" } ] }, collect );
+
+				expect( outcome.succeeded() ).toBeFalse();
+				expect( outcome.reason() ).notToInclude( dir );
+			} );
+
+		} );
+	}
+
+}

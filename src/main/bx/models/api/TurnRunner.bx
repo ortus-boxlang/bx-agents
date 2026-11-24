@@ -12,7 +12,7 @@
  * Frames: thread { threadId }, chunk <what the model sent>, tool { id, name, arguments, status, ms },
  * suspended { threadId, pendingActions }, error { message }, done "[DONE]".
  *
- * A request is { input, conversationId?, threadId?, params?, options?, attachments?, images? }. Of `options` and `params`
+ * A request is { input, conversationId?, threadId?, params?, options?, attachments?, images? }; `images` (paths) only for a runner built with localImages. Of `options` and `params`
  * only what TurnOptions lists is used; the rest is dropped.
  */
 import bxModules.bxagents.models.api.Outcome;
@@ -28,11 +28,13 @@ class {
 	 * @offered An OfferedProfiles: which profiles a request may ask for; null allows none beyond the default
 	 * @agentName The name the turns are for when `agent` is a sub-agent that is talked to directly; blank for the main agent. A conversation belongs to the agent it started with.
 	 * @mainName The main agent's name, for the words of a refusal
+	 * @localImages True only for the in-process terminal: `images: [ { path } ]` may then name files on this machine. Never set from a request
 	 */
-	function init( required any agent, any sessions, any offered, string agentName = "", string mainName = "" ) {
+	function init( required any agent, any sessions, any offered, string agentName = "", string mainName = "", boolean localImages = false ) {
 		variables.agent = arguments.agent
 		variables.agentName = arguments.agentName
 		variables.mainName = arguments.mainName
+		variables.localImages = arguments.localImages
 		variables.sessions = arguments.sessions ?: nullValue()
 		variables.offered = arguments.offered ?: nullValue()
 		// the list's message count is refreshed from memory when a turn ends (see prepareTurn)
@@ -77,7 +79,12 @@ class {
 
 		// pictures arrive as files on this machine (images: [ { path } ], the terminal) or as data over the wire
 		// (attachments: [ { name, mime, data } ]); MessageBuilder checks and builds both
-		var images = isArray( arguments.request.images ?: "" ) ? duplicate( arguments.request.images ) : []
+		// `images` holds paths to files on this machine, so only the terminal that runs the agent in its own process may
+		// send it. Who the caller says it is (the source header) is not proof; the runner is built with the flag by code.
+		var images = variables.localImages && isArray( arguments.request.images ?: "" ) ? duplicate( arguments.request.images ) : []
+		if ( !variables.localImages && arguments.request.keyExists( "images" ) ) {
+			Logger::log( "agent", "warn", "Ignored what #arguments.caller.source()# sent in a turn request: images (send attachments with base64 data)" )
+		}
 		var attachments = arguments.request.attachments ?: []
 		if ( isArray( attachments ) ) {
 			for ( var a in attachments ) {

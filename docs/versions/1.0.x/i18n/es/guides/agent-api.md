@@ -80,6 +80,8 @@ Además de `input`, `conversationId`, `threadId` y `attachments`, una petición 
 
 Todo lo demás se descarta sin error, y el servidor registra los nombres ignorados (nunca los valores). Las claves que empiezan por `_` son internas de la biblioteca de modelos y nunca se aceptan. Es una regla de seguridad: una clave como `options._resumeContext` haría que la biblioteca ejecutara llamadas a herramientas que aporta la petición sin pedir aprobación, y `params.model` u `options.apiKey` dejarían que quien llama elija un modelo que paga el servidor. La persona, el hilo y la conversación salen del token y de la petición, nunca de `options`.
 
+Las imágenes van en `attachments`, como `[ { "name": "a.png", "mime": "image/png", "data": "<base64>" } ]`. Una petición no tiene campo `images`: contiene rutas de archivos del servidor, así que el servidor lo ignora (y registra que lo hizo) y no lee ningún archivo; solo el terminal que ejecuta el agente en su propio proceso adjunta archivos por ruta.
+
 ## Streams
 
 `stream` y `events` responden con eventos enviados por el servidor: cada frame es `event: <nombre>` y luego `data: <json>`.
