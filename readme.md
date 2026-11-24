@@ -115,7 +115,7 @@ Rebuild any app made before this layout; `serve` refuses it and says so. See the
 - Only `public/` is served. Files outside it (`Agent.yml`, `instructions.md`, `config/`, `skills/`) answer 404, and only `index.bxm` is executed by address.
 - `serve` binds to `127.0.0.1`; pass `--host=0.0.0.0` deliberately. A built app is open on your own machine; to share it set `agentApi` tokens or `access: token`, and turn on web app sign-in. `allowedIPs` and a rate limit are available.
 - Secrets go in `.env` or the vault, never in `Agent.yml`; packaging redacts them. See [Deployment & Secrets](docs/deployment-and-secrets.md).
-- The Docker deploy target builds from `.build`, but that recipe has not been run in a real Docker yet (see the changelog). Check `/__bxagents/health` after your first deploy.
+- The Docker deploy target installs the app at `/srv/bxapp` (not `/app`, which is also the ColdBox mapping name) and was run in real Docker: health, the web UI and its assets answer, and config and project files return 404. A model call from inside the container and gateways other than web were not tested. Check `/__bxagents/health` after your first deploy.
 
 ## Examples and templates
 
