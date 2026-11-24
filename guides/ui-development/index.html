@@ -266,7 +266,7 @@
 <tr><td>Partials</td><td><code>src/main/bx/bxagentsui/views/_components/{app,ui}/</code></td></tr>
 <tr><td>Sass: tokens, base, layouts, components, views, in that order</td><td><code>ui/resources/assets/scss/</code></td></tr>
 <tr><td>Alpine: <code>App.js</code>, <code>stores/</code>, <code>components/&lt;domain&gt;/</code>, <code>utils/</code></td><td><code>ui/resources/assets/js/</code></td></tr>
-<tr><td>The Vite build, committed</td><td><code>src/main/bx/bxagentsui/includes/build/</code></td></tr>
+<tr><td>The Vite build, not committed (made by <code>./gradlew uiBuild</code>)</td><td><code>src/main/bx/bxagentsui/includes/build/</code></td></tr>
 <tr><td>The dev agent and its scripted model</td><td><code>ui/dev/agent/</code>, <code>ui/dev/model.json</code></td></tr>
 <tr><td>Project shapes (other paths, a password, no accounts)</td><td><code>ui/dev/shapes/</code></td></tr>
 <tr><td>Browser tests</td><td><code>ui/tests/e2e/</code>, <code>ui/tests/shapes/</code></td></tr>
@@ -275,17 +275,17 @@
 </table></div>
 <h2 id="how-an-agent-gets-it"><a href="#how-an-agent-gets-it" id="how-an-agent-gets-it" name="how-an-agent-gets-it" class="anchor"></a>How an agent gets it</h2>
 <p>For each <code>gateways/*.bx</code> entry with <code>exposes: &quot;webui&quot;</code>, the build (<code>WebAppModule</code>) copies the module to <code>.build/app/modules/bxagentsui</code>, puts the built scripts and styles (<code>includes/build/assets</code>) where the browser fetches them, in <code>.build/public/includes/bxagentsui/build/assets</code> (the module's own folders are not under the web root), and writes <code>config/bxagentsui.json</code>: where the app is mounted (<code>basePath</code>, the entry's <code>path</code>), where the agent API is (<code>apiBase</code>), the branding, the theme, and the files of the project's extensions. <code>ModuleConfig.bx</code> reads that file when ColdBox registers the module, so the module answers at the entry's path.</p>
-<p>The build of the scripts and styles is committed in <code>includes/build</code>. An agent build never runs Node, so a change to a script or a style ships only once <code>npm run build</code> has run and its output is committed.</p>
+<p>The build of the scripts and styles is not committed: <code>./gradlew shadowJar</code> (through <code>uiBuild</code>) writes it to <code>includes/build</code> and the module carries it, so an agent build never runs Node. Building this repository needs Java and Node 24 (<code>ui/.nvmrc</code>); there is no way to skip it, and the build fails with what to install when Node is missing or another major.</p>
 <p>With <code>BXAGENTS_UI_LINK=true</code> the build links the module instead of copying it (and links <code>public/includes/bxagentsui</code> to the module's <code>includes</code> folder), so a change to a view shows on the next request. <code>npm run stack</code> sets it. Only a linked module serves <code>&lt;path&gt;/_kit</code>, a page with every partial and magic working; a built agent answers 404 there.</p>
 <h2 id="set-it-up-once"><a href="#set-it-up-once" id="set-it-up-once" name="set-it-up-once" class="anchor"></a>Set it up once</h2>
 <p>From the repository root:</p>
 <pre><code class="language-bash">./gradlew downloadBoxLang shadowJar
-cd ui &amp;&amp; npm install
+cd ui &amp;&amp; npm install     # Node 24 (nvm use) and Java are both required
 npx playwright install chromium     # if you have no Playwright browser yet
 </code></pre>
 <h2 id="run-it"><a href="#run-it" id="run-it" name="run-it" class="anchor"></a>Run it</h2>
 <pre><code class="language-bash">npm run dev        # the dev agent, its model and the Vite dev server
-npm run stack      # the dev agent and its model only, with the committed build
+npm run stack      # the dev agent and its model only, with the build of the scripts and styles (run `npm run build` first)
 </code></pre>
 <p>The app is at <a href="http://127.0.0.1:8780/chat">http://127.0.0.1:8780/chat</a>. Sign in as <code>ada</code> (an admin) or <code>bob</code> (a member), password <code>demo-pass</code>.</p>
 <p>In <code>npm run dev</code> a change to a view or a layout shows on reload, and a change to the Sass or a script reloads the page by itself. A change to a handler, a model or <code>ModuleConfig.bx</code> needs the stack restarted (Ctrl+C, then <code>npm run dev</code> again). <code>npm run dev -- --no-build</code> starts without building the agent again.</p>
@@ -303,9 +303,9 @@ npm run stack      # the dev agent and its model only, with the committed build
 </table></div>
 <p>The agent has two profiles (<code>fast</code>, <code>planner</code>), notes, a vault, routines and one folder extension, <code>panel</code> (see <a href="/conventions/extensions/index.html#a-worked-example-the-panel-extension">extensions</a>). It keeps its data in <code>ui/.stack/home</code>: delete that folder to start fresh. <code>UI_AGENT_PORT</code> and <code>UI_LLM_PORT</code> move the ports (8780 and 8080).</p>
 <h2 id="build"><a href="#build" id="build" name="build" class="anchor"></a>Build</h2>
-<pre><code class="language-bash">npm run build      # writes src/main/bx/bxagentsui/includes/build
+<pre><code class="language-bash">npm run build      # builds only the web app, into src/main/bx/bxagentsui/includes/build
 </code></pre>
-<p>Commit the build with the change that needs it.</p>
+<p>The output is ignored by git. <code>./gradlew shadowJar</code> builds it too (<code>./gradlew uiBuild</code> alone), so a module build always carries a fresh one.</p>
 <h2 id="conventions"><a href="#conventions" id="conventions" name="conventions" class="anchor"></a>Conventions</h2>
 <p>The full list is in <code>ui/AGENTS.md</code>. In short:</p>
 <ul>
@@ -392,7 +392,7 @@ npm run stack      # the dev agent and its model only, with the committed build
 <p><strong>The tests.</strong> Add <code>&quot;reports&quot;</code> to <code>PAGES</code> in <code>ui/tests/e2e/a11y.spec.js</code> (and to <code>MEMBER_PAGES</code> when a member sees it), and write a browser test in <code>ui/tests/e2e</code> for what a person does on the page. Run <code>npm run e2e:shapes</code> too: a change to routes, paths or the frame must work under every project shape.</p>
 </li>
 <li>
-<p><strong>The build.</strong> <code>npm run build</code>, and commit <code>includes/build</code> with the change.</p>
+<p><strong>The build.</strong> <code>npm run build</code> to see it in <code>npm run stack</code>; the build is not committed, and <code>./gradlew shadowJar</code> makes it for the module.</p>
 </li>
 </ol>
 <p>A change to the router, the menu or a handler needs the stack restarted.</p>
@@ -435,7 +435,7 @@ npm run e2e:shapes   # every page under other project shapes
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/guides/ui-development.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/guides/ui-development.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Nov 24, 2026, 8&#x3a;44&#x3a;49 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Guide%3A%20Work%20on%20the%20Web%20App&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fguides%2Fui-development%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/guides/ui-development.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/guides/ui-development.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Nov 24, 2026, 9&#x3a;04&#x3a;39 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Guide%3A%20Work%20on%20the%20Web%20App&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fguides%2Fui-development%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 

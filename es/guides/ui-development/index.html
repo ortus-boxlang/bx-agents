@@ -264,7 +264,7 @@
 <tr><td>Parciales</td><td><code>src/main/bx/bxagentsui/views/_components/{app,ui}/</code></td></tr>
 <tr><td>Sass: tokens, base, layouts, componentes, vistas, en ese orden</td><td><code>ui/resources/assets/scss/</code></td></tr>
 <tr><td>Alpine: <code>App.js</code>, <code>stores/</code>, <code>components/&lt;dominio&gt;/</code>, <code>utils/</code></td><td><code>ui/resources/assets/js/</code></td></tr>
-<tr><td>El build de Vite, confirmado</td><td><code>src/main/bx/bxagentsui/includes/build/</code></td></tr>
+<tr><td>El build de Vite, no confirmado (lo genera <code>./gradlew uiBuild</code>)</td><td><code>src/main/bx/bxagentsui/includes/build/</code></td></tr>
 <tr><td>El agente de desarrollo y su modelo con guion</td><td><code>ui/dev/agent/</code>, <code>ui/dev/model.json</code></td></tr>
 <tr><td>Formas de proyecto (otras rutas, una contraseña, sin cuentas)</td><td><code>ui/dev/shapes/</code></td></tr>
 <tr><td>Pruebas de navegador</td><td><code>ui/tests/e2e/</code>, <code>ui/tests/shapes/</code></td></tr>
@@ -273,17 +273,17 @@
 </table></div>
 <h2 id="cómo-la-recibe-un-agente"><a href="#cómo-la-recibe-un-agente" id="cómo-la-recibe-un-agente" name="cómo-la-recibe-un-agente" class="anchor"></a>Cómo la recibe un agente</h2>
 <p>Por cada entrada <code>gateways/*.bx</code> con <code>exposes: &quot;webui&quot;</code>, el build (<code>WebAppModule</code>) copia el módulo a <code>&lt;app&gt;/modules/bxagentsui</code> y escribe <code>config/bxagentsui.json</code>: dónde se monta la app (<code>basePath</code>, el <code>path</code> de la entrada), dónde está la API del agente (<code>apiBase</code>), la marca, el tema y los archivos de las extensiones del proyecto. <code>ModuleConfig.bx</code> lee ese archivo cuando ColdBox registra el módulo, así que el módulo responde en la ruta de la entrada.</p>
-<p>El build de los scripts y estilos está confirmado en <code>includes/build</code>. El build de un agente nunca ejecuta Node, así que un cambio en un script o un estilo solo se distribuye cuando <code>npm run build</code> se ha ejecutado y su salida está confirmada.</p>
+<p>El build de los scripts y estilos no se confirma: <code>./gradlew shadowJar</code> (mediante <code>uiBuild</code>) lo escribe en <code>includes/build</code> y el módulo lo lleva, así que el build de un agente nunca ejecuta Node. Compilar este repositorio necesita Java y Node 24 (<code>ui/.nvmrc</code>); no hay forma de omitirlo, y el build falla indicando qué instalar si falta Node o es otra versión mayor.</p>
 <p>Con <code>BXAGENTS_UI_LINK=true</code> el build enlaza el módulo en lugar de copiarlo, así que un cambio en una vista se ve en la siguiente petición. <code>npm run stack</code> lo define. Solo un módulo enlazado sirve <code>&lt;path&gt;/_kit</code>, una página con cada parcial y cada magic funcionando; un agente compilado responde 404 allí.</p>
 <h2 id="prepararla-una-vez"><a href="#prepararla-una-vez" id="prepararla-una-vez" name="prepararla-una-vez" class="anchor"></a>Prepararla una vez</h2>
 <p>Desde la raíz del repositorio:</p>
 <pre><code class="language-bash">./gradlew downloadBoxLang shadowJar
-cd ui &amp;&amp; npm install
+cd ui &amp;&amp; npm install     # hacen falta Node 24 (nvm use) y Java
 npx playwright install chromium     # si aún no tienes un navegador de Playwright
 </code></pre>
 <h2 id="arrancarla"><a href="#arrancarla" id="arrancarla" name="arrancarla" class="anchor"></a>Arrancarla</h2>
 <pre><code class="language-bash">npm run dev        # el agente de desarrollo, su modelo y el servidor de desarrollo de Vite
-npm run stack      # solo el agente de desarrollo y su modelo, con el build confirmado
+npm run stack      # solo el agente de desarrollo y su modelo, con el build de scripts y estilos (ejecuta antes `npm run build`)
 </code></pre>
 <p>La app está en <a href="http://127.0.0.1:8780/chat">http://127.0.0.1:8780/chat</a>. Entra como <code>ada</code> (admin) o <code>bob</code> (miembro), contraseña <code>demo-pass</code>.</p>
 <p>En <code>npm run dev</code> un cambio en una vista o un layout se ve al recargar, y un cambio en el Sass o en un script recarga la página solo. Un cambio en un handler, un modelo o <code>ModuleConfig.bx</code> necesita reiniciar el stack (Ctrl+C y <code>npm run dev</code> otra vez). <code>npm run dev -- --no-build</code> arranca sin volver a compilar el agente.</p>
@@ -301,9 +301,9 @@ npm run stack      # solo el agente de desarrollo y su modelo, con el build conf
 </table></div>
 <p>El agente tiene dos perfiles (<code>fast</code>, <code>planner</code>), notas, un vault, rutinas y una extensión de carpeta, <code>panel</code> (ver <a href="/es/conventions/extensions/index.html#un-ejemplo-completo-panel">extensiones</a>). Guarda sus datos en <code>ui/.stack/home</code>: borra esa carpeta para empezar de cero. <code>UI_AGENT_PORT</code> y <code>UI_LLM_PORT</code> cambian los puertos (8780 y 8080).</p>
 <h2 id="compilar"><a href="#compilar" id="compilar" name="compilar" class="anchor"></a>Compilar</h2>
-<pre><code class="language-bash">npm run build      # escribe src/main/bx/bxagentsui/includes/build
+<pre><code class="language-bash">npm run build      # compila solo la app web, en src/main/bx/bxagentsui/includes/build
 </code></pre>
-<p>Confirma el build con el cambio que lo necesita.</p>
+<p>git ignora la salida. <code>./gradlew shadowJar</code> también la genera (o <code>./gradlew uiBuild</code> solo), así que el build del módulo siempre lleva una reciente.</p>
 <h2 id="convenciones"><a href="#convenciones" id="convenciones" name="convenciones" class="anchor"></a>Convenciones</h2>
 <p>La lista completa está en <code>ui/AGENTS.md</code>. En resumen:</p>
 <ul>
@@ -390,7 +390,7 @@ npm run stack      # solo el agente de desarrollo y su modelo, con el build conf
 <p><strong>Las pruebas.</strong> Añade <code>&quot;reports&quot;</code> a <code>PAGES</code> en <code>ui/tests/e2e/a11y.spec.js</code> (y a <code>MEMBER_PAGES</code> cuando la ve un miembro), y escribe una prueba de navegador en <code>ui/tests/e2e</code> para lo que hace una persona en la página. Ejecuta también <code>npm run e2e:shapes</code>: un cambio en las rutas, las direcciones o el marco debe funcionar con cada forma de proyecto.</p>
 </li>
 <li>
-<p><strong>El build.</strong> <code>npm run build</code>, y confirma <code>includes/build</code> con el cambio.</p>
+<p><strong>El build.</strong> <code>npm run build</code> para verlo en <code>npm run stack</code>; el build no se confirma y <code>./gradlew shadowJar</code> lo genera para el módulo.</p>
 </li>
 </ol>
 <p>Un cambio en el router, el menú o un handler necesita reiniciar el stack.</p>
@@ -433,7 +433,7 @@ npm run e2e:shapes   # cada página con otras formas de proyecto
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/guides/ui-development.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/guides/ui-development.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Nov 24, 2026, 8&#x3a;44&#x3a;49 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Gu%C3%ADa%3A%20Trabajar%20en%20la%20app%20web&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fguides%2Fui-development%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/guides/ui-development.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/guides/ui-development.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Nov 24, 2026, 9&#x3a;04&#x3a;39 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Gu%C3%ADa%3A%20Trabajar%20en%20la%20app%20web&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fguides%2Fui-development%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 

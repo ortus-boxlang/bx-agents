@@ -22,7 +22,7 @@ The rules and the full tables of building blocks are in [`ui/AGENTS.md`](https:/
 | Partials | `src/main/bx/bxagentsui/views/_components/{app,ui}/` |
 | Sass: tokens, base, layouts, components, views, in that order | `ui/resources/assets/scss/` |
 | Alpine: `App.js`, `stores/`, `components/<domain>/`, `utils/` | `ui/resources/assets/js/` |
-| The Vite build, committed | `src/main/bx/bxagentsui/includes/build/` |
+| The Vite build, not committed (made by `./gradlew uiBuild`) | `src/main/bx/bxagentsui/includes/build/` |
 | The dev agent and its scripted model | `ui/dev/agent/`, `ui/dev/model.json` |
 | Project shapes (other paths, a password, no accounts) | `ui/dev/shapes/` |
 | Browser tests | `ui/tests/e2e/`, `ui/tests/shapes/` |
@@ -32,7 +32,7 @@ The rules and the full tables of building blocks are in [`ui/AGENTS.md`](https:/
 
 For each `gateways/*.bx` entry with `exposes: "webui"`, the build (`WebAppModule`) copies the module to `.build/app/modules/bxagentsui`, puts the built scripts and styles (`includes/build/assets`) where the browser fetches them, in `.build/public/includes/bxagentsui/build/assets` (the module's own folders are not under the web root), and writes `config/bxagentsui.json`: where the app is mounted (`basePath`, the entry's `path`), where the agent API is (`apiBase`), the branding, the theme, and the files of the project's extensions. `ModuleConfig.bx` reads that file when ColdBox registers the module, so the module answers at the entry's path.
 
-The build of the scripts and styles is committed in `includes/build`. An agent build never runs Node, so a change to a script or a style ships only once `npm run build` has run and its output is committed.
+The build of the scripts and styles is not committed: `./gradlew shadowJar` (through `uiBuild`) writes it to `includes/build` and the module carries it, so an agent build never runs Node. Building this repository needs Java and Node 24 (`ui/.nvmrc`); there is no way to skip it, and the build fails with what to install when Node is missing or another major.
 
 With `BXAGENTS_UI_LINK=true` the build links the module instead of copying it (and links `public/includes/bxagentsui` to the module's `includes` folder), so a change to a view shows on the next request. `npm run stack` sets it. Only a linked module serves `<path>/_kit`, a page with every partial and magic working; a built agent answers 404 there.
 
@@ -42,7 +42,7 @@ From the repository root:
 
 ```bash
 ./gradlew downloadBoxLang shadowJar
-cd ui && npm install
+cd ui && npm install     # Node 24 (nvm use) and Java are both required
 npx playwright install chromium     # if you have no Playwright browser yet
 ```
 
@@ -50,7 +50,7 @@ npx playwright install chromium     # if you have no Playwright browser yet
 
 ```bash
 npm run dev        # the dev agent, its model and the Vite dev server
-npm run stack      # the dev agent and its model only, with the committed build
+npm run stack      # the dev agent and its model only, with the build of the scripts and styles (run `npm run build` first)
 ```
 
 The app is at http://127.0.0.1:8780/chat. Sign in as `ada` (an admin) or `bob` (a member), password `demo-pass`.
@@ -72,10 +72,10 @@ The agent has two profiles (`fast`, `planner`), notes, a vault, routines and one
 ## Build
 
 ```bash
-npm run build      # writes src/main/bx/bxagentsui/includes/build
+npm run build      # builds only the web app, into src/main/bx/bxagentsui/includes/build
 ```
 
-Commit the build with the change that needs it.
+The output is ignored by git. `./gradlew shadowJar` builds it too (`./gradlew uiBuild` alone), so a module build always carries a fresh one.
 
 ## Conventions
 
@@ -149,7 +149,7 @@ A page is a route, a menu entry, a handler, a view and an Alpine component. Say 
 5. **The component.** `ui/resources/assets/js/components/reports/ReportsPage.js` exports one factory, `reportsPage()`, registered in `App.js` with `Alpine.data( "reportsPage", reportsPage )`. It reads its data with `$api` in `init()`. A tab or a filter the address should keep goes through `keepInAddress()` (`utils/address.js`).
 6. **The styles**, if the partials are not enough: a file under `scss/views/`, used in `app.scss`, with tokens for every colour.
 7. **The tests.** Add `"reports"` to `PAGES` in `ui/tests/e2e/a11y.spec.js` (and to `MEMBER_PAGES` when a member sees it), and write a browser test in `ui/tests/e2e` for what a person does on the page. Run `npm run e2e:shapes` too: a change to routes, paths or the frame must work under every project shape.
-8. **The build.** `npm run build`, and commit `includes/build` with the change.
+8. **The build.** `npm run build` to see it in `npm run stack`; the build is not committed, and `./gradlew shadowJar` makes it for the module.
 
 A change to the router, the menu or a handler needs the stack restarted.
 

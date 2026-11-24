@@ -22,7 +22,7 @@ Las reglas y las tablas completas de piezas están en [`ui/AGENTS.md`](https://g
 | Parciales | `src/main/bx/bxagentsui/views/_components/{app,ui}/` |
 | Sass: tokens, base, layouts, componentes, vistas, en ese orden | `ui/resources/assets/scss/` |
 | Alpine: `App.js`, `stores/`, `components/<dominio>/`, `utils/` | `ui/resources/assets/js/` |
-| El build de Vite, confirmado | `src/main/bx/bxagentsui/includes/build/` |
+| El build de Vite, no confirmado (lo genera `./gradlew uiBuild`) | `src/main/bx/bxagentsui/includes/build/` |
 | El agente de desarrollo y su modelo con guion | `ui/dev/agent/`, `ui/dev/model.json` |
 | Formas de proyecto (otras rutas, una contraseña, sin cuentas) | `ui/dev/shapes/` |
 | Pruebas de navegador | `ui/tests/e2e/`, `ui/tests/shapes/` |
@@ -32,7 +32,7 @@ Las reglas y las tablas completas de piezas están en [`ui/AGENTS.md`](https://g
 
 Por cada entrada `gateways/*.bx` con `exposes: "webui"`, el build (`WebAppModule`) copia el módulo a `<app>/modules/bxagentsui` y escribe `config/bxagentsui.json`: dónde se monta la app (`basePath`, el `path` de la entrada), dónde está la API del agente (`apiBase`), la marca, el tema y los archivos de las extensiones del proyecto. `ModuleConfig.bx` lee ese archivo cuando ColdBox registra el módulo, así que el módulo responde en la ruta de la entrada.
 
-El build de los scripts y estilos está confirmado en `includes/build`. El build de un agente nunca ejecuta Node, así que un cambio en un script o un estilo solo se distribuye cuando `npm run build` se ha ejecutado y su salida está confirmada.
+El build de los scripts y estilos no se confirma: `./gradlew shadowJar` (mediante `uiBuild`) lo escribe en `includes/build` y el módulo lo lleva, así que el build de un agente nunca ejecuta Node. Compilar este repositorio necesita Java y Node 24 (`ui/.nvmrc`); no hay forma de omitirlo, y el build falla indicando qué instalar si falta Node o es otra versión mayor.
 
 Con `BXAGENTS_UI_LINK=true` el build enlaza el módulo en lugar de copiarlo, así que un cambio en una vista se ve en la siguiente petición. `npm run stack` lo define. Solo un módulo enlazado sirve `<path>/_kit`, una página con cada parcial y cada magic funcionando; un agente compilado responde 404 allí.
 
@@ -42,7 +42,7 @@ Desde la raíz del repositorio:
 
 ```bash
 ./gradlew downloadBoxLang shadowJar
-cd ui && npm install
+cd ui && npm install     # hacen falta Node 24 (nvm use) y Java
 npx playwright install chromium     # si aún no tienes un navegador de Playwright
 ```
 
@@ -50,7 +50,7 @@ npx playwright install chromium     # si aún no tienes un navegador de Playwrig
 
 ```bash
 npm run dev        # el agente de desarrollo, su modelo y el servidor de desarrollo de Vite
-npm run stack      # solo el agente de desarrollo y su modelo, con el build confirmado
+npm run stack      # solo el agente de desarrollo y su modelo, con el build de scripts y estilos (ejecuta antes `npm run build`)
 ```
 
 La app está en http://127.0.0.1:8780/chat. Entra como `ada` (admin) o `bob` (miembro), contraseña `demo-pass`.
@@ -72,10 +72,10 @@ El agente tiene dos perfiles (`fast`, `planner`), notas, un vault, rutinas y una
 ## Compilar
 
 ```bash
-npm run build      # escribe src/main/bx/bxagentsui/includes/build
+npm run build      # compila solo la app web, en src/main/bx/bxagentsui/includes/build
 ```
 
-Confirma el build con el cambio que lo necesita.
+git ignora la salida. `./gradlew shadowJar` también la genera (o `./gradlew uiBuild` solo), así que el build del módulo siempre lleva una reciente.
 
 ## Convenciones
 
@@ -149,7 +149,7 @@ Una página es una ruta, una entrada del menú, un handler, una vista y un compo
 5. **El componente.** `ui/resources/assets/js/components/reports/ReportsPage.js` exporta una factoría, `reportsPage()`, registrada en `App.js` con `Alpine.data( "reportsPage", reportsPage )`. Lee sus datos con `$api` en `init()`. Una pestaña o un filtro que la dirección debe conservar pasa por `keepInAddress()` (`utils/address.js`).
 6. **Los estilos**, si los parciales no bastan: un archivo bajo `scss/views/`, usado en `app.scss`, con tokens para cada color.
 7. **Las pruebas.** Añade `"reports"` a `PAGES` en `ui/tests/e2e/a11y.spec.js` (y a `MEMBER_PAGES` cuando la ve un miembro), y escribe una prueba de navegador en `ui/tests/e2e` para lo que hace una persona en la página. Ejecuta también `npm run e2e:shapes`: un cambio en las rutas, las direcciones o el marco debe funcionar con cada forma de proyecto.
-8. **El build.** `npm run build`, y confirma `includes/build` con el cambio.
+8. **El build.** `npm run build` para verlo en `npm run stack`; el build no se confirma y `./gradlew shadowJar` lo genera para el módulo.
 
 Un cambio en el router, el menú o un handler necesita reiniciar el stack.
 
