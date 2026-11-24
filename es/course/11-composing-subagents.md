@@ -69,8 +69,8 @@ nada. Un rombo (dos padres que comparten un descendiente) no supone ningún prob
   `subAgents: [ "..." ]` - puramente una cuestión de cableado en tiempo de build.
 - El **`name` declarado** por el propio subagente (el campo `name` de su definición) es por
   lo que lo recuperas en tiempo de ejecución - cada agente del árbol queda registrado en
-  `config/WireBox.bx` bajo ese nombre, así que [`schedules/Scheduler.bx`](../conventions/schedules.md)
-  (o cualquier otra cosa que conozca WireBox) lo alcanza con `getInstance( "TheAgentName" )`.
+  `config/WireBox.bx` bajo ese nombre, así que un scheduler de [`schedules/`](../conventions/schedules.md)
+  (o cualquier otra cosa que conozca WireBox) lo alcanza con `agent( "TheAgentName" )` (o con `getInstance( "TheAgentName" )`).
 
 Estos dos nombres pueden diferir, y a menudo diferirán. Como `name` es también una clave de
 binding de WireBox, debe ser único en todo el proyecto - `build` falla la validación si dos

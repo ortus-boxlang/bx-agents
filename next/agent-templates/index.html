@@ -284,7 +284,7 @@ bxAgents new my-agent --forgebox=some-package-slug             # install a Forge
 <h3 id="minimal"><a href="#minimal" id="minimal" name="minimal" class="anchor"></a><code>minimal</code></h3>
 <p>The default when <code>--template</code> is omitted entirely. This IS the base skeleton described above - no extra files. Use it when you're starting from a blank agent and adding conventions yourself as you need them.</p>
 <h3 id="webui-chat"><a href="#webui-chat" id="webui-chat" name="webui-chat" class="anchor"></a><code>webui-chat</code></h3>
-<p>Adds <code>gateways/webui.bx</code>, exposing the built-in <a href="/next/conventions/web-ui/index.html">web chat UI</a> at <code>/chat</code>:</p>
+<p>Adds <code>gateways/webui.bx</code>, exposing the built-in <a href="/next/conventions/web-ui/index.html">web chat UI</a> at <code>/chat</code> (<code>bxAgents add gateway web</code> writes the same content to <code>gateways/web.bx</code>; the file name does not matter):</p>
 <pre><code class="language-javascript">// gateways/webui.bx
 class {
 
@@ -390,7 +390,7 @@ class {
 </code></pre>
 <p><code>target</code> names the <code>mcp/*</code> entry to expose - here, the example server above. After <code>build</code>/<code>serve</code>, any MCP-speaking client can connect at <code>/mcp</code>. The example server registers no tools yet: write <code>@AITool</code> functions under <code>tools/</code> and list their names in a <code>tools: [ ... ]</code> array in <code>mcp/exampleServer.bx</code> (or add more <code>mcp/*.bx</code> files), per <a href="/next/conventions/mcp/index.html">mcp/</a>.</p>
 <h3 id="scheduled"><a href="#scheduled" id="scheduled" name="scheduled" class="anchor"></a><code>scheduled</code></h3>
-<p>Adds a <a href="/next/conventions/schedules/index.html">BoxLang scheduler</a> calling the agent on a cron schedule:</p>
+<p>Adds a <a href="/next/conventions/schedules/index.html">BoxLang scheduler</a> calling the agent on a daily schedule:</p>
 <pre><code class="language-javascript">// schedules/Example.bx
 class {
 
@@ -403,7 +403,7 @@ class {
 
 }
 </code></pre>
-<p>(<code>run()</code> sends the message to the project's default agent, the root agent. The build gives the class its helpers, so there is no <code>extends</code>.) This is real <a href="/next/conventions/schedules/index.html"><code>schedules/</code></a> content, not a placeholder - edit <code>configure()</code> to add or change tasks with BoxLang's task DSL (<code>cron(...)</code>, <code>every(...)</code>, <code>everyDayAt(...)</code>, etc.), or add more files.</p>
+<p>(<code>run()</code> sends the message to the project's default agent, the root agent. The build gives the class its helpers, so there is no <code>extends</code>.) This is real <a href="/next/conventions/schedules/index.html"><code>schedules/</code></a> content, not a placeholder - edit <code>configure()</code> to add or change tasks with BoxLang's task DSL (<code>every(...)</code>, <code>everyDayAt(...)</code>, <code>onWeekdays(...)</code>, etc.), or add more files. A six-field <code>cron(...)</code> works; a five-field one does not fire on BoxLang 1.19.0 (see <a href="/next/conventions/schedules/index.html#cron">Cron</a>).</p>
 <h3 id="multi-agent"><a href="#multi-agent" id="multi-agent" name="multi-agent" class="anchor"></a><code>multi-agent</code></h3>
 <p>The one template that changes the root <code>Agent.yml</code> itself, rather than only adding files alongside it. It declares two <a href="/next/conventions/subagents/index.html">subagents</a> with a <code>subAgents</code> list:</p>
 <pre><code class="language-yaml"># Agent.yml

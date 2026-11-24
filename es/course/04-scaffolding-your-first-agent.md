@@ -54,7 +54,7 @@ my-agent/
 ```
 
 Más un `.env` (solo con comentarios para tus claves de API; a propósito no define
-`BOXLANG_HOME`), un `.gitignore` (ignora `.build/`, `dist/`, `.env`, `lib/` y `data/chat.db*`, entre otros)
+`BOXLANG_HOME`), un `.gitignore` (ignora `.build/`, `dist/`, `.env`, `lib/` y `data/chat.db*`, entre otros; la base de datos del chat vive ahora en la carpeta de datos del agente, `~/.bxagents/<nombre del agente>/`, fuera del proyecto, así que esa última línea solo importa en un proyecto que ya guarda una en `data/`)
 y unos cuantos dotfiles (`.boxlang.json`, `.editorconfig`, `.bxlint.json`, `.gitattributes`,
 `.markdownlint.json`) - `new` nunca sobrescribe ninguno si ya existen. BoxLang carga por sí mismo el `.env`
 desde la raíz del proyecto, así que es donde viven los secretos: el asistente y `add` escriben una

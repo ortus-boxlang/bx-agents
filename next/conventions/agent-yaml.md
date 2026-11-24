@@ -169,7 +169,7 @@ How it works:
 - Both scopes go into the system prompt as short lists, oldest first, within their limits. They are read once per conversation, so the prompt stays the same turn to turn (a provider's prompt cache keeps working) and a note saved now shows from the next conversation.
 - A note is one line of at most 500 characters. Nothing is dropped silently: a note that does not fit the limit is refused, and the agent is told how full the notes are so it can replace or forget an older one.
 - **Who a user is**: it is the name of the [access token](agent-bx.md#access-tokens-for-a-deployed-agent) the caller used, or `local` when the route is open. `local` is also who you are in `bxAgents chat` (`--user=NAME` changes it), so the terminal, the web page and the API share one set of conversations and notes on an open server. The agent scope belongs to the agent's `name`.
-- The terminal chat, the web chat and the server share one file, `data/chat.db` (see [the SQLite store](web-ui.md#the-sqlite-store)).
+- The terminal chat, the web chat and the server share one file, `chat.db` in the [data home](data.md) (`~/.bxagents/<agent name>/chat.db` by default; see [the SQLite store](web-ui.md#the-sqlite-store)).
 
 Manage them yourself with `/remember` and `/notes` in [`chat`](../cli-reference.md#chat), with [`bxAgents notes`](../cli-reference.md#notes) from a shell, or over HTTP through the [run-control routes](agent-bx.md#run-control).
 

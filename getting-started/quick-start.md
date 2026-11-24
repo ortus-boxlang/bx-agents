@@ -8,10 +8,12 @@ tags: [getting-started]
 
 # Quick Start
 
-![A terminal session: bxAgents new scaffolds a project, bxAgents build assembles a ColdBox app, bxAgents inspect prints the agent, model and environment, and bxAgents serve starts it on http://127.0.0.1:8080](../assets/cli-quickstart.svg)
+![A terminal session: bxAgents new scaffolds a project, bxAgents build assembles a ColdBox app, bxAgents inspect prints the agent and its model, and bxAgents serve starts it on http://127.0.0.1:8080](../assets/cli-quickstart.svg)
 
 
 By the end you will have an agent you can chat with in the terminal and serve over HTTP. This walks through the full lifecycle of a BxAgents project: scaffold, edit, build, run.
+
+Before you start you need BoxLang and the module installed (see [Installation](installation.md)) and an API key for the model provider you pick (`OPENAI_API_KEY` for `openai/gpt-5`). To run `bxAgents test` you also need [CommandBox](https://commandbox.ortusbooks.com) (the `box` command) on your `PATH`: `new` runs `box install` once to fetch TestBox. Without `box` the project is still created, `new` prints a warning with the command to run later, and `--skipInstall` leaves the step out.
 
 ## 1. Scaffold a project
 
@@ -19,7 +21,7 @@ By the end you will have an agent you can chat with in the terminal and serve ov
 bxAgents new my-agent
 ```
 
-At a terminal this asks what the agent should do (its model, tools, MCP servers, channels, how people reach it, where it deploys) and writes the project to match; see [the new wizard](../guides/new-wizard.md). It ends by printing the one-line command that builds the same project without questions. To skip the questions, pass a model:
+At a terminal this asks what the agent should do (its model, tools, MCP servers (outside tool servers that speak the Model Context Protocol), channels, how people reach it, where it deploys) and writes the project to match; see [the new wizard](../guides/new-wizard.md). It ends by printing the one-line command that builds the same project without questions. To skip the questions, pass a model:
 
 ```bash
 bxAgents new my-agent --model=openai/gpt-5
@@ -71,7 +73,7 @@ environments:
 
 The agent is just this file plus `instructions.md`. See [Agent.yml](../conventions/agent-yaml.md) for every key.
 
-Every convention folder is created empty - add files to the ones your agent actually needs and delete (or just ignore) the rest.
+Every convention folder (a folder whose name tells BxAgents what its files are, such as `tools/` or `gateways/`) is created empty - add files to the ones your agent actually needs and delete (or just ignore) the rest.
 
 ## 2. Edit
 
@@ -89,7 +91,7 @@ class {
 }
 ```
 
-See the [Conventions](../conventions/agent-yaml.md) section for every other folder (`skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/`). You do not have to write them by hand: `bxAgents add <kind>` (`tool`, `skill`, `subagent`, `gateway`, `schedule`, `interceptor`, `mcp`, `profile`, `provider`, `capability`, `extension`) asks a few questions and writes the files, and `--dry-run` shows them first.
+See the [Conventions](../conventions/agent-yaml.md) section for every other folder (`skills/`, `subagents/`, `gateways/` (a gateway is a door into the agent: a chat platform, a web page or an HTTP path), `schedules/`, `mcp/`, `interceptors/`, `modules/`). You do not have to write them by hand: `bxAgents add <kind>` (`tool`, `skill`, `subagent`, `gateway`, `schedule`, `interceptor`, `mcp`, `profile` (a named model setup you can switch to in a chat), `provider`, `capability`, `extension`) asks a few questions and writes the files, and `--dry-run` shows them first.
 
 ## 3. Test it
 
@@ -116,11 +118,13 @@ Two ways to talk to the built agent - both load the exact same `GeneratedAgentFa
 
 **Interactively, from the terminal:**
 
+Put your provider key in `.env` first (the file has a commented `OPENAI_API_KEY=sk-...` line to uncomment and fill in). Without it the model call fails with the provider's "You didn't provide an API key" error.
+
 ```bash
 bxAgents chat
 ```
 
-At a terminal this is a full-screen chat that keeps your scrollback: answers stream in as formatted Markdown, tool calls show as they run, Esc stops the agent, and typing `/` lists the commands (`/sessions`, `/resume`, `/name`, `/fork`, `/export`, `/notes`, `/context` and more). Type `@` to attach a file, or `@picture.png` to send a picture. Conversations are listed in `data/chat.db` (the messages last as long as the agent's memory does), so `bxAgents chat --continue` can pick up where you left off. See [the terminal UI](../guides/terminal-ui.md) and [Slash commands](../guides/slash-commands.md). To chat against the full app (schedulers, interceptors, gateways), use `bxAgents chat --server`, or `--connect=<url>` for a server that is already running (add `--token=<token>` if it wants one).
+At a terminal this is a full-screen chat that keeps your scrollback: answers stream in as formatted Markdown, tool calls show as they run, Esc stops the agent, and typing `/` lists the commands (`/sessions`, `/resume`, `/name`, `/fork`, `/export`, `/notes`, `/context` and more). Type `@` to attach a file, or `@picture.png` to send a picture. Conversations are listed in the `chat.db` of the agent's [data home](../conventions/data.md) (`~/.bxagents/<agent name>/` by default; the messages last as long as the agent's memory does), so `bxAgents chat --continue` can pick up where you left off. See [the terminal UI](../guides/terminal-ui.md) and [Slash commands](../guides/slash-commands.md). To chat against the full app (schedulers, interceptors, gateways), use `bxAgents chat --server`, or `--connect=<url>` for a server that is already running (add `--token=<token>` if it wants one).
 
 **Over HTTP**, via a real [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) process:
 
@@ -142,7 +146,7 @@ If you scaffolded with `--template=webui-chat`, `bxAgents serve` also serves the
   <track kind="captions" src="/assets/video/web-trailer.vtt" srclang="en" label="English" default>
 </video>
 
-![The web app: the left menu, a conversation with a tool call and a formatted answer, and the model picker in the header](../assets/webui/webui-chat.png)
+![The web app: the left menu, a conversation with a tool call and a formatted answer, with the model select in the bar above the conversation](../assets/webui/webui-chat.png)
 
 Each page has its own address under `/chat` (`/chat/routines`, `/chat/settings`, ...), and an address there that is no page answers `404`. Every page is described in [the web app guide](../conventions/web-ui.md#the-pages).
 
@@ -151,7 +155,7 @@ Each page has its own address under `/chat` (`/chat/routines`, `/chat/settings`,
 ```bash
 bxAgents doctor               # runtime, modules, project checks and unset environment variables
 bxAgents inspect              # how the agent is composed: agents, tools, env vars, checks
-bxAgents package --version=1.0.0   # writes dist/my-agent-1.0.0.bxa + .sha256
+bxAgents package --version=1.0.0   # writes dist/my-agent-1.0.0.bxa + .sha256 (a .bxa is the built agent as one portable file)
 bxAgents deploy --destination=/path/to/somewhere   # copies the newest .bxa there
 ```
 

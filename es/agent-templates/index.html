@@ -284,7 +284,7 @@ bxAgents new my-agent --forgebox=some-package-slug               # instalar un p
 <h3 id="minimal"><a href="#minimal" id="minimal" name="minimal" class="anchor"></a><code>minimal</code></h3>
 <p>La opción por defecto cuando se omite <code>--template</code> por completo. ES el esqueleto base descrito arriba - sin archivos extra. Úsala cuando partes de un agente en blanco y vas añadiendo convenciones tú mismo a medida que las necesitas.</p>
 <h3 id="webui-chat"><a href="#webui-chat" id="webui-chat" name="webui-chat" class="anchor"></a><code>webui-chat</code></h3>
-<p>Añade <code>gateways/webui.bx</code>, que expone la <a href="/es/conventions/web-ui/index.html">UI web de chat</a> integrada en <code>/chat</code>:</p>
+<p>Añade <code>gateways/webui.bx</code>, que expone la <a href="/es/conventions/web-ui/index.html">UI web de chat</a> integrada en <code>/chat</code> (<code>bxAgents add gateway web</code> escribe el mismo contenido en <code>gateways/web.bx</code>; el nombre del archivo da igual):</p>
 <pre><code class="language-javascript">// gateways/webui.bx
 class {
 
@@ -390,19 +390,20 @@ class {
 </code></pre>
 <p><code>target</code> nombra la entrada <code>mcp/*</code> que se expone - aquí, el servidor de ejemplo de arriba. Después de <code>build</code>/<code>serve</code>, cualquier cliente que hable MCP puede conectarse en <code>/mcp</code>. El servidor de ejemplo aún no registra ninguna tool: escribe funciones <code>@AITool</code> en <code>tools/</code> y lista sus nombres en un array <code>tools: [ ... ]</code> dentro de <code>mcp/exampleServer.bx</code> (o añade más archivos <code>mcp/*.bx</code>), según <a href="/es/conventions/mcp/index.html">mcp/</a>.</p>
 <h3 id="scheduled"><a href="#scheduled" id="scheduled" name="scheduled" class="anchor"></a><code>scheduled</code></h3>
-<p>Añade un scheduler ColdBox real, escrito a mano, que llama al agente de forma periódica:</p>
-<pre><code class="language-javascript">// schedules/Scheduler.bx
-class extends=&quot;coldbox.system.web.tasks.ColdBoxScheduler&quot; {
+<p>Añade un <a href="/es/conventions/schedules/index.html">scheduler de BoxLang</a> que llama al agente cada día:</p>
+<pre><code class="language-javascript">// schedules/Example.bx
+class {
 
 	function configure() {
 		task( &quot;example&quot; )
-			.call( () =&gt; getInstance( &quot;my-agent&quot; ).run( &quot;Give me a status update&quot; ) )
 			.everyDayAt( &quot;00:00&quot; )
+			.call( () =&gt; run( &quot;Give me a status update&quot; ) )
+			.withNoOverlaps()
 	}
 
 }
 </code></pre>
-<p>(El argumento de <code>getInstance(...)</code> es siempre el propio <code>name</code> del agente creado, de modo que resuelve la clave de binding correcta de WireBox.) Esto es contenido real de <a href="/es/conventions/schedules/index.html"><code>schedules/</code></a>, no un marcador de posición - edita <code>configure()</code> directamente para añadir o cambiar tareas usando el propio DSL de scheduler de ColdBox (<code>everyMinute()</code>, <code>everyHourAt()</code>, <code>cron(...)</code>, etc.).</p>
+<p>(<code>run()</code> envía el mensaje al agente por defecto del proyecto, el agente raíz. El build da a la clase sus ayudantes, así que no hay <code>extends</code>.) Esto es contenido real de <a href="/es/conventions/schedules/index.html"><code>schedules/</code></a>, no un marcador de posición - edita <code>configure()</code> para añadir o cambiar tareas con el DSL de tareas de BoxLang (<code>every(...)</code>, <code>everyDayAt(...)</code>, <code>onWeekdays(...)</code>, etc.), o añade más archivos. Un <code>cron(...)</code> de seis campos funciona; uno de cinco campos no se dispara en BoxLang 1.19.0 (ver <a href="/es/conventions/schedules/index.html#cron">Cron</a>).</p>
 <h3 id="multi-agent"><a href="#multi-agent" id="multi-agent" name="multi-agent" class="anchor"></a><code>multi-agent</code></h3>
 <p>La única plantilla que cambia el propio <code>Agent.yml</code> raíz, en lugar de limitarse a añadir archivos a su lado. Declara dos <a href="/es/conventions/subagents/index.html">subagentes</a> con una lista <code>subAgents</code>:</p>
 <pre><code class="language-yaml"># Agent.yml
@@ -527,7 +528,7 @@ box publish
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/agent-templates.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/agent-templates.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Nov 23, 2026, 9&#x3a;02&#x3a;34 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Plantillas%20de%20agentes&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fagent-templates%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/agent-templates.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/agent-templates.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Nov 24, 2026, 12&#x3a;00&#x3a;39 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Plantillas%20de%20agentes&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fagent-templates%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 

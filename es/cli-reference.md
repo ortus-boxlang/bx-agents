@@ -25,7 +25,18 @@ Estos se manejan antes del despacho de verbos y nunca llegan a un verbo.
 
 ## Comillas en los valores de los flags
 
-El script launcher `boxlang` de BoxLang 1.19.0 parte cada argumento por los espacios, así que `--description="Daily standup"` llega como `--description=Daily`. Mientras no se arregle en BoxLang, escribe los valores sin espacios (`--description=Daily-standup`), rellena el texto en el archivo generado después, o arranca el módulo con Java, que conserva las comillas: `java -cp boxlang-1.19.0.jar ortus.boxlang.runtime.BoxRunner module:bxagents new ... --description="a b c"`.
+El script launcher `boxlang` de BoxLang 1.19.0 parte cada argumento por los espacios, así que `--description="Daily standup"` llega como `--description=Daily` (`--description "a b c"` y `"--description=a b c"` también). Las comillas simples, las barras invertidas y `%20` tampoco ayudan: no hay forma de teclear un valor con un espacio a través del comando `bxAgents` hasta que se arregle en BoxLang. Un mensaje partido así no se rechaza, se lee mal: `bxAgents invoke --message="Where is order 48213, and can I still return it?"` falla con `No build found at [.../is/.build]`, porque `is` se tomó por la carpeta del proyecto.
+
+Dos formas de evitarlo:
+
+- **Arranca el módulo con Java, que conserva las comillas.** Define esto una vez en tu shell y cada ejemplo de estas páginas que cita un valor con espacios funciona tal como está escrito (cambia la ruta por el jar del runtime de BoxLang, `boxlang-<versión>.jar`, en la carpeta `lib` de tu instalación de BoxLang):
+
+  ```bash
+  bxAgents() { java -cp /path/to/boxlang-1.19.0.jar ortus.boxlang.runtime.BoxRunner module:bxagents "$@"; }
+  ```
+
+  O ejecútalo en una línea: `java -cp /path/to/boxlang-1.19.0.jar ortus.boxlang.runtime.BoxRunner module:bxagents new my-agent --description="a b c"`.
+- **Escribe el valor sin espacios** (`--description=Daily-standup`) y rellena el texto en el archivo generado después.
 
 ## El banner
 
@@ -72,6 +83,8 @@ Usa siempre la forma `--flag=valor`. La forma con espacio no está soportada.
 `completions/` contiene scripts de autocompletado listos para bash, fish y PowerShell. Consulta [Instalación](getting-started/installation.md#autocompletado-con-tab) para la configuración de cada uno en una línea.
 
 ## Verbos
+
+Un ejemplo de abajo que cita un valor con espacios (`--description="..."`, `--message="..."`, `--when="..."`) necesita la forma Java de [Comillas en los valores de los flags](#comillas-en-los-valores-de-los-flags) cuando se ejecuta con el launcher `bxAgents`.
 
 ::: cards
 ::: card title="new" icon="phosphor-duotone:sparkle" href="#new"
@@ -192,7 +205,7 @@ bxAgents new my-agent --forgebox=some-package-slug
     - `telegram-bot` - añade un adaptador de canal `gateways/telegram.bx`, más una línea de marcador de posición `TELEGRAM_BOT_TOKEN` correspondiente en `.env`.
     - `github-bot` - añade un adaptador de canal `gateways/github.bx`, más las líneas de marcador de posición `GITHUB_TOKEN`/`GITHUB_WEBHOOK_SECRET`/`GITHUB_BOT_NAME` correspondientes en `.env`.
     - `mcp-server` - añade un servidor de herramientas de ejemplo `mcp/exampleServer.bx` y una entrada `gateways/mcpExpose.bx` que lo expone como servidor MCP en `/mcp`.
-    - `scheduled` - añade un [`schedules/Scheduler.bx`](conventions/schedules.md) real que llama al agente con un temporizador diario.
+    - `scheduled` - añade un [scheduler de `schedules/`](conventions/schedules.md) que llama al agente cada día.
     - `multi-agent` - añade una lista `subAgents` al `Agent.yml` raíz que declara dos [subagentes](conventions/subagents.md) (`researcher`, `writer`), cada uno generado como su propio `subagents/<name>/Agent.yml` + `instructions.md` reales.
   - `--class` (una opción booleana sin valor, como las demás descritas arriba) escribe el [`Agent.bx`](conventions/agent-bx.md) basado en clase en lugar del `Agent.yml` predeterminado, para agentes cuya definición necesita código (hooks, instrucciones dinámicas). Aplica a la raíz y a los subagentes que genere una plantilla, y solo al modo `--template` - no a `--repo`/`--forgebox`.
   - También ejecuta `box install` en la raíz del nuevo proyecto, así que `bxAgents test` funciona de inmediato sin un paso de instalación separado. Esto es de mejor esfuerzo: si `box` no está en `PATH` o la instalación falla, `new` igual tiene éxito - el mensaje simplemente te indica ejecutarlo tú mismo. Pasa `--skipInstall` para omitir este paso por completo.
@@ -252,36 +265,38 @@ bxAgents add interceptor AiWatch --scope=runtime --points=beforeAIModelInvoke,on
 
 #### `add schedule`
 
-Añade una tarea a `schedules/Scheduler.bx` que envía un mensaje al agente según una programación. Solo se pregunta cuándo se ejecuta y qué le dice al agente. Las ejecuciones solapadas siempre se evitan (`.withNoOverlaps()`).
+Añade un [scheduler](conventions/schedules.md) a `schedules/` que envía un mensaje al agente según una programación. Se preguntan tres cosas: cuándo se ejecuta, qué le dice al agente y qué agente. Las ejecuciones solapadas siempre se evitan (`.withNoOverlaps()`). Cada programación es su propio archivo, `schedules/<Name>.bx`, así que añadir una nunca edita otra.
 
 ```bash
 bxAgents add schedule --when="weekdays 08:30" --prompt="Summarize yesterday's findings"
-bxAgents add schedule digest --when="every 15 minutes" --prompt="Check for new tickets" --agent=researcher
+bxAgents add schedule digest --when="0 9 * * 1-5" --prompt="Check for new tickets" --agent=researcher
 bxAgents add schedule                          # pregunta cada cuánto, los detalles, un nombre y qué decir
 ```
 
 | Flag | Significado |
 |---|---|
-| `--when=<phrase>` | Cuándo se ejecuta, con una de las frases de abajo. En una terminal, omítelo y se te pregunta cada cuánto y luego los detalles. |
+| `--when=<phrase or cron>` | Cuándo se ejecuta: una de las frases de abajo, o una expresión cron. En una terminal, omítelo y se te pregunta cada cuánto y luego los detalles. |
 | `--prompt=<text>` | El mensaje que se envía al agente cada vez. |
-| `--name=<name>` | El nombre de la tarea, o el segundo posicional. Por defecto, un nombre hecho a partir de la frase. Se rechaza un nombre que ya esté en el scheduler. |
-| `--agent=<subagent>` | Qué agente la ejecuta. Solo se pregunta si el proyecto tiene subagentes; `.` (el valor por defecto) es el agente raíz. La tarea busca al agente por su `name` declarado, así que renombrar el agente obliga a editar la tarea. |
+| `--name=<name>` | El nombre de la tarea, o el segundo posicional. También nombra el archivo: `daily-digest` escribe `schedules/DailyDigest.bx`. Por defecto, un nombre hecho a partir de la frase. Se rechaza un nombre de tarea ya usado en `schedules/`. |
+| `--agent=<subagent>` | Qué agente la ejecuta. Solo se pregunta si el proyecto tiene subagentes; `.` (el valor por defecto) es el agente raíz, al que el archivo llama con `run()`. Otro agente se llama con `agent( "name" ).run()` por su `name` declarado, así que renombrar el agente obliga a editar el archivo. |
 
-| Frase | Se ejecuta |
-|---|---|
-| `every 15 minutes`, `every 2 hours`, `every 1 days` | En ese intervalo |
-| `hourly`, `hourly :15` | Cada hora, en punto o en ese minuto |
-| `daily 09:00` | Cada día a esa hora |
-| `weekdays 08:30`, `weekends 10:00` | De lunes a viernes, o sábado y domingo |
-| `weekly mon 09:00` | Una vez por semana (`mon` `tue` `wed` `thu` `fri` `sat` `sun`) |
-| `monthly 1 09:00` | Una vez al mes ese día, de 1 a 28 para que ningún mes se la salte |
-| `first-business-day 09:00`, `last-business-day 17:00` | Ese día laborable de cada mes |
+| Frase | Se ejecuta | Se escribe como |
+|---|---|---|
+| `every 15 minutes`, `every 2 hours`, `every 1 days` | En ese intervalo | `.every( 15, "minutes" )`, `.every( 2, "hours" )`, `.every( 1, "days" )` |
+| `hourly`, `hourly :15` | Cada hora, en punto o en ese minuto | `.everyHour()`, `.everyHourAt( 15 )` |
+| `daily 09:00` | Cada día a esa hora | `.everyDayAt( "09:00" )` |
+| `weekdays 08:30`, `weekends 10:00` | De lunes a viernes, o sábado y domingo | `.onWeekdays( "08:30" )`, `.onWeekends( "10:00" )` |
+| `weekly mon 09:00` | Una vez por semana (`mon` `tue` `wed` `thu` `fri` `sat` `sun`) | `.everyWeekOn( 1, "09:00" )` |
+| `monthly 1 09:00` | Una vez al mes ese día, de 1 a 28 para que ningún mes se la salte | `.everyMonthOn( 1, "09:00" )` |
+| `first-business-day 09:00`, `last-business-day 17:00` | Ese día laborable de cada mes | `.onFirstBusinessDayOfTheMonth( "09:00" )` |
+| `0 9 * * 1-5`, `0 30 8 * * MON-FRI` | Cualquier expresión cron: cinco campos, o seis con los segundos delante | `.cron( "..." )` con seis campos (a una de cinco se le añade un `0` delante), comprobada por el propio parser de BoxLang. Solo la forma de seis campos se dispara en BoxLang 1.19.0 |
 
-Las horas son `HH:mm` en formato de 24 horas, en la zona horaria del scheduler. No hay frase cron: el `ScheduledTask` de ColdBox no tiene método cron, así que para cualquier otra cosa escribe la tarea a mano con todo su DSL.
+Las horas son `HH:mm` en formato de 24 horas, en la zona horaria del scheduler.
 
-- Si `schedules/Scheduler.bx` no existe, se crea. Si existe, la tarea se añade al final de `configure()` y el resto del archivo se deja como estaba.
-- Si no se encuentra `configure()`, no se cambia nada y el error incluye la tarea para pegarla.
-- Las tareas programadas se ejecutan mientras la app se sirve (`bxAgents serve`). Comprueba el resultado con `bxAgents inspect --section=schedule`.
+Una frase nunca se escribe como un `.cron()` de cinco campos: en BoxLang 1.19.0 no se dispara (ver [Cron](conventions/schedules.md#cron)).
+
+- Un archivo existente con el mismo nombre es un conflicto y no se escribe nada; `--force` lo reemplaza.
+- Los schedulers se ejecutan mientras la app se sirve (`bxAgents serve`). Comprueba el resultado con `bxAgents inspect --section=schedule`.
 
 #### `add mcp`
 
@@ -337,7 +352,7 @@ Las plataformas son las que ofrece el asistente de new: `telegram`, `slack`, `di
 
 | Flag | Significado |
 |---|---|
-| `--name=<name>` | El archivo, `gateways/<name>.bx`, o el segundo posicional. Por defecto, el tipo. Se rechaza un nombre en uso. |
+| `--name=<name>` | El archivo, `gateways/<name>.bx`, o el segundo posicional. Por defecto, el tipo, así que `add gateway web` escribe `gateways/web.bx`, mientras que el asistente y la plantilla `webui-chat` escriben `gateways/webui.bx`. El nombre del archivo da igual: lo que dice qué es es el valor `exposes` de dentro. Se rechaza un nombre en uso. |
 | `--env=<config=NAME,...>` | Plataformas de chat: qué variable guarda cada credencial, por ejemplo `botTokenEnvVar=ACME_BOT`. Sin él se usan los nombres habituales (`SLACK_BOT_TOKEN`, ...). En el archivo del gateway solo van los nombres; en `.env` se añade un marcador vacío para cada uno. |
 | `--policy=queue\|reject\|steer\|interrupt` | Plataformas de chat: qué hacer con un mensaje que llega mientras el agente sigue respondiendo. Se escribe en el `gatewaySession` de Agent.yml salvo que sea el valor por defecto, `queue`. |
 | `--path=<path>` | `web` y `api`: dónde se sirve (`/chat` y `/api/chat` por defecto). Se rechaza una ruta que otro gateway use. |
@@ -584,7 +599,7 @@ El tamaño del contexto también está siempre a la vista: la fila de ayuda bajo
 
 #### Conversaciones en el chat
 
-Cada chat es una conversación, listada en la [base de datos de chat compartida](conventions/web-ui.md#el-almacén-sqlite) del proyecto (`data/chat.db`) bajo tu usuario, la misma lista que muestra el chat web. Los mensajes se guardan en la [memoria](conventions/agent-yaml.md#ajustes) del agente, así que una conversación solo se puede retomar mientras dure esa memoria: la memoria `cache` por defecto se pierde al terminar el proceso, una memoria `file` o `jdbc` no.
+Cada chat es una conversación, listada en la [base de datos de chat compartida](conventions/web-ui.md#el-almacén-sqlite) del proyecto (el `chat.db` de la carpeta de datos del agente) bajo tu usuario, la misma lista que muestra el chat web. Los mensajes se guardan en la [memoria](conventions/agent-yaml.md#ajustes) del agente, así que una conversación solo se puede retomar mientras dure esa memoria: la memoria `cache` por defecto se pierde al terminar el proceso, una memoria `file` o `jdbc` no.
 
 | Comando | Hace |
 |---|---|
@@ -778,7 +793,7 @@ bxAgents hash-password --password="<tu-contraseña>"
 
 ### `token`
 
-Los tokens de acceso de un agente desplegado, guardados en la [base de datos de chat compartida](conventions/web-ui.md#el-almacén-sqlite) del proyecto (`data/chat.db`, o el archivo que indique `BXAGENTS_DB`). El agente los acepta cuando su [`agentApi`](conventions/agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) tiene `tokens: true`.
+Los tokens de acceso de un agente desplegado, guardados en la [base de datos de chat compartida](conventions/web-ui.md#el-almacén-sqlite) del proyecto (el `chat.db` de la carpeta de datos del agente, o el archivo que indique `BXAGENTS_DB`). El agente los acepta cuando su [`agentApi`](conventions/agent-bx.md#tokens-de-acceso-para-un-agente-desplegado) tiene `tokens: true`.
 
 ```bash
 bxAgents token create --name=laptop [--scope=chat|admin] [--expires=90d]
@@ -808,7 +823,7 @@ bxAgents users member --name=ada
 
 ### `notes`
 
-Las notas que guarda un agente, leídas de la [base de datos de chat compartida](conventions/web-ui.md#el-almacén-sqlite) del proyecto (`data/chat.db`, o el archivo que indique `BXAGENTS_DB`). Los límites vienen del bloque [`notes`](conventions/agent-yaml.md#notas) de `Agent.yml`.
+Las notas que guarda un agente, leídas de la [base de datos de chat compartida](conventions/web-ui.md#el-almacén-sqlite) del proyecto (el `chat.db` de la carpeta de datos del agente, o el archivo que indique `BXAGENTS_DB`). Los límites vienen del bloque [`notes`](conventions/agent-yaml.md#notas) de `Agent.yml`.
 
 ```bash
 bxAgents notes list [--scope=user|agent] [--user=NOMBRE] [--json]
@@ -846,7 +861,7 @@ planner       claude/claude-opus-4            context ?  images ?  key MISSING
 
 ### `vault`
 
-Los secretos que usa un agente en tiempo de ejecución, sellados en la [base de datos de chat compartida](conventions/web-ui.md#el-almacén-sqlite) del proyecto (`data/chat.db`, o el archivo que nombre `BXAGENTS_DB`). Consulta [la vault](conventions/vault.md).
+Los secretos que usa un agente en tiempo de ejecución, sellados en la [base de datos de chat compartida](conventions/web-ui.md#el-almacén-sqlite) del proyecto (el `chat.db` de la carpeta de datos del agente, o el archivo que nombre `BXAGENTS_DB`). Consulta [la vault](conventions/vault.md).
 
 ```bash
 bxAgents vault list [--scope=agent|user|all] [--user=NAME] [--json]
@@ -936,7 +951,7 @@ bxAgents routines clean <name> [--older-than=30d | --all] [--yes]
 
 ### `sessions`
 
-Las conversaciones de la [base de datos de chat compartida](conventions/web-ui.md#el-almacen-sqlite) del proyecto (`data/chat.db`, o el archivo indicado por `BXAGENTS_DB`), la misma lista que muestran `chat` y la página web.
+Las conversaciones de la [base de datos de chat compartida](conventions/web-ui.md#el-almacen-sqlite) del proyecto (el `chat.db` de la carpeta de datos del agente, o el archivo indicado por `BXAGENTS_DB`), la misma lista que muestran `chat` y la página web.
 
 ```bash
 bxAgents sessions list [--user=NOMBRE] [--json]
@@ -956,7 +971,7 @@ bxAgents sessions import --file=chat.json [--name="Nuevo nombre"] [--user=NOMBRE
 
 ### `stats`
 
-Lo que usaron las llamadas al modelo del proyecto, a partir del registro que guarda la app en la [base de datos de chat compartida](conventions/web-ui.md#el-almacen-sqlite) (`data/chat.db`, o el archivo indicado por `BXAGENTS_DB`).
+Lo que usaron las llamadas al modelo del proyecto, a partir del registro que guarda la app en la [base de datos de chat compartida](conventions/web-ui.md#el-almacen-sqlite) (el `chat.db` de la carpeta de datos del agente, o el archivo indicado por `BXAGENTS_DB`).
 
 ```bash
 bxAgents stats [--days=30] [--by=model|provider|day|user] [--user=NOMBRE] [--json]
@@ -1022,7 +1037,7 @@ El informe tiene estas secciones, en este orden. `--section` acepta cualquiera d
 | `skills` | Las skills de cada agente. |
 | `mcp` | Los servidores MCP que usa cada agente (las URLs se muestran sin usuario ni query string, y con las variables de entorno que necesitan) y los servidores MCP que aloja el proyecto. |
 | `gateways` | Cada entrada de `gateways/`: su tipo (`agent`, `mcp`, `webui` con su modo de autenticación, o una plataforma de chat) y su ruta. |
-| `schedule` | `schedules/Scheduler.bx` y los nombres de sus llamadas `task()`. |
+| `schedule` | Cada scheduler de `schedules/*.bx` con sus tareas: nombre, cron (o el método de frecuencia) y el agente que ejecuta (`default` para el agente raíz). |
 | `ai` | El modelo por defecto, los otros proveedores, los [perfiles](conventions/models.md) con nombre con el origen de cada clave, y los valores por defecto de las capacidades. |
 | `interceptors`, `modules`, `deploy` | Interceptores con su ámbito, módulos declarados y entradas de `deploy/` con su destino. |
 | `env` | Cada variable de entorno que lee el proyecto: credenciales de gateways, tokens MCP, la API key de cada proveedor de modelos, `agentApi.tokenEnvVar`. |

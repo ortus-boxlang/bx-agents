@@ -26,8 +26,8 @@
 
 	
 	
-		<meta name="description" content="Wake an agent on a cron schedule, no separate cron daemon needed.">
-		<meta property="og:description" content="Wake an agent on a cron schedule, no separate cron daemon needed.">
+		<meta name="description" content="Wake an agent on a schedule, with a BoxLang scheduler and no separate cron daemon.">
+		<meta property="og:description" content="Wake an agent on a schedule, with a BoxLang scheduler and no separate cron daemon.">
 	
 
 	
@@ -236,7 +236,7 @@
 		</h1>
 		
 		
-			<p class="page-summary">Wake an agent on a cron schedule, no separate cron daemon needed.</p>
+			<p class="page-summary">Wake an agent on a schedule, with a BoxLang scheduler and no separate cron daemon.</p>
 		
 		
 		
@@ -260,7 +260,7 @@
 </symbol>
 </svg>
 <h1 id="example-a-scheduled-agent"><a href="#example-a-scheduled-agent" id="example-a-scheduled-agent" name="example-a-scheduled-agent" class="anchor"></a>Example: A Scheduled Agent</h1>
-<p><a href="https://github.com/ortus-boxlang/bx-agents/tree/development/examples/scheduled-agent"><code>examples/scheduled-agent/</code></a> wakes an agent nightly with a BoxLang scheduler under <code>schedules/</code> - plain <a href="/conventions/schedules/index.html">Schedules</a> code with BoxLang's own task DSL and cron syntax.</p>
+<p><a href="https://github.com/ortus-boxlang/bx-agents/tree/development/examples/scheduled-agent"><code>examples/scheduled-agent/</code></a> wakes an agent nightly with a BoxLang scheduler under <code>schedules/</code> - plain <a href="/conventions/schedules/index.html">Schedules</a> code with BoxLang's own task DSL (<code>.every()</code>, <code>.everyDayAt()</code>, <code>.onWeekdays()</code> and the rest).</p>
 <h2 id="the-project"><a href="#the-project" id="the-project" name="the-project" class="anchor"></a>The project</h2>
 <pre><code class="language-text">scheduled-agent/
 ├── Agent.yml
@@ -270,7 +270,7 @@
 </code></pre>
 <p><code>Agent.yml</code> is the same shape as every other example - nothing special is needed on the agent side to be schedule-driven:</p>
 <pre><code class="language-yaml">name: scheduled-agent
-description: An agent that wakes up on a cron schedule via schedules/.
+description: An agent that wakes up on a daily schedule via schedules/.
 model: mock/mock-model
 </code></pre>
 <h2 id="the-scheduler"><a href="#the-scheduler" id="the-scheduler" name="the-scheduler" class="anchor"></a>The scheduler</h2>
@@ -286,7 +286,7 @@ model: mock/mock-model
 
 }
 </code></pre>
-<p>The full BoxLang task DSL is available - <code>cron()</code>, <code>every()</code>, <code>everyDayAt()</code>, <code>withNoOverlaps()</code>, <code>onFailure()</code> and the rest, not a subset BxAgents reimplements (see <a href="/conventions/schedules/index.html"><code>schedules/</code></a>).</p>
+<p>The full BoxLang task DSL is available - <code>every()</code>, <code>everyDayAt()</code>, <code>onWeekdays()</code>, <code>withNoOverlaps()</code>, <code>onFailure()</code> and the rest, not a subset BxAgents reimplements (see <a href="/conventions/schedules/index.html"><code>schedules/</code></a>). A six-field <code>cron()</code> works too, but a five-field one never fires on BoxLang 1.19.0 (see <a href="/conventions/schedules/index.html#cron">Cron</a>).</p>
 <p><code>run( &quot;cleanup&quot; )</code> sends the message to the project's default agent, the root agent. To reach a subagent, use <code>agent( &quot;TheAgentName&quot; ).run( ... )</code>: every agent in a project's tree is registered under its own declared <code>name</code>.</p>
 <h2 id="instructions-for-the-scheduled-prompt"><a href="#instructions-for-the-scheduled-prompt" id="instructions-for-the-scheduled-prompt" name="instructions-for-the-scheduled-prompt" class="anchor"></a>Instructions for the scheduled prompt</h2>
 <p>The instructions describe what the agent should do when <code>run( &quot;cleanup&quot; )</code> fires - there's no difference, from the agent's point of view, between a scheduled wake-up and a chat message; both are just a <code>run()</code> call with some input text:</p>
@@ -302,7 +302,7 @@ bxAgents build
 bxAgents serve
 </code></pre>
 <p>The <code>nightly</code> task fires automatically once <code>serve</code> is running - no separate cron daemon, no OS-level <code>cron</code> entry. BoxLang's own scheduler drives it, on the schedule declared in <code>Nightly.bx</code>.</p>
-<p>To add another schedule to your own project, run <code>bxAgents add schedule</code>. It asks when (for example <code>daily 09:00</code> or <code>every 15 minutes</code>), what to tell the agent and which agent, and writes <code>schedules/&lt;Name&gt;.bx</code>. <code>bxAgents inspect</code> lists the schedules a project has.</p>
+<p>To add another schedule to your own project, run <code>bxAgents add schedule</code>. It asks when (for example <code>daily 09:00</code> or <code>every 15 minutes</code>), what to tell the agent and which agent, and writes <code>schedules/&lt;Name&gt;.bx</code> using the task's own methods (<code>daily 09:00</code> becomes <code>.everyDayAt( &quot;09:00&quot; )</code>). A cron expression you type is written as a six-field <code>.cron()</code>, because a five-field one does not fire on BoxLang 1.19.0. <code>bxAgents inspect</code> lists the schedules a project has.</p>
 <div class="adm-block adm-info">
 <div class="adm-heading">
 <svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
@@ -313,7 +313,7 @@ bxAgents serve
 </div>
 <h2 id="where-to-go-next"><a href="#where-to-go-next" id="where-to-go-next" name="where-to-go-next" class="anchor"></a>Where to go next</h2>
 <ul>
-<li><a href="/conventions/schedules/index.html">Schedules</a> for the helpers a scheduler gets and the cron syntax.</li>
+<li><a href="/conventions/schedules/index.html">Schedules</a> for the helpers a scheduler gets, the ways to say when it runs and the cron note.</li>
 <li><a href="/guides/example-minimal-agent/index.html">Example: A Minimal Agent</a> if you haven't seen the base project shape yet.</li>
 <li><a href="/guides/example-web-chat-agent/index.html">Example: Building a Web Chat Agent</a> for an agent reachable interactively instead of on a timer.</li>
 </ul>
@@ -322,7 +322,7 @@ bxAgents serve
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/guides/example-scheduled-agent.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/guides/example-scheduled-agent.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Nov 23, 2026, 9&#x3a;02&#x3a;34 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Example%3A%20A%20Scheduled%20Agent&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fguides%2Fexample-scheduled-agent%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/guides/example-scheduled-agent.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/guides/example-scheduled-agent.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Nov 24, 2026, 12&#x3a;00&#x3a;39 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Example%3A%20A%20Scheduled%20Agent&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fguides%2Fexample-scheduled-agent%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 

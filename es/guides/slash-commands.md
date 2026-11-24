@@ -1,8 +1,8 @@
 ---
 title: "Comandos con barra"
 icon: phosphor-duotone:command
-summary: "Los 33 comandos del chat: qué hace cada uno, dónde funciona (terminal, página web, plataformas de chat) y un ejemplo."
-description: "Los 33 comandos del chat: qué hace cada uno, dónde funciona (terminal, página web, plataformas de chat) y un ejemplo."
+summary: "Los 36 comandos del chat: qué hace cada uno, dónde funciona (terminal, página web, plataformas de chat) y un ejemplo."
+description: "Los 36 comandos del chat: qué hace cada uno, dónde funciona (terminal, página web, plataformas de chat) y un ejemplo."
 tags: [guides, cli, tui, reference]
 ---
 
@@ -26,7 +26,9 @@ Escribe `/` en el chat de terminal o en el [chat web](../conventions/web-ui.md#c
 | `/name <nombre>` | T W | Pone nombre a esta conversación | `/name Quarterly plan` |
 | `/fork [nombre]` | T W | Copia esta conversación, con todos sus mensajes, y sigue en la copia | `/fork Other approach` |
 | `/clear` | T W G | Olvida los mensajes de esta conversación, conserva la conversación | `/clear` |
-| `/compact` | T W G | Sustituye los mensajes antiguos por un resumen. Necesita un modelo de resumen en la memoria del agente | `/compact` |
+| `/settings [nombre] [valor\|reset] [--global]` | T | Solo terminal. Abre el panel de ajustes, o muestra, cambia o restablece uno. Un nombre que no es de los propios del chat es un ajuste del `Agent.yml` del agente y se aplica la próxima vez que arranque el agente. Un cambio se guarda para este agente en su carpeta de datos, o para todos los agentes con `--global` | `/settings header compact`, `/settings model ollama/qwen3 --global` |
+| `/cls` | T | Solo terminal. Borra la pantalla sobre el cuadro de mensaje y el scrollback. La conversación se queda, mientras que `/clear` olvida sus mensajes. Ctrl+L hace lo mismo | `/cls` |
+| `/compact` | T W G | Sustituye los mensajes antiguos por un resumen y conserva los últimos (`keepRecent`). El propio modelo del agente escribe el resumen, salvo que su memoria nombre un modelo de resumen | `/compact` |
 | `/export [archivo] [--format=md\|html]` | T W | Guarda la conversación. El nombre del archivo decide el formato salvo que `--format` diga otro | `/export plan.html` |
 | `/exit` (alias `/quit`) | T | Sale del chat | `/exit` |
 
@@ -39,6 +41,9 @@ En un gateway, `/new`, `/clear`, `/compact`, `/sessions` y `/resume` están desa
 | `/help` | T W G | Lista los comandos que puedes ejecutar aquí | `/help` |
 | `/info` | T W G | Agente, modelo, conversación, número de mensajes, notas y base de datos | `/info` |
 | `/tools` | T W G | Lista las tools del agente | `/tools` |
+| `/skills` | T W G | Lista las skills que el agente puede cargar, y su nivel: installed, project, bxagents o agent | `/skills` |
+| `/routines [all]` | T W | Lista tus rutinas: la programación en palabras, el estado y la próxima ejecución (un admin añade `all`) | `/routines` |
+| `/routine <nombre> [run\|pause\|resume\|delete confirm\|reports\|report <archivo>]` | T W | Muestra una rutina, o actúa sobre ella. `delete` necesita `confirm`, y ningún comando elimina un informe | `/routine check-build pause` |
 | `/volumes` | T W G | Lista las carpetas que el agente puede usar, por nombre, modo y descripción. Nunca una carpeta de la máquina | `/volumes` |
 | `/agent [nombre]` | T | Solo terminal. Lista el agente y sus sub-agentes, o cambia a uno y empieza una conversación nueva con él. Cada agente guarda su propia memoria. La página web tiene el menú **Talk to** para esto, y un gateway siempre habla con el agente principal | `/agent researcher` |
 | `/context` | T W | Qué tamaño tiene el contexto y de qué se compone. Se calcula en local, sin llamar al modelo | `/context` |
@@ -67,6 +72,9 @@ Con `--connect` o `--server`, `/profile` solo puede cambiar entre los perfiles q
 | `/notes edit <id> <texto>` | T W G | Cambia una nota; el id es el código corto de la lista | `/notes edit a3f New text` |
 | `/notes remove <id>` | T W G | Elimina una nota. Eliminar una del agente necesita un token `admin` con `--connect` | `/notes remove a3f` |
 | `/notes stats` | T W G | Caracteres usados frente al límite, y los tokens aproximados que añaden | `/notes stats` |
+| `/connect` | T W G | Lista los conectores y los servicios que piden iniciar sesión, y si estás conectado; `/connect NOMBRE` conecta uno (en la terminal un token va en un cuadro oculto), `/connect NOMBRE off` lo desconecta, `/connect NOMBRE tools` lista y activa sus tools | `/connect github` |
+| `/logs [área] [--tail=N] [--level=warn] [--grep=texto]` | T | Los logs del agente: cuáles hay, o las últimas líneas de uno. Solo admin; con `--connect` necesita un token admin. Para seguir uno en vivo, `bxAgents logs <área> --follow` o `--ui` | `/logs gateways --level=warn` |
+| `/vault` | T W G | Abre la pantalla de la vault (terminal), o lista los nombres de los secretos. Un valor nunca se teclea en un comando | `/vault` |
 
 ## Tu terminal
 

@@ -524,6 +524,8 @@ bxAgents add extension standup --with=command,key    # or say so, for a pipe or 
 bxAgents add extension standup --with=command,tool --description="Daily standup"
 ```
 
+(With the BoxLang 1.19.0 launcher a quoted value with spaces is split at the spaces; see [Quoting flag values](../cli-reference.md#quoting-flag-values).)
+
 `add extension` writes `extensions/<name>.bx`, or `extensions/<name>/` with an `Extension.bx` when something needs a file of its own, with working stubs and a `TODO` where you fill in. `--with` takes any of `command`, `key`, `status`, `prefix`, `source`, `slot`, `verb`, `listener` (methods of the one class) and `scheduler`, `gateway`, `tool`, `skill`, `web` (files, so the extension is a folder). `--layout=file|folder` picks the shape when it can be either. Nothing is overwritten without `--force`, and `--dry-run` shows the files. It is yours: commit it with the project. Try it with `bxAgents chat` and `/reload`.
 
 ## Installing extensions

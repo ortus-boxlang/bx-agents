@@ -20,7 +20,7 @@ A **connector** is a ready-made connection to a service that has an MCP server. 
   <track kind="captions" src="/assets/video/connectors.vtt" srclang="en" label="English" default>
 </video>
 
-![The Connectors page, with Git connected](../assets/webui/connectors.png)
+![The Connectors page: the built-in connectors, each with its risk and how it signs in](../assets/webui/connectors.png)
 
 ## States
 

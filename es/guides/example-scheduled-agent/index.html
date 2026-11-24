@@ -26,8 +26,8 @@
 
 	
 	
-		<meta name="description" content="Despierta un agente con una programaci&oacute;n cron real de ColdBox, sin necesidad de un demonio cron aparte.">
-		<meta property="og:description" content="Despierta un agente con una programaci&oacute;n cron real de ColdBox, sin necesidad de un demonio cron aparte.">
+		<meta name="description" content="Despierta un agente con una programaci&oacute;n, con un scheduler de BoxLang y sin un demonio cron aparte.">
+		<meta property="og:description" content="Despierta un agente con una programaci&oacute;n, con un scheduler de BoxLang y sin un demonio cron aparte.">
 	
 
 	
@@ -234,7 +234,7 @@
 		</h1>
 		
 		
-			<p class="page-summary">Despierta un agente con una programaci&oacute;n cron real de ColdBox, sin necesidad de un demonio cron aparte.</p>
+			<p class="page-summary">Despierta un agente con una programaci&oacute;n, con un scheduler de BoxLang y sin un demonio cron aparte.</p>
 		
 		
 		
@@ -258,34 +258,34 @@
 </symbol>
 </svg>
 <h1 id="ejemplo-un-agente-programado"><a href="#ejemplo-un-agente-programado" id="ejemplo-un-agente-programado" name="ejemplo-un-agente-programado" class="anchor"></a>Ejemplo: un agente programado</h1>
-<p><a href="https://github.com/ortus-boxlang/bx-agents/tree/development/examples/scheduled-agent"><code>examples/scheduled-agent/</code></a> despierta un agente cada noche mediante una clase de scheduler ColdBox real, escrita a mano, bajo <code>schedules/</code> - la prueba de que las <a href="/es/conventions/schedules/index.html">Programaciones</a> no son un DSL inventado por BxAgents, sino código ColdBox real que el build deja pasar intacto.</p>
+<p><a href="https://github.com/ortus-boxlang/bx-agents/tree/development/examples/scheduled-agent"><code>examples/scheduled-agent/</code></a> despierta un agente cada noche con un scheduler de BoxLang bajo <code>schedules/</code> - código sencillo de <a href="/es/conventions/schedules/index.html">Programaciones</a> con el propio DSL de tareas de BoxLang (<code>.every()</code>, <code>.everyDayAt()</code>, <code>.onWeekdays()</code> y el resto).</p>
 <h2 id="el-proyecto"><a href="#el-proyecto" id="el-proyecto" name="el-proyecto" class="anchor"></a>El proyecto</h2>
 <pre><code class="language-text">scheduled-agent/
 ├── Agent.yml
 ├── instructions.md
 └── schedules/
-    └── Scheduler.bx
+    └── Nightly.bx
 </code></pre>
 <p><code>Agent.yml</code> tiene la misma forma que en todos los demás ejemplos - no hace falta nada especial en el lado del agente para que lo dirija una programación:</p>
 <pre><code class="language-yaml">name: scheduled-agent
-description: An agent that wakes up on a cron schedule via schedules/.
+description: An agent that wakes up on a daily schedule via schedules/.
 model: mock/mock-model
 </code></pre>
 <h2 id="el-scheduler"><a href="#el-scheduler" id="el-scheduler" name="el-scheduler" class="anchor"></a>El scheduler</h2>
-<p><code>schedules/Scheduler.bx</code> extiende el propio <code>ColdBoxScheduler</code> de ColdBox y usa su DSL fluido de tareas real:</p>
-<pre><code class="language-javascript">class extends=&quot;coldbox.system.web.tasks.ColdBoxScheduler&quot; {
+<p><code>schedules/Nightly.bx</code> es una clase sencilla. El build añade la clase base que da <code>task()</code> y <code>run()</code>:</p>
+<pre><code class="language-javascript">class {
 
 	function configure() {
 		task( &quot;nightly&quot; )
-			.call( () =&gt; getInstance( &quot;scheduled-agent&quot; ).run( &quot;cleanup&quot; ) )
 			.everyDayAt( &quot;00:00&quot; )
+			.call( () =&gt; run( &quot;cleanup&quot; ) )
 			.withNoOverlaps()
 	}
 
 }
 </code></pre>
-<p>Como <code>build</code> copia este archivo a la aplicación generada esencialmente tal cual (consulta <a href="/es/conventions/schedules/index.html"><code>schedules/</code></a>), tienes disponible el DSL completo de scheduler de ColdBox - <code>everyDayAt()</code>, <code>everyMinute()</code>, <code>withNoOverlaps()</code>, <code>onFailure()</code>, y todo lo demás que soporte el propio scheduler de ColdBox, no un subconjunto reimplementado por BxAgents.</p>
-<p><code>getInstance( &quot;scheduled-agent&quot; )</code> resuelve por el <code>name</code> declarado en el propio <code>Agent.yml</code> de este proyecto - cada agente del árbol de un proyecto queda registrado con su propio nombre en WireBox, no solo la raíz, y eso es lo que hace que esta línea funcione sin ningún cableado adicional.</p>
+<p>Tienes disponible el DSL completo de tareas de BoxLang - <code>every()</code>, <code>everyDayAt()</code>, <code>onWeekdays()</code>, <code>withNoOverlaps()</code>, <code>onFailure()</code> y todo lo demás, no un subconjunto reimplementado por BxAgents (consulta <a href="/es/conventions/schedules/index.html"><code>schedules/</code></a>). Un <code>cron()</code> de seis campos también funciona, pero uno de cinco campos nunca se dispara en BoxLang 1.19.0 (ver <a href="/es/conventions/schedules/index.html#cron">Cron</a>).</p>
+<p><code>run( &quot;cleanup&quot; )</code> envía el mensaje al agente por defecto del proyecto, el agente raíz. Para llegar a un subagente, usa <code>agent( &quot;TheAgentName&quot; ).run( ... )</code>: cada agente del árbol de un proyecto queda registrado con su propio <code>name</code> declarado.</p>
 <h2 id="instrucciones-para-el-prompt-programado"><a href="#instrucciones-para-el-prompt-programado" id="instrucciones-para-el-prompt-programado" name="instrucciones-para-el-prompt-programado" class="anchor"></a>Instrucciones para el prompt programado</h2>
 <p>Las instrucciones describen qué debe hacer el agente cuando se dispara <code>run( &quot;cleanup&quot; )</code> - desde el punto de vista del agente no hay diferencia entre un despertar programado y un mensaje de chat; ambos son simplemente una llamada a <code>run()</code> con algo de texto de entrada:</p>
 <pre><code class="language-markdown">## Scheduled Agent
@@ -299,19 +299,19 @@ what a cleanup pass would involve for a typical project.
 bxAgents build
 bxAgents serve
 </code></pre>
-<p>La tarea <code>nightly</code> se dispara automáticamente en cuanto <code>serve</code> está en marcha - sin ningún demonio cron aparte, sin ninguna entrada <code>cron</code> a nivel de sistema operativo. Lo mueve el propio hilo de scheduler en proceso de ColdBox, con la programación declarada en <code>Scheduler.bx</code>.</p>
-<p>Para añadir otra programación a tu propio proyecto, ejecuta <code>bxAgents add schedule</code>. Pregunta cuándo (por ejemplo <code>daily 09:00</code> o <code>every 15 minutes</code>), qué decirle al agente y a qué agente, y escribe <code>schedules/&lt;Name&gt;.bx</code>. <code>bxAgents inspect</code> lista las programaciones de un proyecto.</p>
+<p>La tarea <code>nightly</code> se dispara automáticamente en cuanto <code>serve</code> está en marcha - sin ningún demonio cron aparte, sin ninguna entrada <code>cron</code> a nivel de sistema operativo. Lo mueve el propio scheduler de BoxLang, con la programación declarada en <code>Nightly.bx</code>.</p>
+<p>Para añadir otra programación a tu propio proyecto, ejecuta <code>bxAgents add schedule</code>. Pregunta cuándo (por ejemplo <code>daily 09:00</code> o <code>every 15 minutes</code>), qué decirle al agente y a qué agente, y escribe <code>schedules/&lt;Name&gt;.bx</code> con los propios métodos de la tarea (<code>daily 09:00</code> pasa a ser <code>.everyDayAt( &quot;09:00&quot; )</code>). Una expresión cron que teclees se escribe como un <code>.cron()</code> de seis campos, porque uno de cinco campos no se dispara en BoxLang 1.19.0. <code>bxAgents inspect</code> lista las programaciones de un proyecto.</p>
 <div class="adm-block adm-info">
 <div class="adm-heading">
 <svg class="adm-icon"><use xlink:href="#adm-info" /></svg><span>Info</span>
 </div>
 <div class="adm-body">
-<p><code>build</code> no puede validar de forma significativa el <em>contenido</em> de <code>Scheduler.bx</code> más allá de comprobar que el archivo existe - una errata en una llamada a <code>getInstance()</code> o una referencia a un nombre de agente que no existe pasarán <code>build</code> limpiamente y solo saldrán a la luz cuando la aplicación generada arranque de verdad.</p>
+<p><code>build</code> comprueba el nombre de archivo del scheduler y que sea una clase, pero no el <em>contenido</em> de <code>configure()</code> - una errata en una llamada a <code>agent()</code> o una referencia a un nombre de agente que no existe pasarán <code>build</code> limpiamente y solo saldrán a la luz cuando la aplicación generada arranque de verdad.</p>
 </div>
 </div>
 <h2 id="dónde-ir-a-continuación"><a href="#dónde-ir-a-continuación" id="dónde-ir-a-continuación" name="dónde-ir-a-continuación" class="anchor"></a>Dónde ir a continuación</h2>
 <ul>
-<li><a href="/es/conventions/schedules/index.html">Programaciones</a> para el DSL completo del scheduler y para ver dónde acaba el <code>config/Scheduler.bx</code> generado dentro de la salida del build.</li>
+<li><a href="/es/conventions/schedules/index.html">Programaciones</a> para los ayudantes que recibe un scheduler, las formas de decir cuándo se ejecuta y la nota sobre cron.</li>
 <li><a href="/es/guides/example-minimal-agent/index.html">Ejemplo: un agente mínimo</a> si aún no has visto la forma base de un proyecto.</li>
 <li><a href="/es/guides/example-web-chat-agent/index.html">Ejemplo: construir un agente de chat web</a> para un agente accesible de forma interactiva en lugar de por temporizador.</li>
 </ul>
@@ -320,7 +320,7 @@ bxAgents serve
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/guides/example-scheduled-agent.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/guides/example-scheduled-agent.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Nov 23, 2026, 9&#x3a;02&#x3a;34 AM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Ejemplo%3A%20un%20agente%20programado&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fguides%2Fexample-scheduled-agent%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/guides/example-scheduled-agent.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/guides/example-scheduled-agent.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Nov 24, 2026, 12&#x3a;00&#x3a;39 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Ejemplo%3A%20un%20agente%20programado&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fguides%2Fexample-scheduled-agent%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
