@@ -51,8 +51,7 @@ it.
 
 ## What `build` actually produces
 
-Your convention tree on the left, the plain ColdBox application `build` turns it into
-on the right:
+Your convention tree on the left, the plain ColdBox application `build` turns it into on the right:
 
 ::: columns
 ::: column
@@ -88,6 +87,24 @@ your-agent/
 ```
 :::
 :::
+
+## What build does *not* produce: the data home
+
+A built agent also *keeps* things while it runs: conversations, notes, access tokens, routines and their reports, the
+sealed vault, usage counts and logs. They are not in the project and not in `.build/`: they live in the agent's **data
+home**, `~/.bxagents/<agent name>/`, so rebuilding or redeploying never loses them and a backup can copy them.
+
+```text
+~/.bxagents/acme-support/
+├── chat.db        conversations, notes, tokens, accounts, routines, the sealed vault
+├── files/         what the agent writes
+├── skills/        skills the agent saved for itself
+├── routines/      the reports of each routine
+├── logs/          agent, gateways, routines, heartbeat, api
+└── backups/       made by bxAgents backup
+```
+
+That split (what you ship, and what accumulates) comes back in [Logs, Usage and Backups](operating-it.md).
 
 ## Why this matters
 

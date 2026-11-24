@@ -18,6 +18,7 @@ from the system.
 | `demos/wizard.json` | The keystrokes of the `bxAgents new` wizard: a single agent on OpenAI with web search, saved memory and a web chat |
 | `demos/model.json` | The canned answers of the scripted model |
 | `terminal/trailer/` | The narrated trailer of the terminal chat and the `new` wizard: scenes, recorder, voice, cards, compose and mix. See its README |
+| `../course/` | The course kit and checker: `model.json` of the course (the scripted model's answers for every lesson), `kit/resume.sh` and `check-course.bxs`, which replays the course's commands against `fakellm.bxs`. See its README |
 | `webui/` | The web UI walkthrough video and doc screenshots: a demo app (`project/`), `narrate.py` (voice, Kokoro) and `mix.bxs` (music and mix, [bx-audio](https://github.com/ortus-boxlang/bx-audio)), `capture.js` (Playwright). See `webui/README.md` |
 
 ## What you need
