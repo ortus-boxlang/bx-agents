@@ -30,7 +30,7 @@ flowchart LR
 | No OS modules | `Serve.bx` no longer names the machine's module directory or writes `runtime/config/boxlang.json`; `runtime/` is the BoxLang home. The `test` verb's child loads the module through a link in its work folder. |
 | Serving | `.build/miniserver.json`, relative paths, the server started in `.build` with `BOXLANG_HOME=.build/runtime` (`MiniServerLauncher` takes a working directory) |
 | Packaging | The template's set: `app`, `lib`, `public`, `runtime` (without logs and what a server creates in its home), `boxlang_modules`, `miniserver.json`. `.bxaignore` patterns are relative to `.build`. |
-| Docker | `.build` copied to `/app`, `BOXLANG_HOME=/app/runtime`, host `0.0.0.0` by a `sed` in the Dockerfile, a `.dockerignore`. Unverified. |
+| Docker | `.build` copied to `/srv/bxapp` (`APP_DIR=/srv/bxapp`, `BOXLANG_HOME=/srv/bxapp/runtime`), host `0.0.0.0` by a `sed` in the Dockerfile, a `.dockerignore`. Never `/app`: it is the ColdBox mapping name, so `/app/app/config/...` resolves through the mapping to `/app/app/app/config/...`. Built and run. |
 
 ## Evidence from the spike
 
@@ -98,7 +98,7 @@ Commits are on `code/app-public-layout`, branched from `origin/development`.
 
 ### Known gaps
 
-- **Docker is unverified.** No Docker where this was written. The recipe is pinned by a spec on its text; whether the image's entrypoint starts in `/app` and reads `/app/miniserver.json` needs one run with Docker.
+- **Docker: built and run, no model call.** The image builds and serves `/__bxagents/health`, `/chat/` and its assets (200) and hides `/config`, `/project`, `/app/config` and `/runtime` (404). The first recipe used `/app` and failed on the first request (the mapping name collision above). Not verified: an actual model call from the container.
 - The other deploy targets ship the `.bxa` and were not run (ssh, ftp, sftp, DigitalOcean); they take the new packaged set through `DistArtifactLocator`.
 - Gateways other than the web page (Telegram and the like), MCP serving and extension code in a served app were not driven over HTTP here beyond what the existing integration fixtures cover.
 - The nested bundled modules log "already activated, skipping re-activation" and the template's MySQL `coldbox` datasource logs a warning at every start (it is in the vendored `runtime/boxlang.json`; the app has no use for it).

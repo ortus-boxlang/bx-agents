@@ -6,15 +6,16 @@
  * matching `MiniServerLauncher.java`'s established "shell out, don't add a
  * dependency" pattern.
  *
- * The built-in Dockerfile template is based on the real, published
- * `ortussolutions/boxlang:miniserver` image. UNVERIFIED: nothing here could run Docker, so this recipe is read from
- * https://boxlang.ortusbooks.com/getting-started/running-boxlang/docker and /miniserver, not proven. It puts the whole
- * `.build` in `/app` (so `/app/miniserver.json`, which the image is documented to pick up, names `public` as the web
- * root, `runtime/boxlang.json` as the engine config and `runtime` as the home, all relative to the working
- * directory `/app`), sets BOXLANG_HOME to `/app/runtime` so only the bundled bxagents module loads, and binds
- * `0.0.0.0` (a container is reached from outside it). What still needs a run on a machine with Docker: that the
- * entrypoint starts in `/app` and reads `/app/miniserver.json`, since the two documentation pages name different variables
- * for the config. A project can override the whole file with its own `deploy/Dockerfile`.
+ * The built-in Dockerfile template is based on the real, published `ortussolutions/boxlang:miniserver` image, and was
+ * built and run against it. It puts the whole `.build` in `/srv/bxapp` and sets `APP_DIR=/srv/bxapp`: the image's run.sh
+ * does `cd $APP_DIR` and then starts the miniserver, which reads `miniserver.json` there (web root `public`, the engine
+ * config `runtime/boxlang.json`, the home `runtime`, all relative to that folder). BOXLANG_HOME is `/srv/bxapp/runtime`, so only
+ * the bundled bxagents module loads, and the host is rewritten to `0.0.0.0` (a container is reached from outside it).
+ *
+ * Why not `/app`: the vendored runtime/boxlang.json maps `/app` to the ColdBox app folder, so with the build installed at
+ * `/app` the absolute path `/app/app/config/bxai-settings.json` is taken for a path under that mapping, resolves to
+ * `/app/app/app/config/...` and the first request fails with "Failed to load application descriptor". Do not install the
+ * app under a folder named `/app`. A project can override the whole file with its own `deploy/Dockerfile`.
  *
  * `registry.type` accepts `dockerhub`, `ghcr`, or `docr` (DigitalOcean
  * Container Registry) - this is deliberately the SAME shape the
@@ -39,12 +40,12 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 
 	variables.REGISTRY_HOSTS = { "dockerhub" : "", "ghcr" : "ghcr.io", "docr" : "registry.digitalocean.com" }
 
-	// UNVERIFIED (no Docker where this was written): see the class docblock
+	// verified with a real docker build and run, see the class docblock for why the folder is /srv/bxapp and not /app
 	variables.DEFAULT_DOCKERFILE = "FROM ortussolutions/boxlang:miniserver" & char( 10 ) &
-		"WORKDIR /app" & char( 10 ) &
-		"COPY . /app" & char( 10 ) &
-		"ENV BOXLANG_HOME=/app/runtime" & char( 10 ) &
-		"RUN sed -i 's/""host"": *""[^""]*""/""host"": ""0.0.0.0""/' /app/miniserver.json" & char( 10 ) &
+		"ENV APP_DIR=/srv/bxapp" & char( 10 ) &
+		"ENV BOXLANG_HOME=/srv/bxapp/runtime" & char( 10 ) &
+		"COPY . /srv/bxapp" & char( 10 ) &
+		"RUN sed -i 's/""host"": *""[^""]*""/""host"": ""0.0.0.0""/' /srv/bxapp/miniserver.json" & char( 10 ) &
 		"EXPOSE 8080" & char( 10 )
 
 	// what stays out of the image: the manifest, the interceptor work folder and what a running server wrote in its home
@@ -125,7 +126,7 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 	}
 
 	/**
-	 * @return The Dockerfile written when the project has no `deploy/Dockerfile` of its own. UNVERIFIED against a real Docker (see the class docblock)
+	 * @return The Dockerfile written when the project has no `deploy/Dockerfile` of its own.
 	 */
 	string function dockerfileText() {
 		return variables.DEFAULT_DOCKERFILE

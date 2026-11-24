@@ -67,26 +67,32 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			/**
-			 * UNVERIFIED against a real Docker: nothing here ran `docker build`. This pins the text of the recipe, which is read from the
-			 * BoxLang Docker and MiniServer docs: the whole .build is /app, miniserver.json is in it, the runtime folder is the BoxLang home.
+			 * Pins the recipe that was built and run with a real Docker: the build is /srv/bxapp (never /app, which the vendored
+			 * runtime/boxlang.json maps to the ColdBox app folder), APP_DIR makes the image start there, the runtime folder is the BoxLang home.
 			 */
-			describe( "the built-in Dockerfile (unverified: no Docker was available to run it)", function() {
+			describe( "the built-in Dockerfile", function() {
 
-				it( "copies the whole build into /app and works from there, so the relative paths of miniserver.json hold", function() {
+				it( "installs the whole build in /srv/bxapp and points the image's APP_DIR at it, so the relative paths of miniserver.json hold", function() {
 					var text = target.dockerfileText();
 					expect( text ).toInclude( "FROM ortussolutions/boxlang:miniserver" );
-					expect( text ).toInclude( "WORKDIR /app" );
-					expect( text ).toInclude( "COPY . /app" );
+					expect( text ).toInclude( "ENV APP_DIR=/srv/bxapp" );
+					expect( text ).toInclude( "COPY . /srv/bxapp" );
+				} );
+
+				it( "never installs under /app, the ColdBox mapping name, which breaks absolute paths into the app", function() {
+					var text = target.dockerfileText();
+					expect( text ).notToInclude( "WORKDIR /app" );
+					expect( reFind( "(^|[\\s=])/app([\\s/]|$)", text ) ).toBe( 0 );
 				} );
 
 				it( "makes runtime/ the BoxLang home, so only the bundled bxagents module loads", function() {
-					expect( target.dockerfileText() ).toInclude( "ENV BOXLANG_HOME=/app/runtime" );
+					expect( target.dockerfileText() ).toInclude( "ENV BOXLANG_HOME=/srv/bxapp/runtime" );
 				} );
 
 				it( "binds every interface, which a container needs, whatever host the build wrote", function() {
 					var text = target.dockerfileText();
 					expect( text ).toInclude( '"host": "0.0.0.0"' );
-					expect( text ).toInclude( "/app/miniserver.json" );
+					expect( text ).toInclude( "/srv/bxapp/miniserver.json" );
 					expect( text ).toInclude( "EXPOSE 8080" );
 				} );
 

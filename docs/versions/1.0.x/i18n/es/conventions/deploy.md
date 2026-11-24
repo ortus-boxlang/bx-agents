@@ -110,15 +110,15 @@ Requiere un `bxAgents build` previo (no `package` - construye directamente desde
 
 ```dockerfile
 FROM ortussolutions/boxlang:miniserver
-WORKDIR /app
-COPY . /app
-ENV BOXLANG_HOME=/app/runtime
-RUN sed -i 's/"host": *"[^"]*"/"host": "0.0.0.0"/' /app/miniserver.json
+ENV APP_DIR=/srv/bxapp
+ENV BOXLANG_HOME=/srv/bxapp/runtime
+COPY . /srv/bxapp
+RUN sed -i 's/"host": *"[^"]*"/"host": "0.0.0.0"/' /srv/bxapp/miniserver.json
 EXPOSE 8080
 ```
 
-!!! warning "Sin verificar"
-    Esta receta está leída de la documentación de Docker y MiniServer de BoxLang y **no se ha ejecutado**: no había Docker donde se escribió. Copia todo el build en `/app`, confía en que la imagen encuentre `/app/miniserver.json` (documentado) y arranque en `/app` (no confirmado), y hace de `runtime/` el home de BoxLang para que solo cargue el módulo `bxagents` incluido. Constrúyela una vez y comprueba `GET /__bxagents/health` antes de depender de ella.
+!!! note "Por qué `/srv/bxapp` y no `/app`"
+    El entrypoint de la imagen hace `cd $APP_DIR` y arranca el miniserver ahí, donde lee `miniserver.json` (raíz web `public`, configuración del motor `runtime/boxlang.json`, home `runtime`); `runtime/` es el home de BoxLang para que solo cargue el módulo `bxagents` incluido. Un `.dockerignore` escrito en `.build` deja fuera de la imagen el manifiesto, las carpetas de trabajo y lo que un servidor en marcha escribió en `runtime/`. **No instales la app en una carpeta llamada `/app`:** la configuración del runtime mapea `/app` a la carpeta de la app de ColdBox, así que BoxLang toma la ruta absoluta `/app/app/config/bxai-settings.json` por una ruta bajo ese mapeo, mira `/app/app/app/config/...` y la primera petición falla con "Failed to load application descriptor". Esta receta se construyó y se ejecutó: `/__bxagents/health`, `/chat/` y sus recursos responden 200, y `/config/...`, `/project/Agent.yml`, `/app/config/bxai-settings.json` y `/runtime/boxlang.json` responden 404. No verificado: una llamada real a un modelo desde dentro del contenedor.
 
 `docker login` solo se ejecuta cuando tanto `DOCKER_USERNAME` como `DOCKER_PASSWORD` están configuradas en el entorno - un registro que un daemon Docker local ya autenticado puede alcanzar no necesita ninguna de las dos.
 
