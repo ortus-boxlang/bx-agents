@@ -1,6 +1,7 @@
 /**
  * The tools that let an agent keep its own notes: `note_remember` (save or correct) and `note_forget` (remove).
  */
+import bxModules.bxagents.models.api.TurnRunner;
 import bxModules.bxagents.models.util.ToolNames;
 
 class {
@@ -39,7 +40,7 @@ class {
 				var owner = ownerOf( noteScope, chatRequest )
 				return len( trim( arguments.replaces ) )
 					? provider.replace( noteScope, owner, trim( arguments.replaces ), arguments.text )
-					: provider.add( noteScope, owner, arguments.text, "agent", chatRequest.getThreadId() ?: "" )
+					: provider.add( noteScope, owner, arguments.text, "agent", TurnRunner::unscope( chatRequest.getThreadId() ?: "" ) )
 			},
 			false
 		)

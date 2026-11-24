@@ -8,6 +8,8 @@
  *
  * Recording must never break a chat: a failed write is logged and the call goes on.
  */
+import bxModules.bxagents.models.api.TurnRunner;
+
 class {
 
 	static {
@@ -52,7 +54,7 @@ class {
 			}
 			new "models.usage.UsageStore@bxagents"( new "models.notes.NotesWiring@bxagents"().store() ).record( {
 				userId           : ask( chatRequest, "getUserId" ),
-				threadId         : ask( chatRequest, "getThreadId" ),
+				threadId         : TurnRunner::unscope( ask( chatRequest, "getThreadId" ) ),
 				provider         : providerName,
 				model            : arguments.data.model ?: "",
 				operation        : arguments.data.operation ?: "chat",

@@ -15,6 +15,7 @@
  * the next model call or tool call), not in the middle of a token. A message typed while the
  * agent works is spliced into the run with steerRun().
  */
+import bxModules.bxagents.models.api.TurnRunner;
 import bxModules.bxagents.models.logs.Logger;
 
 class extends="models.chat.AgentConversation@bxagents" {
@@ -126,7 +127,8 @@ class extends="models.chat.AgentConversation@bxagents" {
 	 */
 	private function frameHandler( required struct state ) {
 		var run = arguments.state
-		var threadId = variables.threadId
+		// the run is known to bx-ai by the id scoped to the person at the terminal, as the runner made it
+		var agentThread = TurnRunner::scope( variables.userId, variables.threadId )
 		var agent = variables.agent
 		var screen = variables.hooks
 		var summary = new models.cli.chat.ToolSummary@bxagents()
@@ -149,11 +151,11 @@ class extends="models.chat.AgentConversation@bxagents" {
 			var chunk = data
 			if ( screen.cancelRequested() && !run.cancelled ) {
 				run.cancelled = true
-				agent.cancelRun( threadId, "Stopped by the user." )
+				agent.cancelRun( agentThread, "Stopped by the user." )
 			}
 			var steer = screen.takeSteer()
 			if ( !isNull( steer ) ) {
-				agent.steerRun( threadId, steer )
+				agent.steerRun( agentThread, steer )
 			}
 
 			// a run that ends on a middleware decision arrives as a sentinel; a human approval is reported as its own

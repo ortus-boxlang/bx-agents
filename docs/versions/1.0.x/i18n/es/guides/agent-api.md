@@ -98,7 +98,7 @@ Las imágenes van en `attachments`, como `[ { "name": "a.png", "mime": "image/pn
 
 ## Control de ejecuciones
 
-El id de hilo del primer frame de una ejecución es todo lo que piden `cancel` y `steer`. Una ejecución en pausa solo la puede reanudar quien la empezó.
+El id de hilo del primer frame de una ejecución es lo que piden `cancel` y `steer`. Una ejecución pertenece a quien la empezó, así que el mismo id de otro usuario no la alcanza (`cancelled: false`, `steered: false`), y dos usuarios pueden usar el mismo id de hilo sin compartir una ejecución. Una ejecución en pausa solo la puede reanudar quien la empezó.
 
 | Llamada | Hace |
 |---|---|

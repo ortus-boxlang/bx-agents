@@ -1,0 +1,205 @@
+/**
+ * A run belongs to the caller that started it. The client chooses the thread id, so on its own it must not reach
+ * anybody's run: another caller who names it cancels nothing, steers nothing and shares no slot. This runs a real
+ * bx-ai agent on the mock provider, with a tool that waits so a run is in flight, through the TurnRunner every
+ * HTTP route uses.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.TurnRunner and whose run it is", function() {
+
+			beforeEach( function() {
+				// every run that reaches the tool counts itself in, then waits for `release`
+				variables.arrivals = createObject( "java", "java.util.concurrent.atomic.AtomicInteger" ).init( 0 );
+				variables.release = createObject( "java", "java.util.concurrent.CountDownLatch" ).init( 1 );
+				var waitFor = variables.release;
+				var arrived = variables.arrivals;
+				var slow = aiTool( "slow", "Takes a while", () => {
+					arrived.incrementAndGet();
+					waitFor.await( 30, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS );
+					return "ran";
+				} );
+				var call = { toolCalls : [ { name : "slow", arguments : {} } ] };
+				variables.agent = aiAgent(
+					name         = "waiter",
+					model        = aiModel( provider = "mock", options = { providerOptions : { responses : [ call, call, "after the tool", "after the tool" ] } } ),
+					tools        = [ slow ],
+					checkpointer = aiMemory( memory = "cache", config = {} )
+				);
+				variables.ada = new bxagents.models.api.Caller( id = "ada", source = "web" );
+				variables.bob = new bxagents.models.api.Caller( id = "bob", source = "web" );
+				variables.runner = new bxagents.models.api.TurnRunner( agent );
+			} );
+
+			/**
+			 * Starts a streaming turn for `who` on another thread and returns once it is inside the tool.
+			 *
+			 * @return { frames, future }
+			 */
+			function start( required any who, required string threadId, numeric arrivals = 1 ) {
+				var run = { frames : [] };
+				var frames = run.frames;
+				var theRunner = variables.runner;
+				var caller = arguments.who;
+				var id = arguments.threadId;
+				run.future = runAsync( () => {
+					return theRunner.stream( caller, { input : "go", threadId : id }, ( name, data ) => {
+						lock name="turn-frames" type="exclusive" timeout=5 {
+							frames.append( { name : name, data : data } );
+						}
+					} );
+				} );
+				return run;
+			}
+
+			function awaitEntered( numeric count = 1 ) {
+				var waited = 0;
+				while ( variables.arrivals.get() < arguments.count && waited < 20000 ) {
+					sleep( 20 );
+					waited += 20;
+				}
+				expect( variables.arrivals.get() ).toBeGTE( arguments.count, "the run never reached its tool" );
+			}
+
+			function finish( required struct run ) {
+				variables.release.countDown();
+				arguments.run.future.get( 30, "seconds" );
+				return arguments.run.frames.map( ( f ) => f.name );
+			}
+
+			it( "control: a run in flight is cancelled by the caller that started it, by the id it was given", function() {
+				var run = start( ada, "other3" );
+				awaitEntered();
+
+				expect( runner.cancel( ada, "other3" ).data().cancelled ).toBeTrue();
+				var names = finish( run );
+
+				expect( names ).toInclude( "suspended" );
+				expect( run.frames.first().data.threadId ).toBe( "other3" );
+			} );
+
+			it( "refuses to cancel somebody else's run, and the run goes on", function() {
+				var run = start( ada, "other3" );
+				awaitEntered();
+
+				var answer = runner.cancel( bob, "other3" ).data().cancelled;
+				var names = finish( run );
+
+				expect( names ).notToInclude( "suspended", "ada's run was stopped by bob" );
+				expect( answer ).toBeFalse();
+				expect( names.last() ).toBe( "done" );
+			} );
+
+			it( "refuses to steer somebody else's run, and steers its own", function() {
+				var run = start( ada, "other3" );
+				awaitEntered();
+
+				var theirs = runner.steer( bob, "other3", "hijack" ).data().steered;
+				var mine = runner.steer( ada, "other3", "also this" ).data().steered;
+				var names = finish( run );
+
+				expect( theirs ).toBeFalse();
+				expect( mine ).toBeTrue();
+				expect( names.last() ).toBe( "done" );
+			} );
+
+			it( "does not let a second caller take over a run by naming its thread id: two runs on one id are two runs", function() {
+				var theirs = start( ada, "shared" );
+				var mine = start( bob, "shared" );
+				awaitEntered( 2 );
+
+				// ada was first: her cancel stops her run only, not the run bob started under the same id
+				expect( runner.cancel( ada, "shared" ).data().cancelled ).toBeTrue();
+				variables.release.countDown();
+				mine.future.get( 30, "seconds" );
+				var bobNames = mine.frames.map( ( f ) => f.name );
+				var adaNames = finish( theirs );
+
+				expect( adaNames ).toInclude( "suspended" );
+				expect( bobNames ).notToInclude( "suspended" );
+				expect( bobNames.last() ).toBe( "done" );
+				// each client sees the id it sent, not the one the agent knows
+				expect( theirs.frames.first().data.threadId ).toBe( "shared" );
+				expect( mine.frames.first().data.threadId ).toBe( "shared" );
+			} );
+
+			it( "hands the agent an id that holds the caller, and tells the client only its own", function() {
+				var prepared = runner.prepareTurn( ada, { input : "hi", threadId : "t-1" } );
+
+				expect( prepared.data().threadId ).toBe( "t-1" );
+				expect( prepared.data().scoped ).toBe( "u:ada:t-1" );
+				expect( bxagents.models.api.TurnRunner::unscope( prepared.data().scoped ) ).toBe( "t-1" );
+			} );
+
+			it( "cannot be made to collide by a caller id that holds a colon", function() {
+				var scope = bxagents.models.api.TurnRunner::scope;
+				// without an encoding both of these would be a:b:c
+				expect( scope( "a:b", "c" ) ).notToBe( scope( "a", "b:c" ) );
+				expect( bxagents.models.api.TurnRunner::unscope( scope( "a:b", "c" ) ) ).toBe( "c" );
+				expect( bxagents.models.api.TurnRunner::unscope( scope( "a", "b:c" ) ) ).toBe( "b:c" );
+				// an id that was never scoped (a routine's, a gateway's) is left as it is
+				expect( bxagents.models.api.TurnRunner::unscope( "slack:C1:123" ) ).toBe( "slack:C1:123" );
+			} );
+
+			it( "answers the client's own id from run(), batch() and resume()", function() {
+				expect( runner.run( ada, { input : "hi", threadId : "t-run" } ).data().threadId ).toBe( "t-run" );
+				expect( runner.batch( ada, { inputs : [ "hi" ], threadId : "t-batch" } ).data().threadId ).toBe( "t-batch" );
+			} );
+
+		} );
+
+		describe( "api.TurnRunner and a run paused for approval", function() {
+
+			beforeEach( function() {
+				var danger = aiTool( "danger", "Needs a person's approval", () => "ran" );
+				var call = { toolCalls : [ { name : "danger", arguments : {} } ] };
+				variables.agent = aiAgent(
+					name         = "guarded",
+					model        = aiModel( provider = "mock", options = { providerOptions : { responses : [ call, "after the tool" ] } } ),
+					tools        = [ danger ],
+					checkpointer = aiMemory( memory = "cache", config = {} )
+				).withMiddleware( new bxModules.bxai.models.middleware.core.HumanInTheLoopMiddleware(
+					toolsRequiringApproval = [ "danger" ],
+					mode                   = "web"
+				) );
+				variables.ada = new bxagents.models.api.Caller( id = "ada", source = "web" );
+				variables.bob = new bxagents.models.api.Caller( id = "bob", source = "web" );
+				variables.runner = new bxagents.models.api.TurnRunner( agent );
+				variables.frames = [];
+				variables.collect = function( name, data ) { frames.append( { name : name, data : data } ); };
+			} );
+
+			it( "is resumed and seen only by the caller that started it, and every id the client sees is its own", function() {
+				runner.stream( ada, { input : "go", threadId : "paused-1" }, collect );
+				var suspended = frames.filter( ( f ) => f.name == "suspended" );
+				expect( suspended ).toHaveLength( 1 );
+				expect( suspended.first().data.threadId ).toBe( "paused-1" );
+
+				// bob names the id and finds nothing of ada's
+				expect( runner.pending( bob, "paused-1" ).data().pending ).toBeFalse();
+				expect( runner.pending( ada, "paused-1" ).data().pending ).toBeTrue();
+				expect( runner.pending( ada, "paused-1" ).data().threadId ).toBe( "paused-1" );
+				var refused = runner.resume( bob, "paused-1", { decision : "approve" }, collect );
+				expect( refused.code() ).toBe( "not_your_run" );
+
+				frames.clear();
+				var resumed = runner.resume( ada, "paused-1", { decision : "approve" }, collect );
+				expect( resumed.succeeded() ).toBeTrue();
+				expect( resumed.data().threadId ).toBe( "paused-1" );
+				expect( frames.first().data.threadId ).toBe( "paused-1" );
+				expect( frames.map( ( f ) => f.name ).last() ).toBe( "done" );
+			} );
+
+			it( "answers not_your_run to a caller who resumes a thread that waits for nobody of theirs", function() {
+				runner.stream( ada, { input : "go", threadId : "paused-2" }, collect );
+
+				expect( runner.resume( bob, "paused-2", { decision : "approve" }, function() {} ).code() ).toBe( "not_your_run" );
+				expect( runner.resume( bob, "never-started", { decision : "approve" }, function() {} ).code() ).toBe( "not_your_run" );
+				expect( runner.pending( ada, "paused-2" ).data().pending ).toBeTrue();
+			} );
+
+		} );
+	}
+
+}

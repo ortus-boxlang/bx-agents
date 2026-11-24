@@ -9,6 +9,7 @@
  * are its owner's. The tools find the owner from the conversation, as the routine tools do.
  */
 import bxModules.bxagents.models.api.Caller;
+import bxModules.bxagents.models.api.TurnRunner;
 import bxModules.bxagents.models.logs.Logger;
 import bxModules.bxagents.models.routines.RoutineRunner;
 import bxModules.bxagents.models.util.ToolNames;
@@ -82,7 +83,8 @@ class {
 	 * @return { ok : true, file } or { ok : false, reason }
 	 */
 	struct function saveReport( required any chatRequest, required string file, required string content ) {
-		var threadId = arguments.chatRequest.getThreadId() ?: ""
+		// the run is known to bx-ai by an id scoped to its caller; a routine knows its own
+		var threadId = TurnRunner::unscope( arguments.chatRequest.getThreadId() ?: "" )
 		var row = variables.service().byThread( threadId )
 		if ( isNull( row ) ) {
 			return { ok : false, reason : "Reports are saved by a routine while it runs, and this is not a routine's run. Ask the person to make a routine for it." }
@@ -104,7 +106,7 @@ class {
 	 * @call A function( row ) that returns the answer
 	 */
 	struct function about( required any chatRequest, required string name, required function call ) {
-		var running = variables.service().byThread( arguments.chatRequest.getThreadId() ?: "" )
+		var running = variables.service().byThread( TurnRunner::unscope( arguments.chatRequest.getThreadId() ?: "" ) )
 		if ( !len( trim( arguments.name ) ) ) {
 			if ( isNull( running ) ) {
 				return { ok : false, reason : "Say which routine: pass its name." }

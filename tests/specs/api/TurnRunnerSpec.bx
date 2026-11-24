@@ -29,11 +29,12 @@ class extends="testbox.system.BaseSpec" {
 				expect( frames[ 4 ].data ).toBe( "[DONE]" );
 			} );
 
-			it( "hands the agent the caller, the thread and the conversation", function() {
+			it( "hands the agent the caller, the thread (scoped to the caller) and the conversation", function() {
 				runner().stream( caller, { input : "hi", threadId : "t-1", conversationId : "c-1" }, collect );
 
 				expect( agent.seen().options.userId ).toBe( "ada" );
-				expect( agent.seen().options.threadId ).toBe( "t-1" );
+				// the agent knows the run by an id scoped to the caller; the client keeps its own
+				expect( agent.seen().options.threadId ).toBe( "u:ada:t-1" );
 				expect( agent.seen().options.conversationId ).toBe( "c-1" );
 			} );
 
@@ -170,16 +171,25 @@ class extends="testbox.system.BaseSpec" {
 				expect( runner().pending( new bxagents.models.api.Caller( id = "bob" ), "t-1" ).data().pending ).toBeTrue();
 			} );
 
-			it( "cancels and steers a run by its thread id alone", function() {
+			it( "cancels and steers a run by its thread id, for the caller who started it", function() {
 				var r = runner();
-				var bob = new bxagents.models.api.Caller( id = "bob" );
 
 				expect( r.cancel( caller, "t-1" ).data().cancelled ).toBeTrue();
-				expect( r.cancel( bob, "t-2" ).data().cancelled ).toBeTrue();
-				expect( agent.cancelled() ).toBe( [ "t-1", "t-2" ] );
+				expect( agent.cancelled() ).toBe( [ "u:ada:t-1" ] );
 				expect( r.steer( caller, "t-1", "also this" ).data().steered ).toBeTrue();
 				expect( r.cancel( caller, "" ).code() ).toBe( "bad_request" );
 				expect( r.steer( caller, "t-1", "" ).code() ).toBe( "bad_request" );
+			} );
+
+			it( "does not reach somebody else's run with their thread id: bob's t-2 is bob's own", function() {
+				var r = runner();
+				var bob = new bxagents.models.api.Caller( id = "bob" );
+
+				r.cancel( bob, "t-2" );
+				r.steer( bob, "t-2", "hijack" );
+
+				expect( agent.cancelled() ).toBe( [ "u:bob:t-2" ] );
+				expect( agent.cancelled() ).notToInclude( "u:ada:t-2" );
 			} );
 
 			it( "starts a turn on the thread id the client names", function() {
