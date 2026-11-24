@@ -1,8 +1,10 @@
 import bxModules.bxagents.models.util.TreeDelete;
 
 /**
- * Puts the `bxagents` module into the built app, as `runtime/modules/bxagents`: the ONLY module the served
- * app loads from there.
+ * Puts the `bxagents` module into the built app, under `runtime/modules`: the ONLY module the served app loads
+ * from there. It is copied as it is installed, folder name included: `bx-module install bx-agents` installs it as
+ * `~/.boxlang/modules/bx-agents`, which becomes `runtime/modules/bx-agents` (a dev build's `build/modules/bxagents`
+ * stays `bxagents`). The name is free because the module's mapping comes from `this.mapping` in its ModuleConfig.bx.
  *
  * The served app needs this module (its gateways, tool loader, the web chat ...) and, through it, the BoxLang
  * modules bundled inside it (bxai, sqlite, ...: BoxLang 1.17+ loads those as nested modules). BoxLang loads
@@ -23,7 +25,7 @@ class {
 	variables.WORK_PREFIX = ".module-copy-"
 
 	/**
-	 * @moduleDir The module folder to copy (named `bxagents`). Empty copies nothing: a source checkout or a test harness
+	 * @moduleDir The module folder to copy, under any name. Empty copies nothing: a source checkout or a test harness
 	 *            has no installed module, and says so through `reason`
 	 * @runtimeDir Absolute path to `.build/runtime`
 	 *
@@ -32,13 +34,15 @@ class {
 	struct function copy( required string moduleDir, required string runtimeDir ) {
 		var runtime = arguments.runtimeDir.reReplace( "[\\/]+$", "" )
 		var build = getDirectoryFromPath( runtime ).reReplace( "[\\/]+$", "" )
-		var target = runtime & "/modules/bxagents"
 		removeLeftovers( build )
 
 		if ( !len( arguments.moduleDir ) || !directoryExists( arguments.moduleDir ) ) {
-			return { copied : false, reason : "no-module", stamp : "", target : target }
+			return { copied : false, reason : "no-module", stamp : "", target : "" }
 		}
 		var source = arguments.moduleDir.reReplace( "[\\/]+$", "" )
+		// the copy keeps the installed folder's own name (`bx-module install` makes it `bx-agents`): it is the same module, as is
+		var folderName = listLast( source.replace( "\", "/", "all" ), "/" )
+		var target = runtime & "/modules/" & folderName
 		var stamp = stampOf( source )
 		if ( fileExists( target & "/" & variables.STAMP_FILE ) && fileRead( target & "/" & variables.STAMP_FILE, "UTF-8" ) == stamp ) {
 			return { copied : false, reason : "unchanged", stamp : stamp, target : target }
@@ -47,15 +51,16 @@ class {
 		var work = build & "/" & variables.WORK_PREFIX & createUUID()
 		try {
 			directoryCreate( path = work, createPath = true )
-			directoryCopy( source, work & "/bxagents", true )
+			directoryCopy( source, work & "/" & folderName, true )
 			// the stamp is written last: a folder that has it is a complete copy
-			fileWrite( work & "/bxagents/" & variables.STAMP_FILE, stamp, "UTF-8" )
+			fileWrite( work & "/" & folderName & "/" & variables.STAMP_FILE, stamp, "UTF-8" )
 			directoryCreate( path = runtime & "/modules", createPath = true, ignoreExists = true )
-			if ( directoryExists( target ) ) {
-				TreeDelete::tree( target )
+			// it is the only module there: the earlier copy goes, and so does one under another name (an earlier install's)
+			for ( var old in directoryList( path = runtime & "/modules", recurse = false, type = "dir" ) ) {
+				TreeDelete::tree( old )
 			}
 			createObject( "java", "java.nio.file.Files" ).move(
-				createObject( "java", "java.nio.file.Paths" ).get( work & "/bxagents", [] ),
+				createObject( "java", "java.nio.file.Paths" ).get( work & "/" & folderName, [] ),
 				createObject( "java", "java.nio.file.Paths" ).get( target, [] ),
 				[]
 			)
@@ -92,20 +97,28 @@ class {
 	}
 
 	/**
-	 * The module folder this code runs from, when it is an installed module: a folder named `bxagents` with
-	 * its `ModuleConfig.bx`. A source checkout (`src/main/bx`) is not one, and the test harness reaches the module through a
-	 * mapping, so they answer "".
+	 * The module folder this code runs from, when it is an installed module (see isInstalledModule()). A source checkout
+	 * (`src/main/bx`) is not one, and the test harness reaches the module through a mapping, so they answer "".
 	 *
-	 * @return Absolute path of the installed `bxagents` folder, or ""
+	 * @return Absolute path of the installed module folder, or ""
 	 */
 	string function installedModuleDir() {
 		var root = createObject( "java", "java.nio.file.Paths" )
 			.get( getDirectoryFromPath( getCurrentTemplatePath() ) & "../../..", [] )
 			.normalize()
-		if ( root.getFileName().toString() != "bxagents" || !fileExists( root.toString() & "/ModuleConfig.bx" ) ) {
-			return ""
-		}
-		return root.toString().replace( "\", "/", "all" )
+			.toString()
+		return isInstalledModule( root ) ? root.replace( "\", "/", "all" ) : ""
+	}
+
+	/**
+	 * Whether a folder is an installed (or built) module: its `ModuleConfig.bx` with a `box.json` next to it, under any folder
+	 * name (`bx-module install` names it `bx-agents`, a dev build `bxagents`). A source checkout (`src/main/bx`) has the
+	 * ModuleConfig.bx but no box.json: the repository's box.json is one folder up.
+	 *
+	 * @dir The folder
+	 */
+	boolean function isInstalledModule( required string dir ) {
+		return fileExists( arguments.dir & "/ModuleConfig.bx" ) && fileExists( arguments.dir & "/box.json" )
 	}
 
 	/**

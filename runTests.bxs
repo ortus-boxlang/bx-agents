@@ -29,7 +29,9 @@ createObject( "java", "java.lang.System" ).setProperty( "user.home", createObjec
 
 // Every build copies the bxagents module into .build/runtime/modules (70 MB, see ModuleCopier). The suite builds hundreds of
 // projects and almost none serves one, so they get a stand-in module folder; the specs that boot a server name the built module.
-stubModule = createObject( "java", "java.nio.file.Files" ).createTempDirectory( "bxagents-test-module-", [] ).toString();
+// Named bxagents: the copy keeps the folder's own name, and the specs look for runtime/modules/bxagents.
+stubModule = createObject( "java", "java.nio.file.Files" ).createTempDirectory( "bxagents-test-module-", [] ).toString() & "/bxagents";
+directoryCreate( stubModule );
 fileWrite( stubModule & "/ModuleConfig.bx", "class {}" );
 createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_MODULE_DIR", stubModule );
 
