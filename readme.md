@@ -18,7 +18,7 @@
 
 **BxAgents** is a conventions-based framework for building AI agents your team can ship, powered by [BoxLang AI](https://ai.boxlang.io) and built on [ColdBox](https://www.coldbox.org). You describe an agent with files and folders (`Agent.yml`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/` it needs) and `bxAgents build` assembles a real ColdBox application from them, **once, at build time**: a thirteen-page web app, an HTTP API with OpenAPI, gateways, routines, a vault and backups. Serve it, chat with it in the terminal, or package it as a portable `.bxa`.
 
-Documentation: **[bxagents.ai](https://bxagents.ai)** (source in [docs/](docs/index.md)). Free course: **[Introduction to BxAgents](docs/course/index.md)**, 29 lessons that build one support agent from install to a deployed one.
+Documentation: **[bxagents.ai](https://bxagents.ai)** (source in [docs/](docs/index.md)). Free course: **[Introduction to BxAgents](docs/course/index.md)**, 20 lessons from install to a deployed agent.
 
 ## Requirements
 
@@ -62,7 +62,7 @@ No API key yet? Scaffold with `--model=mock/mock-model` and the agent answers wi
 | Extend and test | [Sub-agents](docs/conventions/subagents.md), [skills](docs/conventions/skills.md), [interceptors](docs/conventions/interceptors.md), [extensions](docs/conventions/extensions.md), and specs that run with `mockResponses()` and no API key. [Testing](docs/conventions/testing.md) |
 | Ship | `bxAgents package` makes a `.bxa`; `deploy` targets local, SSH, FTP, SFTP, Docker and DigitalOcean. [Deploy](docs/conventions/deploy.md) |
 
-Live counts of verbs, slash commands, API routes, pages, gateway types, starters, connectors, skills, deploy targets, examples and lessons come from `python3 tools/docs-counts.py`; at the time of writing that is 29 verbs, 36 slash commands, 82 API routes, 13 pages, 12 gateway types, 8 starters, 7 connectors, 6 shipped skills, 6 deploy targets, 20 examples and 29 lessons.
+Live counts of verbs, slash commands, API routes, pages, gateway types, starters, connectors, skills, deploy targets, examples and lessons come from `python3 tools/docs-counts.py`; at the time of writing that is 29 verbs, 36 slash commands, 82 API routes, 13 pages, 12 gateway types, 8 starters, 7 connectors, 6 shipped skills, 6 deploy targets, 20 examples and 20 lessons.
 
 ## See it
 

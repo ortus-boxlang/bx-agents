@@ -85,12 +85,55 @@ class extends="testbox.system.BaseSpec" {
 				var result = copier.copy( "", runtime );
 				expect( result.copied ).toBeFalse();
 				expect( result.reason ).toBe( "no-module" );
+				expect( result.target ).toBe( "" );
 				expect( directoryExists( runtime & "/modules/bxagents" ) ).toBeFalse();
 			} );
 
-			it( "finds the module folder from a path that looks like src/main/bx only when it is named bxagents", function() {
+			it( "copies a module installed as bx-agents (what `bx-module install` makes) under that name, as is", function() {
+				var installed = tmp & "/bx-agents";
+				directoryCopy( module, installed, true );
+				var result = copier.copy( installed, runtime );
+				expect( result.copied ).toBeTrue();
+				expect( result.target ).toBe( runtime & "/modules/bx-agents" );
+				expect( fileExists( runtime & "/modules/bx-agents/ModuleConfig.bx" ) ).toBeTrue();
+				expect( fileExists( runtime & "/modules/bx-agents/modules/bxai/box.json" ) ).toBeTrue();
+				expect( directoryList( runtime & "/modules", false, "name" ) ).toBe( [ "bx-agents" ] );
+				expect( copier.copy( installed, runtime ).reason ).toBe( "unchanged" );
+			} );
+
+			it( "removes an earlier copy under the other name, so the copied module stays the only one", function() {
+				var installed = tmp & "/bx-agents";
+				directoryCopy( module, installed, true );
+				copier.copy( module, runtime );
+				expect( directoryList( runtime & "/modules", false, "name" ) ).toBe( [ "bxagents" ] );
+				copier.copy( installed, runtime );
+				expect( directoryList( runtime & "/modules", false, "name" ) ).toBe( [ "bx-agents" ] );
+				copier.copy( module, runtime );
+				expect( directoryList( runtime & "/modules", false, "name" ) ).toBe( [ "bxagents" ] );
+			} );
+
+			it( "does not take the repository's src/main/bx for an installed module", function() {
 				// this spec reaches the code through the /bxagents mapping, which is the repository's src/main/bx: not an installed module
 				expect( copier.installedModuleDir() ).toBe( "" );
+			} );
+
+			describe( "which folder is an installed module", function() {
+
+				it( "is one with a ModuleConfig.bx and a box.json, under any name", function() {
+					var installed = tmp & "/bx-agents";
+					directoryCopy( module, installed, true );
+					expect( copier.isInstalledModule( module ) ).toBeTrue();
+					expect( copier.isInstalledModule( installed ) ).toBeTrue();
+				} );
+
+				it( "is not one without a box.json next to its ModuleConfig.bx, as in a source checkout", function() {
+					var checkout = tmp & "/repo/src/main/bx";
+					directoryCreate( checkout, true );
+					fileWrite( checkout & "/ModuleConfig.bx", "class {}" );
+					expect( copier.isInstalledModule( checkout ) ).toBeFalse();
+					expect( copier.isInstalledModule( expandPath( "/bxagents" ) ) ).toBeFalse();
+				} );
+
 			} );
 
 			describe( "which folder is the module to copy", function() {

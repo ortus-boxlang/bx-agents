@@ -18,7 +18,7 @@
  * ### Which modules the served app loads
  *
  * Exactly the `bxagents` module (with the modules nested in it) and the project's own `boxlang_modules/`: the
- * module is copied into `.build/runtime/modules/bxagents` (see ModuleCopier) and `serverHome` is
+ * module is copied into `.build/runtime/modules`, under its installed folder name (see ModuleCopier), and `serverHome` is
  * `.build/runtime`, so BoxLang's `<home>/modules` is that folder. This verb used to add the machine's own
  * module directory to the served app's config, which loaded every module installed there into the served app.
  * It no longer names that directory anywhere. Measured: with neither `serverHome` nor BOXLANG_HOME set, BoxLang
@@ -112,10 +112,12 @@ class {
 		// The served app needs the bxagents module in its own runtime (and nothing else from the machine). The build put it
 		// there; this makes sure of it, which is a no-op while its stamp is unchanged.
 		var copied = new "models.build.layout.ModuleCopier@bxagents"().copy( new "models.build.layout.ModuleCopier@bxagents"().sourceDir( arguments.options.moduleDir ?: "" ), serverHome )
-		if ( !directoryExists( serverHome & "/modules/bxagents" ) ) {
+		// the copy keeps the installed folder's name (`bx-agents` from `bx-module install`), so any folder there is the module
+		var installedCopies = directoryExists( serverHome & "/modules" ) ? directoryList( path = serverHome & "/modules", recurse = false, type = "dir" ) : []
+		if ( !installedCopies.len() ) {
 			throw(
 				type    = "BxAgents.NoModuleInBuild",
-				message = "The build has no bxagents module in [#serverHome#/modules/bxagents], so the served app could not load. It is copied from the installed module: run `build` with BX Agents installed as a module, or set BXAGENTS_MODULE_DIR to the built module folder."
+				message = "The build has no bxagents module in [#serverHome#/modules], so the served app could not load. It is copied from the installed module: run `build` with BX Agents installed as a module, or set BXAGENTS_MODULE_DIR to the built module folder."
 			)
 		}
 
