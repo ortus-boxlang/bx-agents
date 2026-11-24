@@ -79,6 +79,17 @@ agentClient.stream( "Say it shorter.", ( text ) => print( text ), first.threadId
 
 Build the client with named arguments. There is one method for each route: `invoke`, `stream`, `events`, `resume`, `cancel`, `steer`, `sessions`, `history`, `export`, `notes`, `preferences`, `command`, `tokens` and the rest. A bad request comes back as `{ success: false, error, code }`; a refused token, a missing route or a server failure is thrown. Pass `path` when the server moved the API with `agentApi.path`, and `source` to name your program in the conversation list.
 
+## What a turn accepts
+
+Besides `input`, `conversationId`, `threadId` and `attachments`, a turn request may carry two structs:
+
+| Field | What is used |
+|---|---|
+| `options` | `profile` only: the name of an [offered profile](../conventions/agent-bx.md#agentapi) (`GET /profiles`). Any other name is a `400` `bad_profile`. |
+| `params` | Everything the model accepts (`temperature`, `top_p`, `max_tokens`, `stop`, `seed`, `response_format`, reasoning settings and so on), except `model`, `messages`, `contents`, `system` and `tools`, and any key that starts with `_` at any depth. |
+
+Everything else is dropped without an error, and the server logs the names it ignored (never the values). This is a security rule. A key such as `options._resumeContext` would make the model library run tool calls the request supplies without asking for approval, and `options.apiKey` would swap the server's key. In `params`, `model` would pick a model the server did not offer, `messages` or `contents` would replace the conversation, `system` could set the prompt, and `tools` would add tools the agent was not given. The person, thread and conversation come from the token and the request, never from `options`.
+
 ## Streams
 
 `stream` and `events` answer server-sent events: each frame is `event: <name>` then `data: <json>`.
