@@ -35,7 +35,8 @@ class {
 			if ( len( arguments.profile ) ) {
 				options[ "profile" ] = arguments.profile
 			} else if ( len( arguments.model.provider ?: "" ) ) {
-				options[ "provider" ] = arguments.model.provider
+				// bx-ai reports an agent's provider by its display name, which aiChat() does not know
+				options[ "provider" ] = new "models.build.ModelSlugParser@bxagents"().providerId( arguments.model.provider )
 				params = duplicate( arguments.model.params ?: {} )
 			}
 			var answer = aiChat( "Reply with the single word: pong", params, options )

@@ -96,6 +96,14 @@ class {
 			var exitCode = process.exitValue()
 
 			var report = fileExists( reportPath ) ? jsonDeserialize( fileRead( reportPath ) ) : {}
+			var failures = extractFailures( report )
+			// A bundle whose beforeAll() throws (BaseAgentSpec's build failing, say) is reported by TestBox as totalError -1, with the
+			// exception in the bundle's globalException; the child's own exit check ( fail + error > 0 ) then passes it (measured:
+			// `Error: -1`, exit 0). Such a bundle is an error, and a failed run.
+			var setupFailures = failures.filter( f => !len( f.suite ) ).len()
+			if ( setupFailures && exitCode == 0 ) {
+				exitCode = 1
+			}
 
 			return {
 				exitCode     : exitCode,
@@ -104,9 +112,9 @@ class {
 				totalSpecs   : report.totalSpecs ?: 0,
 				totalPass    : report.totalPass ?: 0,
 				totalFail    : report.totalFail ?: 0,
-				totalError   : report.totalError ?: 0,
+				totalError   : max( 0, report.totalError ?: 0 ) + setupFailures,
 				totalSkipped : report.totalSkipped ?: 0,
-				failures     : extractFailures( report )
+				failures     : failures
 			}
 		} finally {
 			// never through a link: the module is reached through one (see childModulesDirectory()), and directoryDelete( path, true )
@@ -118,13 +126,46 @@ class {
 	}
 
 	/**
+	 * Whether the project says how to build its agent for tests: an `environments.test` block in Agent.yml, or a `test()`
+	 * method in Agent.bx. `BaseAgentSpec` builds against that environment (see docs/conventions/testing.md).
+	 *
+	 * @projectRoot Absolute path to the project root
+	 *
+	 * @return True when one is declared
+	 */
+	boolean function hasTestEnvironment( required string projectRoot ) {
+		var root = arguments.projectRoot.reReplace( "[\/]+$", "" )
+		if ( fileExists( root & "/Agent.bx" ) && fileRead( root & "/Agent.bx" ).reFind( "function\s+test\s*\(" ) ) {
+			return true
+		}
+		if ( !fileExists( root & "/Agent.yml" ) ) {
+			return false
+		}
+		var inEnvironments = false
+		for ( var line in fileRead( root & "/Agent.yml" ).listToArray( char( 10 ) ) ) {
+			if ( !trim( line ).len() || trim( line ).left( 1 ) == "##" ) {
+				continue
+			}
+			if ( !reFind( "^\s", line ) ) {
+				inEnvironments = reFind( "^environments\s*:", line ) > 0
+			} else if ( inEnvironments && reFind( "^\s+test\s*:", line ) ) {
+				return true
+			}
+		}
+		return false
+	}
+
+	/**
 	 * @report TestBox's own deserialized JSONReporter output
 	 *
-	 * @return A flattened array of { bundle, suite, spec, message } for every Failed/Error spec
+	 * @return A flattened array of { bundle, suite, spec, message } for every Failed/Error spec, and one with an empty suite and spec for each bundle that failed before running any
 	 */
 	private array function extractFailures( required struct report ) {
 		var failures = []
 		for ( var bundleStat in ( arguments.report.bundleStats ?: [] ) ) {
+			if ( isStruct( bundleStat.globalException ?: "" ) && len( bundleStat.globalException.Message ?: "" ) ) {
+				failures.append( { bundle : bundleStat.path ?: bundleStat.name ?: "", suite : "", spec : "", message : bundleStat.globalException.Message } )
+			}
 			for ( var suiteStat in ( bundleStat.suiteStats ?: [] ) ) {
 				for ( var specStat in ( suiteStat.specStats ?: [] ) ) {
 					if ( specStat.status == "Failed" || specStat.status == "Error" ) {

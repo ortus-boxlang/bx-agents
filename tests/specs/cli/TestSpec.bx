@@ -100,6 +100,44 @@ class extends="testbox.system.BaseSpec" {
 				expect( directoryList( builtModule, false, "name" ).len() ).toBeGT( 3 );
 			} );
 
+			it( "tells a project with no test environment what is missing and how to add it, and fails", function() {
+				if ( !hasRealModuleInstall() ) {
+					return;
+				}
+
+				// provider + model and no environments.test: the test build forces the mock provider, which the model slug then contradicts
+				var projectRoot = newTempProject( "testable-agent" );
+				directoryCopy( expandPath( "/testbox" ), projectRoot & "/lib/testbox", true );
+				fileDelete( projectRoot & "/Agent.bx" );
+				fileWrite( projectRoot & "/Agent.yml", "name: no-test-env" & char( 10 ) & "provider: openai" & char( 10 ) & "model: gpt-5" & char( 10 ) );
+
+				var result = testVerb.run( { projectRoot : projectRoot, moduleDir : builtModule } );
+
+				expect( result.exitCode ).toBe( 1 );
+				expect( result.message ).notToInclude( "Error: -" );
+				expect( result.message ).toInclude( "no `environments.test`" );
+				expect( result.message ).toInclude( "mock/mock-model" );
+				expect( result.message ).toInclude( "name different providers" );
+			} );
+
+			it( "knows whether a project declares a test environment", function() {
+				var service = new bxagents.models.build.TestRunnerService();
+				var dir = createTempDirectory( prefix = "bxagents-cli-test-env-" );
+				tempDirs.append( dir );
+
+				expect( service.hasTestEnvironment( dir ) ).toBeFalse();
+
+				fileWrite( dir & "/Agent.yml", "name: a" & char( 10 ) & "environments:" & char( 10 ) & "  production:" & char( 10 ) & "    model: openai/gpt-5" & char( 10 ) );
+				expect( service.hasTestEnvironment( dir ) ).toBeFalse();
+
+				fileWrite( dir & "/Agent.yml", "name: a" & char( 10 ) & "environments:" & char( 10 ) & "  test:" & char( 10 ) & "    model: mock/mock-model" & char( 10 ) );
+				expect( service.hasTestEnvironment( dir ) ).toBeTrue();
+
+				fileDelete( dir & "/Agent.yml" );
+				fileWrite( dir & "/Agent.bx", "class { function configure() { return {}; } function test() { return { model : 'mock/mock-model' }; } }" );
+				expect( service.hasTestEnvironment( dir ) ).toBeTrue();
+			} );
+
 			it( "reports a real failing spec with exit code 1 and a useful failure message", function() {
 				if ( !hasRealModuleInstall() ) {
 					return;
