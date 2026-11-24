@@ -1,5 +1,5 @@
 ---
-title: "Lección 6: instructions.md y el system prompt"
+title: "instructions.md y el system prompt"
 icon: phosphor-duotone:note-pencil
 summary: El archivo opcional que se convierte en el system prompt de tu agente.
 description: El archivo opcional que se convierte en el system prompt de tu agente.
@@ -47,7 +47,7 @@ Haz esto para un prompt corto, o cuando prefieras tener todo lo relativo al agen
 solo archivo. Si existen ambos, gana `instructions.md`; si no existe ninguno, el build
 falla y lo indica. Un prompt que deba generarse o construirse con plantillas en código
 pertenece al `Agent.bx` avanzado basado en clase (consulta el final de la
-[Lección 5](05-agent-bx.md)).
+[La definición del agente - Agent.yml](05-agent-bx.md)).
 
 ## ¿Cuál deberías elegir?
 
@@ -60,8 +60,8 @@ de piezas más pequeñas, etc.).
 ## Pruébalo
 
 Abre el `instructions.md` que creó el `bxAgents new` de la
-[Lección 4](04-scaffolding-your-first-agent.md) y escribe un system prompt real para el tipo
+[Crear el andamiaje de tu primer agente](04-scaffolding-your-first-agent.md) y escribe un system prompt real para el tipo
 de agente que quieras construir en este curso - un bot de soporte, un revisor de código, lo
 que sea. Lo construirás y lo ejecutarás en las dos lecciones siguientes.
 
-Siguiente: [Lección 7 - Construir tu agente](07-building-your-agent.md)
+Siguiente: [Construir tu agente](07-building-your-agent.md)

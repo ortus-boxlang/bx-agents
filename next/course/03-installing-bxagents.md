@@ -1,5 +1,5 @@
 ---
-title: "Lesson 3: Installing BxAgents"
+title: "Installing BxAgents"
 icon: phosphor-duotone:package
 summary: Install BoxLang and BxAgents, and verify the bxAgents command works.
 description: Install BoxLang and BxAgents, and verify the bxAgents command works.
@@ -39,6 +39,16 @@ bxAgents --help
 :::
 :::
 
+Check the command is there:
+
+```bash title="Terminal 2"
+bxAgents --version
+```
+
+```text title="You see"
+bxAgents v<anything>
+```
+
 ## The `bxAgents` command
 
 BxAgents declares a native executable in its `box.json`:
@@ -58,7 +68,7 @@ This course uses the short `bxAgents <verb>` form throughout.
 
 ## Optional, for later lessons
 
-- **`serve`**, **`chat --server`** and **`invoke --server`** ([Lesson 8](08-talking-to-your-agent.md))
+- **`serve`**, **`chat --server`** and **`invoke --server`** ([Talking to Your Agent](08-talking-to-your-agent.md))
   additionally need the standalone [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver)
   binary on `PATH`.
 
@@ -67,6 +77,15 @@ None of them is required to follow along with `build`, plain `chat`, `test`, `pa
 checks the BoxLang version, whether `bx-ai` is loaded, whether the project validates and
 which environment variables it needs are not set.
 
+## Two things to know before you start
+
+- **Flag values do not contain spaces.** BoxLang 1.19.0's launcher splits every quoted argument at its spaces, so
+  `--message="Where is my order"` does not arrive as one value. The course writes `--message=refund` and types
+  sentences into the chat instead. See [Quoting flag values](../cli-reference.md#quoting-flag-values).
+- **What an agent remembers lives outside the project.** Conversations, notes, tokens, the vault, logs and backups
+  are kept in the agent's *data home*, `~/.bxagents/<agent name>/` (the environment variable `BXAGENTS_HOME` moves it).
+  It is created the first time it is needed, and [Logs, Usage and Backups](operating-it.md) is about looking after it.
+
 See [Installation](../getting-started/installation.md) for the full reference page.
 
-Next: [Lesson 4 - Scaffolding Your First Agent](04-scaffolding-your-first-agent.md)
+Next: [A Model That Needs No Key](practice-model.md)

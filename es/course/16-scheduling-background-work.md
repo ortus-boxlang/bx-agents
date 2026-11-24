@@ -1,5 +1,5 @@
 ---
-title: "Lección 16: Programar trabajo en segundo plano"
+title: "Programar trabajo en segundo plano"
 icon: phosphor-duotone:clock-countdown
 summary: schedules/*.bx - schedulers de BoxLang, un archivo cada uno, que dicen cuándo con los propios métodos de la tarea.
 description: schedules/*.bx - schedulers de BoxLang, un archivo cada uno, que dicen cuándo con los propios métodos de la tarea.
@@ -36,7 +36,7 @@ Los métodos de tarea de BoxLang dicen cuándo: `.every( 15, "minutes" )`, `.eve
 
 `run( ... )` envía un mensaje al **agente por defecto**, el agente raíz que define tu
 `Agent.yml`. `agent( "TheAgentName" )` obtiene cualquier otro agente del árbol por el
-`name` que declara su definición (consulta la [Lección 11](11-composing-subagents.md)):
+`name` que declara su definición (consulta [Componer subagentes](11-composing-subagents.md)):
 
 ```javascript
 task( "weekly-digest" )
@@ -73,4 +73,4 @@ una y el agente. Una expresión cron que pases a `--when` se escribe como un `.c
 
 Referencia completa: [schedules/](../conventions/schedules.md).
 
-Siguiente: [Lección 17 - Alojar y consumir servidores MCP](17-hosting-mcp-servers.md)
+Siguiente: [Exponer tu agente por HTTP y MCP](13-exposing-http-and-mcp.md)

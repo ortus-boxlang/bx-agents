@@ -1,5 +1,5 @@
 ---
-title: "Lección 9: Dar tools a tu agente"
+title: "Dar tools a tu agente"
 icon: phosphor-duotone:wrench
 summary: Cualquier función anotada con @AITool bajo tools/ se convierte en una tool invocable.
 description: Cualquier función anotada con @AITool bajo tools/ se convierte en una tool invocable.
@@ -91,4 +91,4 @@ bxAgents chat
 
 Referencia completa: [tools/](../conventions/tools.md).
 
-Siguiente: [Lección 10 - Empaquetar skills](10-packaging-skills.md)
+Siguiente: [Empaquetar skills](10-packaging-skills.md)

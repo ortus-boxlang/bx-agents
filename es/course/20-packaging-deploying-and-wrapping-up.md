@@ -1,5 +1,5 @@
 ---
-title: "Lección 20: Empaquetar, desplegar y cerrar"
+title: "Empaquetar, desplegar y cerrar"
 icon: phosphor-duotone:cloud-arrow-up
 summary: Empaqueta un .bxa, envíalo a un destino real, y hacia dónde seguir desde aquí.
 description: Empaqueta un .bxa, envíalo a un destino real, y hacia dónde seguir desde aquí.
@@ -78,14 +78,14 @@ bxAgents inspect --section=tools,env
 bxAgents inspect --json
 ```
 
-Obtienes el árbol de agentes y subagentes con cada modelo, las herramientas y skills, a través de qué se expone el proyecto, la programación, y cada variable de entorno que necesita con una marca para las que no están definidas (solo nombres, nunca valores). `--md` escribe lo mismo como Markdown para un pull request. Consulta la [Referencia de la CLI](../cli-reference.md#inspect) para ver cada sección.
+Obtienes el árbol de agentes y subagentes con cada modelo, las herramientas y skills, a través de qué se expone el proyecto, la programación, y cada variable de entorno que necesita con una marca para las que no están definidas (solo nombres, nunca valores). `--md` escribe lo mismo como Markdown para un pull request. Consulta [Referencia de la CLI](../cli-reference.md#inspect) para ver cada sección.
 
 ## Lo que registró cada build: el manifiesto
 
 Cada `build` escribe además `.build/manifest.json`, un registro sellado con hashes de exactamente qué entró en el build - nombre del agente,
 modelo, entorno, y una entrada por cada archivo descubierto con un hash de contenido SHA-256.
 Esto es lo que hace que reconstruir un proyecto sin cambios sea idéntico byte a byte, la idea
-que conociste por primera vez en la [Lección 2](02-what-is-bxagents.md). Ábrelo en cualquier editor; `inspect` muestra su versión y número de archivos en la sección `build`.
+que conociste por primera vez en [¿Qué es BxAgents?](02-what-is-bxagents.md). Ábrelo en cualquier editor; `inspect` muestra su versión y número de archivos en la sección `build`.
 
 ## Limpiar
 
@@ -99,7 +99,7 @@ Elimina solo `.build/` y `dist/` - tus convenciones fuente no se tocan nunca.
 
 Un agente desplegado ya no está en tu propia máquina, así que decide quién puede llamarlo. La API
 del agente está abierta por defecto, lo cual es correcto en un portátil e incorrecto en internet.
-Antes de desplegar, define `agentApi` en `Agent.yml` ([Lección 13](13-exposing-http-and-mcp.md)):
+Antes de desplegar, define `agentApi` en `Agent.yml` ([Exponer tu agente por HTTP y MCP](13-exposing-http-and-mcp.md)):
 un secreto compartido en una variable de entorno, `tokens: true` para tokens por persona, y
 `allowedIPs` o `rateLimit` donde encajen. Ejecuta `token` donde está la base de datos del agente (en
 el servidor), crea uno para cada persona o programa, y habla con el despliegue desde tu propia terminal:
@@ -139,10 +139,10 @@ A lo largo de este curso has usado `new`, `build`, `test`, `chat`, `invoke`, `se
 La referencia completa de cada carpeta de convención que recorrió este curso.
 :::
 ::: card title="El pipeline de build" icon="phosphor-duotone:factory" href="../build-pipeline.md"
-Exactamente qué hace `build`, y en qué orden, con más profundidad que la Lección 7.
+Exactamente qué hace `build`, y en qué orden, con más profundidad que la lección Construir tu agente.
 :::
 ::: card title="Despliegue y secretos" icon="phosphor-duotone:lock-key" href="../deployment-and-secrets.md"
-Toda la historia de empaquetado y secretos de la Lección 20, en profundidad.
+Toda la historia de empaquetado y secretos de esta lección, en profundidad.
 :::
 :::
 
@@ -152,3 +152,5 @@ programación - en veinte lecciones. Todo lo que venga a partir de aquí es apli
 convenciones a lo que realmente quieras construir.
 
 Enhorabuena, y bienvenido a BxAgents.
+
+Siguiente: [Ship Acme Support](capstone.md)

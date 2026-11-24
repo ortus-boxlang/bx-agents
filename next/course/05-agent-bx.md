@@ -1,5 +1,5 @@
 ---
-title: "Lesson 5: The Agent Definition - Agent.yml"
+title: "The Agent Definition - Agent.yml"
 icon: phosphor-duotone:robot
 summary: The one required file - a plain YAML file that says what your agent is.
 description: The one required file - a plain YAML file that says what your agent is.
@@ -23,8 +23,8 @@ instructions: |
 ```
 
 That is a complete agent. `bxAgents new` scaffolds this shape for you (see
-[Lesson 4](04-scaffolding-your-first-agent.md)), with the system prompt in an
-`instructions.md` beside it (see [Lesson 6](06-instructions-and-system-prompt.md)).
+[Scaffolding Your First Agent](04-scaffolding-your-first-agent.md)), with the system prompt in an
+`instructions.md` beside it (see [instructions.md and the System Prompt](06-instructions-and-system-prompt.md)).
 
 !!! info
     A folder holds **one** agent definition. An `Agent.yml` together with an
@@ -39,15 +39,17 @@ That is a complete agent. `bxAgents new` scaffolds this shape for you (see
 | `model` | A `provider/model` slug (see below). |
 | `description` | Optional. |
 | `instructions` | Inline system prompt. An `instructions.md` beside the file wins when both exist. |
-| `tools` | Module tools this agent gets, as `item@module` or `*@module` (see [Lesson 9](09-giving-your-agent-tools.md)). |
+| `tools` | Module tools this agent gets, as `item@module` or `*@module` (see [Giving Your Agent Tools](09-giving-your-agent-tools.md)). |
 | `toolOptions` | Options for a module's tools, keyed by module name. |
-| `subAgents` | Names of sibling folders under `subagents/` (see [Lesson 11](11-composing-subagents.md)). |
-| `mcpServers` | Remote MCP servers the agent can call (see [Lesson 17](17-hosting-mcp-servers.md)). |
+| `subAgents` | Names of sibling folders under `subagents/` (see [Composing Subagents](11-composing-subagents.md)). |
+| `mcpServers` | Remote MCP servers the agent can call (see [Hosting and Consuming MCP Servers](17-hosting-mcp-servers.md)). |
 | `security`, `memory`, `checkpointer` | Guardrails, conversation memory and human-in-the-loop state. |
-| `gatewaySession` | How chat gateways queue messages, which slash commands they answer and whether they read attachments (see [Lesson 14](14-connecting-chat-platforms.md)). |
-| `agentApi` | The always-on agent API: who may call it (tokens, allowed addresses, rate limit) and where it is served (see [Lesson 13](13-exposing-http-and-mcp.md)). |
+| `gatewaySession` | How chat gateways queue messages, which slash commands they answer and whether they read attachments (see [Connecting Chat Platforms](14-connecting-chat-platforms.md)). |
+| `agentApi` | The always-on agent API: who may call it (tokens, allowed addresses, rate limit) and where it is served (see [Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md)). |
 | `environments` | Per-environment overrides (see below). |
-| `provider`, `params`, `options`, `providers`, `profiles`, `notes` (short notes the agent keeps), `usage` (record token counts for `bxAgents stats`), `tui` (the look of the terminal chat), `extensions`, and more | Further settings, all listed in the [Agent.yml](../conventions/agent-yaml.md) reference. |
+| `provider`, `params`, `options`, `providers`, `profiles` | The model and its settings (see [Models and Profiles](12-named-model-configs.md)). |
+| `notes`, `routines`, `vault`, `volumes`, `usage` | What the agent keeps and may do: short notes about people, prompts it runs on a schedule, secrets it may use, folders its file tools may reach, and a record of token counts for `bxAgents stats`. Each has a lesson later in the course. |
+| `tui`, `extensions`, and more | The look of the terminal chat, values for extensions and the rest, all listed in the [Agent.yml](../conventions/agent-yaml.md) reference. |
 
 An **unknown key is an error** that lists the valid ones, so a typo such as `modle:`
 can never quietly do nothing. Wrong types and empty values are errors too.
@@ -69,8 +71,9 @@ separate arguments. BxAgents splits the slug **on the first `/` only**:
 | `mock/mock-model` | `mock` | `mock-model` |
 
 `mock` is a real provider that never makes a network call - useful for tests (see
-[Lesson 19](19-testing-your-agent.md)) and for following this course with no API key
-at all.
+[Testing Your Agent](19-testing-your-agent.md)). The course itself uses `openai-compatible`
+against the scripted model instead, because that one also streams and calls tools like a real
+provider does.
 
 ## Adding settings
 
@@ -102,7 +105,7 @@ environments:
 The active environment resolves, highest wins: `--environment` CLI flag >
 `BX_AGENTS_ENV` env var > `"development"` default. `bxAgents build --environment=production`
 picks it up. Only the active block is applied, on top of the top-level keys. You'll use
-this exact mechanism for the `mock` provider in your tests ([Lesson 19](19-testing-your-agent.md)),
+this exact mechanism for the `mock` provider in your tests ([Testing Your Agent](19-testing-your-agent.md)),
 which is why `bxAgents new` already gives you a `test` block.
 
 Full reference: [Agent.yml](../conventions/agent-yaml.md).
@@ -135,4 +138,42 @@ Scaffold one with `bxAgents new --class`, or start in YAML and switch later: cre
 `Agent.bx`, move the settings across, and delete the `Agent.yml`. Full reference:
 [Agent.bx](../conventions/agent-bx.md).
 
-Next: [Lesson 6 - instructions.md and the System Prompt](06-instructions-and-system-prompt.md)
+## Try it
+
+Give Acme support a description, and turn on usage recording now so the later lessons have numbers to show.
+This replaces the file `bxAgents new` wrote (its `test` block stays):
+
+```yaml title="acme-support/Agent.yml"
+# Acme support: the agent this course builds, lesson by lesson.
+name: acme-support
+description: Answers questions about orders, returns and shipping for Acme.
+provider: openai-compatible
+model: fast-model
+usage: true
+
+environments:
+  test:
+    model: mock/mock-model
+```
+
+Ask the agent to check the file still describes a valid agent:
+
+```bash title="Terminal 2"
+cd ~/bxagents-course/acme-support
+bxAgents inspect --section=agents
+```
+
+```text title="You see"
+...
+<anything>acme-support  openai-compatible/fast-model
+...
+```
+
+A typo in a key is an error, not a silent no-op. Try `modle: x` on a new line, run `bxAgents inspect`, read the
+message that lists the valid keys, and take the line out again.
+
+## Checkpoint
+
+`acme-support/Agent.yml` is the file above. If it is not, `kit/resume.sh 05-agent-bx` puts it back.
+
+Next: [instructions.md and the System Prompt](06-instructions-and-system-prompt.md)

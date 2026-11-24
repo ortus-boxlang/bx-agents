@@ -1,5 +1,5 @@
 ---
-title: "Lección 7: Construir tu agente"
+title: "Construir tu agente"
 icon: phosphor-duotone:hammer
 summary: bxAgents build y el pipeline de cinco fases que convierte tu proyecto en una aplicación.
 description: bxAgents build y el pipeline de cinco fases que convierte tu proyecto en una aplicación.
@@ -83,4 +83,4 @@ qué entró en él. Hablarás con este agente construido en la siguiente lecció
 
 Referencia completa: [El pipeline de build](../build-pipeline.md).
 
-Siguiente: [Lección 8 - Hablar con tu agente](08-talking-to-your-agent.md)
+Siguiente: [Hablar con tu agente](08-talking-to-your-agent.md)
