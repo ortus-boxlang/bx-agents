@@ -256,6 +256,68 @@ task installDevLibs( type: Exec ) {
 }
 
 /**
+ * The web app (ui/), built with Node and Vite into src/main/bx/bxagentsui/includes/build. The output is NOT committed:
+ * createModuleStructure depends on uiBuild, so shadowJar, a release and a snapshot always ship a fresh web app, and
+ * `./gradlew uiBuild` builds only that. Building this project needs Java AND Node (a Node major of `uiNodeMajor`);
+ * there is no flag to skip it, and a missing or other Node fails the build with what to install.
+ */
+ext {
+	uiDir = file( 'ui' )
+	uiNodeMajor = 24 // keep ui/.nvmrc, ui/package.json "engines" and the workflows' setup-node in step
+	uiIsWindows = System.getProperty( 'os.name' ).toLowerCase().contains( 'windows' )
+}
+
+task uiCheckNode {
+	group = "build"
+	description = "Fails with a clear message unless Node ${uiNodeMajor} and npm are installed"
+	doLast {
+		def run = { String... cmd ->
+			try {
+				def p = new ProcessBuilder( ( uiIsWindows ? [ 'cmd', '/c' ] : [] ) + cmd.toList() ).redirectErrorStream( true ).start()
+				def out = p.inputStream.text.trim()
+				return p.waitFor() == 0 ? out : null
+			} catch ( IOException e ) {
+				return null
+			}
+		}
+		def fail = { String what ->
+			throw new GradleException( "${what}\n\n" +
+				"Building the BX Agents web app (ui/) needs Node ${uiNodeMajor} (LTS) and npm, besides Java. There is no way to skip it.\n" +
+				"Install Node ${uiNodeMajor} from https://nodejs.org/en/download (or `nvm install` / `fnm use` in ui/, which has an .nvmrc), " +
+				"make sure `node` and `npm` are on the PATH, and run the build again." )
+		}
+		def node = run( 'node', '--version' )
+		if ( node == null ) fail( "Node.js was not found on the PATH." )
+		if ( run( 'npm', '--version' ) == null ) fail( "npm was not found on the PATH (Node was: ${node})." )
+		def m = ( node =~ /^v?(\d+)\./ )
+		def major = m.find() ? m.group( 1 ) as int : -1
+		if ( major != uiNodeMajor ) fail( "Node ${uiNodeMajor} is required, found ${node}." )
+	}
+}
+
+task uiNpmCi( type: Exec ) {
+	group = "build"
+	description = "Installs the web app's npm dependencies from ui/package-lock.json (npm ci)"
+	dependsOn uiCheckNode
+	workingDir uiDir
+	inputs.files( 'ui/package.json', 'ui/package-lock.json', 'ui/.nvmrc' )
+	// npm writes this file in node_modules on every install: a cheap stand-in for the whole folder
+	outputs.file 'ui/node_modules/.package-lock.json'
+	commandLine( uiIsWindows ? [ 'cmd', '/c', 'npm', 'ci' ] : [ 'npm', 'ci' ] )
+}
+
+task uiBuild( type: Exec ) {
+	group = "build"
+	description = "Builds the web app with Vite into src/main/bx/bxagentsui/includes/build (needs Node ${uiNodeMajor})"
+	dependsOn uiCheckNode, uiNpmCi
+	workingDir uiDir
+	inputs.dir 'ui/resources'
+	inputs.files( 'ui/package.json', 'ui/package-lock.json', 'ui/vite.config.mjs' )
+	outputs.dir 'src/main/bx/bxagentsui/includes/build'
+	commandLine( uiIsWindows ? [ 'cmd', '/c', 'npm', 'run', 'build' ] : [ 'npm', 'run', 'build' ] )
+}
+
+/**
  * Custom task that creates a build/modules/bxagents folder - a real,
  * installable module structure.
  * - Copies the build/libs/bx-agents-{version}.jar to build/modules/bxagents/libs/
@@ -277,7 +339,7 @@ task createModuleStructure(type: Copy) {
 	mustRunAfter shadowJar, jar
 	// The bundled BoxLang modules and ColdBox libs must be in place BEFORE this copies
 	// and the zip is built, or a fresh build ships a zip without them
-	dependsOn "downloadModules", "installLibs"
+	dependsOn "downloadModules", "installLibs", "uiBuild"
     from( 'build/libs' ) {
 		include "${project.name}-${version}.jar"
         into 'libs'
@@ -311,7 +373,7 @@ task createModuleStructure(type: Copy) {
     from( 'src/main/bx' ) {
 		include 'templates/coldbox-boxlang/**'
     }
-    // the web app module's Vite build (scripts, styles and the manifest naming them), copied as built: no token filter
+    // the web app module's Vite build (scripts, styles and the manifest naming them, made by uiBuild), copied as built: no token filter
     from( 'src/main/bx' ) {
 		include 'bxagentsui/includes/build/**'
     }

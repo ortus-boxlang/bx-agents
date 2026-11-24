@@ -149,7 +149,7 @@ The rest of this readme covers developing BxAgents itself (this repo), not build
 
 ### Gradle Tasks
 
-Before you get started, fetch the BoxLang binary (until this module is published to Maven):
+Building needs Java and Node 24 (see `ui/.nvmrc`). Before you get started, fetch the BoxLang binary (until this module is published to Maven):
 
 ```bash
 ./gradlew downloadBoxLang     # BoxLang core, MiniServer, and bundled BX Agents modules
@@ -160,6 +160,7 @@ Before you get started, fetch the BoxLang binary (until this module is published
 | `build` | The default lifecycle task: `clean`, `assemble`, and others. |
 | `clean` | Deletes the `build` folder. |
 | `compileJava` | Compiles Java source in `src/main/java`. |
+| `uiBuild` | Builds the web app in `ui/` with Vite (`npm ci`, `npm run build`) into `src/main/bx/bxagentsui/includes/build` (not committed). Needs Node 24; `createModuleStructure` and so `shadowJar` run it. |
 | `test` | Runs the JUnit suite. |
 | `testBx` | Runs the TestBox BDD suite (`tests/specs`, excluding the ColdBox-dependent bundle) via `runTests.bxs`. Runs `installDevLibs` first for TestBox. |
 | `testColdBoxIntegration` | Boots a real `boxlang-miniserver` against a generated app and hits a `toAi()` route over real HTTP, via `runColdBoxIntegrationTests.bxs`. Needs the miniserver jar; ColdBox and its modules come from the module's bundled `lib/`. |

@@ -10,7 +10,7 @@ The web app is a ColdBox module, `bxagentsui`, built the cbGenesis way. Read thi
 | Partials (cbGenesis `_components`) | `src/main/bx/bxagentsui/views/_components/{app,ui}/` |
 | Sass (tokens, base, layouts, components, views, in that order) | `ui/resources/assets/scss/` |
 | Alpine (one `App.js`, `stores/`, `components/<domain>/`, `utils/`) | `ui/resources/assets/js/` |
-| Vite output, committed so an agent build needs no Node | `src/main/bx/bxagentsui/includes/build/` |
+| Vite output, not committed: `./gradlew uiBuild` (also run by `shadowJar`) or `npm run build` makes it | `src/main/bx/bxagentsui/includes/build/` |
 | The dev agent and its scripted model | `ui/dev/` |
 | Browser tests | `ui/tests/e2e/` |
 | Project shapes (other paths, a password, no accounts) | `ui/dev/shapes/`, `ui/tests/shapes/` |

@@ -56,6 +56,14 @@ jobs:
           distribution: "temurin"
           java-version: ${{ matrix.jdkVersion }}
 
+      # Gradle builds the web app (ui/) into the module: Node 24 is as required as Java
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
       - name: Setup CommandBox CLI
         uses: ortus-boxlang/setup-boxlang@main
         with:
@@ -100,13 +108,6 @@ jobs:
 
       # The web app in a real browser: the dev agent (ui/dev/agent) built and served by this module, against a scripted
       # model, driven by Playwright (ui/tests/e2e). The same suite a developer runs with `npm run e2e` in ui/.
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: ui/package-lock.json
-
       - name: Lint, build and test the web app
         timeout-minutes: 35
         working-directory: ui
@@ -119,9 +120,8 @@ jobs:
           npm run lint:scss
           npm run lint:md
           npm test
-          # the committed build must be what the sources build to: an agent build ships it as it is
+          # the build is not committed: Gradle makes it (uiBuild); this checks the web app builds on its own
           npm run build
-          git diff --exit-code -- ../src/main/bx/bxagentsui/includes/build
           npx playwright install --with-deps chromium
           npm run e2e
           # every page over a real server for other project shapes (ui/dev/shapes): another path, a password, no accounts

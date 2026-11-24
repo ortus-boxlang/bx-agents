@@ -46,6 +46,12 @@ const hotFile = path.join( repo, "src/main/bx/bxagentsui/includes/hot" );
 if ( !process.env.UI_VITE_DEV && fs.existsSync( hotFile ) ) {
 	fs.rmSync( hotFile );
 }
+// the scripts and styles are not committed: without the Vite build the app loads nothing, so say how to make it
+if ( !process.env.UI_VITE_DEV && !fs.existsSync( path.join( repo, "src/main/bx/bxagentsui/includes/build/.vite/manifest.json" ) ) ) {
+	console.error( "The web app is not built: src/main/bx/bxagentsui/includes/build/.vite/manifest.json is missing.\n" +
+		"Run `npm run build` in ui/ (or `./gradlew uiBuild` in the repository root), or use `npm run dev`." );
+	process.exit( 1 );
+}
 const classPath = [
 	boxlangJar,
 	path.join( repo, "build/classes/java/main" )
