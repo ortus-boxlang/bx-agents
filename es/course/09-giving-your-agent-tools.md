@@ -74,7 +74,7 @@ class {
 
 	@AITool( "Get the current server time." )
 	function now() {
-		return dateTimeFormat( now(), "yyyy-mm-dd HH:nn:ss" );
+		return dateTimeFormat( now(), "yyyy-MM-dd HH:mm:ss" );
 	}
 
 }

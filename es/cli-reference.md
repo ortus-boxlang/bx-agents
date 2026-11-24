@@ -668,7 +668,7 @@ Dos prefijos en la caja de mensaje ejecutan algo en **tu propia máquina**, nunc
 |---|---|
 | `!comando` | Ejecuta un comando de shell (`sh -c`, o `cmd /c` en Windows) en la carpeta donde empezaste. Su salida (salida estándar y error juntas, cortada a 20.000 caracteres, detenida a los 60 segundos) se muestra y **acompaña a tu siguiente mensaje**, para que el agente vea lo que viste tú |
 | `!!comando` | Lo mismo, solo en pantalla |
-| `#funcion( argumentos )` | Llama a una función integrada de BoxLang, como `#dateFormat( now(), 'yyyy-mm-dd' )` o `#listLen( 'a,b,c' )`. El resultado se muestra (un struct o array como JSON) y acompaña al siguiente mensaje |
+| `#funcion( argumentos )` | Llama a una función integrada de BoxLang, como `#dateFormat( now(), 'yyyy-MM-dd' )` o `#listLen( 'a,b,c' )`. El resultado se muestra (un struct o array como JSON) y acompaña al siguiente mensaje |
 | `##funcion( argumentos )` | Lo mismo, solo en pantalla |
 
 Tras `!` debe venir el comando de inmediato (`! hola` es un mensaje) y tras `#` una llamada (`# Un título` y `#hashtag` son mensajes). Una llamada es **solo** una llamada: como argumento, una cadena (`'..'` o `".."`), un número, `true`, `false`, `null`, un array, un struct o una llamada anidada, posicional o con nombre, y nada más. No hay variables, operadores, acceso con `.` ni sentencias, y un nombre que no sea una función integrada registrada se rechaza antes de ejecutar nada. Lo que espera al siguiente mensaje aparece en `/context` (como *Attached*) y en la barra de estado, y desaparece al enviar el mensaje.

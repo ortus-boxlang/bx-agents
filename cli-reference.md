@@ -709,7 +709,7 @@ Two prefixes in the message box run something on **your own machine**, never on 
 |---|---|
 | `!command` | Runs a shell command (`sh -c`, or `cmd /c` on Windows) in the folder you started in. Its output (standard output and error together, cut at 20,000 characters, stopped after a minute) is shown, and **goes with your next message**, so the agent sees what you saw |
 | `!!command` | The same, shown on screen only |
-| `#function( arguments )` | Calls one BoxLang built-in function, such as `#dateFormat( now(), 'yyyy-mm-dd' )` or `#listLen( 'a,b,c' )`. The result is shown (a struct or array as JSON) and goes with the next message |
+| `#function( arguments )` | Calls one BoxLang built-in function, such as `#dateFormat( now(), 'yyyy-MM-dd' )` or `#listLen( 'a,b,c' )`. The result is shown (a struct or array as JSON) and goes with the next message |
 | `##function( arguments )` | The same, shown on screen only |
 
 `!` must be followed at once by the command (`! hello` is a message) and `#` by a call (`# A heading` and `#hashtag` are messages). A call is **only** a call: a string (`'..'` or `".."`), number, `true`, `false`, `null`, array, struct or nested call as an argument, positional or named, and nothing else. There are no variables, operators, `.` access or statements, and a name that is not a registered built-in function is refused before anything runs. What waits for the next message shows in `/context` (as *Attached*) and in the status bar, and is gone once the message is sent.
