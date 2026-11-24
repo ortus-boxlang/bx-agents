@@ -72,7 +72,7 @@ class {
 }
 ```
 
-This one is big enough to earn its own lesson - see [The Generated Web Chat UI](15-the-generated-web-chat-ui.md).
+This one is big enough to earn its own lesson - see [The Web App](15-the-generated-web-chat-ui.md).
 
 ## The agent API that is always there
 
@@ -123,17 +123,73 @@ entry's file name.
 
 ## Try it
 
-```bash
+Acme support already has the web app's gateway from [The Web App](15-the-generated-web-chat-ui.md). Add a plain HTTP
+entry point of your own at a path you choose (`add gateway api` writes the `exposes: "agent"` file above), rebuild
+and serve it (Terminal 3):
+
+```bash title="Terminal 2"
+cd ~/bxagents-course/acme-support
+bxAgents add gateway api --path=/api/chat
 bxAgents build
-bxAgents serve --port=8080
-curl -X POST http://localhost:8080/api/chat/invoke \
-  -H "Content-Type: application/json" \
-  -d '{"input":"Hi there"}'
 ```
 
-(Or skip `serve` entirely and reach for `bxAgents invoke --message=Hello --server`
-from [Talking to Your Agent](08-talking-to-your-agent.md), which exercises this exact route without
-you having to manage the server process yourself.)
+```text title="You see"
++ Created  gateways/api.bx
+...
+Build succeeded: <anything>/acme-support/.build/app
+```
+
+<!-- course: background name=serve ready-url=http://127.0.0.1:8791/chat -->
+```bash title="Terminal 3"
+cd ~/bxagents-course/acme-support
+bxAgents serve --port=8791
+```
+
+Call your own route, then the one that is always there. Both answer the same way:
+
+```bash title="Terminal 2"
+curl -s -H 'Content-Type: application/json' -d '{"input":"hello"}' http://127.0.0.1:8791/api/chat/invoke
+echo
+curl -s -H 'Content-Type: application/json' -d '{"input":"hello"}' http://127.0.0.1:8791/__bxagents/invoke
+echo
+curl -s http://127.0.0.1:8791/__bxagents/openapi | grep -o '"title":"[^"]*"'
+```
+
+```text title="You see"
+{"output":"Hello from the practice model. I am scripted: I only say what the course told me to say.","threadId":"<anything>","success":true}
+{"output":"Hello from the practice model. I am scripted: I only say what the course told me to say.","threadId":"<anything>","success":true}
+"title":"acme-support agent API"
+```
+
+The OpenAPI document lists every route the server really has, so any OpenAPI tool can call the agent. From BoxLang,
+the client has one method per route. Save this next to the project and run it:
+
+```javascript title="ask.bxs"
+import bxModules.bxagents.models.api.AgentApiClient;
+
+client = new AgentApiClient( url = "http://127.0.0.1:8791" );
+println( client.invoke( "hello" ).output );
+println( client.about().name );
+```
+
+```bash title="Terminal 2"
+cd ~/bxagents-course
+boxlang ask.bxs
+```
+
+```text title="You see"
+Hello from the practice model. I am scripted: I only say what the course told me to say.
+acme-support
+```
+
+The terminal chat can talk to a running server too (`bxAgents chat --connect=http://127.0.0.1:8791`), and has the
+same conversations as the web app. Who is *allowed* to call all this is the subject of
+[Who Is Allowed](users-roles-and-tokens.md). The whole tour, with every route, is [Call your agent from code](../guides/agent-api.md).
+
+## Checkpoint
+
+`acme-support/gateways/` has `web.bx` and `api.bx`. `kit/resume.sh 13-exposing-http-and-mcp` restores them; rebuild
+after.
 
 Full reference: [gateways/](../conventions/gateways/index.md).
 

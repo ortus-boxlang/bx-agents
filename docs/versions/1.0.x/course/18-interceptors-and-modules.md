@@ -41,7 +41,7 @@ choice, since `runtime` scope has effects beyond one app. An `@scope` value that
 `agent` or `runtime` fails the build with a clear error.
 
 You've already seen a **generated** interceptor without writing one yourself - when you list
-`users` on the web chat ([The Generated Web Chat UI](15-the-generated-web-chat-ui.md)), its sign-in gate is
+`users` on the web chat ([The Web App](15-the-generated-web-chat-ui.md)), its sign-in gate is
 registered exactly this way, just written by BxAgents instead of by you.
 
 ## `extensions/` - add to the chat and the served agent
@@ -107,11 +107,68 @@ declared dependencies.
 
 ## Try it
 
-Try `bxAgents add extension hello --with=command` and `/hello` in the chat. Then add an `interceptors/RequestLogger.bx` with an explicit `@scope agent` annotation that
-logs every incoming request via `writeLog()`, rebuild, and check
-`.build/app/interceptors/` for the copy plus its registration in
-`.build/app/bxagents/Application.bx`.
+Two small additions to Acme support. First an interceptor that writes a log line for every request. It is `agent`
+scope (the default) and says so:
 
-Full reference: [interceptors/](../conventions/interceptors.md), [modules/](../conventions/modules.md).
+```javascript title="acme-support/interceptors/RequestLogger.bx"
+/**
+ * @scope agent
+ */
+class {
+
+	function preProcess( event, interceptData ) {
+		writeLog( text = "Acme request", type = "information" )
+	}
+
+}
+```
+
+Second an extension that adds a chat command, `/hello`. One file is a whole extension (the guide
+[Your first extension](../guides/first-extension.md) goes on from here, and `bxAgents add extension standup` writes a
+richer frame):
+
+```javascript title="acme-support/extensions/hello.bx"
+class {
+
+	@Command( "hello" )
+	@Hint( "say hello: /hello <name>" )
+	function greet( agentContext, commandArguments ) {
+		return agentContext.reply().ok( "Hello, #commandArguments#!" )
+	}
+
+}
+```
+
+Build, check that the interceptor was copied into the app, and that the extension loads:
+
+```bash title="Terminal 2"
+cd ~/bxagents-course/acme-support
+bxAgents build
+ls .build/app/interceptors
+bxAgents extensions list
+```
+
+```text title="You see"
+Build succeeded: <anything>/acme-support/.build/app
+RequestLogger.bx
+hello (project, loaded)
+    commands:   /hello
+```
+
+Now open the terminal chat and type `/hello Ada`: the answer is `Hello, Ada!`, written by your extension, and `/extensions`
+lists it. The same command runs in the web app's chat. It never reached the model.
+
+<!-- course: manual -->
+```bash title="Terminal 2"
+bxAgents chat
+```
+
+## Checkpoint
+
+`acme-support/` has `interceptors/RequestLogger.bx` and `extensions/hello.bx`. `kit/resume.sh 18-interceptors-and-modules`
+restores them; rebuild after.
+
+Full reference: [interceptors/](../conventions/interceptors.md), [extensions/](../conventions/extensions.md) and
+[modules/](../conventions/modules.md).
 
 Next: [Testing Your Agent](19-testing-your-agent.md)

@@ -8,8 +8,8 @@ tags: [course, deployment]
 
 # Packaging, Deploying, and Wrapping Up
 
-You've built an agent with tools, skills, subagents, an HTTP route, a chat-platform
-connection, a web UI, a schedule, and a test suite. This last lesson ships it.
+You've built Acme support: an agent with tools, skills, subagents, an HTTP route, a web app, routines, people and
+tokens, a vault, a test suite and a backup. This lesson ships it.
 
 ## The chain, end to end
 
@@ -114,6 +114,51 @@ The conversations, notes and tokens live in one SQLite file, `chat.db` in the ag
 `bxAgents notes list` read it from a shell, and `bxAgents stats` shows what the model calls used when
 `usage: true` is set.
 
+## What travels, and what does not
+
+A deployed agent is the package plus three things that stay outside it:
+
+| Stays outside | Why | How it gets there |
+|---|---|---|
+| **Environment variables** (`OPENAI_API_KEY`, `ACME_ADA_PASSWORD`, `BXAGENTS_VAULT_KEY`) | Secrets never enter the artifact | Set on the server, or by the deploy target's `envs` |
+| **The data home** (`~/.bxagents/acme-support/`) | Conversations, notes, tokens, routines and the sealed vault are *state*, not code | `bxAgents backup` on the old machine, `bxAgents restore` on the new one |
+| **The vault key** | The vault is sealed with it, and a backup is no use without it | Set `BXAGENTS_VAULT_KEY` yourself, kept apart from the backup |
+
+So moving to a new machine is: install BoxLang and BxAgents there, unpack the `.bxa`, set the variables, `restore` the
+backup, start the server. The [vault lesson](the-vault.md) says why a secret is not written in `.env` for the model to
+use, and [Logs, Usage and Backups](operating-it.md) makes and restores a backup.
+
+## Try it
+
+Build, package and deploy Acme support to a folder (the `local` target needs no server):
+
+```bash title="Terminal 2"
+cd ~/bxagents-course/acme-support
+bxAgents build
+bxAgents package --version=1.0.0
+ls dist
+bxAgents deploy --destination=$HOME/acme-deploy
+ls ~/acme-deploy
+```
+
+```text title="You see"
+Build succeeded: <anything>/acme-support/.build/app
+Packaged: <anything>/dist/acme-support-1.0.0.bxa
+acme-support-1.0.0.bxa
+acme-support-1.0.0.bxa.sha256
+manifest.json
+Deployed acme-support-1.0.0.bxa to <anything>
+acme-support-1.0.0.bxa
+```
+
+The `.sha256` lets a server check the artifact it received, and the redacted `manifest.json` records what went in.
+Packaging the same build twice gives the same bytes. Nothing of your `.env`, your data home or your vault is in the
+`.bxa`.
+
+## Checkpoint
+
+Nothing in the project changed (`dist/` is output, and `.gitignore` ignores it).
+
 ## Every verb, in one place
 
 You've now used `new`, `build`, `test`, `chat`, `invoke`, `serve`, `package`, `deploy`,
@@ -145,11 +190,7 @@ The full packaging and secrets story from this lesson, in depth.
 :::
 :::
 
-You went from an empty terminal to a tested, packaged, deployable agent with tools,
-skills, subagents, a chat-platform connection, a browser UI, and a schedule - in
-twenty lessons. Everything from here is applying these same conventions to whatever
-you actually want to build.
-
-Congratulations, and welcome to BxAgents.
+One lesson is left: [Ship Acme Support](capstone.md) runs the whole agent end to end and shows the one-line swap to a
+real model.
 
 Next: [Ship Acme Support](capstone.md)

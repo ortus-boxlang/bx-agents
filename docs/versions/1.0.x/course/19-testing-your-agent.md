@@ -14,7 +14,7 @@ already has a root `box.json` (TestBox as a development dependency) and a ready-
 
 ```bash
 cd my-agent
-box install       # fetches testbox into lib/testbox - new already ran this for you
+box install       # fetches testbox into lib/testbox (new does it too, unless you pass --skipInstall)
 bxAgents test
 ```
 
@@ -96,15 +96,68 @@ expect( agent ).notToHaveCalledTool( "getStockPrice" )
 
 ## Try it
 
-Write a spec that scripts a tool call for the `GetTime` tool from
-[Giving Your Agent Tools](09-giving-your-agent-tools.md), and assert `toHaveCalledTool( "currentTime" )`.
+You made Acme support with `--skipInstall`, so TestBox is not there yet. Install it (this needs the internet; `box` is
+the CommandBox command, see [Installing BxAgents](03-installing-bxagents.md)). The suite `new` wrote passes straight away:
 
-```bash
+<!-- course: network -->
+```bash title="Terminal 2"
+cd ~/bxagents-course/acme-support
+box install
 bxAgents test
 ```
 
-Prints pass/fail/error/skipped counts, one line per failure, and exits non-zero on
-failure - suitable as a CI gate before you deploy in the next lesson.
+<!-- course: network -->
+```text title="You see"
+...
+Bundles: 1 | Suites: 1 | Specs: 1
+Pass: 1 | Fail: 0 | Error: 0 | Skipped: 0
+```
+
+Now test what Acme cares about: that a question about an order calls the order tool. The mocked model first asks for the
+tool, the tool really runs against your `tools/Orders.bx`, and the mocked model then answers:
+
+```javascript title="acme-support/tests/specs/OrderSpec.bx"
+class extends="bxModules.bxagents.models.testing.BaseAgentSpec" {
+
+	function run() {
+		describe( "order lookups", function() {
+
+			it( "calls the order tool and reports the answer", function() {
+				mockResponses( [
+					{ toolCalls : [ { name : "orderStatus", arguments : { orderNumber : "48213" } } ] },
+					"Order 48213 has shipped."
+				] )
+
+				var response = agent.run( "Where is order 48213?" )
+
+				expect( agent ).toHaveCalledTool( "orderStatus" )
+				expect( response ).toContainText( "shipped" )
+			} )
+
+		} )
+	}
+
+}
+```
+
+<!-- course: network -->
+```bash title="Terminal 2"
+bxAgents test
+```
+
+<!-- course: network -->
+```text title="You see"
+Bundles: 2 | Suites: 2 | Specs: 2
+Pass: 2 | Fail: 0 | Error: 0 | Skipped: 0
+```
+
+`test` prints pass, fail, error and skipped counts, one line per failure, and exits non-zero on a failure, so it can gate
+a deploy in the last lesson. Because the model is mocked, the suite needs no key, no network and no scripted model; the
+scripted model of this course is for *talking* to the agent, the mock for *proving* it.
+
+## Checkpoint
+
+`acme-support/tests/specs/` has `AgentSpec.bx` and `OrderSpec.bx`. `kit/resume.sh 19-testing-your-agent` restores them.
 
 Full reference: [tests/](../conventions/testing.md).
 

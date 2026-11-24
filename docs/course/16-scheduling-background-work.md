@@ -8,6 +8,19 @@ tags: [course, conventions, scheduling]
 
 # Scheduling Background Work
 
+There are two ways to make an agent do something on a clock, for two different people.
+
+| | Scheduler (`schedules/*.bx`) | Routine ([the last lesson](routines-and-reports.md)) |
+|---|---|---|
+| Made by | You, the developer, in a file | Anyone who uses the agent, by asking it |
+| Lives | In the project, shipped with the agent | In the chat database, per person |
+| Runs as | The app, with no person behind it | The person who made it |
+| Changed by | Editing the file and rebuilding | Asking, while the app runs |
+| When | BoxLang's task methods (this lesson) | A 5-field cron or `every 30m`, read in the routine's time zone |
+
+Reach for a scheduler for what the *agent's owner* wants to happen whatever anyone says (a nightly clean-up, a digest
+to a fixed audience). Reach for a routine for what one *person* wants ("every weekday at 9, check my orders").
+
 Every `schedules/*.bx` is a **BoxLang scheduler**: a plain class whose `configure()`
 builds tasks. There is no ColdBox in it and nothing to extend - the build adds the
 base class that gives it `task()`, `run()` and `agent()`.
@@ -59,18 +72,49 @@ agent name surfaces when the app starts (`serve`), not at `build`.
 
 ## Try it
 
-```bash
-bxAgents add schedule --when="weekdays 08:30" --prompt="Summarize yesterday's findings"
-bxAgents build --verbose
+Acme wants a digest every weekday morning. Write the scheduler. (`bxAgents add schedule` writes the same shape from
+`--when` and `--prompt`; its phrases have spaces, so with the 1.19.0 launcher it is easier to write the file.) It
+asks the `researcher` subagent from [Composing Subagents](11-composing-subagents.md) a question; `agent( "researcher" )`
+finds it by the `name` its definition declares:
+
+```javascript title="acme-support/schedules/Digest.bx"
+class {
+
+	function configure() {
+		task( "morning-digest" )
+			.onWeekdays( "08:30" )
+			.call( () => agent( "researcher" ).run( "refund" ) )
+			.withNoOverlaps()
+	}
+
+}
+```
+
+Build, and ask `inspect` what the project would schedule. `inspect` reads the source, so nothing has to run:
+
+```bash title="Terminal 2"
+cd ~/bxagents-course/acme-support
+bxAgents build
 bxAgents inspect --section=schedule
 ```
 
-(With the BoxLang 1.19.0 launcher a quoted value with spaces is split at the spaces; see [Quoting flag values](../cli-reference.md#quoting-flag-values).)
+```text title="You see"
+Build succeeded: <anything>/acme-support/.build/app
+...
+Digest<anything>
+...
+morning-digest<anything>
+...
+```
 
-`add schedule` writes `schedules/<Name>.bx` with the task's own methods (this one is
-`.onWeekdays( "08:30" )`); `inspect` lists each scheduler with its tasks, when each
-runs and the agent. A cron expression you pass to `--when` is written as a six-field
-`.cron()`.
+The task runs while the app is served (`bxAgents serve`), at 08:30 on weekdays, and the course does not wait for a clock.
+A five-field cron in `.cron()` does not fire on BoxLang 1.19.0, so use the task methods or six fields
+(`0 30 8 * * MON-FRI`), as [schedules/](../conventions/schedules.md#cron) explains. Routines have no such trap: they
+store a five-field cron and the app's own one-minute heartbeat reads it.
+
+## Checkpoint
+
+`acme-support/schedules/Digest.bx` exists. `kit/resume.sh 16-scheduling-background-work` restores it; rebuild after.
 
 Full reference: [schedules/](../conventions/schedules.md).
 

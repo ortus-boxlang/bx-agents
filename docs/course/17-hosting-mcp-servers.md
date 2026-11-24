@@ -91,13 +91,65 @@ class {
 }
 ```
 
+## Connectors: ready-made servers, signed in per person
+
+Consuming a server by writing its address in `Agent.yml` is for services you choose. BxAgents also ships a catalog
+of **connectors**: ready-made connections to seven services (GitHub, Stripe, Notion, Atlassian, Cloudflare, Supabase
+and Git). Every agent offers them, and none is connected until a person connects *their own* account; the token is
+sealed in [the vault](the-vault.md) and locked to the service's host, and the model never sees it.
+
+![The Connectors page: the built-in connectors, each with its risk and how it signs in](../assets/webui/connectors.png)
+
+`bxAgents connectors list` shows the catalog, and `bxAgents connect github` (or the **Connectors** page of the web app)
+connects one. `connectors: { only: [ github ] }` in `Agent.yml` limits what the agent offers. See
+[connectors](../conventions/connectors.md) and [connect](../conventions/connect.md).
+
 ## Try it
 
-Host the `GetTime` tool you wrote in [Giving Your Agent Tools](09-giving-your-agent-tools.md) as its
-own MCP server (`tools: [ "currentTime" ]`, the tool's function name), expose it at `/mcp/tools`, build, and `serve` - it's now reachable by
-any outside MCP client, independent of your agent's own chat interface.
+Acme's `orderStatus` tool from [Giving Your Agent Tools](09-giving-your-agent-tools.md) should be usable by other
+agents too. Host it as its own MCP server. `add mcp server` writes the `mcp/` file with the tools it finds and the
+`gateways/` entry that serves it (the description has no spaces, because of the launcher rule):
 
-`bxAgents add mcp server` writes the `mcp/` file and the `gateways/` entry for you. Full
-reference: [mcp/](../conventions/mcp.md).
+```bash title="Terminal 2"
+cd ~/bxagents-course/acme-support
+bxAgents add mcp server tools --description=Acme-tools --yes
+bxAgents connectors list
+```
+
+```text title="You see"
++ Created  mcp/tools.bx
++ Created  gateways/toolsMcp.bx
+...
+ID           NAME                              HOW IN              RISK    VERIFIED
+...
+github<anything>
+...
+7 connectors. Nothing is active until a person connects one. bxAgents connectors show <id> says more.
+```
+
+`mcp/tools.bx` lists `tools: [ "orderStatus" ]` (a tool added later has to be added there), and
+`gateways/toolsMcp.bx` serves it at `/mcp/tools` once the app runs. That route has no authentication of its own: keep
+it off public networks or put it behind a proxy that checks a credential. Check the wiring without serving:
+
+```bash title="Terminal 2"
+bxAgents build
+bxAgents inspect --section=mcp
+```
+
+```text title="You see"
+Build succeeded: <anything>/acme-support/.build/app
+...
+tools<anything>orderStatus<anything>
+...
+```
+
+Any outside MCP client can now list and call `orderStatus`, independent of your agent's own chat interface.
+
+## Checkpoint
+
+`acme-support/` has `mcp/tools.bx` and `gateways/toolsMcp.bx`. `kit/resume.sh 17-hosting-mcp-servers` restores them;
+rebuild after.
+
+Full reference: [mcp/](../conventions/mcp.md).
 
 Next: [Who Is Allowed](users-roles-and-tokens.md)
