@@ -294,10 +294,15 @@ export function chatPage() {
 				return;
 			}
 			this.loading = true;
-			const result = await this.$api.get( "/history?conversationId=" + encodeURIComponent( this.conversationId ) );
+			const asked = this.conversationId;
+			const result = await this.$api.get( "/history?conversationId=" + encodeURIComponent( asked ) );
 			this.loading = false;
 			// a history that cannot be read never blocks the chat
 			this.messages = result.ok ? transcriptOf( result.data.messages ) : [];
+			// the conversation says whose it is, so it need not be one of the rows the list holds
+			if ( result.ok && typeof result.data.agent === "string" && asked === this.conversationId ) {
+				this.agent = agentOfRow( result.data, this.$store.session.agentName );
+			}
 			this.scrollToEnd( true );
 			this.refreshContext();
 		},

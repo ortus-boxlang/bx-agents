@@ -123,6 +123,23 @@ class {
 	}
 
 	/**
+	 * The agent a conversation of the caller belongs to: the one it started with, by the name the list shows (the main
+	 * agent's name when it has none of its own). Somebody else's conversation, and one that does not exist, answer the same.
+	 *
+	 * @return The agent's name, or blank when the caller has no such conversation
+	 */
+	string function ownerOf( required any caller, required string conversationId ) {
+		if ( !len( arguments.conversationId ) ) {
+			return ""
+		}
+		var row = variables.sessions.byId( arguments.caller.id(), arguments.conversationId )
+		if ( row.isEmpty() ) {
+			return ""
+		}
+		return len( row.agent ?: "" ) ? row.agent : mainName()
+	}
+
+	/**
 	 * Starts a conversation and gives its id. The id is made here, never taken from the client: one the client
 	 * chose could collide with a conversation that exists.
 	 *

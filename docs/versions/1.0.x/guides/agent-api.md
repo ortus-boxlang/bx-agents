@@ -207,7 +207,7 @@ There are 82 routes (90 verb and path pairs); the token routes are there only wi
 | `POST /sessions` | Caller | Starts a conversation, for the main agent or one named in agent. |
 | `GET /sessions` | Caller | A page of the caller's conversations, newest first, with the total that match. |
 | `GET /export` | Caller | One conversation as a file, Markdown or a page of HTML. |
-| `GET /history` | Caller | The messages of one conversation. |
+| `GET /history` | Caller | The messages of one conversation, and `agent`, the agent it belongs to (the one it started with). |
 | `POST /clear` | Caller | Deletes the messages of a conversation, keeps the conversation. |
 | `POST /compact` | Caller | Summarizes the older messages and keeps the recent ones. |
 | `POST /memory/clear` | Caller | Forgets the messages of conversations and keeps the conversations: one of the caller's (conversationId), or with all (an admin) every conversation, or those of one agent. |
