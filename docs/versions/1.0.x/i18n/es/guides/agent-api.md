@@ -68,6 +68,18 @@ client.stream( "Dilo más corto.", ( text ) => print( text ), first.threadId );
 
 Construye el cliente con argumentos con nombre. Hay un método por cada ruta: `invoke`, `stream`, `events`, `resume`, `cancel`, `steer`, `sessions`, `history`, `export`, `notes`, `preferences`, `command`, `tokens` y el resto. Una petición incorrecta vuelve como `{ success: false, error, code }`; un token rechazado, una ruta que falta o un fallo del servidor se lanzan como error. Pasa `path` cuando el servidor movió la API con `agentApi.path`, y `source` para nombrar tu programa en la lista de conversaciones.
 
+## Qué acepta un turno
+
+Además de `input`, `conversationId`, `threadId` y `attachments`, una petición de turno puede llevar dos structs pequeños, y solo se usan estas claves:
+
+| Campo | Clave | Significado |
+|---|---|---|
+| `options` | `profile` | El nombre de un [perfil ofrecido](../conventions/agent-bx.md#agentapi) (`GET /profiles`). Cualquier otro nombre es un `400` `bad_profile`. |
+| `params` | `temperature` | Un número de 0 a 2. |
+| `params` | `max_tokens` | Un número entero de 1 a 1000000. |
+
+Todo lo demás se descarta sin error, y el servidor registra los nombres ignorados (nunca los valores). Las claves que empiezan por `_` son internas de la biblioteca de modelos y nunca se aceptan. Es una regla de seguridad: una clave como `options._resumeContext` haría que la biblioteca ejecutara llamadas a herramientas que aporta la petición sin pedir aprobación, y `params.model` u `options.apiKey` dejarían que quien llama elija un modelo que paga el servidor. La persona, el hilo y la conversación salen del token y de la petición, nunca de `options`.
+
 ## Streams
 
 `stream` y `events` responden con eventos enviados por el servidor: cada frame es `event: <nombre>` y luego `data: <json>`.

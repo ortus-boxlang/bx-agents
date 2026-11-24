@@ -1,0 +1,68 @@
+/**
+ * What a client of the agent API may put in `options` and `params` of a turn, and nothing else.
+ *
+ * Why an allowlist: TurnRunner used to pass the caller's `options` to bx-ai whole. bx-ai reads `options._resumeContext`
+ * into the chat request, and the provider then runs the tool calls it carries without ever reaching the approval
+ * middleware (beforeToolCall), so a caller with chat scope could run any tool, approval-gated or not. The same
+ * pass-through let a caller pick the model (`params.model`), the key (`options.apiKey`), the provider payload
+ * (`returnFormat`) and script a reply (`providerOptions.responses`), which `agentApi.profiles` was meant to prevent.
+ *
+ * What clients send today (the web page, AgentApiClient, the terminal over HTTP and the gateways): `options.profile`,
+ * nothing in `params`. So the allowlist is that and the two sampling knobs `ModelTuning` already knows:
+ *
+ *   options  profile (a name; OfferedProfiles decides whether it is offered)
+ *   params   temperature (0 to 2), max_tokens (a whole number of 1 or more)
+ *
+ * Everything else is dropped without an error: a client library that sends a field this server does not take still
+ * works, and a hostile request gets no answer that tells it which key mattered. The names that were dropped (never
+ * the values) are returned so the caller can log them. A key starting with `_` is internal to bx-ai and is never
+ * accepted, whatever the allowlist says. The server sets `userId`, `threadId` and `conversationId` itself, after this.
+ */
+class {
+
+	// the names clients may send and the check each value must pass; lower case, matched ignoring case
+	static {
+		ALLOWED_OPTIONS = { profile : ( v ) => isSimpleValue( v ) && !isBoolean( v ) && len( trim( v ) ) > 0 && len( v ) <= 200 };
+		ALLOWED_PARAMS = {
+			temperature : ( v ) => isSimpleValue( v ) && isNumeric( v ) && v >= 0 && v <= 2,
+			max_tokens  : ( v ) => isSimpleValue( v ) && isNumeric( v ) && v >= 1 && v == int( v ) && v <= 1000000
+		};
+	}
+
+	/**
+	 * @supplied What the client sent as `options`; anything but a struct is treated as nothing
+	 *
+	 * @return { value : the clean struct, dropped : [ names that were not accepted ] }
+	 */
+	static struct function ofOptions( any supplied = "" ) {
+		return TurnOptions::filter( arguments.supplied, static.ALLOWED_OPTIONS )
+	}
+
+	/**
+	 * @supplied What the client sent as `params`; anything but a struct is treated as nothing
+	 *
+	 * @return { value : the clean struct, dropped : [ names that were not accepted ] }
+	 */
+	static struct function ofParams( any supplied = "" ) {
+		return TurnOptions::filter( arguments.supplied, static.ALLOWED_PARAMS )
+	}
+
+	private static struct function filter( any supplied, required struct allowed ) {
+		var clean = {}
+		var dropped = []
+		if ( !isStruct( arguments.supplied ) ) {
+			return { value : clean, dropped : dropped }
+		}
+		for ( var key in arguments.supplied ) {
+			var name = lCase( key )
+			var accepted = left( name, 1 ) != "_" && arguments.allowed.keyExists( name ) && arguments.allowed[ name ]( arguments.supplied[ key ] )
+			if ( accepted ) {
+				clean[ name ] = name == "profile" ? arguments.supplied[ key ] : val( arguments.supplied[ key ] )
+			} else {
+				dropped.append( key )
+			}
+		}
+		return { value : clean, dropped : dropped }
+	}
+
+}
