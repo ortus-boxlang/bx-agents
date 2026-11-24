@@ -110,15 +110,15 @@ Requires a prior `bxAgents build` (not `package` - it builds straight from `.bui
 
 ```dockerfile
 FROM ortussolutions/boxlang:miniserver
-WORKDIR /app
-COPY . /app
-ENV BOXLANG_HOME=/app/runtime
-RUN sed -i 's/"host": *"[^"]*"/"host": "0.0.0.0"/' /app/miniserver.json
+ENV APP_DIR=/srv/bxapp
+ENV BOXLANG_HOME=/srv/bxapp/runtime
+COPY . /srv/bxapp
+RUN sed -i 's/"host": *"[^"]*"/"host": "0.0.0.0"/' /srv/bxapp/miniserver.json
 EXPOSE 8080
 ```
 
-!!! warning "Unverified"
-    This recipe is read from the BoxLang Docker and MiniServer documentation and has **not been run**: no Docker was available where it was written. It copies the whole build into `/app`, relies on the image finding `/app/miniserver.json` (documented) and starting in `/app` (not confirmed; the two documentation pages even name different variables for the engine config), and makes `runtime/` the BoxLang home so that only the bundled `bxagents` module loads. A `.dockerignore` written into `.build` keeps the manifest, the work folders and what a running server wrote into `runtime/` out of the image. Build it once and check `GET /__bxagents/health` before relying on it.
+!!! note "Why `/srv/bxapp` and not `/app`"
+    The image's entrypoint does `cd $APP_DIR` and starts the miniserver there, where it reads `miniserver.json` (web root `public`, engine config `runtime/boxlang.json`, home `runtime`); `runtime/` is the BoxLang home so that only the bundled `bxagents` module loads. A `.dockerignore` written into `.build` keeps the manifest, the work folders and what a running server wrote into `runtime/` out of the image. **Do not install the app under a folder named `/app`:** the runtime config maps `/app` to the ColdBox app folder, so BoxLang takes the absolute path `/app/app/config/bxai-settings.json` for a path under that mapping, looks at `/app/app/app/config/...` and the first request fails with "Failed to load application descriptor". This recipe was built and run: `/__bxagents/health`, `/chat/` and its assets answer 200, and `/config/...`, `/project/Agent.yml`, `/app/config/bxai-settings.json` and `/runtime/boxlang.json` answer 404. Not verified: an actual model call from inside the container.
 
 `docker login` only runs when both `DOCKER_USERNAME` and `DOCKER_PASSWORD` are set in the environment - a registry an already-authenticated local Docker daemon can reach needs neither.
 
