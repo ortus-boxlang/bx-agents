@@ -90,6 +90,8 @@ Besides `input`, `conversationId`, `threadId` and `attachments`, a turn request 
 
 Everything else is dropped without an error, and the server logs the names it ignored (never the values). This is a security rule. A key such as `options._resumeContext` would make the model library run tool calls the request supplies without asking for approval, and `options.apiKey` would swap the server's key. In `params`, `model` would pick a model the server did not offer, `messages` or `contents` would replace the conversation, `system` could set the prompt, and `tools` would add tools the agent was not given. The person, thread and conversation come from the token and the request, never from `options`.
 
+Pictures go in `attachments`, as `[ { "name": "a.png", "mime": "image/png", "data": "<base64>" } ]`. A request has no `images` field: it holds paths to files on the server, so the server ignores it (and logs that it did) and reads no file; only the terminal that runs the agent in its own process attaches files by path.
+
 ## Streams
 
 `stream` and `events` answer server-sent events: each frame is `event: <name>` then `data: <json>`.
