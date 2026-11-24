@@ -174,7 +174,7 @@ Extensions in the project's `extensions/` folder, in your own `~/.bxagents/exten
 | `@picture.png` | Sends a picture (png, jpg, gif, webp) as an image part. Up to 4 per message, 5 MB each. Refused when the profile says `vision: false` |
 | `!command` | Runs a shell command **on your machine**; its output goes with your next message so the agent sees what you saw |
 | `!!command` | Same, shown on screen only |
-| `#function( args )` | Calls one BoxLang built-in, such as `#dateFormat( now(), 'yyyy-mm-dd' )`; the result goes with your next message |
+| `#function( args )` | Calls one BoxLang built-in, such as `#dateFormat( now(), 'yyyy-MM-dd' )`; the result goes with your next message |
 | `##function( args )` | Same, shown on screen only |
 
 `!` and `#` run locally even when the chat is connected to a server. Switch them off, or narrow them, in the same user file:

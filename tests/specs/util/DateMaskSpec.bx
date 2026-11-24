@@ -1,0 +1,38 @@
+/**
+ * Date masks: BoxLang reads `mm` as minutes and `MM` as the month. A mask written the CFML way (`yyyy-mm-dd HH:nn`)
+ * prints the minutes in the month slot, for example `2026-07-24 13:00` for 24 November 2026, 13:07.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "Date masks", function() {
+
+			it( "prints the month with MM and the minutes with mm", function() {
+				var when = createDateTime( 2026, 11, 24, 13, 7, 42 )
+				expect( dateTimeFormat( when, "yyyy-MM-dd HH:mm" ) ).toBe( "2026-11-24 13:07" )
+				expect( dateTimeFormat( when, "yyyy-MM-dd HH:mm:ss" ) ).toBe( "2026-11-24 13:07:42" )
+				expect( dateFormat( when, "yyyy-MM-dd" ) ).toBe( "2026-11-24" )
+			} );
+
+			it( "is what the source and the docs use: no `yyyy-mm` and no `HH:nn` mask anywhere", function() {
+				var root = getDirectoryFromPath( getCurrentTemplatePath() ) & "../../../"
+				var found = []
+				for ( var folder in [ "src/main/bx", "docs" ] ) {
+					for ( var file in directoryList( root & folder, true, "path", "*.bx|*.bxm|*.md" ) ) {
+						// the web app's bundle is generated and minified
+						if ( file.contains( "/includes/build/" ) || file.contains( "/node_modules/" ) ) {
+							continue
+						}
+						var text = fileRead( file )
+						if ( reFind( "yyyy-mm|HH:nn", text ) ) {
+							found.append( file.replace( root, "" ) )
+						}
+					}
+				}
+				expect( found ).toBe( [], "a CFML-style date mask in: " & found.toList( ", " ) )
+			} );
+
+		} );
+	}
+
+}

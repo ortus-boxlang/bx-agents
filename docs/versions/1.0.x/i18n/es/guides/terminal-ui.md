@@ -115,7 +115,7 @@ Las extensiones de la carpeta `extensions/` del proyecto, de tu propia `~/.bxage
 | `@picture.png` | Envía una imagen (png, jpg, gif, webp) como parte de imagen. Hasta 4 por mensaje, 5 MB cada una. Se rechaza cuando el perfil dice `vision: false` |
 | `!command` | Ejecuta un comando de shell **en tu máquina**; su salida va con tu siguiente mensaje para que el agente vea lo que viste tú |
 | `!!command` | Lo mismo, mostrado solo en pantalla |
-| `#function( args )` | Llama a una función integrada de BoxLang, como `#dateFormat( now(), 'yyyy-mm-dd' )`; el resultado va con tu siguiente mensaje |
+| `#function( args )` | Llama a una función integrada de BoxLang, como `#dateFormat( now(), 'yyyy-MM-dd' )`; el resultado va con tu siguiente mensaje |
 | `##function( args )` | Lo mismo, mostrado solo en pantalla |
 
 `!` y `#` se ejecutan en local incluso cuando el chat está conectado a un servidor. Desactívalos, o restríngelos, en el mismo archivo de usuario:
