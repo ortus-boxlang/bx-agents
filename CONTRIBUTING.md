@@ -59,6 +59,8 @@ If you discover a security vulnerability, please send an email to the developmen
 
 Development needs **CommandBox with the `bx-cli` tooling** (the `commandbox-boxlang` module) installed. It does all dependency management, from one manifest: `src/main/lib/box.json`. Its `dependencies` (ColdBox, qb, cbsecurity, cbauth, cbmailservices) ship in the module and are copied into every generated app; its `devDependencies` (TestBox) stay on your machine. `./gradlew installLibs` runs `box install --production` against it into `build/lib-prod` (what ships); `./gradlew installDevLibs` runs the full `box install` into `build/lib-stage` (adds TestBox). Users never need CommandBox.
 
+Building also needs **Java and Node 24** (see `ui/.nvmrc`; `nvm use` or [nodejs.org](https://nodejs.org/en/download)). `./gradlew shadowJar` builds the web app in `ui/` with Vite (`uiBuild`) into `src/main/bx/bxagentsui/includes/build`, which git ignores and you never commit; `npm run build` in `ui/` builds only that. There is no way to skip it: the build fails with what to install when Node is missing or another major.
+
 ```bash
 ./gradlew downloadBoxLang     # fetches BoxLang core, MiniServer, and bundled modules
 ./gradlew installDevLibs      # TestBox + ColdBox + qb + cbsecurity + ... into build/lib-stage (the one manifest; any task that needs it runs it for you)

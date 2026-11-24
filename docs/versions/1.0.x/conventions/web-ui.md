@@ -39,7 +39,7 @@ That installs the web app at `<path>`: a ColdBox module (`bxagentsui`) with its 
 
 The screenshots on this page show the web app this repo ships, served from a demo project (Acme Support) with a scripted model, sub-agents, skills, notes, routines, vault entries and thirty conversations. Everything runs offline.
 
-The app is written with [Alpine.js](https://alpinejs.dev) and Sass and built with Vite in this repository's `ui/` folder, and the build is **committed inside the module**: `bxAgents build` never runs `npm install`/`npm run build`, and a generated project never needs Node or npm installed at all. The build writes the module's settings (path, branding, theme, extension files) to `config/bxagentsui.json` in the generated app. Its scripts and styles are served from `/modules/bxagentsui/includes`, and it loads nothing from a CDN. To change the app itself, see [Working on the web app](#working-on-the-web-app).
+The app is written with [Alpine.js](https://alpinejs.dev) and Sass and built with Vite in this repository's `ui/` folder, and the build ships **inside the module** but is not committed: `./gradlew shadowJar` makes it (it needs Node 24 as well as Java), so the module you install already holds it, `bxAgents build` never runs `npm install`/`npm run build`, and a generated project never needs Node or npm installed at all. The build writes the module's settings (path, branding, theme, extension files) to `config/bxagentsui.json` in the generated app. Its scripts and styles are served from `/modules/bxagentsui/includes`, and it loads nothing from a CDN. To change the app itself, see [Working on the web app](#working-on-the-web-app).
 
 That constraint is about the build, not about scope. The app is a full client: conversation sidebar, streaming with reasoning and tool calls, approvals, compaction, server-side theming. What is genuinely still missing is listed under [What is not here yet](#what-is-not-here-yet).
 
@@ -607,11 +607,11 @@ The app's source is in this repository: the module in `src/main/bx/bxagentsui` (
 cd ui
 npm install
 npm run dev     # a dev agent, a scripted model and the Vite dev server: edit, save, see it
-npm run build   # writes src/main/bx/bxagentsui/includes/build, which is committed
+npm run build   # builds only the web app, into src/main/bx/bxagentsui/includes/build (not committed; ./gradlew shadowJar does it too)
 npm run e2e     # the browser tests (Playwright)
 ```
 
-The dev agent is at http://127.0.0.1:8780/chat (`ada` or `bob`, password `demo-pass`). A built agent gets the committed build, so a change to a script or a style ships only once `npm run build` has run and its output is committed. [Work on the web app](../guides/ui-development.md) is the full guide: the layout, the conventions, adding a page, the linters and the tests.
+The dev agent is at http://127.0.0.1:8780/chat (`ada` or `bob`, password `demo-pass`). A built agent gets the build the module shipped with, so a change to a script or a style reaches it once `./gradlew shadowJar` has run (it builds the web app first). Building this repository needs Java and Node 24. [Work on the web app](../guides/ui-development.md) is the full guide: the layout, the conventions, adding a page, the linters and the tests.
 
 ## What is not here yet
 

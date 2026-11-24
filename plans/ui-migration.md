@@ -42,7 +42,7 @@ Because the generated agent is already a ColdBox app, the UI becomes a **ColdBox
 
 - **In development** it is mounted by a small host app in `ui/` (this is the "app you start and iterate on", like cbGenesis).
 - **In a built agent** the generator copies the module into `modules_app/` and mounts it at the gateway's `path` (today `/chat`). The settings the generator replaces as `__TOKENS__` today (title, subtitle, icon, welcome, suggestions, placeholder, footer, theme, custom CSS, API base, login URL, reasoning and tool toggles) become **module settings** that the layouts and views read with `getSetting()`. No string replacement.
-- The Vite output (`public/includes/build/` with `manifest.json`) is **committed** in the bx-agents repo (like `libs.min.js` is today), so building an agent never needs Node. CI checks the committed output is fresh.
+- The Vite output (`public/includes/build/` with `manifest.json`) is **not committed** (updated: Gradle's `uiBuild` makes it, so building the module needs Node 24 and a built agent still never does).
 - **Offline stays true:** no CDN, no runtime network, assets served by the agent itself.
 - **Extensions** keep working: `window.bxagents`, the slots, and their `web/` folders. The layout renders the slots and links the extension assets.
 
@@ -88,7 +88,7 @@ box install && npm install
 box server start          # ColdBox host app on :8080 with the fixture API
 npm run dev               # Vite HMR on :5173
 npm run lint && npm run lint:scss && npm test && npm run e2e
-npm run build             # writes the committed public/includes/build/
+npm run build             # writes public/includes/build/ (git-ignored)
 ```
 
 `UI_API=http://127.0.0.1:8730` points the host app at a real running agent instead of the fixtures.

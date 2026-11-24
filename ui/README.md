@@ -5,10 +5,13 @@ is scripted (`dev/model.json`, served by `tools/demo/fakellm.bxs`). No key, no n
 
 ## Once
 
+You need **Java and Node 24** (`ui/.nvmrc`: `nvm use`). `./gradlew shadowJar` builds the web app too, and fails with what to install
+when Node is missing or another major; there is no way to skip it.
+
 From the repository root:
 
 ```bash
-./gradlew downloadBoxLang shadowJar
+./gradlew downloadBoxLang shadowJar   # also builds the web app (uiBuild: npm ci, npm run build)
 cd ui && npm install
 ```
 
@@ -18,7 +21,7 @@ cd ui && npm install
 
 ```bash
 npm run dev        # the agent, its model and the Vite dev server: edit, save, see it
-npm run stack      # the agent and its model only, with the committed build of the scripts and styles
+npm run stack      # the agent and its model only, with the build of the scripts and styles (it needs `npm run build` or `./gradlew uiBuild` first, and says so if it is missing)
 ```
 
 The web app is at http://127.0.0.1:8780/chat (ada or bob, password demo-pass). It is a ColdBox module; its source is `src/main/bx/bxagentsui` (handlers, views,
@@ -42,7 +45,7 @@ Both run offline with the scripted model and put the pictures where the docs rea
 ## Build and lint
 
 ```bash
-npm run build      # writes src/main/bx/bxagentsui/includes/build, which is committed
+npm run build      # builds only the web app, into src/main/bx/bxagentsui/includes/build (git ignores it; ./gradlew shadowJar does it too)
 npm run lint       # ESLint, the scripts (lint:fix fixes what it can)
 npm run lint:scss  # Stylelint, the Sass (lint:scss:fix)
 npm run lint:md    # markdownlint, docs/, changelog.md, readme.md and these notes

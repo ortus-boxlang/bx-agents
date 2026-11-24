@@ -39,7 +39,7 @@ Eso instala la app web en `<path>`: un módulo de ColdBox (`bxagentsui`) con sus
 
 La captura de pantalla anterior muestra la web app que distribuye este repositorio, con la marca de [`examples/webui-agent`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent) (su propia configuración de `theme`/`title`/`icon`) y poblada con contenido de conversación de ejemplo para ilustrarla; `bxAgents build && bxAgents serve` en ese ejemplo la reproduce de verdad.
 
-La app está escrita con [Alpine.js](https://alpinejs.dev) y Sass y se compila con Vite en la carpeta `ui/` de este repositorio, y el build está **confirmado dentro del módulo**: `bxAgents build` nunca ejecuta `npm install`/`npm run build`, y un proyecto generado nunca necesita Node ni npm instalados en absoluto. El build escribe la configuración del módulo (ruta, marca, tema, archivos de extensiones) en `config/bxagentsui.json` de la app generada. Sus scripts y estilos se sirven desde `/modules/bxagentsui/includes` y no carga nada de un CDN. Para cambiar la app misma, ver [Trabajar en la app web](#trabajar-en-la-app-web).
+La app está escrita con [Alpine.js](https://alpinejs.dev) y Sass y se compila con Vite en la carpeta `ui/` de este repositorio, y el build va **dentro del módulo** pero no se confirma: `./gradlew shadowJar` lo genera (necesita Node 24 además de Java), así que el módulo instalado ya lo trae, `bxAgents build` nunca ejecuta `npm install`/`npm run build`, y un proyecto generado nunca necesita Node ni npm instalados en absoluto. El build escribe la configuración del módulo (ruta, marca, tema, archivos de extensiones) en `config/bxagentsui.json` de la app generada. Sus scripts y estilos se sirven desde `/modules/bxagentsui/includes` y no carga nada de un CDN. Para cambiar la app misma, ver [Trabajar en la app web](#trabajar-en-la-app-web).
 
 Esa restricción es sobre el build, no sobre el alcance. La página es un cliente completo: barra lateral de conversación, streaming con razonamiento y llamadas de tool, aprobaciones, compactación, temática del lado del servidor. Lo que realmente todavía falta se lista bajo [What is not here yet](#what-is-not-here-yet).
 
@@ -598,11 +598,11 @@ El código de la app está en este repositorio: el módulo en `src/main/bx/bxage
 cd ui
 npm install
 npm run dev     # un agente de desarrollo, un modelo con guion y el servidor de Vite: edita, guarda, míralo
-npm run build   # escribe src/main/bx/bxagentsui/includes/build, que se confirma
+npm run build   # compila solo la app web, en src/main/bx/bxagentsui/includes/build (no se confirma; ./gradlew shadowJar también lo hace)
 npm run e2e     # las pruebas de navegador (Playwright)
 ```
 
-El agente de desarrollo está en http://127.0.0.1:8780/chat (`ada` o `bob`, contraseña `demo-pass`). Un agente compilado recibe el build confirmado, así que un cambio en un script o un estilo solo se distribuye cuando `npm run build` se ha ejecutado y su salida está confirmada. [Trabajar en la app web](../guides/ui-development.md) es la guía completa: la estructura, las convenciones, añadir una página, los linters y las pruebas.
+El agente de desarrollo está en http://127.0.0.1:8780/chat (`ada` o `bob`, contraseña `demo-pass`). Un agente compilado recibe el build con el que se distribuyó el módulo, así que un cambio en un script o un estilo le llega cuando se ejecuta `./gradlew shadowJar` (compila antes la app web). Compilar este repositorio necesita Java y Node 24. [Trabajar en la app web](../guides/ui-development.md) es la guía completa: la estructura, las convenciones, añadir una página, los linters y las pruebas.
 
 ## What is not here yet
 
