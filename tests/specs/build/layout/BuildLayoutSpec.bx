@@ -74,6 +74,13 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileRead( build & "/runtime/logs/runtime.log" ) ).toBe( "kept" );
 			} );
 
+			it( "removes the runtime/config/boxlang.json an earlier BxAgents wrote, which named the machine's module directory", function() {
+				directoryCreate( build & "/runtime/config", true );
+				fileWrite( build & "/runtime/config/boxlang.json", '{ "modulesDirectory": [ "/home/someone/.boxlang/modules" ] }' );
+				new bxagents.models.build.layout.TemplateAssembler().assemble( build );
+				expect( fileExists( build & "/runtime/config/boxlang.json" ) ).toBeFalse();
+			} );
+
 			it( "reports the pinned template version it laid out", function() {
 				var result = new bxagents.models.build.layout.TemplateAssembler().assemble( build );
 				expect( result.commit ).toMatch( "^[0-9a-f]{40}$" );

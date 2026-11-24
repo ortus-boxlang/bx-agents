@@ -42,6 +42,11 @@ class {
 
 		directoryCreate( path = build & "/runtime", createPath = true, ignoreExists = true )
 		fileCopy( template & "/runtime/boxlang.json", build & "/runtime/boxlang.json" )
+		// An earlier BxAgents wrote runtime/config/boxlang.json for `serve`, with the machine's module directory in it. The engine ignores
+		// it when a configPath is given (measured), but a file naming that directory has no business in the build.
+		if ( fileExists( build & "/runtime/config/boxlang.json" ) ) {
+			fileDelete( build & "/runtime/config/boxlang.json" )
+		}
 
 		directoryCreate( path = build & "/app", createPath = true, ignoreExists = true )
 		fileCopy( template & "/app/Application.bx", build & "/app/Application.bx" )
