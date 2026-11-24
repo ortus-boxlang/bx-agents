@@ -1,0 +1,59 @@
+/**
+ * Makes the screenshots and GIFs of the terminal chat and the `new` wizard in the docs (docs/assets/tui) from the casts that
+ * trailer/record.bxs --cast-only --scenes=docs-scenes.json recorded. Each scene in docs-scenes.json lists its stills (the file name,
+ * the text to wait for on screen and how long after it to draw) and, for a GIF, its name. docs-shots.sh runs both steps.
+ *
+ *   boxlang docs-shots.bxs --casts=<record.bxs out>/scenes --out=<docs/assets/tui> --boxlang-jar=<boxlang.jar> [--only=chat-main]
+ */
+opts = server.cli.parsed.options
+here = getDirectoryFromPath( getCurrentTemplatePath() )
+demo = expandPath( here & "../" )
+jar = expandPath( opts[ "boxlang-jar" ] )
+casts = expandPath( opts.casts )
+out = expandPath( opts.out )
+only = len( opts.only ?: "" ) ? opts.only.listToArray() : []
+bl = [ "java", "-cp", jar, "ortus.boxlang.runtime.BoxRunner" ]
+
+function run( required array command ) {
+	var pb = new java.lang.ProcessBuilder( arguments.command.map( a => javaCast( "string", a ) ) )
+	pb.redirectErrorStream( true )
+	pb.environment().remove( "JAVA_TOOL_OPTIONS" )
+	var process = pb.start()
+	var output = toString( process.getInputStream().readAllBytes(), "UTF-8" )
+	return { exit : process.waitFor(), output : output.trim() }
+}
+
+function docsShots() {
+	directoryCreate( out, true, true )
+	for ( var scene in jsonDeserialize( fileRead( here & "docs-scenes.json" ) ) ) {
+		if ( only.len() && !only.contains( scene.id ) ) {
+			continue
+		}
+		var cast = casts & "/" & scene.id & ".cast"
+		if ( !fileExists( cast ) ) {
+			println( scene.id & ": no recording" )
+			continue
+		}
+		for ( var still in ( scene.stills ?: [] ) ) {
+			var args = [ demo & "render.bxs", cast, casts & "/" & scene.id & "-tmp", "--size=16", "--max-idle=1.2", "--still=" & out & "/" & still.file & ".png", "--settle=" & ( still.settle ?: 0.6 ) ]
+			if ( len( still.rows ?: "" ) ) {
+				args.append( "--rows=" & still.rows )
+			}
+			if ( len( still.at ?: "" ) ) {
+				args.append( "--at=" & still.at )
+			}
+			var result = run( bl.merge( args ) )
+			println( still.file & ": " & result.output.listToArray( char( 10 ) ).last() )
+		}
+		if ( len( scene.gif ?: "" ) ) {
+			var folder = casts & "/" & scene.id & "-gif"
+			directoryCreate( folder, true, true )
+			var result = run( bl.merge( [ demo & "render.bxs", cast, folder, "--size=16", "--fps=10", "--max-idle=1.2", "--hold=1.5", "--formats=gif" ] ) )
+			fileMove( folder & "/demo.gif", out & "/" & scene.gif & ".gif" )
+			directoryDelete( folder, true )
+			println( scene.gif & ".gif: " & result.output.listToArray( char( 10 ) ).last() )
+		}
+	}
+}
+docsShots()
+java.lang.System::exit( 0 )

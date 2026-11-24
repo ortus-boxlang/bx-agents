@@ -32,11 +32,11 @@ project never needs Node installed at all.
 
 ![The generated web app with a conversation](../assets/webui-chat-light.png)
 
-That's the real, unmodified generated page - this one branded with
+This is the web app, here branded with
 [`examples/webui-agent`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent)'s
 `theme`/`title`/`icon` config from [Lesson 13](13-exposing-http-and-mcp.md)'s exposure
-concept, taken further. `bxAgents build && bxAgents serve` in that example gets you the
-same page for real.
+concept, taken further. `bxAgents build && bxAgents serve` in that example serves the
+same app.
 
 ## What the page can do
 

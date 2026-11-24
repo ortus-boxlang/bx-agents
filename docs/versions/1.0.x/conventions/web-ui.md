@@ -35,9 +35,9 @@ class {
 
 That installs the web app at `<path>`: a ColdBox module (`bxagentsui`) with its own handlers, routes, layouts and views, copied into the generated app. The app is a client of the [agent API](agent-bx.md#the-always-on-agent-route) at `/__bxagents`, the same one the terminal chat and the gateways use, so there is no second API under `<path>`. The agent API must stay enabled (`agentApi.enabled: false` with a `webui` entry is a build error).
 
-![The generated web app: the left menu, a conversation with a tool call, and the model picker and context ring in the header](../assets/webui-chat-light.png)
+![The generated web app: the left menu, the header with the light or dark switch, and a conversation with a tool call under the bar that holds the model select and the context ring](../assets/webui-chat-light.png)
 
-The screenshots on this page are the real, unmodified web app this repo ships, from a demo project (Acme Support) with a scripted model, sub-agents, skills, notes, routines, vault entries and thirty conversations. Everything runs offline.
+The screenshots on this page show the web app this repo ships, served from a demo project (Acme Support) with a scripted model, sub-agents, skills, notes, routines, vault entries and thirty conversations. Everything runs offline.
 
 The app is written with [Alpine.js](https://alpinejs.dev) and Sass and built with Vite in this repository's `ui/` folder, and the build is **committed inside the module**: `bxAgents build` never runs `npm install`/`npm run build`, and a generated project never needs Node or npm installed at all. The build writes the module's settings (path, branding, theme, extension files) to `config/bxagentsui.json` in the generated app. Its scripts and styles are served from `/modules/bxagentsui/includes`, and it loads nothing from a CDN. To change the app itself, see [Working on the web app](#working-on-the-web-app).
 
@@ -71,7 +71,7 @@ Every page has a **left menu** and a **header**. The menu has two groups, and ea
 
 A member never sees the Admin group: an Admin page answers `403` to a member who is signed in, and the API refuses the routes behind it anyway. The menu shows only the pages this person may use, from the capabilities `GET /agent` reports. It folds to icons (the choice is remembered in the browser) and becomes a drawer on a phone. The header holds the agent's icon and title, a light or dark switch, and either **Password** (an agent without accounts) or who is signed in and **Sign out**. Extensions can add to the Chat page with [slots](extensions.md#the-web-page-slots-and-web).
 
-![The Chat page: the left menu with Main and Admin groups, a conversation with a tool call and a formatted answer, and the model picker and context ring in the header](../assets/webui/webui-chat.png)
+![The Chat page: the left menu with Main and Admin groups, the header with the light or dark switch and who is signed in, and a conversation with a tool call and a formatted answer under the chat bar with the model select](../assets/webui/webui-chat.png)
 
 ![The same page in dark mode](../assets/webui/webui-chat-dark.png)
 
@@ -187,7 +187,7 @@ The [trailer at the top](#the-web-app) covers every page. These are the details 
 | | |
 |---|---|
 | ![Sign in with the accounts declared in `users`](../assets/webui/login.png) **Sign in.** Accounts come from [`users`](#users-and-sign-in). | ![An empty conversation with the welcome message and suggestion buttons](../assets/webui/empty-suggestions.png) **Suggestions.** An empty conversation can offer [`suggestions`](#branding-and-theming) that send with one click. |
-| ![A streamed reply with a numbered list and bold text](../assets/webui/markdown-list.png) **Streaming.** Replies render Markdown as they arrive. | ![The planner profile chosen in the picker, and the reply naming its model](../assets/webui/model-picker.png) **Model picker.** The pick is sent with each message, in the same conversation. |
+| ![A streamed reply with a numbered list and bold text](../assets/webui/markdown-list.png) **Streaming.** Replies render Markdown as they arrive. | ![The model select in the chat bar with a profile chosen](../assets/webui/model-picker.png) **Model picker.** The pick is sent with each message, in the same conversation. |
 | ![A tool call shown as an open block above the reply](../assets/webui/tool-call.png) **Tools.** Each call shows its name and arguments. | ![The command menu opened by typing a slash](../assets/webui/commands-menu.png) **Commands.** Type `/` for the menu. |
 | ![A code block with its language and a Copy button](../assets/webui/code-block.png) **Code.** Each block shows its language and copies the code itself. | ![The Connectors page](../assets/webui/connectors.png) **Connectors.** Connect GitHub, Notion and more once; the agent then acts as you. |
 | ![The context panel listing what fills the model's window](../assets/webui/context-panel.png) **Context.** The ring fills as the conversation grows; click it for the breakdown. | ![The header: the agent's title, the light or dark switch, and who is signed in with Sign out](../assets/webui/settings-menu.png) **Header.** The light or dark switch, and Password or Sign out. |
@@ -268,7 +268,7 @@ memory:
 
 ## Choosing the model
 
-By default the page talks to the agent's own model and offers no choice. List [profiles](models.md#profiles) in the entry and the header gets a model picker:
+By default the page talks to the agent's own model and offers no choice. List [profiles](models.md#profiles) in the entry and the bar above the conversation gets a model select:
 
 ```javascript
 // gateways/chat.bx
@@ -392,9 +392,9 @@ The Chat page is a real chat client, not a demo shell. The app reads `GET /agent
 | **Clear / Compact** | `/clear` empties this conversation; **Compact** appears only when a summary model is configured, and reports what it actually did (`Compacted 12 messages down to 3`, or `Nothing to compact yet`) |
 | **Reasoning + tool calls** | Collapsed disclosures fed from `delta.reasoning` and `delta.tool_calls` on the same envelope |
 | **Approvals** | A human-in-the-loop pause renders an Approve/Reject card from `GET /pending`, answered via `/resume`, which streams the continuation of the same turn |
-| **Theme** | The light or dark switch in the header. Kept in this browser (`localStorage`) and also saved as the `theme` preference |
-| **Model** | The model picker above the conversation names each profile's model, when the gateway lists `profiles` |
-| **Context size** | A ring in the header that fills as the context does (amber from 70 percent, red from 90), from `GET /context`, refreshed after each turn, command, clear, compaction, conversation switch and change to the notes. Click it for the breakdown: the total, each part with its share (system prompt, tool definitions, notes, messages), the tools, and a button to compact the conversation. The ring fills only when the model's [`contextWindow`](models.md#what-the-project-knows-about-a-model) is set; without it the panel still shows the sizes |
+| **Theme** | The light or dark switch (a moon, or a sun in the dark theme) in the header. Kept in this browser (`localStorage`) and also saved as the `theme` preference |
+| **Model** | The model select in the bar above the conversation names each profile's model, with **Default model** first, when the gateway lists `profiles` |
+| **Context size** | A ring in the bar above the conversation that fills as the context does (amber from 70 percent, red from 90), from `GET /context`, refreshed after each turn, command, clear, compaction, conversation switch and change to the notes. Click it for the breakdown: the total, each part with its share (system prompt, tool definitions, notes, messages), the tools, and a button to compact the conversation. The ring fills only when the model's [`contextWindow`](models.md#what-the-project-knows-about-a-model) is set; without it the panel still shows the sizes |
 | **Attachments** | An **Attach** button (shown when `GET /agent` reports `capabilities.attachments`) picks pictures and text files; you can also paste a picture or drop files on the page. Chips show what waits, each with a remove button. Pictures go as base64 `attachments` of the stream request, text files are inlined in the message. At most 4 pictures, 5 MB each; `GET /agent` also reports `vision`, and a picture to a profile without it is refused with the reason |
 | **Shortcuts** | Enter sends, Shift+Enter adds a line. `?` alone (or `/keys`) lists them |
 
@@ -424,7 +424,7 @@ The datasource is registered in the generated base class (`bxagents/Application.
 // bxagents/Application.bx (generated)
 this.datasources[ "bxagents" ] = {
 	"driver"  : "sqlite",
-	"database": expandPath( "./data/chat.db" )
+	"database": databaseFile( "./data/chat.db" )   // BXAGENTS_DB, else the data home's chat.db, else this path
 }
 this.datasource = "bxagents"   // NOT this.defaultDatasource - see below
 
@@ -440,11 +440,11 @@ Both are optional to override, per entry:
 | Key | What it does | Default |
 | --- | --- | --- |
 | `database.datasource` | The ColdBox datasource name | `bxagents` |
-| `database.path` | The database file, relative to the app root | `./data/chat.db` |
+| `database.path` | The fallback database file, relative to the app root. It is used only when `BXAGENTS_DB` is not set and the agent has no name to make a [data home](data.md) from | `./data/chat.db` |
 
 An absolute `database.path` **fails the build**: it's resolved with `expandPath()` inside the generated app, so an absolute path silently escapes the app directory and breaks a packaged `.bxa` deploy.
 
-**One file for the web chat and the terminal chat.** On a developer's machine, `bxAgents serve` starts the app with the environment variable `BXAGENTS_DB` set to `data/chat.db` in the project folder, and `bxAgents chat` opens the same file. The generated app uses `BXAGENTS_DB` when it is set and `database.path` otherwise, so a deployed app keeps its file inside the app unless you set `BXAGENTS_DB` there too (for example to a mounted volume). New projects git-ignore `data/chat.db*`. The file is in WAL mode, so the terminal chat and a running server can use it at the same time.
+**One file for the web chat and the terminal chat.** `bxAgents serve` starts the app with the environment variable `BXAGENTS_DB` set to the `chat.db` of the agent's [data home](data.md) (`~/.bxagents/<agent name>/chat.db` by default, or where `BXAGENTS_HOME` or `data.home` says), and `bxAgents chat` opens the same file. The generated app uses `BXAGENTS_DB` when it is set. When it is not, as on a deployed app, it asks the data home itself, so the file is in the same place there. `database.path` is only the fallback for an agent with no name. To keep the file elsewhere, for example on a mounted volume, set `BXAGENTS_DB` or `BXAGENTS_HOME`. A fresh project has no `data/` folder of its own. The file is in WAL mode, so the terminal chat and a running server can use it at the same time.
 
 **Schema is versioned and forward-only.** `ChatStore.migrate()` (called by `ChatDb.migrate()`) records what it has applied in a `bxagents_schema_version` table and applies only what's newer, so booting against an existing store is a no-op. v1 creates `conversations` and `preferences`; v2 adds `users`, v3 `tokens`, v4 `notes` and v5 `usage`; v6 adds where a conversation started, v7 the vault and v8 the admin flag of an account. Evolve it by adding a step to the store's migration list - never by editing a migration that has shipped, because **SQLite cannot modify or drop a column**. A database made by an earlier version of the generated app is recognised and left as it is.
 

@@ -1,8 +1,8 @@
 ---
 title: "Lesson 16: Scheduling Background Work"
 icon: phosphor-duotone:clock-countdown
-summary: schedules/*.bx - BoxLang schedulers, one file each, with cron syntax.
-description: schedules/*.bx - BoxLang schedulers, one file each, with cron syntax.
+summary: schedules/*.bx - BoxLang schedulers, one file each, saying when with the task's own methods.
+description: schedules/*.bx - BoxLang schedulers, one file each, saying when with the task's own methods.
 tags: [course, conventions, scheduling]
 ---
 
@@ -67,8 +67,10 @@ bxAgents inspect --section=schedule
 
 (With the BoxLang 1.19.0 launcher a quoted value with spaces is split at the spaces; see [Quoting flag values](../cli-reference.md#quoting-flag-values).)
 
-`add schedule` writes `schedules/<Name>.bx`; `inspect` lists each scheduler with its
-tasks, cron and agent.
+`add schedule` writes `schedules/<Name>.bx` with the task's own methods (this one is
+`.onWeekdays( "08:30" )`); `inspect` lists each scheduler with its tasks, when each
+runs and the agent. A cron expression you pass to `--when` is written as a six-field
+`.cron()`.
 
 Full reference: [schedules/](../conventions/schedules.md).
 

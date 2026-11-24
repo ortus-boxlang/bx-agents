@@ -22,4 +22,4 @@ bxAgents serve
 
 The task fires automatically once `serve` is running, no separate cron daemon needed - BoxLang's own scheduler drives it. `run( "cleanup" )` sends the message to the project's default agent, the root agent. To reach another agent in the tree, call `agent( "TheAgentName" ).run( ... )`, by the `name` its own definition declares.
 
-See [schedules/](../../docs/conventions/schedules.md) for the helpers a scheduler gets and the cron syntax.
+See [schedules/](../../docs/conventions/schedules.md) for the helpers a scheduler gets, the ways to say when it runs and the cron note.

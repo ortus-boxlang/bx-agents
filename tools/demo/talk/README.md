@@ -36,7 +36,7 @@ Tested here, end to end, with the scripted model in place of a local one: `prepa
 - Terminal font large (at least 20pt), dark theme, notifications off.
 - Three terminal tabs: one in `~/talk/live`, one in `~/talk/support-demo`, one spare for the API call.
 - A browser window open on a blank tab.
-- Nothing else is using port 8080.
+- Nothing else is using port 8080. (If something is, the scripted-model fallback below cannot start and a model address of `localhost:8080` reaches that other process instead, with no error.)
 - The fallback clips in `fallback/` are open in a player on another screen, paused.
 
 ## Demo 1: Zero to chatting (3:00)
@@ -49,7 +49,7 @@ Tested here, end to end, with the scripted model in place of a local one: `prepa
 4. (0:30) Ask: **What day is it today, and how should I greet a customer on that day?** It streams and calls the date tool; point at the tool row with its time.
 5. (0:40) Type `/` to show the menu of commands, then `/profile planner`. Ask the same question again. Say: same conversation, same tools, only the model changed. `/model` shows which one is in use, and `/default` goes back.
 
-**Expected:** the header with the skills line, a tool row (`now`), a streamed answer, then the message `planner (<provider>/<model>)... The conversation carries on` and an answer from the other model.
+**Expected:** the header with the skills line, a tool row (`now`), a streamed answer, then the message `Now using planner (<provider>/<model>). The conversation carries on.` (for example `Now using planner (openai-compatible/planner-model). The conversation carries on.`) and an answer from the other model.
 
 ## Demo 2: Teach it something (2:50)
 

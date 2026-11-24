@@ -90,11 +90,11 @@ Los subagentes se construyen **de hojas primero** (de abajo hacia arriba): si `A
 - Un `Agent.yml`/`Agent.bx` faltante dentro de una carpeta `subagents/*` descubierta se reporta como su propio error de validación, y también una carpeta que contiene ambos (`BxAgents.AmbiguousAgentDefinition`) - una carpeta contiene una sola definición.
 - El propio `name` DECLARADO de cada nodo (raíz + la definición propia de cada subagente) debe ser único en todo el proyecto - ver abajo.
 
-## Retrieving an agent from `schedules/Scheduler.bx`
+## Retrieving an agent from `schedules/`
 
 Dos nombres diferentes están en juego, y no son intercambiables:
 
 - El **nombre de carpeta** bajo `subagents/` (`researcher` arriba) es lo que referencia `subAgents: [ "..." ]` - es puramente una preocupación de cableado de tiempo de build.
-- El propio **`name` declarado** del subagente (el campo `name` de su definición de agente, por ejemplo `"ResearchBot"`) es por lo que lo recuperas en tiempo de ejecución - cada agente en el árbol (raíz + cada subagente) se registra en `config/WireBox.bx` bajo este nombre, así que [`schedules/Scheduler.bx`](schedules.md) (o cualquier otro código consciente de WireBox) lo alcanza con un simple `getInstance( "ResearchBot" )`.
+- El propio **`name` declarado** del subagente (el campo `name` de su definición de agente, por ejemplo `"ResearchBot"`) es por lo que lo recuperas en tiempo de ejecución - cada agente en el árbol (raíz + cada subagente) se registra en `config/WireBox.bx` bajo este nombre, así que un scheduler de [`schedules/`](schedules.md) lo alcanza con `agent( "ResearchBot" )` (y cualquier otro código consciente de WireBox con un simple `getInstance( "ResearchBot" )`).
 
 Estos dos nombres pueden diferir, y a menudo lo harán - el nombre de carpeta es un detalle de implementación, el `name` declarado es el que importa en cualquier otro lugar (prompts, recuperación de WireBox). Porque ahora también es una clave de binding de WireBox, `build` falla la validación si dos agentes en el árbol - sin importar cuán profundamente anidados - terminan con el mismo `name` declarado, incluyendo dos que ambos lo dejan sin configurar y silenciosamente comparten el valor por defecto `"BxAi"`.

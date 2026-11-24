@@ -35,7 +35,7 @@ Qué puedes hacer en él:
   todas las teclas, y puedes reasignarlas en `~/.bxagents/Agent.yml`.
 - **Comandos de barra.** Escribe `/` para ver un menú: `/help`, `/tools`, `/model`, `/info` y más.
   Todos los comandos están en [Comandos de barra](../guides/slash-commands.md).
-- **Sesiones.** Cada chat es una conversación guardada en `data/chat.db`, la misma lista que muestra
+- **Sesiones.** Cada chat es una conversación guardada en el `chat.db` de la carpeta de datos del agente (`~/.bxagents/<nombre del agente>/`), la misma lista que muestra
   el chat web. `/sessions` las lista, `/resume` vuelve a una, `/new` empieza otra, `/name` le pone
   nombre, `/fork` la copia y sigue en la copia, y `/export` la guarda como Markdown o HTML.
   `bxAgents chat --continue` reabre la última. Los mensajes duran lo mismo que la memoria del
@@ -63,6 +63,8 @@ Si pide un token ([Lección 13](13-exposing-http-and-mcp.md)), pasa `--token=<to
 ```bash
 bxAgents invoke --message="What's the weather in Boston?" [--json]
 ```
+
+(Con el launcher de BoxLang 1.19.0 un valor entre comillas con espacios se parte en los espacios; ver [Comillas en los valores de los flags](../cli-reference.md#comillas-en-los-valores-de-los-flags).)
 
 Existe para scripting y CI, donde el requisito de TTY de `chat` es un bloqueo total. Por
 defecto carga la factory generada en el mismo proceso, el mismo camino que usa `chat`

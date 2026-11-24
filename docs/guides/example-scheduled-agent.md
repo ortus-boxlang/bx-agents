@@ -1,14 +1,14 @@
 ---
 title: "Example: A Scheduled Agent"
 icon: phosphor-duotone:alarm
-summary: Wake an agent on a cron schedule, no separate cron daemon needed.
-description: Wake an agent on a cron schedule, no separate cron daemon needed.
+summary: Wake an agent on a schedule, with a BoxLang scheduler and no separate cron daemon.
+description: Wake an agent on a schedule, with a BoxLang scheduler and no separate cron daemon.
 tags: [guides, examples, schedules]
 ---
 
 # Example: A Scheduled Agent
 
-[`examples/scheduled-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/scheduled-agent) wakes an agent nightly with a BoxLang scheduler under `schedules/` - plain [Schedules](../conventions/schedules.md) code with BoxLang's own task DSL and cron syntax.
+[`examples/scheduled-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/scheduled-agent) wakes an agent nightly with a BoxLang scheduler under `schedules/` - plain [Schedules](../conventions/schedules.md) code with BoxLang's own task DSL (`.every()`, `.everyDayAt()`, `.onWeekdays()` and the rest).
 
 ## The project
 
@@ -24,7 +24,7 @@ scheduled-agent/
 
 ```yaml
 name: scheduled-agent
-description: An agent that wakes up on a cron schedule via schedules/.
+description: An agent that wakes up on a daily schedule via schedules/.
 model: mock/mock-model
 ```
 
@@ -45,7 +45,7 @@ class {
 }
 ```
 
-The full BoxLang task DSL is available - `cron()`, `every()`, `everyDayAt()`, `withNoOverlaps()`, `onFailure()` and the rest, not a subset BxAgents reimplements (see [`schedules/`](../conventions/schedules.md)).
+The full BoxLang task DSL is available - `every()`, `everyDayAt()`, `onWeekdays()`, `withNoOverlaps()`, `onFailure()` and the rest, not a subset BxAgents reimplements (see [`schedules/`](../conventions/schedules.md)). A six-field `cron()` works too, but a five-field one never fires on BoxLang 1.19.0 (see [Cron](../conventions/schedules.md#cron)).
 
 `run( "cleanup" )` sends the message to the project's default agent, the root agent. To reach a subagent, use `agent( "TheAgentName" ).run( ... )`: every agent in a project's tree is registered under its own declared `name`.
 
@@ -72,13 +72,13 @@ bxAgents serve
 
 The `nightly` task fires automatically once `serve` is running - no separate cron daemon, no OS-level `cron` entry. BoxLang's own scheduler drives it, on the schedule declared in `Nightly.bx`.
 
-To add another schedule to your own project, run `bxAgents add schedule`. It asks when (for example `daily 09:00` or `every 15 minutes`), what to tell the agent and which agent, and writes `schedules/<Name>.bx`. `bxAgents inspect` lists the schedules a project has.
+To add another schedule to your own project, run `bxAgents add schedule`. It asks when (for example `daily 09:00` or `every 15 minutes`), what to tell the agent and which agent, and writes `schedules/<Name>.bx` using the task's own methods (`daily 09:00` becomes `.everyDayAt( "09:00" )`). A cron expression you type is written as a six-field `.cron()`, because a five-field one does not fire on BoxLang 1.19.0. `bxAgents inspect` lists the schedules a project has.
 
 !!! info
     `build` checks the scheduler's file name and that it is a class, but not the *contents* of `configure()` - a typo in an `agent()` call or a reference to an agent name that doesn't exist will pass `build` cleanly and only surface once the generated app actually boots.
 
 ## Where to go next
 
-- [Schedules](../conventions/schedules.md) for the helpers a scheduler gets and the cron syntax.
+- [Schedules](../conventions/schedules.md) for the helpers a scheduler gets, the ways to say when it runs and the cron note.
 - [Example: A Minimal Agent](example-minimal-agent.md) if you haven't seen the base project shape yet.
 - [Example: Building a Web Chat Agent](example-web-chat-agent.md) for an agent reachable interactively instead of on a timer.

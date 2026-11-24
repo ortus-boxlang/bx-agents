@@ -85,7 +85,7 @@ Envía un DM al bot, o menciónalo en un canal donde esté. Las respuestas vuelv
 
 ## Qué puede hacer la gente en el chat
 
-- **Cada persona tiene su propia conversación.** Al agente se le dice quién escribe (`slack:U123`) y de qué conversación se trata: el canal, más el hilo cuando lo hay. Dos personas en el mismo canal no comparten memoria, y cada hilo de Slack conserva la suya. Las conversaciones se guardan en `data/chat.db`, marcadas con `source` Slack.
+- **Cada persona tiene su propia conversación.** Al agente se le dice quién escribe (`slack:U123`) y de qué conversación se trata: el canal, más el hilo cuando lo hay. Dos personas en el mismo canal no comparten memoria, y cada hilo de Slack conserva la suya. Las conversaciones se guardan en el `chat.db` de la carpeta de datos del agente (`~/.bxagents/<nombre del agente>/`), marcadas con `source` Slack.
 - **Comandos.** Por defecto el bot responde por sí mismo a `/help`, `/tools`, `/model`, `/info`, `/ping`, `/remember` y `/notes`, sin llamar al modelo. Slack se reserva los mensajes `/palabra` escritos para sus propios comandos, así que un bot nunca los recibe. Crea un slash command en la app de Slack (un `/agent` general, de modo que `/agent model fast` ejecuta `/model fast`, o uno por comando) y la respuesta solo la ve quien lo escribió, o define otro prefijo en `Agent.yml`:
 
 ```yaml

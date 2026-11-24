@@ -57,7 +57,7 @@ La opción por defecto cuando se omite `--template` por completo. ES el esquelet
 
 ### `webui-chat`
 
-Añade `gateways/webui.bx`, que expone la [UI web de chat](conventions/web-ui.md) integrada en `/chat`:
+Añade `gateways/webui.bx`, que expone la [UI web de chat](conventions/web-ui.md) integrada en `/chat` (`bxAgents add gateway web` escribe el mismo contenido en `gateways/web.bx`; el nombre del archivo da igual):
 
 ```javascript
 // gateways/webui.bx
@@ -199,22 +199,23 @@ class {
 
 ### `scheduled`
 
-Añade un scheduler ColdBox real, escrito a mano, que llama al agente de forma periódica:
+Añade un [scheduler de BoxLang](conventions/schedules.md) que llama al agente cada día:
 
 ```javascript
-// schedules/Scheduler.bx
-class extends="coldbox.system.web.tasks.ColdBoxScheduler" {
+// schedules/Example.bx
+class {
 
 	function configure() {
 		task( "example" )
-			.call( () => getInstance( "my-agent" ).run( "Give me a status update" ) )
 			.everyDayAt( "00:00" )
+			.call( () => run( "Give me a status update" ) )
+			.withNoOverlaps()
 	}
 
 }
 ```
 
-(El argumento de `getInstance(...)` es siempre el propio `name` del agente creado, de modo que resuelve la clave de binding correcta de WireBox.) Esto es contenido real de [`schedules/`](conventions/schedules.md), no un marcador de posición - edita `configure()` directamente para añadir o cambiar tareas usando el propio DSL de scheduler de ColdBox (`everyMinute()`, `everyHourAt()`, `cron(...)`, etc.).
+(`run()` envía el mensaje al agente por defecto del proyecto, el agente raíz. El build da a la clase sus ayudantes, así que no hay `extends`.) Esto es contenido real de [`schedules/`](conventions/schedules.md), no un marcador de posición - edita `configure()` para añadir o cambiar tareas con el DSL de tareas de BoxLang (`every(...)`, `everyDayAt(...)`, `onWeekdays(...)`, etc.), o añade más archivos. Un `cron(...)` de seis campos funciona; uno de cinco campos no se dispara en BoxLang 1.19.0 (ver [Cron](conventions/schedules.md#cron)).
 
 ### `multi-agent`
 

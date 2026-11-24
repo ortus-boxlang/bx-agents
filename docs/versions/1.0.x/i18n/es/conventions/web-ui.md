@@ -1,14 +1,14 @@
 ---
 title: La web app
 icon: phosphor-duotone:chat-circle-text
-summary: La web app generada - doce páginas, chat con streaming, rutinas, vault, logs y copias de seguridad.
-description: La web app generada: un menú a la izquierda y doce páginas (chat, conversaciones, rutinas, registro, memoria, vault, ajustes, agente, gateways, logs, acceso, datos y copias), streaming, aprobaciones y un almacén SQLite.
+summary: La web app generada - trece páginas, chat con streaming, rutinas, vault, logs y copias de seguridad.
+description: La web app generada: un menú a la izquierda y trece páginas (chat, conversaciones, rutinas, registro, conectores, memoria, vault, ajustes, agente, gateways, logs, acceso, datos y copias), streaming, aprobaciones y un almacén SQLite.
 tags: [conventions, gateways, web-ui]
 ---
 
 # La web app
 
-Una entrada `gateways/*.bx` con `exposes: "webui"` envía una web app completa para el agente: un menú a la izquierda con [doce páginas](#las-páginas), un chat con streaming, razonamiento y llamadas de tool, aprobaciones human-in-the-loop, temática por visitante, y un almacén SQLite real detrás.
+Una entrada `gateways/*.bx` con `exposes: "webui"` envía una web app completa para el agente: un menú a la izquierda con [trece páginas](#las-páginas), un chat con streaming, razonamiento y llamadas de tool, aprobaciones human-in-the-loop, temática por visitante, y un almacén SQLite real detrás.
 
 Vive bajo [gateways/](gateways/index.md) porque ahí es donde se declaran las exposiciones, pero es un subsistema por derecho propio, que es por lo que tiene su propia página.
 
@@ -37,7 +37,7 @@ Eso instala la app web en `<path>`: un módulo de ColdBox (`bxagentsui`) con sus
 
 ![La interfaz web de chat generada: una barra lateral de conversaciones, un transcript de varios turnos, y un encabezado/compositor con marca](../assets/webui-chat-light.png)
 
-La captura de pantalla anterior es la página generada real y sin modificar - la misma plantilla que este repositorio distribuye - con la marca de [`examples/webui-agent`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent) (su propia configuración de `theme`/`title`/`icon`) y poblada con contenido de conversación de ejemplo para ilustrarla; `bxAgents build && bxAgents serve` en ese ejemplo la reproduce de verdad.
+La captura de pantalla anterior muestra la web app que distribuye este repositorio, con la marca de [`examples/webui-agent`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent) (su propia configuración de `theme`/`title`/`icon`) y poblada con contenido de conversación de ejemplo para ilustrarla; `bxAgents build && bxAgents serve` en ese ejemplo la reproduce de verdad.
 
 La app está escrita con [Alpine.js](https://alpinejs.dev) y Sass y se compila con Vite en la carpeta `ui/` de este repositorio, y el build está **confirmado dentro del módulo**: `bxAgents build` nunca ejecuta `npm install`/`npm run build`, y un proyecto generado nunca necesita Node ni npm instalados en absoluto. El build escribe la configuración del módulo (ruta, marca, tema, archivos de extensiones) en `config/bxagentsui.json` de la app generada. Sus scripts y estilos se sirven desde `/modules/bxagentsui/includes` y no carga nada de un CDN. Para cambiar la app misma, ver [Trabajar en la app web](#trabajar-en-la-app-web).
 
@@ -71,7 +71,7 @@ Cada página tiene un **menú a la izquierda** y una **cabecera**. El menú tien
 
 Un miembro nunca ve el grupo Admin: una página Admin responde `403` a un miembro con sesión iniciada, y la API rechaza igualmente las rutas que hay detrás. El menú muestra solo las páginas que esta persona puede usar, según las capacidades que informa `GET /agent`. Se pliega a iconos (se recuerda en el navegador) y en un teléfono pasa a ser un cajón. La cabecera lleva el icono y el título del agente, un interruptor de claro u oscuro, y **Password** (un agente sin cuentas) o quién inició sesión y **Sign out**. Las extensiones pueden añadir cosas a la página Chat con [slots](extensions.md#la-página-web-slots-y-web).
 
-![La página Chat: el menú de la izquierda con los grupos Main y Admin, una conversación con una llamada a una tool y una respuesta con formato, y el selector de modelo y el anillo de contexto en la cabecera](../assets/webui/webui-chat.png)
+![La página Chat: el menú de la izquierda con los grupos Main y Admin, una conversación con una llamada a una tool y una respuesta con formato, la cabecera con el interruptor de claro u oscuro y quién inició sesión, y el selector de modelo y el anillo de contexto en la barra sobre la conversación](../assets/webui/webui-chat.png)
 
 ![La misma página en modo oscuro](../assets/webui/webui-chat-dark.png)
 
@@ -416,7 +416,7 @@ El datasource se registra en el clase base generada (`bxagents/Application.bx`) 
 // Application.bx (generado)
 this.datasources[ "bxagents" ] = {
 	"driver"  : "sqlite",
-	"database": expandPath( "./data/chat.db" )
+	"database": databaseFile( "./data/chat.db" )   // BXAGENTS_DB, si no el chat.db de la carpeta de datos, si no esta ruta
 }
 this.datasource = "bxagents"   // NO this.defaultDatasource - ver abajo
 
@@ -432,11 +432,11 @@ Ambos son opcionales de sobreescribir, por entrada:
 | Clave | Qué hace | Por defecto |
 | --- | --- | --- |
 | `database.datasource` | El nombre del datasource de ColdBox | `bxagents` |
-| `database.path` | El archivo de base de datos, relativo a la raíz de la app | `./data/chat.db` |
+| `database.path` | El archivo de base de datos de recurso, relativo a la raíz de la app. Se usa solo cuando `BXAGENTS_DB` no está definida y el agente no tiene nombre con el que hacer una carpeta de datos | `./data/chat.db` |
 
 Un `database.path` absoluto **falla el build**: se resuelve con `expandPath()` dentro de la app generada, así que una ruta absoluta escapa silenciosamente del directorio de la app y rompe un despliegue de `.bxa` empaquetado.
 
-**Un solo archivo para el chat web y el chat de terminal.** En la máquina de un desarrollador, `bxAgents serve` arranca la app con la variable de entorno `BXAGENTS_DB` apuntando a `data/chat.db` en la carpeta del proyecto, y `bxAgents chat` abrirá el mismo archivo. La app generada usa `BXAGENTS_DB` cuando está definida y `database.path` en caso contrario, así que una app desplegada guarda su archivo dentro de la app a menos que definas `BXAGENTS_DB` también allí (por ejemplo, hacia un volumen montado). Los proyectos nuevos ignoran `data/chat.db*` en git. El archivo está en modo WAL, así que el chat de terminal y un servidor en marcha pueden usarlo a la vez.
+**Un solo archivo para el chat web y el chat de terminal.** `bxAgents serve` arranca la app con la variable de entorno `BXAGENTS_DB` apuntando al `chat.db` de la carpeta de datos del agente (`~/.bxagents/<nombre del agente>/chat.db` por defecto, o donde digan `BXAGENTS_HOME` o `data.home`), y `bxAgents chat` abre el mismo archivo. La app generada usa `BXAGENTS_DB` cuando está definida. Si no, como en una app desplegada, le pregunta ella misma a la carpeta de datos, así que el archivo está en el mismo sitio. `database.path` es solo el recurso para un agente sin nombre. Para guardar el archivo en otro lugar, por ejemplo en un volumen montado, define `BXAGENTS_DB` o `BXAGENTS_HOME`. Un proyecto nuevo no tiene una carpeta `data/` propia. El archivo está en modo WAL, así que el chat de terminal y un servidor en marcha pueden usarlo a la vez.
 
 **El esquema está versionado y es solo-hacia-adelante.** `ChatStore.migrate()` (que llama `ChatDb.migrate()`) registra lo que ha aplicado en una tabla `bxagents_schema_version` y solo aplica lo que es más nuevo, así que arrancar contra un almacén existente es un no-op. v1 crea `conversations` y `preferences`; v2 añade `users`. Evolúcionalo añadiendo un paso a la lista de migraciones del almacén - nunca editando una migración que ya se envió, porque **SQLite no puede modificar ni eliminar una columna**. Una base de datos creada por una versión anterior de la app generada se reconoce y se deja como está.
 

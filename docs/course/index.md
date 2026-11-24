@@ -11,7 +11,7 @@ toc: false
 
 Twenty lessons, start to finish: install the CLI, scaffold a project, understand
 `Agent.yml`, wire up tools, skills and subagents, expose your agent over HTTP and to
-chat platforms, ship the generated web UI, schedule background work, test it for real,
+chat platforms, ship the web app, schedule background work, test it for real,
 and package + deploy it. Every lesson links back to the full [Conventions](../conventions/agent-yaml.md)
 reference for the deep dive - this course is the guided path through it.
 

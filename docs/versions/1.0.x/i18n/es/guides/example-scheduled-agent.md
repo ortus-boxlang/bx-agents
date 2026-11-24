@@ -1,14 +1,14 @@
 ---
 title: "Ejemplo: un agente programado"
 icon: phosphor-duotone:alarm
-summary: Despierta un agente con una programación cron real de ColdBox, sin necesidad de un demonio cron aparte.
-description: Despierta un agente con una programación cron real de ColdBox, sin necesidad de un demonio cron aparte.
+summary: Despierta un agente con una programación, con un scheduler de BoxLang y sin un demonio cron aparte.
+description: Despierta un agente con una programación, con un scheduler de BoxLang y sin un demonio cron aparte.
 tags: [guides, examples, schedules]
 ---
 
 # Ejemplo: un agente programado
 
-[`examples/scheduled-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/scheduled-agent) despierta un agente cada noche mediante una clase de scheduler ColdBox real, escrita a mano, bajo `schedules/` - la prueba de que las [Programaciones](../conventions/schedules.md) no son un DSL inventado por BxAgents, sino código ColdBox real que el build deja pasar intacto.
+[`examples/scheduled-agent/`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/scheduled-agent) despierta un agente cada noche con un scheduler de BoxLang bajo `schedules/` - código sencillo de [Programaciones](../conventions/schedules.md) con el propio DSL de tareas de BoxLang (`.every()`, `.everyDayAt()`, `.onWeekdays()` y el resto).
 
 ## El proyecto
 
@@ -17,37 +17,37 @@ scheduled-agent/
 ├── Agent.yml
 ├── instructions.md
 └── schedules/
-    └── Scheduler.bx
+    └── Nightly.bx
 ```
 
 `Agent.yml` tiene la misma forma que en todos los demás ejemplos - no hace falta nada especial en el lado del agente para que lo dirija una programación:
 
 ```yaml
 name: scheduled-agent
-description: An agent that wakes up on a cron schedule via schedules/.
+description: An agent that wakes up on a daily schedule via schedules/.
 model: mock/mock-model
 ```
 
 ## El scheduler
 
-`schedules/Scheduler.bx` extiende el propio `ColdBoxScheduler` de ColdBox y usa su DSL fluido de tareas real:
+`schedules/Nightly.bx` es una clase sencilla. El build añade la clase base que da `task()` y `run()`:
 
 ```javascript
-class extends="coldbox.system.web.tasks.ColdBoxScheduler" {
+class {
 
 	function configure() {
 		task( "nightly" )
-			.call( () => getInstance( "scheduled-agent" ).run( "cleanup" ) )
 			.everyDayAt( "00:00" )
+			.call( () => run( "cleanup" ) )
 			.withNoOverlaps()
 	}
 
 }
 ```
 
-Como `build` copia este archivo a la aplicación generada esencialmente tal cual (consulta [`schedules/`](../conventions/schedules.md)), tienes disponible el DSL completo de scheduler de ColdBox - `everyDayAt()`, `everyMinute()`, `withNoOverlaps()`, `onFailure()`, y todo lo demás que soporte el propio scheduler de ColdBox, no un subconjunto reimplementado por BxAgents.
+Tienes disponible el DSL completo de tareas de BoxLang - `every()`, `everyDayAt()`, `onWeekdays()`, `withNoOverlaps()`, `onFailure()` y todo lo demás, no un subconjunto reimplementado por BxAgents (consulta [`schedules/`](../conventions/schedules.md)). Un `cron()` de seis campos también funciona, pero uno de cinco campos nunca se dispara en BoxLang 1.19.0 (ver [Cron](../conventions/schedules.md#cron)).
 
-`getInstance( "scheduled-agent" )` resuelve por el `name` declarado en el propio `Agent.yml` de este proyecto - cada agente del árbol de un proyecto queda registrado con su propio nombre en WireBox, no solo la raíz, y eso es lo que hace que esta línea funcione sin ningún cableado adicional.
+`run( "cleanup" )` envía el mensaje al agente por defecto del proyecto, el agente raíz. Para llegar a un subagente, usa `agent( "TheAgentName" ).run( ... )`: cada agente del árbol de un proyecto queda registrado con su propio `name` declarado.
 
 ## Instrucciones para el prompt programado
 
@@ -70,15 +70,15 @@ bxAgents build
 bxAgents serve
 ```
 
-La tarea `nightly` se dispara automáticamente en cuanto `serve` está en marcha - sin ningún demonio cron aparte, sin ninguna entrada `cron` a nivel de sistema operativo. Lo mueve el propio hilo de scheduler en proceso de ColdBox, con la programación declarada en `Scheduler.bx`.
+La tarea `nightly` se dispara automáticamente en cuanto `serve` está en marcha - sin ningún demonio cron aparte, sin ninguna entrada `cron` a nivel de sistema operativo. Lo mueve el propio scheduler de BoxLang, con la programación declarada en `Nightly.bx`.
 
-Para añadir otra programación a tu propio proyecto, ejecuta `bxAgents add schedule`. Pregunta cuándo (por ejemplo `daily 09:00` o `every 15 minutes`), qué decirle al agente y a qué agente, y escribe `schedules/<Name>.bx`. `bxAgents inspect` lista las programaciones de un proyecto.
+Para añadir otra programación a tu propio proyecto, ejecuta `bxAgents add schedule`. Pregunta cuándo (por ejemplo `daily 09:00` o `every 15 minutes`), qué decirle al agente y a qué agente, y escribe `schedules/<Name>.bx` con los propios métodos de la tarea (`daily 09:00` pasa a ser `.everyDayAt( "09:00" )`). Una expresión cron que teclees se escribe como un `.cron()` de seis campos, porque uno de cinco campos no se dispara en BoxLang 1.19.0. `bxAgents inspect` lista las programaciones de un proyecto.
 
 !!! info
-    `build` no puede validar de forma significativa el *contenido* de `Scheduler.bx` más allá de comprobar que el archivo existe - una errata en una llamada a `getInstance()` o una referencia a un nombre de agente que no existe pasarán `build` limpiamente y solo saldrán a la luz cuando la aplicación generada arranque de verdad.
+    `build` comprueba el nombre de archivo del scheduler y que sea una clase, pero no el *contenido* de `configure()` - una errata en una llamada a `agent()` o una referencia a un nombre de agente que no existe pasarán `build` limpiamente y solo saldrán a la luz cuando la aplicación generada arranque de verdad.
 
 ## Dónde ir a continuación
 
-- [Programaciones](../conventions/schedules.md) para el DSL completo del scheduler y para ver dónde acaba el `config/Scheduler.bx` generado dentro de la salida del build.
+- [Programaciones](../conventions/schedules.md) para los ayudantes que recibe un scheduler, las formas de decir cuándo se ejecuta y la nota sobre cron.
 - [Ejemplo: un agente mínimo](example-minimal-agent.md) si aún no has visto la forma base de un proyecto.
 - [Ejemplo: construir un agente de chat web](example-web-chat-agent.md) para un agente accesible de forma interactiva en lugar de por temporizador.
