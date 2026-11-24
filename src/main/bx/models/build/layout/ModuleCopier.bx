@@ -1,4 +1,3 @@
-import bxModules.bxagents.models.util.Env;
 import bxModules.bxagents.models.util.TreeDelete;
 
 /**
@@ -69,21 +68,25 @@ class {
 	}
 
 	/**
-	 * The folder to copy: `BXAGENTS_MODULE_DIR` (an environment variable or system property) when it names a module folder (or
-	 * `none`, which means there is none), else
-	 * the installed module this code runs from. The variable is how a checkout, the dev stack and the test suite say where the built
-	 * module is (`build/modules/bxagents`), since they run the code from `src/main/bx`.
+	 * The folder to copy: the one asked for explicitly, else `BXAGENTS_MODULE_DIR` (read with getSystemSetting()) when it names a
+	 * module folder, else the installed module this code runs from. `none` (either way) means there is none. The variable is how a
+	 * checkout, the dev stack and the test suite say where the built module is (`build/modules/bxagents`), since they run the code
+	 * from `src/main/bx`. getSystemSetting() answers from a per-key cache for the life of the process, so a test that needs a
+	 * different folder passes it as `explicit` (or through the build and serve options) and never changes the variable.
+	 *
+	 * @explicit A module folder, or `none`; empty falls back to the variable
 	 *
 	 * @return Absolute path of the module folder to copy, or "" when there is none
 	 */
-	string function sourceDir() {
-		var named = trim( Env::get( "BXAGENTS_MODULE_DIR" ) )
-		// "none" says there is no module to copy, even where this code runs from an installed one (a run that must not serve)
-		if ( named == "none" ) {
-			return ""
-		}
-		if ( len( named ) && fileExists( named & "/ModuleConfig.bx" ) ) {
-			return named.replace( "\", "/", "all" ).reReplace( "[\\/]+$", "" )
+	string function sourceDir( string explicit = "" ) {
+		for ( var candidate in [ trim( arguments.explicit ), trim( getSystemSetting( "BXAGENTS_MODULE_DIR", "" ) ) ] ) {
+			// "none" says there is no module to copy, even where this code runs from an installed one (a run that must not serve)
+			if ( candidate == "none" ) {
+				return ""
+			}
+			if ( len( candidate ) && fileExists( candidate & "/ModuleConfig.bx" ) ) {
+				return candidate.replace( "\", "/", "all" ).reReplace( "[\\/]+$", "" )
+			}
 		}
 		return installedModuleDir()
 	}

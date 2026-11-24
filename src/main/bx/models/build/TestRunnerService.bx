@@ -41,10 +41,11 @@ class {
 
 	/**
 	 * @projectRoot Absolute path to the project root (containing tests/specs)
+	 * @moduleDir The bxagents module folder the child loads, or "none"; empty takes BXAGENTS_MODULE_DIR, else the installed module
 	 *
 	 * @return { exitCode, totalBundles, totalSuites, totalSpecs, totalPass, totalFail, totalError, totalSkipped, failures: [ { bundle, suite, spec, message } ] }
 	 */
-	struct function run( required string projectRoot ) {
+	struct function run( required string projectRoot, string moduleDir = "" ) {
 		var root = arguments.projectRoot.reReplace( "[\/]+$", "" )
 		var testsDir = root & "/tests"
 		var specsDir = testsDir & "/specs"
@@ -77,7 +78,7 @@ class {
 					"/specs"   : specsDir,
 					"/testbox" : testBoxDir
 				},
-				modulesDirectory : childModulesDirectory( root, workDir )
+				modulesDirectory : childModulesDirectory( root, workDir, arguments.moduleDir )
 			} ) )
 
 			fileWrite( scriptPath, renderRunnerScript( reportPath ) )
@@ -190,8 +191,8 @@ class {
 	 *
 	 * @return The module directories, as strings
 	 */
-	private array function childModulesDirectory( string projectRoot = "", required string workDir ) {
-		var source = new "models.build.layout.ModuleCopier@bxagents"().sourceDir()
+	private array function childModulesDirectory( string projectRoot = "", required string workDir, string moduleDir = "" ) {
+		var source = new "models.build.layout.ModuleCopier@bxagents"().sourceDir( arguments.moduleDir )
 		if ( !len( source ) ) {
 			return currentModulesDirectory( arguments.projectRoot )
 		}

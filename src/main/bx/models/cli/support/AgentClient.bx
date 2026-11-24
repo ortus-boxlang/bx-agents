@@ -181,16 +181,18 @@ class {
 	 *
 	 * @projectRoot Absolute path to the project root
 	 * @port Optional explicit port; defaults to a free ephemeral one
+	 * @moduleDir Optional bxagents module folder for the served app (see Serve.bx); empty takes BXAGENTS_MODULE_DIR
 	 *
 	 * @return { process, baseUrl, port } - hand `process` back to stopServer() when done
 	 */
-	struct function startServer( required string projectRoot, any port ) {
+	struct function startServer( required string projectRoot, any port, string moduleDir = "" ) {
 		var host       = "127.0.0.1"
 		var resolved   = arguments.port ?: findFreePort()
 		var serveResult = new "models.cli.Serve@bxagents"().run( {
 			projectRoot : arguments.projectRoot,
 			port        : resolved,
-			host        : host
+			host        : host,
+			moduleDir   : arguments.moduleDir
 		} )
 
 		// a server this client started serves the project's own API path, which the build wrote down

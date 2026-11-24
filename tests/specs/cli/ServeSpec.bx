@@ -1,24 +1,8 @@
 class extends="testbox.system.BaseSpec" {
 
-	/**
-	 * A served app carries the bxagents module in its own runtime, copied from the installed module. A source checkout has none, so the
-	 * specs that start a server name a stand-in folder: they only check what `serve` writes and starts, and stop the process at once.
-	 */
-	function beforeAll() {
-		variables.stubModule = createTempDirectory( prefix = "bxagents-serve-module-" );
-		fileWrite( stubModule & "/ModuleConfig.bx", "class {}" );
-		variables.savedModule = new bxagents.models.util.Env().get( "BXAGENTS_MODULE_DIR" );
-		createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_MODULE_DIR", stubModule );
-	}
-
-	function afterAll() {
-		if ( len( variables.savedModule ) ) {
-			createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_MODULE_DIR", variables.savedModule );
-		} else {
-			createObject( "java", "java.lang.System" ).clearProperty( "BXAGENTS_MODULE_DIR" );
-		}
-		directoryDelete( variables.stubModule, true );
-	}
+	// The specs that start a server only check what `serve` writes and starts, and stop the process at once. A served app carries the
+	// bxagents module in its own runtime; a source checkout has no installed one, so runTests.bxs names a stand-in folder in
+	// BXAGENTS_MODULE_DIR once, at the start of the run.
 
 	function run() {
 		describe( "cli.Serve", function() {
@@ -150,16 +134,10 @@ class extends="testbox.system.BaseSpec" {
 				var projectRoot = newTempProject( "full-project" );
 				buildVerb.run( { projectRoot : projectRoot } );
 				directoryDelete( projectRoot & "/.build/runtime/modules/bxagents", true );
-				var saved = new bxagents.models.util.Env().get( "BXAGENTS_MODULE_DIR" );
 				// "none": no module to copy, even though this suite runs from a built one
-				createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_MODULE_DIR", "none" );
-				try {
-					expect( function() {
-						serveVerb.run( { projectRoot : projectRoot } );
-					} ).toThrow( "BxAgents.NoModuleInBuild" );
-				} finally {
-					createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_MODULE_DIR", saved );
-				}
+				expect( function() {
+					serveVerb.run( { projectRoot : projectRoot, moduleDir : "none" } );
+				} ).toThrow( "BxAgents.NoModuleInBuild" );
 			} );
 
 			it( "tells a build made before the app/public layout to build again", function() {

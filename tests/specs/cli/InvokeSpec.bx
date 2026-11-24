@@ -113,20 +113,13 @@ class extends="testbox.system.BaseSpec" {
 				if ( !fileExists( builtModule & "/ModuleConfig.bx" ) ) {
 					return;
 				}
-				var system = createObject( "java", "java.lang.System" );
-				var saved = new bxagents.models.util.Env().get( "BXAGENTS_MODULE_DIR" );
-				system.setProperty( "BXAGENTS_MODULE_DIR", builtModule );
-				try {
-					var dir = newTempProject( "invoke-agent" );
-					buildVerb.run( { projectRoot : dir } );
+				var dir = newTempProject( "invoke-agent" );
+				buildVerb.run( { projectRoot : dir, moduleDir : builtModule } );
 
-					var result = invokeVerb.run( { projectRoot : dir, message : "Hello there", server : true } );
+				var result = invokeVerb.run( { projectRoot : dir, message : "Hello there", server : true, moduleDir : builtModule } );
 
-					expect( result.exitCode ).toBe( 0 );
-					expect( result.message ).toBe( "Mock response" );
-				} finally {
-					system.setProperty( "BXAGENTS_MODULE_DIR", saved );
-				}
+				expect( result.exitCode ).toBe( 0 );
+				expect( result.message ).toBe( "Mock response" );
 			} );
 
 		} );

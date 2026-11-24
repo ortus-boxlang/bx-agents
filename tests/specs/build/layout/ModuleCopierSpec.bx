@@ -93,34 +93,20 @@ class extends="testbox.system.BaseSpec" {
 				expect( copier.installedModuleDir() ).toBe( "" );
 			} );
 
-			describe( "which folder is the module to copy (BXAGENTS_MODULE_DIR)", function() {
+			describe( "which folder is the module to copy", function() {
 
-				beforeEach( function() {
-					variables.system = createObject( "java", "java.lang.System" );
-					variables.savedDir = new bxagents.models.util.Env().get( "BXAGENTS_MODULE_DIR" );
+				// getSystemSetting() answers from a per-key cache, so these pass the folder as the argument and never change BXAGENTS_MODULE_DIR
+
+				it( "is the folder it is asked for, when it has a ModuleConfig.bx", function() {
+					expect( copier.sourceDir( module ) ).toBe( module );
 				} );
 
-				afterEach( function() {
-					if ( len( savedDir ) ) {
-						system.setProperty( "BXAGENTS_MODULE_DIR", savedDir );
-					} else {
-						system.clearProperty( "BXAGENTS_MODULE_DIR" );
-					}
+				it( "is nothing when it is asked for none", function() {
+					expect( copier.sourceDir( "none" ) ).toBe( "" );
 				} );
 
-				it( "is the folder BXAGENTS_MODULE_DIR names, when it has a ModuleConfig.bx", function() {
-					system.setProperty( "BXAGENTS_MODULE_DIR", module );
-					expect( copier.sourceDir() ).toBe( module );
-				} );
-
-				it( "is nothing when BXAGENTS_MODULE_DIR is none", function() {
-					system.setProperty( "BXAGENTS_MODULE_DIR", "none" );
-					expect( copier.sourceDir() ).toBe( "" );
-				} );
-
-				it( "ignores a BXAGENTS_MODULE_DIR that is not a module folder, and falls back to the installed module", function() {
-					system.setProperty( "BXAGENTS_MODULE_DIR", tmp & "/not-a-module" );
-					expect( copier.sourceDir() ).toBe( copier.installedModuleDir() );
+				it( "ignores a folder that is not a module, and falls back to what BXAGENTS_MODULE_DIR or the installed module gives", function() {
+					expect( copier.sourceDir( tmp & "/not-a-module" ) ).toBe( copier.sourceDir() );
 				} );
 
 			} );

@@ -8,26 +8,9 @@
  */
 class extends="testbox.system.BaseSpec" {
 
-	/**
-	 * The spawned test run loads the bxagents module alone (a link to it in the run's work folder, not the machine's module directory),
-	 * so the specs that spawn one name the BUILT module as the one to link.
-	 */
-	function beforeAll() {
-		variables.system = createObject( "java", "java.lang.System" );
-		variables.savedModule = new bxagents.models.util.Env().get( "BXAGENTS_MODULE_DIR" );
-		variables.builtModule = expandPath( "/" ) & "build/modules/bxagents";
-		if ( fileExists( builtModule & "/ModuleConfig.bx" ) ) {
-			system.setProperty( "BXAGENTS_MODULE_DIR", builtModule );
-		}
-	}
-
-	function afterAll() {
-		if ( len( variables.savedModule ) ) {
-			system.setProperty( "BXAGENTS_MODULE_DIR", variables.savedModule );
-		} else {
-			system.clearProperty( "BXAGENTS_MODULE_DIR" );
-		}
-	}
+	// The spawned test run loads the bxagents module alone (a link to it in the run's work folder, not the machine's module directory),
+	// so the specs that spawn one name the BUILT module as the one to link, through the verb's moduleDir option.
+	variables.builtModule = expandPath( "/" ) & "build/modules/bxagents";
 
 	function run() {
 		describe( "cli.Test", function() {
@@ -102,7 +85,7 @@ class extends="testbox.system.BaseSpec" {
 				var projectRoot = newTempProject( "testable-agent" );
 				directoryCopy( expandPath( "/testbox" ), projectRoot & "/lib/testbox", true );
 
-				var result = testVerb.run( { projectRoot : projectRoot } );
+				var result = testVerb.run( { projectRoot : projectRoot, moduleDir : builtModule } );
 
 				expect( result.exitCode ).toBe( 0 );
 				expect( result.result.totalSpecs ).toBe( 2 );
@@ -138,7 +121,7 @@ class extends="testbox.system.BaseSpec" {
 					}
 				' );
 
-				var result = testVerb.run( { projectRoot : projectRoot } );
+				var result = testVerb.run( { projectRoot : projectRoot, moduleDir : builtModule } );
 
 				expect( result.exitCode ).toBe( 1 );
 				expect( result.result.totalFail ).toBeGT( 0 );

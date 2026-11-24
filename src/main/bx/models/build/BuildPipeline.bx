@@ -50,9 +50,8 @@ class {
 		variables.templateAssembler = new "models.build.layout.TemplateAssembler@bxagents"()
 		variables.moduleCopier = new "models.build.layout.ModuleCopier@bxagents"()
 		variables.miniServerJson = new "models.build.layout.MiniServerJson@bxagents"()
-		variables.moduleDir = new "models.build.layout.ModuleCopier@bxagents"().sourceDir()
+		variables.moduleDir = ""
 		variables.libsDir = ""
-		variables.applicationVariant = ""
 		variables.toolsSkillsCopier = new "models.build.generators.ToolsSkillsCopier@bxagents"()
 		variables.projectFilesCopier = new "models.build.generators.ProjectFilesCopier@bxagents"()
 		variables.runtimeLibsCopier = new "models.build.generators.RuntimeLibsCopier@bxagents"()
@@ -70,26 +69,16 @@ class {
 
 	/**
 	 * For tests and the dev harness: which folder is copied into `runtime/modules/bxagents`, and the lib/ the ColdBox
-	 * libraries come from. Not set, they are the ones inside the installed module this code runs from; a source
-	 * checkout has neither, and the build says so rather than failing.
+	 * libraries come from. Not set, they are what ModuleCopier.sourceDir() finds (BXAGENTS_MODULE_DIR, else the installed
+	 * module this code runs from); a source checkout has neither, and the build says so rather than failing. A test passes
+	 * the folder here rather than changing BXAGENTS_MODULE_DIR, because getSystemSetting() answers from a per-key cache.
 	 *
-	 * @moduleDir The module folder (named bxagents) to copy into the app's runtime
+	 * @moduleDir The module folder (named bxagents) to copy into the app's runtime; `none` copies nothing
 	 * @libsDir The module's lib/ folder (coldbox, modules/*)
 	 */
 	function setModuleSource( string moduleDir = "", string libsDir = "" ) {
 		variables.moduleDir = arguments.moduleDir
 		variables.libsDir = arguments.libsDir
-		return this
-	}
-
-	/**
-	 * Which shape `public/Application.bx` takes: "template" (the template's own file plus fenced insertions) or "stub" (a
-	 * thin class extending a generated base). Not set, ColdBoxAppGenerator's defaultVariant() decides.
-	 *
-	 * @variant "template" or "stub"
-	 */
-	function setApplicationVariant( required string variant ) {
-		variables.applicationVariant = arguments.variant
 		return this
 	}
 
@@ -257,7 +246,8 @@ class {
 			// (unlike skillsDirectory) - the app must call aiToolRegistry().scan()
 			// itself at startup so tool-by-name lookups (M10's local MCP server
 			// wiring, any future tool reference) resolve.
-			// `app.tools`: the web root `/` is public/ now, so a bare "tools" would look for public/tools and find nothing, silently
+			// `app.tools`: bx-ai expands the dotted path against a mapping (expandPath( "/app/tools" )), so it must be a mapping path
+			// (the template's /app), not a path relative to the app. A bare "tools" expands the mapping /tools, which this layout does not have
 			toolScanStatements.append( 'aiToolRegistry().scan( "app.tools" )' )
 		}
 
@@ -338,14 +328,8 @@ class {
 			schedulerClasses      = variables.schedulerGenerator.classPaths( discovery ),
 			// The developer's own Application.bx, copied as it is; absent, the app gets one that only extends the base
 			userApplicationPath   = fileExists( root & "/Application.bx" ) ? root & "/Application.bx" : "",
-			publicDir             = publicDir,
-			applicationVariant    = variables.applicationVariant
+			publicDir             = publicDir
 		)
-		arguments.onProgress( "    public/Application.bx: #coldboxResult.variant# variant" )
-		for ( var note in coldboxResult.warnings ) {
-			arguments.onProgress( "    ! " & note )
-			validation.warnings.append( note )
-		}
 		var agentNames = coldboxResult.agentNodes.map( function( n ) { return n.name } )
 		arguments.onProgress( "    agents registered in WireBox (getInstance-able by name): #agentNames.toList( ', ' )#" )
 
@@ -372,7 +356,7 @@ class {
 
 		// Only the bxagents module goes into runtime/modules: the one module the served app needs, with the modules nested in it.
 		// Never the machine's own module folder, which would load every module installed there.
-		var moduleResult = variables.moduleCopier.copy( variables.moduleDir, layout.runtimeDir )
+		var moduleResult = variables.moduleCopier.copy( variables.moduleCopier.sourceDir( variables.moduleDir ), layout.runtimeDir )
 		if ( moduleResult.reason == "copied" ) {
 			arguments.onProgress( "+ Copied the bxagents module into .build/runtime/modules" )
 		} else if ( moduleResult.reason == "unchanged" ) {

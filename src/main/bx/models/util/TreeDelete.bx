@@ -1,7 +1,11 @@
 /**
  * Deletes a folder and everything in it without following links: a symbolic link inside it is removed as a link, so
- * whatever it points at (the web app module's source, linked into a dev build) is never touched. directoryDelete( path,
- * true ) follows links and empties their targets.
+ * whatever it points at (the web app module's source, linked into a dev build) is never touched.
+ *
+ * Why not `directoryDelete( path, true )`: it follows links and empties their targets. Measured on BoxLang 1.19.0: the
+ * `test` verb's work folder held a link to the built module (`build/modules/bxagents`); deleting the folder with
+ * `directoryDelete( path, true )` emptied the module itself, and the rest of that suite run failed with the module gone.
+ * The same call on `.build` in a dev build would empty the web app module's source, which `.build` links.
  */
 class {
 
