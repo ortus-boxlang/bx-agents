@@ -1,44 +1,75 @@
 ---
-title: "The Generated Web Chat UI"
+title: "The Web App"
 icon: phosphor-duotone:globe-hemisphere-west
-summary: A complete browser chat client - sidebar, streaming, approvals, SQLite store.
-description: A complete browser chat client - sidebar, streaming, approvals, SQLite store.
+summary: Serve the agent and meet the web app that comes with it - a chat, your conversations, the registry, settings and more.
+description: Serve the agent and meet the web app that comes with it - a chat, your conversations, the registry, settings and more.
 tags: [course, conventions, web-ui]
 ---
 
-# The Generated Web Chat UI
+# The Web App
 
-A `gateways/*.bx` entry with `exposes: "webui"` ships a complete browser chat client
-for your agent - a conversation sidebar, streaming with reasoning and tool calls,
-human-in-the-loop approvals, per-visitor theming, and a real SQLite store behind it.
+A `gateways/*.bx` entry with `exposes: "webui"` gives your agent a complete web app: a chat with streaming,
+reasoning, tool calls and approvals, and thirteen pages around it (your conversations, routines, what the agent
+can use, its memory, its settings, and for admins its logs, access and backups). It is a ColdBox module that calls
+the agent API at `/__bxagents`, built ahead of time and shipped inside BxAgents, so `bxAgents build` never runs
+`npm install` and a project never needs Node.
 
-```javascript
-// gateways/chat.bx
-class {
-	function configure() {
-		return {
-			exposes     : "webui",
-			path        : "/chat",
-			apiKeyEnvVar: "CHAT_UI_API_KEY"   // optional - see "Securing it" below
-		};
-	}
-}
+!!! info "What you will build"
+    A running Acme support web app on port 8791, talked to from a browser and from a script. About 20 minutes.
+
+## 1. Add the web gateway and serve it
+
+`bxAgents add gateway web` writes `gateways/web.bx` for you. `--auth=open` means no sign-in, fine on your own
+machine (the [users lesson](users-roles-and-tokens.md) closes it):
+
+```bash title="Terminal 2"
+cd ~/bxagents-course/acme-support
+bxAgents add gateway web --auth=open --yes
+bxAgents build
 ```
 
-This installs the web app at `<path>`: a ColdBox module that calls the agent API
-at `/__bxagents`. Its scripts and styles are built ahead of time and ship inside
-BxAgents itself - `bxAgents build` never runs `npm install`, and a generated
-project never needs Node installed at all.
+```text title="You see"
++ Created  gateways/web.bx
+...
+Build succeeded: <anything>/acme-support/.build/app
+```
 
-![The generated web app with a conversation](../assets/webui-chat-light.png)
+Open Terminal 3 and serve it. Port 8080 is taken by the scripted model, so the course uses 8791:
 
-This is the web app, here branded with
-[`examples/webui-agent`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent)'s
-`theme`/`title`/`icon` config from [Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md)'s exposure
-concept, taken further. `bxAgents build && bxAgents serve` in that example serves the
-same app.
+<!-- course: background name=serve ready-url=http://127.0.0.1:8791/chat -->
+```bash title="Terminal 3"
+cd ~/bxagents-course/acme-support
+bxAgents serve --port=8791
+```
 
-## What the page can do
+```text title="You see"
+Serving [<anything>] (the app is in [<anything>]) on http://127.0.0.1:8791 - bound to 127.0.0.1 only
+...
+```
+
+`serve` runs a real `boxlang-miniserver` on `.build/public`, the only folder it serves, and is bound to
+`127.0.0.1`: nobody else on your network can reach it. The first start takes a few seconds. Stop it with Ctrl+C,
+and start it again after every `build`, because it loaded the app that was built when it started.
+
+## 2. Talk to it
+
+Open `http://127.0.0.1:8791/chat` in a browser (the bare address redirects there) and type `hello`. The scripted
+model answers, and the answer streams in word by word. Ask `refund` and `48213` too: the second shows a tool call as
+a card with its arguments and result.
+
+![The Chat page: the left menu with Main and Admin groups, the header, and a conversation with a tool call and a formatted answer](../assets/webui/webui-chat.png)
+
+The same thing from a script. The agent API is under `/__bxagents`; `invoke` runs one turn and answers JSON:
+
+```bash title="Terminal 2"
+curl -s -H 'Content-Type: application/json' -d '{"input":"hello"}' http://127.0.0.1:8791/__bxagents/invoke
+```
+
+```text title="You see"
+{"output":"Hello from the practice model. I am scripted: I only say what the course told me to say.","threadId":"<anything>","success":true}
+```
+
+## What the chat can do
 
 - **Conversation sidebar** - switch, rename, delete, or start a new conversation.
 - **Steer while streaming** - the composer stays live during a turn; **Send** becomes
@@ -61,50 +92,45 @@ same app.
   breakdown.
 - **Model picker** - when the entry lists `profiles`, visitors can choose one per message.
 
-### The pages and the header
+## The pages and the header
 
-The app is more than the chat. A left menu lists its pages, and each page is an address of its own
-under `<path>` (`/chat/conversations`, `/chat/routines`, `/chat/settings`), so you can bookmark one.
-The menu shows only what this person may use. An address under `<path>` that is no page answers `404`.
+The app is more than the chat. A left menu lists its pages, and each page is an address of its own under the
+gateway's `path` (`/chat/conversations`, `/chat/routines`, `/chat/settings`), so you can bookmark one. The menu shows
+only what this person may use. An address under `/chat` that is no page answers `404`.
 
 | Group | Pages |
 |---|---|
 | Main | Chat, Conversations, Routines, Registry, Connectors, Memory, Vault, Settings |
 | Admin | Agent, Gateways, Logs, Access, Data and backups |
 
-The header holds the agent's icon and title, a light or dark switch, and **Password** (an agent
-without accounts) or who is signed in and **Sign out**. On the Chat page, the bar above the
-conversation holds the model picker, the context ring and the **Fork**, **Export** and **Compact**
-buttons.
+Take the tour with what you already built:
 
-The **Settings** page has **Appearance**: each visitor picks light, dark or system, an accent color,
-the text size and the density, saved in their own browser. It never changes your `theme`, which
-stays the default. The **Access** page lists, creates and revokes tokens for admins, when the server
-sets `agentApi.manageTokens: true` ([Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md)).
+- **Conversations** lists every conversation you may see, from the web, the terminal and (later) gateways and
+  routines, with a search and filters.
+- **Registry** has three tabs: **Tools** lists `orderStatus` and `now`, grouped by where they come from, and marks
+  the ones that ask first; **Skills** lists `refund-policy` and the six shipped ones, with a **Read** button;
+  **Volumes** lists the folders the agent may use.
+- **Settings** has **Appearance** (light or dark, an accent color, text size, density, kept in your browser) and your
+  own per-person settings, the subject of [Each Person's Own Settings](layered-settings.md).
+- **Routines**, **Memory** and **Vault** each get a lesson of their own, and the Admin group comes with
+  [Who Is Allowed](users-roles-and-tokens.md) and [Logs, Usage and Backups](operating-it.md).
+
+![The Conversations page: filters, agent chips and a table of conversations](../assets/webui/webui-conversations.png)
+
+![The Registry page on the Tools tab](../assets/webui/webui-registry.png)
+
+The header holds the agent's icon and title, a light or dark switch, and **Password** (an agent without accounts)
+or who is signed in and **Sign out**.
 
 ## Without accounts: one shared workspace
 
-By default the UI has **no accounts and no gate** - every visitor is anonymous, and
-every visitor reads and writes the **same** conversations, preferences and agent
-memory. This is the zero-ceremony local-dev experience, not a deployment posture.
+By default the app has **no accounts and no gate**: every visitor is anonymous, and every visitor reads and writes
+the **same** conversations, preferences and agent memory. That is the zero-ceremony local experience, not a
+deployment posture.
 
 !!! warning
-    An open UI has no privacy between visitors. Declare `users` if the page is
-    reachable by more than the people who should see the transcripts.
-
-```javascript
-users : [
-    { username: "ada", passwordEnvVar: "ACME_ADA_PASSWORD", displayName: "Ada Lovelace" }
-]
-```
-
-An account names the **environment variable** holding its password, or carries an
-already-hashed value - a literal `password` key is a build error, not a warning.
-Generate a hash with:
-
-```bash
-bxAgents hash-password --password="<your-password>"
-```
+    An open app has no privacy between visitors. Declare `users` (or tokens) if the page is reachable by more than
+    the people who should see the transcripts. [Who Is Allowed](users-roles-and-tokens.md) does it step by step.
 
 ## Branding it
 
@@ -127,27 +153,12 @@ theme: {
 available, plus a `themeFile` for anything the tokens don't cover. `icon` can be an emoji, an
 image address or `phosphor:<name>` (a Phosphor icon built into the page).
 
-## Securing it
+## Checkpoint
 
-`apiKeyEnvVar` is the agent API's shared secret - not a full login system. Left unset,
-the API is open (fine for local dev). Set it, and every call to `/__bxagents` must carry
-a matching `x-bxagents-token` header. The app's pages themselves are deliberately **not**
-gated, since a browser's plain page navigation can't send a custom header: the page asks for the
-secret in a **Password** dialog that opens by itself when the server answers `401`, and from the
-key button in the header. For several people, use issued tokens or list `users`
-([Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md) covers tokens, `allowedIPs` and `rateLimit`).
+`acme-support/` has `gateways/web.bx`. `kit/resume.sh 15-the-generated-web-chat-ui` restores it (add `serve` again
+after a rebuild).
 
-## Try it
-
-```bash
-bxAgents build
-bxAgents serve --port=8080
-```
-
-Open `http://localhost:8080/chat` in a browser (or just `http://localhost:8080/`, which redirects there) and talk to your agent - the same one
-you've been building tools, skills and subagents onto since [Giving Your Agent Tools](09-giving-your-agent-tools.md).
-
-Full reference: [The web chat UI](../conventions/web-ui.md). To change the app itself, see
+Full reference: [The web app](../conventions/web-ui.md). To change the app itself, see
 [Work on the web app](../guides/ui-development.md).
 
 Next: [The Agent Asks First](approvals.md)

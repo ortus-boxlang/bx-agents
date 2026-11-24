@@ -87,4 +87,4 @@ Because the web app and the API list the profiles too, a person can pick one per
 
 Full reference: [Models and profiles](../conventions/models.md).
 
-Next: [The Generated Web Chat UI](15-the-generated-web-chat-ui.md)
+Next: [The Web App](15-the-generated-web-chat-ui.md)

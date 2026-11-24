@@ -46,7 +46,7 @@ class {
 	}
 
 	function normalize( required string path ) {
-		return reReplace( replace( arguments.path, "\", "/", "all" ), "/+$", "" )
+		return reReplace( reReplace( replace( arguments.path, "\", "/", "all" ), "/{2,}", "/", "all" ), "/+$", "" )
 	}
 
 	// ------------------------------------------------------------------ the manifest
@@ -245,10 +245,24 @@ class {
 		return kept.toList( char( 10 ) )
 	}
 
+	/**
+	 * @return The text with every character that is not a letter, a digit or a space escaped
+	 */
+	string function escapeRegex( required string text ) {
+		var escaped = createObject( "java", "java.lang.StringBuilder" ).init()
+		for ( var ch in arguments.text.toCharArray() ) {
+			if ( !reFind( "^[A-Za-z0-9 ]$", ch ) ) {
+				escaped.append( "\" )
+			}
+			escaped.append( ch )
+		}
+		return escaped.toString()
+	}
+
 	boolean function lineMatches( required string expected, required string actual ) {
 		if ( find( "<anything>", arguments.expected ) ) {
 			var parts = arguments.expected.split( "<anything>", -1 )
-			var pattern = "^" & parts.map( ( p ) => createObject( "java", "java.util.regex.Pattern" ).quote( p ) ).toList( ".*" ) & "$"
+			var pattern = "^" & parts.map( ( p ) => escapeRegex( p ) ).toList( ".*" ) & "$"
 			return reFind( "(?s)" & pattern, arguments.actual ) > 0
 		}
 		return arguments.expected == arguments.actual
@@ -696,6 +710,8 @@ class {
 		builder.redirectErrorStream( true )
 		builder.redirectOutput( createObject( "java", "java.io.File" ).init( logFile ) )
 		setEnvironment( builder )
+		// a server must not see the end of its input: `serve` quits when it reads one
+		builder.redirectInput( createObject( "java", "java.lang.ProcessBuilder$Redirect" ).INHERIT )
 		variables.processes[ name ] = { process : builder.start(), log : logFile, keep : d.keyExists( "keep" ) }
 		var wait = val( d.seconds ?: 120 )
 		if ( len( d[ "ready-url" ] ?: "" ) ) {
@@ -704,8 +720,8 @@ class {
 				if ( trim( probe.output ) == "200" ) {
 					break
 				}
-				if ( !variables.processes[ name ].process.isAlive() ) {
-					return "the background command [#name#] stopped:" & char( 10 ) & indent( clean( fileRead( logFile ) ) )
+				if ( !variables.processes[ name ].process.isAlive() && variables.processes[ name ].process.exitValue() != 0 ) {
+					return "the background command [#name#] stopped (exit #variables.processes[ name ].process.exitValue()#):" & char( 10 ) & indent( clean( fileRead( logFile ) ) )
 				}
 				sleep( 1000 )
 				if ( i == wait ) {
@@ -753,6 +769,16 @@ class {
 				p.process.descendants().toArray().each( ( h ) => h.destroyForcibly() )
 				p.process.destroyForcibly()
 				variables.processes.delete( name )
+			}
+		}
+		// `bxAgents serve` leaves its server running when it is not at a terminal (the command returns after two seconds),
+		// so a server started from the workspace is found by where it lives and stopped
+		var served = arguments.everything ? variables.work : variables.work & "/home/bxagents-course/acme-support/.build/runtime"
+		var self = createObject( "java", "java.lang.ProcessHandle" ).current().pid()
+		for ( var handle in createObject( "java", "java.lang.ProcessHandle" ).allProcesses().toArray() ) {
+			var info = handle.info().commandLine()
+			if ( handle.pid() != self && info.isPresent() && find( served, info.get() ) && ( arguments.everything || find( "boxlang-miniserver", info.get() ) ) ) {
+				handle.destroyForcibly()
 			}
 		}
 		if ( !arguments.everything ) {
