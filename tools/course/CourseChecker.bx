@@ -362,6 +362,11 @@ class {
 			}
 		}
 
+		// the kit carries a copy of the scripted model
+		if ( fileRead( variables.repoRoot & "/tools/course/kit/fakellm.bxs" ) != fileRead( variables.repoRoot & "/tools/demo/fakellm.bxs" ) ) {
+			problems.append( "tools/course/kit/fakellm.bxs differs from tools/demo/fakellm.bxs (copy it again)" )
+		}
+
 		// the counts the home page and the index say
 		var words = { 20 : "Twenty", 29 : "Twenty-nine" }
 		for ( var file in [ "docs/.theme/home.bxm", "docs/course/index.md" ] ) {
@@ -423,7 +428,7 @@ class {
 		var only = o.only ?: ""
 		var started = !len( from ) && !len( only )
 		var previous = ""
-		var order = []
+		var needsModel = false
 
 		if ( !( preflight( 8080 ) && preflight( 8791 ) ) ) {
 			throw( type = "Course.PortBusy", message = "Port 8080 or 8791 is in use. The course needs both free (the scripted model and the web app)." )
@@ -440,7 +445,7 @@ class {
 							restore( checkpoints & "/" & previous, ws & "/acme-support" )
 							directoryCopy( checkpoints & "/" & previous, work & "/snapshot-prev", true )
 						}
-						startModel( ws )
+						needsModel = true
 					} else {
 						previous = checkpointFor( stemName, checkpoints, previous )
 						continue
@@ -454,6 +459,10 @@ class {
 				if ( !list.filter( ( s ) => s.kind != "skip" ).len() ) {
 					continue
 				}
+				if ( needsModel && !list.filter( ( s ) => s.kind == "run" && ( s.directives.name ?: "" ) == "fake" ).len() ) {
+					startModel( ws )
+				}
+				needsModel = false
 				println( "== #stemName#" )
 				variables.cwd = ws
 				for ( var s in list ) {
@@ -643,11 +652,7 @@ class {
 		var builder = createObject( "java", "java.lang.ProcessBuilder" ).init( [ "bash", "-c", wrapper ] )
 		builder.redirectErrorStream( true )
 		builder.redirectOutput( createObject( "java", "java.io.File" ).init( logFile ) )
-		var env = builder.environment()
-		env.put( "HOME", variables.home ?: variables.work )
-		env.put( "PATH", variables.work & "/bin:" & env.get( "PATH" ) )
-		env.put( "NO_COLOR", "1" )
-		env.put( "BXAGENTS_TOKEN", "" )
+		setEnvironment( builder )
 		var process = builder.start()
 		var done = process.waitFor( arguments.timeout, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS )
 		var code = 124
@@ -665,6 +670,21 @@ class {
 		return { code : code, output : output, cwd : endedIn }
 	}
 
+	/**
+	 * The environment of every command: its own HOME (the JVM reads the home folder from the system, not from $HOME, so
+	 * `user.home` is set too) and no color, and nothing of the person's own ~/.bxagents is touched
+	 */
+	private void function setEnvironment( required any builder ) {
+		var env = arguments.builder.environment()
+		var home = variables.home ?: variables.work
+		env.put( "HOME", home )
+		env.put( "PATH", variables.work & "/bin:" & env.get( "PATH" ) )
+		env.put( "NO_COLOR", "1" )
+		env.put( "JAVA_TOOL_OPTIONS", ( env.containsKey( "JAVA_TOOL_OPTIONS" ) ? env.get( "JAVA_TOOL_OPTIONS" ) & " " : "" ) & "-Duser.home=" & home )
+		env.remove( "BXAGENTS_TOKEN" )
+		env.remove( "BXAGENTS_HOME" )
+	}
+
 	private string function startBackground( required struct s ) {
 		var d = arguments.s.directives
 		var name = d.name ?: "bg"
@@ -673,10 +693,7 @@ class {
 		var builder = createObject( "java", "java.lang.ProcessBuilder" ).init( [ "bash", "-c", script ] )
 		builder.redirectErrorStream( true )
 		builder.redirectOutput( createObject( "java", "java.io.File" ).init( logFile ) )
-		var env = builder.environment()
-		env.put( "HOME", variables.home )
-		env.put( "PATH", variables.work & "/bin:" & env.get( "PATH" ) )
-		env.put( "NO_COLOR", "1" )
+		setEnvironment( builder )
 		variables.processes[ name ] = { process : builder.start(), log : logFile, keep : d.keyExists( "keep" ) }
 		var wait = val( d.seconds ?: 120 )
 		if ( len( d[ "ready-url" ] ?: "" ) ) {
@@ -728,7 +745,7 @@ class {
 	 * Stops the background commands a lesson started (all, at the end, or only those not marked `keep`)
 	 */
 	private void function stopBackground( required boolean everything ) {
-		for ( var name in duplicate( variables.processes ).keyArray() ) {
+		for ( var name in variables.processes.keyArray() ) {
 			var p = variables.processes[ name ]
 			if ( arguments.everything || !p.keep ) {
 				p.process.descendants().toArray().each( ( h ) => h.destroyForcibly() )

@@ -40,25 +40,34 @@ if ( problems.len() ) {
 }
 
 failures = []
-if ( !( opts.static ?: false ) ) {
-	only = opts.lesson ?: ""
-	work = opts.work ?: ( getTempDirectory() & "/course-run" )
-	result = checker.replay( {
-		work     : work,
-		bxagents : opts.bxagents ?: "",
-		from     : opts.from ?: "",
-		only     : only,
-		emit     : opts[ "emit-checkpoints" ] ?: false,
-		keep     : opts.keep ?: false,
-		network  : opts.network ?: false,
-		timeout  : opts.timeout ?: 300
-	} )
-	failures = result.failures
-	println( "Replay: #result.ran# step(s), #failures.len()# failure(s)" )
-	failures.each( ( f ) => println( "  - " & f ) )
-	if ( opts.keep ?: false ) {
-		println( "Workspace kept in #work#" )
+
+function runReplay( required any checker, required struct opts ) {
+	try {
+		var work = opts.work ?: ( getTempDirectory() & "/course-run" )
+		var result = checker.replay( {
+			work     : work,
+			bxagents : opts.bxagents ?: "",
+			from     : opts.from ?: "",
+			only     : opts.lesson ?: "",
+			emit     : opts[ "emit-checkpoints" ] ?: false,
+			keep     : opts.keep ?: false,
+			network  : opts.network ?: false,
+			timeout  : opts.timeout ?: 300
+		} )
+		println( "Replay: #result.ran# step(s), #result.failures.len()# failure(s)" )
+		result.failures.each( ( f ) => println( "  - " & f ) )
+		if ( opts.keep ?: false ) {
+			println( "Workspace kept in #work#" )
+		}
+		return result.failures
+	} catch ( any e ) {
+		println( "Replay stopped: " & e.message )
+		return [ e.message ]
 	}
+}
+
+if ( !( opts.static ?: false ) ) {
+	failures = runReplay( checker, opts )
 }
 
 java.lang.System::exit( problems.len() || failures.len() ? 1 : 0 )
