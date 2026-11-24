@@ -1,5 +1,5 @@
 ---
-title: "Lección 18: Interceptores y dependencias de módulos"
+title: "Interceptores y dependencias de módulos"
 icon: phosphor-duotone:funnel
 summary: Hooks de ciclo de vida de ColdBox acotados con @scope, y dependencias de módulos de BoxLang bajo modules/.
 description: Hooks de ciclo de vida de ColdBox acotados con @scope, y dependencias de módulos de BoxLang bajo modules/.
@@ -42,7 +42,7 @@ ya que el ámbito `runtime` tiene efectos más allá de una sola aplicación. Un
 que no sea `agent` ni `runtime` hace fallar el build con un error claro.
 
 Ya has visto un interceptor **generado** sin haber escrito ninguno tú - cuando listas
-`users` en el chat web ([Lección 15](15-the-generated-web-chat-ui.md)), su compuerta de inicio de
+`users` en el chat web ([La UI web de chat generada](15-the-generated-web-chat-ui.md)), su compuerta de inicio de
 sesión se registra exactamente así, solo que escrita por BxAgents en vez de por ti.
 
 ## `extensions/` - añadir al chat y al agente servido
@@ -104,7 +104,7 @@ Esta es la convención propia de BxAgents para declarar dependencias a efectos d
 es independiente del mecanismo de carga de módulos del propio BoxLang, y hoy `build` valida y
 registra estas carpetas en el manifest sin cargarlas en la aplicación generada. Las **dependencias
 circulares** se rechazan igual que los ciclos de subagentes (consulta la
-[Lección 11](11-composing-subagents.md)): se informa del camino completo del ciclo y no se
+[Componer subagentes](11-composing-subagents.md)): se informa del camino completo del ciclo y no se
 genera código hasta que el grafo sea acíclico. Un `module.json` es totalmente opcional - de
 una carpeta de módulo que no lo tenga se asume que no declara dependencias.
 
@@ -117,4 +117,4 @@ registre cada petición entrante mediante `writeLog()`, reconstruye, y comprueba
 
 Referencia completa: [interceptors/](../conventions/interceptors.md), [modules/](../conventions/modules.md).
 
-Siguiente: [Lección 19 - Probar tu agente](19-testing-your-agent.md)
+Siguiente: [Probar tu agente](19-testing-your-agent.md)

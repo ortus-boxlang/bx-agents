@@ -1,0 +1,120 @@
+/**
+ * The course checker's parser and matcher (tools/course/CourseChecker.bx), and the static checks it runs on the real
+ * course: they are the guard against a lesson that numbers itself, a mirror that drifted or a link that lands nowhere.
+ * The replay of the lessons against the scripted model is not run here (it starts servers; see tools/course/README.md).
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function beforeAll() {
+		variables.checker = new tools.course.CourseChecker( expandPath( "/tools" ) & "/.." )
+	}
+
+	function run() {
+		describe( "Reading a lesson", function() {
+
+			it( "finds the fences that have a title, and the directives before them", function() {
+				var markdown = [
+					"## A lesson",
+					"",
+					"```bash",
+					"echo not run",
+					"```",
+					"",
+					"<!-- course: expect-fail -->",
+					"```bash title=""Terminal 2""",
+					"false",
+					"```",
+					"",
+					"```text title=""You see""",
+					"nothing",
+					"```",
+					"",
+					"    ```yaml title=""acme-support/Agent.yml""",
+					"    name: x",
+					"    ```"
+				].toList( char( 10 ) )
+				var blocks = checker.parseBlocks( markdown )
+
+				expect( blocks ).toHaveLength( 4 )
+				expect( blocks[ 2 ].title ).toBe( "Terminal 2" )
+				expect( blocks[ 2 ].directives ).toHaveKey( "expect-fail" )
+				expect( blocks[ 4 ].body ).toBe( "name: x" )
+			} )
+
+			it( "turns the blocks into steps and attaches the output to its command", function() {
+				var steps = checker.steps( checker.parseBlocks( [
+					"```bash title=""Terminal 2""",
+					"echo hi",
+					"```",
+					"```text title=""You see""",
+					"hi",
+					"```",
+					"<!-- course: manual -->",
+					"```bash title=""Terminal 2""",
+					"rm -rf /",
+					"```",
+					"```yaml title=""acme-support/Agent.yml""",
+					"name: x",
+					"```"
+				].toList( char( 10 ) ) ) )
+
+				expect( steps.map( ( s ) => s.kind ).toList() ).toBe( "run,skip,file" )
+				expect( steps[ 1 ].expected ).toBe( "hi" )
+				expect( steps[ 3 ].path ).toBe( "acme-support/Agent.yml" )
+			} )
+
+			it( "reads the words and the key=value pairs of a directive", function() {
+				var d = checker.parseDirective( "background name=fake ready=""fakellm listening"" keep" )
+
+				expect( d ).toHaveKey( "background" )
+				expect( d.name ).toBe( "fake" )
+				expect( d.ready ).toBe( "fakellm listening" )
+				expect( d ).toHaveKey( "keep" )
+			} )
+
+		} )
+
+		describe( "Matching output", function() {
+
+			it( "compares line by line and ignores colors and trailing spaces", function() {
+				expect( checker.matches( "a" & char( 10 ) & "b", char( 27 ) & "[1ma" & char( 27 ) & "[0m  " & char( 10 ) & "b" & char( 10 ) ) ).toBeTrue()
+				expect( checker.matches( "a", "b" ) ).toBeFalse()
+				expect( checker.matches( "a", "a" & char( 10 ) & "b" ) ).toBeFalse()
+			} )
+
+			it( "lets <anything> stand for text inside a line", function() {
+				expect( checker.matches( "Built <anything>/.build/app", "Built /tmp/x/.build/app" ) ).toBeTrue()
+				expect( checker.matches( "{""id"":""<anything>"",""ok"":true}", "{""id"":""a-1"",""ok"":true}" ) ).toBeTrue()
+				expect( checker.matches( "Built <anything>/.build/app", "Built /tmp/x/build/app" ) ).toBeFalse()
+			} )
+
+			it( "lets a line of three dots stand for any number of lines, none included", function() {
+				expect( checker.matches( "a" & char( 10 ) & "..." & char( 10 ) & "z", "a" & char( 10 ) & "z" ) ).toBeTrue()
+				expect( checker.matches( "a" & char( 10 ) & "..." & char( 10 ) & "z", "a" & char( 10 ) & "b" & char( 10 ) & "c" & char( 10 ) & "z" ) ).toBeTrue()
+				expect( checker.matches( "a" & char( 10 ) & "..." & char( 10 ) & "z", "a" & char( 10 ) & "b" ) ).toBeFalse()
+				expect( checker.matches( "...", "" ) ).toBeTrue()
+			} )
+
+		} )
+
+		describe( "The course as it is in the repository", function() {
+
+			it( "passes the static checks (manifest, mirror, numbering, links, home page)", function() {
+				var problems = checker.staticChecks()
+
+				expect( problems ).toBeEmpty( problems.toList( char( 10 ) ) )
+			} )
+
+			it( "lists every lesson once, in an order the files agree with", function() {
+				var stems = checker.stems()
+
+				expect( stems.len() ).toBeGTE( 29 )
+				expect( stems.first() ).toBe( "01-welcome" )
+				expect( stems.last() ).toBe( "capstone" )
+				expect( stems.reduce( ( a, s ) => a.contains( s ) ? a : a.append( s ), [] ) ).toHaveLength( stems.len() )
+			} )
+
+		} )
+	}
+
+}

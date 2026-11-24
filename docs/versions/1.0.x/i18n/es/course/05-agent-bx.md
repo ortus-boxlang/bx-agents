@@ -1,5 +1,5 @@
 ---
-title: "Lección 5: La definición del agente - Agent.yml"
+title: "La definición del agente - Agent.yml"
 icon: phosphor-duotone:robot
 summary: El único archivo obligatorio - un archivo YAML simple que dice qué es tu agente.
 description: El único archivo obligatorio - un archivo YAML simple que dice qué es tu agente.
@@ -23,8 +23,8 @@ instructions: |
 ```
 
 Eso es un agente completo. `bxAgents new` crea esta forma por ti (consulta la
-[Lección 4](04-scaffolding-your-first-agent.md)), con el system prompt en un
-`instructions.md` a su lado (consulta la [Lección 6](06-instructions-and-system-prompt.md)).
+[Crear el andamiaje de tu primer agente](04-scaffolding-your-first-agent.md)), con el system prompt en un
+`instructions.md` a su lado (consulta la [instructions.md y el system prompt](06-instructions-and-system-prompt.md)).
 
 !!! info
     Una carpeta contiene **una** definición de agente. Un `Agent.yml` junto con un
@@ -39,13 +39,13 @@ Eso es un agente completo. `bxAgents new` crea esta forma por ti (consulta la
 | `model` | Un slug `provider/model` (ver abajo). |
 | `description` | Opcional. |
 | `instructions` | System prompt en línea. Un `instructions.md` junto al archivo gana si existen ambos. |
-| `tools` | Tools de módulos que recibe este agente, como `item@module` o `*@module` (consulta la [Lección 9](09-giving-your-agent-tools.md)). |
+| `tools` | Tools de módulos que recibe este agente, como `item@module` o `*@module` (consulta [Dar tools a tu agente](09-giving-your-agent-tools.md)). |
 | `toolOptions` | Opciones para las tools de un módulo, indexadas por nombre de módulo. |
-| `subAgents` | Nombres de carpetas hermanas bajo `subagents/` (consulta la [Lección 11](11-composing-subagents.md)). |
-| `mcpServers` | Servidores MCP remotos que el agente puede llamar (consulta la [Lección 17](17-hosting-mcp-servers.md)). |
+| `subAgents` | Nombres de carpetas hermanas bajo `subagents/` (consulta [Componer subagentes](11-composing-subagents.md)). |
+| `mcpServers` | Servidores MCP remotos que el agente puede llamar (consulta [Alojar y consumir servidores MCP](17-hosting-mcp-servers.md)). |
 | `security`, `memory`, `checkpointer` | Guardrails, memoria de conversación y estado de humano-en-el-bucle. |
-| `gatewaySession` | Cómo los gateways de chat ponen en cola los mensajes, qué comandos de barra responden y si leen adjuntos (consulta la [Lección 14](14-connecting-chat-platforms.md)). |
-| `agentApi` | La API de agente siempre activa: quién puede llamarla (tokens, direcciones permitidas, límite de frecuencia) y dónde se sirve (consulta la [Lección 13](13-exposing-http-and-mcp.md)). |
+| `gatewaySession` | Cómo los gateways de chat ponen en cola los mensajes, qué comandos de barra responden y si leen adjuntos (consulta [Conectar plataformas de chat](14-connecting-chat-platforms.md)). |
+| `agentApi` | La API de agente siempre activa: quién puede llamarla (tokens, direcciones permitidas, límite de frecuencia) y dónde se sirve (consulta [Exponer tu agente por HTTP y MCP](13-exposing-http-and-mcp.md)). |
 | `environments` | Sobrescrituras por entorno (ver abajo). |
 | `provider`, `params`, `options`, `providers`, `profiles`, `notes` (notas cortas que guarda el agente), `usage` (registra los recuentos de tokens para `bxAgents stats`), `tui` (el aspecto del chat de terminal), `extensions` y más | Más ajustes, todos listados en la referencia de [Agent.yml](../conventions/agent-yaml.md). |
 
@@ -71,7 +71,7 @@ dos argumentos separados. BxAgents parte el slug **solo por la primera `/`**:
 | `mock/mock-model` | `mock` | `mock-model` |
 
 `mock` es un proveedor real que nunca hace ninguna llamada de red - útil para pruebas
-(consulta la [Lección 19](19-testing-your-agent.md)) y para seguir este curso sin ninguna
+(consulta [Probar tu agente](19-testing-your-agent.md)) y para seguir este curso sin ninguna
 clave de API.
 
 ## Añadir ajustes
@@ -105,7 +105,7 @@ El entorno activo se resuelve así, y gana el primero: flag `--environment` de l
 variable de entorno `BX_AGENTS_ENV` > el valor por defecto `"development"`.
 `bxAgents build --environment=production` lo recoge. Solo se aplica el bloque activo, por
 encima de las claves de primer nivel. Usarás este mismo mecanismo para el proveedor `mock`
-en tus pruebas ([Lección 19](19-testing-your-agent.md)), por eso `bxAgents new` ya te da un
+en tus pruebas ([Probar tu agente](19-testing-your-agent.md)), por eso `bxAgents new` ya te da un
 bloque `test`.
 
 Referencia completa: [Agent.yml](../conventions/agent-yaml.md).
@@ -138,4 +138,4 @@ Crea uno con `bxAgents new --class`, o empieza en YAML y cambia más tarde: crea
 `Agent.bx`, traslada los ajustes y borra el `Agent.yml`. Referencia completa:
 [Agent.bx](../conventions/agent-bx.md).
 
-Siguiente: [Lección 6 - instructions.md y el system prompt](06-instructions-and-system-prompt.md)
+Siguiente: [instructions.md y el system prompt](06-instructions-and-system-prompt.md)

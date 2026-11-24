@@ -1,5 +1,5 @@
 ---
-title: "Lección 19: Probar tu agente"
+title: "Probar tu agente"
 icon: phosphor-duotone:test-tube
 summary: Una suite TestBox lista para ejecutar, mockResponses(), y matchers pensados para el comportamiento de agentes.
 description: Una suite TestBox lista para ejecutar, mockResponses(), y matchers pensados para el comportamiento de agentes.
@@ -8,7 +8,7 @@ tags: [course, testing]
 
 # Probar tu agente
 
-Todo proyecto creado con `bxAgents new` ([Lección 4](04-scaffolding-your-first-agent.md)) ya
+Todo proyecto creado con `bxAgents new` ([Crear el andamiaje de tu primer agente](04-scaffolding-your-first-agent.md)) ya
 trae un `box.json` en la raíz (TestBox como dependencia de desarrollo) y una carpeta `tests/`
 lista para ejecutar con `tests/specs/AgentSpec.bx`, una spec que pasa de fábrica.
 
@@ -59,7 +59,7 @@ environments:
     model: mock/mock-model
 ```
 
-Es el mismo proveedor `mock` que conociste en la [Lección 5](05-agent-bx.md) - sin llamadas de
+Es el mismo proveedor `mock` que conociste en [La definición del agente - Agent.yml](05-agent-bx.md) - sin llamadas de
 red, sin clave de API, con una CI determinista.
 
 ## `mockResponses()`
@@ -78,7 +78,7 @@ var response = agent.run( "What's the weather in Miami?" )
 
 Una cadena simple programa una respuesta final. Un struct `{ toolCalls: [...] }` programa un
 turno de llamada a tool - la tool nombrada **se ejecuta realmente de verdad** contra tu
-implementación real en `tools/` (de la [Lección 9](09-giving-your-agent-tools.md)); solo se
+implementación real en `tools/` (de [Dar tools a tu agente](09-giving-your-agent-tools.md)); solo se
 programa la respuesta del propio LLM, nunca el comportamiento de la tool.
 
 ## Matchers pensados para el comportamiento de agentes
@@ -97,7 +97,7 @@ expect( agent ).notToHaveCalledTool( "getStockPrice" )
 ## Pruébalo
 
 Escribe una spec que programe una llamada a la tool `GetTime` de la
-[Lección 9](09-giving-your-agent-tools.md), y afirma `toHaveCalledTool( "now" )`.
+[Dar tools a tu agente](09-giving-your-agent-tools.md), y afirma `toHaveCalledTool( "now" )`.
 
 ```bash
 bxAgents test
@@ -109,4 +109,4 @@ siguiente lección.
 
 Referencia completa: [tests/](../conventions/testing.md).
 
-Siguiente: [Lección 20 - Empaquetar, desplegar y cerrar](20-packaging-deploying-and-wrapping-up.md)
+Siguiente: [Empaquetar, desplegar y cerrar](20-packaging-deploying-and-wrapping-up.md)

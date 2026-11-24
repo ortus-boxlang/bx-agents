@@ -1,5 +1,5 @@
 ---
-title: "Lesson 14: Connecting Chat Platforms"
+title: "Connecting Chat Platforms"
 icon: phosphor-duotone:chats-circle
 summary: Channel-adapter gateways - nine chat platforms plus http/cli/mock, all one GatewaySession.
 description: Channel-adapter gateways - nine chat platforms plus http/cli/mock, all one GatewaySession.
@@ -11,7 +11,7 @@ tags: [course, conventions, gateways]
 The other kind of `gateways/*` entry - one with a `type` key instead of `exposes` -
 registers a bx-ai `IGateway`, a channel adapter for external delivery or
 human-in-the-loop approval. This is a real "chat bot" connection, distinct from the
-REST exposure you built in [Lesson 13](13-exposing-http-and-mcp.md).
+REST exposure you built in [Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md).
 
 ## Two request-driven types: `mock` and `cli`
 
@@ -133,11 +133,35 @@ can bring a new gateway type.
 
 ## Try it
 
-If you have a disposable Telegram bot token, add a `gateways/telegramChannel.bx` entry,
-export `TELEGRAM_BOT_TOKEN`, and `bxAgents serve` - message your bot and watch it
-reply. No token handy? Read through a couple of the platform sections in the full
-reference below; the shape is consistent across all nine.
+A chat platform needs an account on that platform, which the course cannot give you, and the `mock` and `cli` types
+are test and approval channels, not chat. What you can do offline is see exactly what adding a platform would write,
+without writing it. `--dry-run` prints the files and the line for `.env`:
+
+```bash title="Terminal 2"
+cd ~/bxagents-course/acme-support
+bxAgents add gateway telegram --dry-run
+```
+
+```text title="You see"
+Would create gateways/telegram.bx
+...
+Would append to .env
+...
+    TELEGRAM_BOT_TOKEN=
+...
+```
+
+That is the whole change for Telegram: one small file that names the variable, and an empty line for the token. The
+token itself would go in `.env` (never in the file), and `bxAgents doctor` reports a credential that is still not set.
+If you have a disposable bot token, drop `--dry-run`, put the token in `.env`, rebuild and `bxAgents serve`: message
+the bot and the same Acme agent answers, with its tools, skills and notes. The other eight platforms follow the same
+shape, and a message there reaches the same agent, so the commands (`/help`, `/tools`, `/remember`, `/notes`)
+you used in the terminal work in the chat too.
+
+## Checkpoint
+
+Nothing in `acme-support/` changed in this lesson (the dry run writes nothing).
 
 Full reference: [gateways/](../conventions/gateways/index.md).
 
-Next: [Lesson 15 - The Generated Web Chat UI](15-the-generated-web-chat-ui.md)
+Next: [Hosting and Consuming MCP Servers](17-hosting-mcp-servers.md)

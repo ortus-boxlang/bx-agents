@@ -1,5 +1,5 @@
 ---
-title: "Lección 14: Conectar plataformas de chat"
+title: "Conectar plataformas de chat"
 icon: phosphor-duotone:chats-circle
 summary: Gateways adaptadores de canal - nueve plataformas de chat más http/cli/mock, todos en una GatewaySession.
 description: Gateways adaptadores de canal - nueve plataformas de chat más http/cli/mock, todos en una GatewaySession.
@@ -11,7 +11,7 @@ tags: [course, conventions, gateways]
 El otro tipo de entrada `gateways/*` - la que tiene una clave `type` en lugar de `exposes` -
 registra un `IGateway` de bx-ai, un adaptador de canal para entrega externa o para aprobación
 con humano en el bucle. Esto es una conexión real de "chat bot", distinta de la exposición
-REST que construiste en la [Lección 13](13-exposing-http-and-mcp.md).
+REST que construiste en [Exponer tu agente por HTTP y MCP](13-exposing-http-and-mcp.md).
 
 ## Dos tipos dirigidos por petición: `mock` y `cli`
 
@@ -147,4 +147,4 @@ secciones de plataforma de la referencia completa de abajo; la forma es la misma
 
 Referencia completa: [gateways/](../conventions/gateways/index.md).
 
-Siguiente: [Lección 15 - La UI web de chat generada](15-the-generated-web-chat-ui.md)
+Siguiente: [Alojar y consumir servidores MCP](17-hosting-mcp-servers.md)

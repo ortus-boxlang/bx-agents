@@ -138,43 +138,57 @@
 
 	/* course path */
 	var STAGES = [
-		["Getting started", "Meet BxAgents", [
-			[1, "01-welcome", "Welcome to BxAgents", "What this course covers, what you'll build, and how each lesson is organized."],
-			[2, "02-what-is-bxagents", "What Is BxAgents?", "Why conventions over configuration, and why assembly happens once at build time."],
-			[3, "03-installing-bxagents", "Installing BxAgents", "Install BoxLang, bx-ai and BxAgents, and verify the bxAgents command works."],
-			[4, "04-scaffolding-your-first-agent", "Scaffolding Your First Agent", "Run bxAgents new and see exactly what it creates for you."]]],
+		["Start", "Get going", [
+			["01-welcome", "Welcome to BxAgents", "What this course covers, what you'll build, and how each lesson is organized."],
+			["02-what-is-bxagents", "What Is BxAgents?", "Why conventions over configuration, and why assembly happens once at build time."],
+			["03-installing-bxagents", "Installing BxAgents", "Install BoxLang and BxAgents, and verify the bxAgents command works."],
+			["practice-model", "A Model That Needs No Key", "Start a scripted stand-in for an AI model and build your first agent against it, with no account and no key."],
+			["04-scaffolding-your-first-agent", "Scaffolding Your First Agent", "Run bxAgents new and see exactly what it creates for you."]]],
 		["The agent", "Write and run it", [
-			[5, "05-agent-bx", "Agent.yml, the Agent Itself", "The one required file: a name, a model and your settings in plain YAML."],
-			[6, "06-instructions-and-system-prompt", "instructions.md and the System Prompt", "The optional file that becomes your agent's system prompt."],
-			[7, "07-building-your-agent", "Building Your Agent", "bxAgents build and the five-phase pipeline that turns your project into an app."],
-			[8, "08-talking-to-your-agent", "Talking to Your Agent", "chat, invoke and serve: three ways to run the exact same built agent."]]],
-		["Capabilities", "Tools to teams", [
-			[9, "09-giving-your-agent-tools", "Giving Your Agent Tools", "Any @AITool annotated function under tools/ becomes a callable tool."],
-			[10, "10-packaging-skills", "Packaging Skills", "Claude Agent Skills: one subfolder per SKILL.md, loaded on demand."],
-			[11, "11-composing-subagents", "Composing Subagents", "Nested agents, each an ordinary BxAgents project of its own, wired as callable tools."],
-			[12, "12-named-model-configs", "Named Model Configs", "Reusable named model configurations, referenced from Agent.yml by name."]]],
-		["Reach users", "HTTP, chat, web", [
-			[13, "13-exposing-http-and-mcp", "Exposing Your Agent over HTTP and MCP", "gateways/ entries with an exposes key turn your agent into a real HTTP route."],
-			[14, "14-connecting-chat-platforms", "Connecting Chat Platforms", "Channel adapter gateways: nine chat platforms plus http, cli and mock, all one GatewaySession."],
-			[15, "15-the-generated-web-chat-ui", "The Generated Web Chat UI", "A complete browser chat client: sidebar, streaming, approvals, SQLite store."]]],
-		["Beyond chat", "Run on its own", [
-			[16, "16-scheduling-background-work", "Scheduling Background Work", "schedules/*.bx, BoxLang schedulers on a timetable, one file each."],
-			[17, "17-hosting-mcp-servers", "Hosting and Consuming MCP Servers", "MCP in both directions: consume remote servers from Agent.yml, host your own under mcp/."],
-			[18, "18-interceptors-and-modules", "Interceptors and Module Dependencies", "ColdBox lifecycle hooks scoped by @scope, and BoxLang module dependencies under modules/."]]],
-		["Ship it", "Test and deploy", [
-			[19, "19-testing-your-agent", "Testing Your Agent", "A ready to run TestBox suite, mockResponses(), and matchers built for agent behavior."],
-			[20, "20-packaging-deploying-and-wrapping-up", "Packaging, Deploying, and Wrapping Up", "Package to a .bxa, ship it to a real target, and where to go from here."]]]
+			["05-agent-bx", "The Agent Definition - Agent.yml", "The one required file - a plain YAML file that says what your agent is."],
+			["06-instructions-and-system-prompt", "instructions.md and the System Prompt", "The optional file that becomes your agent's system prompt."],
+			["07-building-your-agent", "Building Your Agent", "bxAgents build and the five-phase pipeline that turns your project into an app."],
+			["08-talking-to-your-agent", "Talking to Your Agent", "chat, invoke and serve - three ways in to the exact same built agent."]]],
+		["Teach it", "Tools, skills, models", [
+			["09-giving-your-agent-tools", "Giving Your Agent Tools", "Any @AITool-annotated function under tools/ becomes a callable tool."],
+			["10-packaging-skills", "Packaging Skills", "Claude Agent Skills - one subfolder per SKILL.md, loaded on demand."],
+			["12-named-model-configs", "Models and Profiles", "Choose the default model, set up other providers and name combinations such as fast and planner, all in Agent.yml."]]],
+		["The web app", "See it, trust it, remember", [
+			["15-the-generated-web-chat-ui", "The Web App", "Serve the agent and meet the web app that comes with it - a chat, your conversations, the registry, settings and more."],
+			["approvals", "The Agent Asks First", "Why a run stops for a person, who is allowed to approve it, and what Approve, Approve for the conversation and Reject do."],
+			["memory-and-notes", "What It Remembers, and for Whom", "Tell conversation memory, a person's notes and the agent's own notes apart, and manage each from a terminal and from the web app."],
+			["11-composing-subagents", "Composing Subagents", "Nested agents, each an ordinary BxAgents project of its own, wired as callable tools."]]],
+		["On its own", "Routines and schedulers", [
+			["routines-and-reports", "Routines and Reports", "Make a routine by asking, watch it run on the heartbeat, and read the report it saved."],
+			["16-scheduling-background-work", "Scheduling Background Work", "schedules/*.bx - BoxLang schedulers, one file each, saying when with the task's own methods."]]],
+		["Reach people", "HTTP, chat, MCP", [
+			["13-exposing-http-and-mcp", "Exposing Your Agent over HTTP and MCP", "gateways/ entries with an exposes key turn your agent into a real HTTP route."],
+			["14-connecting-chat-platforms", "Connecting Chat Platforms", "Channel-adapter gateways - nine chat platforms plus http/cli/mock, all one GatewaySession."],
+			["17-hosting-mcp-servers", "Hosting and Consuming MCP Servers", "MCP in both directions - consume remote servers from Agent.yml, host your own under mcp/."]]],
+		["For a team", "People, secrets, operations", [
+			["users-roles-and-tokens", "Who Is Allowed", "Move from an open local server to named people with roles, and to access tokens for programs, and see what each can reach."],
+			["the-vault", "Secrets the Agent May Use", "Store a credential once, let the agent use it only for named hosts, and see every use in an audit list."],
+			["layered-settings", "Each Person's Own Settings", "Let a person change the agent for themselves without touching the project, and know who wins when two files disagree."],
+			["operating-it", "Logs, Usage and Backups", "Answer three questions about a running agent - what is it doing, what does it cost, and can I get it back."]]],
+		["Ship it", "Extend, test, deploy", [
+			["18-interceptors-and-modules", "Interceptors and Module Dependencies", "ColdBox lifecycle hooks scoped by @scope, and BoxLang module dependencies under modules/."],
+			["19-testing-your-agent", "Testing Your Agent", "A ready-to-run TestBox suite, mockResponses(), and matchers built for agent behavior."],
+			["20-packaging-deploying-and-wrapping-up", "Packaging, Deploying, and Wrapping Up", "Package to a .bxa, ship it to a real target, and where to go from here."],
+			["capstone", "Ship Acme Support", "Prove the whole agent works as one, swap in a real model with two lines, and see where to go next."]]]
 	];
 	var pathEl = $("#path");
 	if (pathEl) {
+		var n = 0;
 		STAGES.forEach(function (st) {
 			var row = document.createElement("div"); row.className = "bxa-stagerow";
 			row.innerHTML = '<h3>' + esc(st[0]) + '<b>' + esc(st[1]) + '</b></h3><div class="bxa-les-row"></div>';
 			var lr = row.querySelector(".bxa-les-row");
 			st[2].forEach(function (l) {
-				var a = document.createElement("a"); a.className = "bxa-les"; a.textContent = l[0];
-				a.href = BASE + "course/" + l[1] + "/"; a.setAttribute("aria-label", "Lesson " + l[0] + ": " + l[2]);
-				hookTip(a, function () { return '<h4>' + ico("book-open-text") + 'Lesson ' + l[0] + '</h4><div class="bxa-ty"><b>' + esc(l[2]) + '</b></div><div class="bxa-how">' + esc(l[3]) + '</div>'; });
+				// the number is the place in the list, which is the order of docs/data/courses.yaml
+				var num = ++n;
+				var a = document.createElement("a"); a.className = "bxa-les"; a.textContent = num;
+				a.href = BASE + "course/" + l[0] + "/"; a.setAttribute("aria-label", "Lesson " + num + ": " + l[1]);
+				hookTip(a, function () { return '<h4>' + ico("book-open-text") + 'Lesson ' + num + '</h4><div class="bxa-ty"><b>' + esc(l[1]) + '</b></div><div class="bxa-how">' + esc(l[2]) + '</div>'; });
 				lr.appendChild(a);
 			});
 			pathEl.appendChild(row);

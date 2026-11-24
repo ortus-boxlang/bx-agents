@@ -20,8 +20,11 @@
  * A rule matches when the user's last message contains `when` (any case); the first match wins. With
  * `tool`, the model first calls the tool whose name contains that text (if the agent has one), with the
  * arguments in `args` (an object, default none), then answers once the tool's result is back; `{tool}` in
- * the answer is replaced by that result, `{system}` by the system message the agent sent and `{model}` by the model
- * name the request asked for, so two profiles on one scripted model still answer differently.
+ * the answer is replaced by that result, `{system}` by the system message the agent sent, `{model}` by the model
+ * name the request asked for, so two profiles on one scripted model still answer differently, and `{tools}` by the
+ * names of the tools the request offered (comma separated), so a lesson can show which tools reached the model.
+ * A rule with `tool` whose tool the agent does not offer answers with `noTool` when the rule has one (otherwise with
+ * `answer`, with `{tool}` empty).
  *
  * Stop it with Ctrl+C, or POST /__stop.
  */
@@ -29,6 +32,11 @@
 opts = server.cli.parsed.options
 port = val( opts.port ?: 8080 )
 scriptFile = opts.script ?: ( getDirectoryFromPath( getCurrentTemplatePath() ) & "demos/model.json" )
+// a relative --script is read from where you are, then from the folder of this file
+if ( !fileExists( scriptFile ) && fileExists( getDirectoryFromPath( getCurrentTemplatePath() ) & scriptFile ) ) {
+	scriptFile = getDirectoryFromPath( getCurrentTemplatePath() ) & scriptFile
+}
+scriptFile = expandPath( scriptFile )
 script = jsonDeserialize( fileRead( scriptFile ) )
 thinkMs = script.thinkMs ?: 600
 chunkMs = script.chunkMs ?: 45
@@ -69,16 +77,18 @@ function plan( required struct payload ) {
 	var last = messages.len() ? messages.last() : {}
 	var afterTool = ( last.role ?: "" ) == "tool"
 	var tool = ""
-	if ( len( rule.tool ?: "" ) && !afterTool ) {
-		for ( var t in ( arguments.payload.tools ?: [] ) ) {
-			var name = t.function.name ?: ""
-			if ( findNoCase( rule.tool, name ) ) {
-				tool = name
-				break
-			}
+	var offered = []
+	for ( var t in ( arguments.payload.tools ?: [] ) ) {
+		var name = t.function.name ?: ""
+		offered.append( name )
+		if ( !len( tool ) && len( rule.tool ?: "" ) && !afterTool && findNoCase( rule.tool, name ) ) {
+			tool = name
 		}
 	}
 	var answer = rule.answer ?: ( script.default ?: "" )
+	if ( len( rule.tool ?: "" ) && !afterTool && !len( tool ) && len( rule.noTool ?: "" ) ) {
+		answer = rule.noTool
+	}
 	var result = afterTool ? replace( trim( text( last.content ?: "" ) ), '"', "", "all" ) : ""
 	var system = ""
 	for ( var m in messages ) {
@@ -90,6 +100,7 @@ function plan( required struct payload ) {
 	answer = replace( answer, "{tool}", result, "all" )
 	answer = replace( answer, "{system}", system, "all" )
 	answer = replace( answer, "{model}", arguments.payload.model ?: "", "all" )
+	answer = replace( answer, "{tools}", offered.toList( ", " ), "all" )
 	return { tool : tool, answer : answer, args : rule.args ?: {} }
 }
 

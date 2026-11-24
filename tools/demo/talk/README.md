@@ -110,3 +110,7 @@ Silent screen recordings from the project's own trailer, in `fallback/`. Talk ov
 - `demo1-chat.mp4`: the chat with streaming, a tool call and a code block.
 - `demo2-tools.mp4`: a tool call and `/skills`. It is the closest recording; there is no recording of copying the two files.
 - Demo 3: `docs/assets/video/web-trailer.mp4`, the web app tour.
+
+## After the talk
+
+The same journey as a hands-on course, with no account and no key: [Introduction to BxAgents](https://bxagents.ai/course/). It builds the same Acme support agent on the scripted model (`../fakellm.bxs`), and its checker replays every command (`tools/course/`).

@@ -1,5 +1,5 @@
 ---
-title: "Lesson 10: Packaging Skills"
+title: "Packaging Skills"
 icon: phosphor-duotone:graduation-cap
 summary: Claude Agent Skills - one subfolder per SKILL.md, loaded on demand.
 description: Claude Agent Skills - one subfolder per SKILL.md, loaded on demand.
@@ -75,27 +75,48 @@ messages, how to review a pull request against your team's checklist).
 
 ## Try it
 
-```text
-skills/
-└── code-review/
-    └── SKILL.md
-```
+Acme has a refund policy. A tool would be a function; this is know-how, so it is a skill. Write the folder with its
+`SKILL.md` (or let `bxAgents add skill refund-policy` write the frame):
 
-```markdown
+```markdown title="acme-support/skills/refund-policy/SKILL.md"
 ---
-name: code-review
-description: How to review a code change for this project.
+name: refund-policy
+description: What Acme refunds, when, and how to explain a refusal kindly.
 ---
 
-When asked to review code, check for: unhandled errors, missing tests for new
-behavior, and inconsistent naming with the surrounding file. Be specific - point to
-the exact line and explain the risk, don't just say "looks fine" or "consider
-improving this."
+# Refund policy
+
+- Returns are free for 30 days after delivery.
+- Refunds land within 5 working days of the parcel coming back.
+- Sale items are final, but a damaged item is always replaced.
 ```
 
-Rebuild and try asking your agent to review a snippet of code. (Or scaffold the file with
-`bxAgents add skill code-review`.)
+Rebuild. The agent lists the skills it can load in its system prompt, so asking the scripted model for it (the word
+`system` again) shows yours next to the six BxAgents ships:
 
-Full reference: [skills/](../conventions/skills.md).
+```bash title="Terminal 2"
+cd ~/bxagents-course/acme-support
+bxAgents build
+bxAgents invoke --message=system
+```
 
-Next: [Lesson 11 - Composing Subagents](11-composing-subagents.md)
+```text title="You see"
+Build succeeded: <anything>/acme-support/.build/app
+...
+- refund-policy: What Acme refunds, when, and how to explain a refusal kindly.
+...
+```
+
+The six that ship (`bxagents-build-agent`, `bxagents-chat`, `bxagents-gateways-connectors`, `bxagents-operate`,
+`bxagents-subagents-routines` and `bxagents-tools-and-skills`) are on by default and teach the agent how BxAgents
+itself works; `skills: { builtin: false }` leaves them out. In the terminal chat, `/skills` lists all of them and
+where each came from (`project` for yours, `bxagents` for the shipped ones). A model loads a skill on its own when
+the question matches its description, which the scripted model does not do: it only answers with what the course
+wrote. The agent can also write a skill itself (`skill_save`, with your approval), which the
+[approvals lesson](approvals.md) comes back to.
+
+## Checkpoint
+
+`acme-support/skills/refund-policy/SKILL.md` exists. `kit/resume.sh 10-packaging-skills` restores it; rebuild after.
+
+Next: [Models and Profiles](12-named-model-configs.md)
