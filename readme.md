@@ -16,74 +16,120 @@
 
 <p>&nbsp;</p>
 
-**BxAgents** is a conventions-based framework for building AI agents your team can ship, powered by [BoxLang AI](https://ai.boxlang.io). It is built for BoxLang and ColdBox developers, and for any team that wants agents as ordinary code it can read. Skip the glue code for tools, memory, web apps, Slack bots, routines and schedulers: describe an agent with a handful of files and folders - `Agent.yml`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/` it actually needs - and BxAgents assembles a full MVC application from it **at build time** (a thirteen-page web app, an API with OpenAPI, gateways, routines and scheduled jobs included), ready to serve, chat with, or package as a portable `.bxa`.
+**BxAgents** is a conventions-based framework for building AI agents your team can ship, powered by [BoxLang AI](https://ai.boxlang.io) and built on [ColdBox](https://www.coldbox.org). You describe an agent with files and folders (`Agent.yml`, `instructions.md`, and whichever of `tools/`, `skills/`, `subagents/`, `gateways/`, `schedules/`, `mcp/`, `interceptors/`, `modules/` it needs) and `bxAgents build` assembles a real ColdBox application from them, **once, at build time**: a thirteen-page web app, an HTTP API with OpenAPI, gateways, routines, a vault and backups. Serve it, chat with it in the terminal, or package it as a portable `.bxa`.
 
-## What you can build
+Documentation: **[bxagents.ai](https://bxagents.ai)** (source in [docs/](docs/index.md)). Free course: **[Introduction to BxAgents](docs/course/index.md)**, 20 lessons from install to a deployed agent.
 
-Pick the problem, write one file.
+## Requirements
 
-| You need to | You write | You get |
-|---|---|---|
-| Answer people where they are | [`gateways/slack.bx`](docs/conventions/gateways/index.md) | A Slack bot over Socket Mode (also Telegram, Discord, Teams, WhatsApp, Twilio SMS, GitHub, Signal and email) |
-| Run a job every morning | [`schedules/Digest.bx`](docs/conventions/schedules.md) | A task (`.everyDayAt()`, `.onWeekdays()`, `.every()` ...) that calls `run()`, started with the app, no cron daemon |
-| Let other systems call it | [`agentApi` in `Agent.yml`](docs/guides/agent-api.md) | One HTTP API at `/__bxagents` with an OpenAPI document and a BoxLang client, open on your machine or behind tokens; plus [`gateways/expose.bx`](docs/conventions/gateways/index.md) for a REST path of your choosing, or an MCP server |
-| Keep a human in the loop | a tool that needs approval | The run waits for approve or reject, in the terminal, the [web app](docs/conventions/web-ui.md) or a gateway |
-| Let people schedule their own work | [`routines: enabled: true`](docs/conventions/routines.md) | A person asks, the agent makes a routine, a heartbeat runs it, reports are saved, and a summary can go to a gateway chat |
-| Give each specialist a seat | [`subagents/researcher/`](docs/conventions/subagents.md) | A sub-agent you can talk to directly, with its own memory |
-| Connect it to your accounts | [`vault: {}`](docs/conventions/vault.md) | API keys and logins sealed in the database, typed in a hidden box and never shown to the model; each person can keep their own |
-| Let each person sign in to a service | [`oauth:` on an `mcpServers` entry](docs/conventions/connect.md) | Mail, calendars and ticket systems that ask each person to sign in: one click, tokens sealed in the database, the agent acts as them |
-| Add your own commands | [`extensions/hello.bx`](docs/conventions/extensions.md) | A chat command, key, status item or listener, in the terminal chat, the web app and gateways |
-| Test without spending tokens | [`tests/specs/AgentSpec.bx`](docs/conventions/testing.md) | `mockResponses()` and agent matchers: specs run in CI with no API key and no network |
-| Ship it anywhere | `bxAgents package` | A portable `.bxa` and [deploy targets](docs/conventions/deploy.md): local, SSH, FTP, SFTP, Docker, DigitalOcean |
+- [BoxLang](https://www.boxlang.io) 1.18.0 or later, on Java 21 or later.
+- The module itself: `install-bx-module bx-agents`. It bundles `bx-ai`, `bx-sqlite`, `bx-ftp`, `bx-mail`, `bx-yaml`, `bx-markdown`, ColdBox, `qb`, `cbsecurity`, `cbauth` and `cbmailservices`, so there is nothing else to install.
+- `boxlang-miniserver` on your `PATH`, for `serve`, `chat --server` and `invoke --server`. The other verbs do not need it.
+- [CommandBox](https://commandbox.ortusbooks.com) (`box`) only to fetch TestBox for `bxAgents test`. `new` still works without it and prints the command to run later.
+- An API key for the model provider you choose (or use the `mock` provider to try it with none).
 
-## Quick Start
+See [Installation](docs/getting-started/installation.md).
+
+## Quick start
 
 ```bash
-install-bx-module bx-agents      # bundles bx-ai and everything else; see docs/getting-started/installation.md
+install-bx-module bx-agents
 
-bxAgents new my-agent --model=openai/gpt-5   # or just `bxAgents new my-agent` at a terminal, and it asks
-cd my-agent
-# edit instructions.md; add tools, skills, gateways with `bxAgents add <kind>` or by hand
-
-bxAgents build      # assembles a real ColdBox app under .build/app
-bxAgents doctor     # sanity-check the runtime + your project before build/serve surprise you
-bxAgents chat       # a full-screen terminal chat; or: bxAgents serve --port=8080
+bxAgents new my-agent --model=openai/gpt-5    # at a terminal, plain `bxAgents new my-agent` asks questions instead
+cd my-agent                                   # put OPENAI_API_KEY in .env; edit instructions.md
+bxAgents doctor                               # checks the runtime and the project
+bxAgents build                                # assembles the app into .build/
+bxAgents chat                                 # full-screen terminal chat; or: bxAgents serve --port=8080
 ```
 
-`new` at a terminal asks what the agent should do (model, tools, MCP servers, channels, access, deploy target) and writes the project to match; secrets go in `.env` as empty stubs. A template is a preset you build on, not a limit. `new` doesn't only scaffold a blank agent: pick one of 8 built-in `--template`s (a Slack bot, a scheduled agent, a multi-agent team, ...), clone an existing GitHub repo (`--repo=owner/repo`, via a bundled JGit client - no `git` binary required), or install a ForgeBox package (`--forgebox=<slug>`, talking to ForgeBox's REST API directly - no `box` CLI required) - see [Agent Templates](docs/agent-templates.md).
+No API key yet? Scaffold with `--model=mock/mock-model` and the agent answers with a canned reply. Checked end to end with that model: after `bxAgents serve --port=8080`, `GET /__bxagents/health` answers `{"success":true,"status":"ok"}` and `POST /__bxagents/invoke` with `{"message":"hi"}` answers `Mock response`.
+
+`new` can also start from one of 8 built-in `--template`s, clone a GitHub repo (`--repo=owner/repo`) or install a ForgeBox package (`--forgebox=<slug>`); see [Agent Templates](docs/agent-templates.md). The full walk-through is the [Quick Start](docs/getting-started/quick-start.md).
+
+## What you get
+
+| | |
+|---|---|
+| Web app | A left menu and thirteen pages: Chat, Conversations, Routines, Registry, Connectors, Memory, Vault and Settings for everyone; Agent, Gateways, Logs, Access and Data and backups for admins. Light and dark, phone layout. [Guide](docs/conventions/web-ui.md#the-pages) |
+| Terminal chat | Full screen with a header, a footer, a slash-command menu, `/settings`, notes, sessions, `@file` and picture attachments, a context meter. `--server` starts its own server, `--connect=<url>` joins a deployed one. [Guide](docs/guides/terminal-ui.md) |
+| API | One HTTP API at `/__bxagents` with an OpenAPI document and a BoxLang client. [Guide](docs/guides/agent-api.md) |
+| Gateways | Slack, Telegram, Discord, Teams, WhatsApp, Twilio SMS, GitHub, Signal and email, plus `http`, `cli` and `mock`; an agent can also be exposed as a REST path or an MCP server. [Gateways](docs/conventions/gateways/index.md) |
+| Routines and reports | People ask, the agent creates a routine, a heartbeat runs it, reports are saved and can be sent to a gateway chat. Developers write [schedules](docs/conventions/schedules.md) too. [Routines](docs/conventions/routines.md) |
+| Vault and connectors | API keys sealed in the database and never shown to the model, per person if you like; a catalog of connectors and per-person OAuth sign-in for MCP servers. [Vault](docs/conventions/vault.md), [Connectors](docs/conventions/connectors.md), [Connect](docs/conventions/connect.md) |
+| Settings in layers | The person who installs an agent can override its settings from `~/.bxagents/Agent.yml` (every agent) or `~/.bxagents/<agent>/Agent.yml` (one agent). [Layered settings](docs/conventions/layered-settings.md) |
+| Access | Access tokens for the API, and users with admin and member roles for the web app. [`agentApi`](docs/conventions/agent-bx.md#agentapi) |
+| Data and backups | One data home per agent (`~/.bxagents/<name>/` by default) with chat database, files, skills and volumes; `backup` and `restore`. [Data](docs/conventions/data.md) |
+| Extend and test | [Sub-agents](docs/conventions/subagents.md), [skills](docs/conventions/skills.md), [interceptors](docs/conventions/interceptors.md), [extensions](docs/conventions/extensions.md), and specs that run with `mockResponses()` and no API key. [Testing](docs/conventions/testing.md) |
+| Ship | `bxAgents package` makes a `.bxa`; `deploy` targets local, SSH, FTP, SFTP, Docker and DigitalOcean. [Deploy](docs/conventions/deploy.md) |
+
+Live counts of verbs, slash commands, API routes, pages, gateway types, starters, connectors, skills, deploy targets, examples and lessons come from `python3 tools/docs-counts.py`; at the time of writing that is 29 verbs, 36 slash commands, 82 API routes, 13 pages, 12 gateway types, 8 starters, 7 connectors, 6 shipped skills, 6 deploy targets, 20 examples and 20 lessons.
 
 ## See it
 
-The web app a `gateways/` entry with `exposes: "webui"` builds: a left menu with thirteen pages (Chat, Conversations, Routines, Registry, Connectors, Memory, Vault and Settings for everyone; Agent, Gateways, Logs, Access and Data and backups for admins), light and dark, and a phone layout. See the [page-by-page guide](docs/conventions/web-ui.md#the-pages).
-
 ![The generated web app: the left menu, a conversation with a tool call, the header with the light or dark switch, and the model select and context ring in the bar above the conversation](docs/assets/webui/webui-chat.png)
 
-[Watch the trailer](docs/assets/video/web-trailer.mp4): just over three minutes through every page, narrated, with captions (`.vtt`).
-
-The terminal chat, with sessions, routines, notes, `@file` and picture attachments, slash commands and a context meter (the answers here come from a scripted demo model). `bxAgents chat --server` starts its own server and `--connect=<url> --token=<token>` talks to a deployed one:
+[Watch the web app trailer](docs/assets/video/web-trailer.mp4) (just over three minutes, narrated, with captions). The terminal chat and the `new` wizard:
 
 ![bxAgents chat in a terminal: slash commands, a tool call and a formatted answer](docs/assets/tui/chat-terminal.gif)
 
-The `new` wizard, from the name to a finished project:
-
 ![bxAgents new: the wizard asking what the agent should do](docs/assets/tui/wizard.gif)
 
-There is a guide to [the terminal UI](docs/guides/terminal-ui.md), the [slash commands](docs/guides/slash-commands.md), some [walkthroughs](docs/guides/chat-walkthrough.md), and one on [calling your agent from code](docs/guides/agent-api.md).
+The recordings and screenshots come from a demo project and a scripted stand-in for a model ([`tools/demo/fakellm.bxs`](tools/demo/README.md)), so the answers are canned. The same kit renders the trailers and screenshots under [`tools/demo`](tools/demo/README.md).
 
-## Documentation & Examples
+## The CLI
 
-- **[docs/](docs/index.md)** - installation, quick start, one page per convention folder, agent templates (built-in starters, GitHub/ForgeBox sourcing, publishing your own), the build pipeline, the manifest schema, the full CLI reference, and deployment/secrets. Published at **[bxagents.ai](https://bxagents.ai)**, built with [bx-sites](https://bxsites.io/development/); see [Working on the docs](#working-on-the-docs).
-- **[examples/](examples/README.md)** - real, buildable sample projects: eleven core-convention examples (a minimal agent, a simple agent, a class-based agent, an HTTP-exposed agent, a scheduled agent, an MCP agent, a multi-agent team, the web app, a composite "advanced" agent, an extensions agent and an API agent) plus one per push-style chat-platform gateway (Telegram, Slack, Discord, Email, WhatsApp Cloud, Teams, Twilio, GitHub, Signal), each demonstrating one convention folder end-to-end.
+`bxAgents <verb>` (or `boxlang module:bxagents <verb>`); `bxAgents --help` lists them, and the [CLI reference](docs/cli-reference.md) has every flag.
 
-## Why build-time assembly?
+| Verb | What it does |
+|---|---|
+| `new`, `add` | Scaffold a project (a wizard at a terminal); add a tool, skill, sub-agent, gateway, schedule, MCP server, profile, provider, capability or extension |
+| `build`, `clean` | Build the project into `.build/`; remove `.build/` and `dist/` |
+| `chat`, `invoke`, `serve` | Terminal chat, one message in and out, serve over HTTP |
+| `doctor`, `inspect` | Check the runtime and project; report how the agent is composed |
+| `test`, `models` | Run the project's specs; list and test the models it can talk to |
+| `package`, `deploy` | Make a `.bxa`; deploy it to a target |
+| `sessions`, `notes`, `routines` | Conversations, notes and routines of an agent |
+| `vault`, `connect`, `connectors` | Sealed secrets, connector and MCP sign-in, the connector catalog |
+| `token`, `users`, `hash-password` | Access tokens, web app sign-in accounts and roles, password hashes |
+| `data`, `backup`, `restore`, `logs`, `stats` | The data home, backups, logs, token usage |
+| `skills`, `extensions` | Skills from the registry; chat extensions |
 
-Most agent frameworks wire tools, skills, routes, and schedules together **at request time**, on every boot. BxAgents does the opposite: `bxAgents build` runs discovery, validation, and code generation exactly once, producing a plain ColdBox application. Booting that application - via `bxAgents serve`, a real [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) process, or a packaged `.bxa` deployed anywhere BoxLang runs - is then just booting an ordinary app, deterministically and fast.
+## What `build` produces
+
+```text
+my-agent/                   your source: Agent.yml, instructions.md, tools/, skills/, ...
+└── .build/
+    ├── app/                the generated ColdBox application
+    ├── public/             the web root: the only folder a server serves
+    ├── lib/                ColdBox and its modules
+    ├── runtime/            engine config and the BoxLang home; only the bxagents module is loaded
+    ├── boxlang_modules/
+    ├── manifest.json
+    └── miniserver.json
+```
+
+Rebuild any app made before this layout; `serve` refuses it and says so. See the [build pipeline](docs/build-pipeline.md).
+
+## Security notes
+
+- Only `public/` is served. Files outside it (`Agent.yml`, `instructions.md`, `config/`, `skills/`) answer 404, and only `index.bxm` is executed by address.
+- `serve` binds to `127.0.0.1`; pass `--host=0.0.0.0` deliberately. A built app is open on your own machine; to share it set `agentApi` tokens or `access: token`, and turn on web app sign-in. `allowedIPs` and a rate limit are available.
+- Secrets go in `.env` or the vault, never in `Agent.yml`; packaging redacts them. See [Deployment & Secrets](docs/deployment-and-secrets.md).
+- The Docker deploy target builds from `.build`, but that recipe has not been run in a real Docker yet (see the changelog). Check `/__bxagents/health` after your first deploy.
+
+## Examples and templates
+
+[`examples/`](examples/README.md) holds 20 buildable projects (11 core conventions and one per push-style chat gateway), built in CI as a regression gate.
+
+## Status and license
+
+Version 1.0 is in development (the `Unreleased` section of the [changelog](changelog.md)); the docs for it live in `docs/versions/1.0.x/`. Licensed under [Apache-2.0](LICENSE).
 
 ---
 
 ## Contributing to BxAgents
 
-The rest of this readme covers developing BxAgents itself (this repo), not building an agent with it - see [docs/](docs/index.md) for that. See [CONTRIBUTING.md](CONTRIBUTING.md#the-developer-flow---boxlang-is-dynamic) for the actual edit/test loop - BoxLang is a dynamic language, so it isn't the usual edit-compile-run cycle, and there's a real subtlety around how this module's own classes reference each other that's worth reading before you touch `src/main/bx`.
+The rest of this readme covers developing BxAgents itself (this repo), not building an agent with it. Read [AGENTS.md](AGENTS.md) first: it holds the project rules and the BoxLang and ColdBox gotchas. See [CONTRIBUTING.md](CONTRIBUTING.md#the-developer-flow---boxlang-is-dynamic) for the actual edit/test loop - BoxLang is a dynamic language, so it isn't the usual edit-compile-run cycle, and there's a real subtlety around how this module's own classes reference each other that's worth reading before you touch `src/main/bx`.
 
 ### Directory Structure
 
@@ -92,6 +138,10 @@ The rest of this readme covers developing BxAgents itself (this repo), not build
 - `examples/` - working sample agent projects, built as a CI regression gate (`./gradlew verifyExamples`)
 - `src/main/bx` - the BoxLang source: `ModuleConfig.bx` (CLI entry point), `models/build` (the build pipeline: config resolution, discovery, validation, manifest, and code generators), `models/cli` (one class per CLI verb)
 - `src/main/java` - supporting Java (packager, miniserver launcher, dynamic class loader, key dictionary)
+- `src/main/bx/bxagentsui`, `src/main/bx/catalog`, `src/main/bx/skills` - the generated web app module, the connector catalog and the skills the module ships
+- `ui/` - the web app's front-end sources (npm; `npm run lint`, `npm run lint:md`, `npm test`); its build is committed under `src/main/bx/bxagentsui/includes/build`
+- `tools/` - `docs-counts.py` (the numbers the docs state), the demo and screenshot kit in `tools/demo/`, generators and the ColdBox template refresh script
+- `plans/`, `completions/` - design notes and the shell completions
 - `src/test` - JUnit (Java-level) tests and fixtures
 - `tests/` - the TestBox BDD suite (`tests/specs`), including the ColdBox-dependent integration specs under `tests/specs/integration/coldbox`
 - `box.json` - published to ForgeBox; also declares the `bxAgents` native CLI executable
@@ -128,6 +178,12 @@ Run the full local verification pass with:
 
 ```bash
 ./gradlew shadowJar checkTemplateTokens test testBx testColdBoxIntegration verifyExamples
+```
+
+### Markdown lint
+
+```bash
+cd ui && npm ci && npm run lint:md    # docs/, changelog.md and this readme
 ```
 
 ### VSCode Tests
