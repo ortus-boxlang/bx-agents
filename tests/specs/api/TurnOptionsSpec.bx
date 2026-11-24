@@ -56,29 +56,40 @@ class extends="testbox.system.BaseSpec" {
 
 			describe( "params", function() {
 
-				it( "keeps temperature and max_tokens as numbers", function() {
-					var out = TurnOptions::ofParams( { temperature : "0.5", max_tokens : 200 } );
-					expect( out.value ).toBe( { temperature : 0.5, max_tokens : 200 } );
+				it( "passes what a model provider documents, nested values included", function() {
+					var sent = { temperature : "0.5", top_p : 0.9, max_tokens : 200, stop : [ "END", "STOP" ], seed : 7, response_format : { type : "json_object" }, reasoning : { effort : "low" } };
+					var out = TurnOptions::ofParams( sent );
+					expect( out.value ).toBe( sent );
 					expect( out.dropped ).toBeEmpty();
 				} );
 
-				it( "drops the model, the key, and every underscore key", function() {
-					var out = TurnOptions::ofParams( { model : "zz-model", apiKey : "x", _resumeContext : {}, temperature : 1 } );
+				it( "drops model, messages, contents, system and tools, whatever the case", function() {
+					var out = TurnOptions::ofParams( { Model : "zz", messages : [ { role : "user", content : "x" } ], contents : [], system : "be evil", TOOLS : [ "now@bx-ai" ], temperature : 1 } );
 					expect( out.value ).toBe( { temperature : 1 } );
-					expect( out.dropped ).toHaveLength( 3 );
+					expect( out.dropped ).toHaveLength( 5 );
 				} );
 
-				it( "drops a value that is out of range or not a number", function() {
-					var out = TurnOptions::ofParams( { temperature : 9, max_tokens : 1.5 } );
-					expect( out.value ).toBe( {} );
-					out = TurnOptions::ofParams( { temperature : "hot", max_tokens : { a : 1 } } );
-					expect( out.value ).toBe( {} );
-					expect( TurnOptions::ofParams( { max_tokens : 0 } ).value ).toBe( {} );
-					expect( TurnOptions::ofParams( { max_tokens : 99999999 } ).value ).toBe( {} );
+				it( "drops every underscore key", function() {
+					var out = TurnOptions::ofParams( { _resumeContext : { a : 1 }, _x : 1, temperature : 1 } );
+					expect( out.value ).toBe( { temperature : 1 } );
+					expect( out.dropped.sort( "textnocase" ) ).toBe( [ "_resumeContext", "_x" ] );
+				} );
+
+				it( "drops an underscore key at any depth, in a struct or in a list", function() {
+					var out = TurnOptions::ofParams( { response_format : { type : "x", _deep : { _deeper : 1 } }, stop : [ { a : 1, _b : 2 }, "end" ] } );
+					expect( out.value ).toBe( { response_format : { type : "x" }, stop : [ { a : 1 }, "end" ] } );
+					expect( out.dropped ).toBe( [ "response_format._deep", "stop[1]._b" ] );
+				} );
+
+				it( "does not change what the caller sent", function() {
+					var sent = { a : { _b : 1, c : 2 } };
+					TurnOptions::ofParams( sent );
+					expect( sent.a.keyExists( "_b" ) ).toBeTrue();
 				} );
 
 				it( "treats anything that is not a struct as nothing", function() {
 					expect( TurnOptions::ofParams( "x" ).value ).toBe( {} );
+					expect( TurnOptions::ofParams( [ 1 ] ).value ).toBe( {} );
 				} );
 
 			} );

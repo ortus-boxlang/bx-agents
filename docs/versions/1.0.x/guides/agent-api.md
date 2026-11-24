@@ -81,15 +81,14 @@ Build the client with named arguments. There is one method for each route: `invo
 
 ## What a turn accepts
 
-Besides `input`, `conversationId`, `threadId` and `attachments`, a turn request may carry two small structs, and only these keys are used:
+Besides `input`, `conversationId`, `threadId` and `attachments`, a turn request may carry two structs:
 
-| Field | Key | Meaning |
-|---|---|---|
-| `options` | `profile` | The name of an [offered profile](../conventions/agent-bx.md#agentapi) (`GET /profiles`). Any other name is a `400` `bad_profile`. |
-| `params` | `temperature` | A number from 0 to 2. |
-| `params` | `max_tokens` | A whole number from 1 to 1000000. |
+| Field | What is used |
+|---|---|
+| `options` | `profile` only: the name of an [offered profile](../conventions/agent-bx.md#agentapi) (`GET /profiles`). Any other name is a `400` `bad_profile`. |
+| `params` | Everything the model accepts (`temperature`, `top_p`, `max_tokens`, `stop`, `seed`, `response_format`, reasoning settings and so on), except `model`, `messages`, `contents`, `system` and `tools`, and any key that starts with `_` at any depth. |
 
-Everything else is dropped without an error, and the server logs the names it ignored (never the values). Keys that start with `_` are internal to the model library and are never accepted. This is a security rule: a key such as `options._resumeContext` would make the library run tool calls the request supplies without asking for approval, and `params.model` or `options.apiKey` would let a caller pick a model the server pays for. The person, thread and conversation come from the token and the request, never from `options`.
+Everything else is dropped without an error, and the server logs the names it ignored (never the values). This is a security rule. A key such as `options._resumeContext` would make the model library run tool calls the request supplies without asking for approval, and `options.apiKey` would swap the server's key. In `params`, `model` would pick a model the server did not offer, `messages` or `contents` would replace the conversation, `system` could set the prompt, and `tools` would add tools the agent was not given. The person, thread and conversation come from the token and the request, never from `options`.
 
 ## Streams
 
