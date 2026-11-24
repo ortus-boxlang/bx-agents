@@ -40,7 +40,7 @@ An `@scope` value that isn't `agent` or `runtime` (case-insensitive) fails the b
 
 ## Generated wiring
 
-For each `agent`-scope interceptor, the generated wiring ([`bxagents/Wiring.bx`](application-bx.md)) registers an instance with ColdBox's interceptor service from `after()`, once ColdBox has loaded:
+For each `agent`-scope interceptor, the generated base class ([`bxagents/Application.bx`](application-bx.md)) registers an instance with ColdBox's interceptor service from `after()`, once ColdBox has loaded:
 
 ```javascript
 application.cbController.getInterceptorService().register(

@@ -74,7 +74,7 @@ your-agent/
 .build/
 ├── miniserver.json
 ├── app/                  el código (no se sirve)
-│   ├── bxagents/         Wiring.bx  Scheduler.bx
+│   ├── bxagents/         Application.bx  Scheduler.bx
 │   ├── config/           Coldbox.bx  WireBox.bx  Router.bx
 │   ├── schedules/  agent/  tools/  skills/  mcp/
 │   └── handlers/  interceptors/

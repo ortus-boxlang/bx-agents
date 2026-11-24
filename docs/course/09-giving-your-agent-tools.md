@@ -27,7 +27,7 @@ class {
 BxAgents doesn't scan or interpret `@AITool` annotations itself at build time - it
 just discovers one entry per `.bx` file (for name-collision checking) and copies the
 whole `tools/` folder **verbatim** into the generated app. At startup, the generated
-app calls bx-ai's own scanner (`aiToolRegistry().scan( "tools" )`), which registers the tools
+app calls bx-ai's own scanner (`aiToolRegistry().scan( "app.tools" )`: the scanner expands the dotted path against a mapping, `/app` here, so it has to be a mapping path and not one relative to the app), which registers the tools
 by name, and the agent factory loads each agent's own `tools/` folder through bx-ai, which
 does the real reflection work. The scan statement is only emitted at all if your project
 actually has a `tools/` folder with files in it.

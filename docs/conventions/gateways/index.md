@@ -212,10 +212,10 @@ aiGatewayRegistry().register( aiGateway( "bxModules.bxagents.models.gateways.Sig
 
 ### GatewaySession - wiring the agent to every push-style gateway
 
-Any project with at least one push-style gateway entry also gets a generated start-up statement in the generated wiring's `after()`. It builds a single bx-ai `GatewaySession` (our `CommandGatewaySession`, which is one with [commands](#commands-in-a-gateway) in front of the agent) bundling every push-style gateway in the project, bound to the project's root agent, and starts it:
+Any project with at least one push-style gateway entry also gets a generated start-up statement in the generated base class's `after()`. It builds a single bx-ai `GatewaySession` (our `CommandGatewaySession`, which is one with [commands](#commands-in-a-gateway) in front of the agent) bundling every push-style gateway in the project, bound to the project's root agent, and starts it:
 
 ```javascript
-// bxagents/Wiring.bx, after() (GENERATED)
+// bxagents/Application.bx, after() (GENERATED)
 var wirebox        = application.cbController.getWireBox()
 var agent          = wirebox.getInstance( "GeneratedAgent" )
 var gatewaySession = new "models.gateways.CommandGatewaySession@bxagents"(
