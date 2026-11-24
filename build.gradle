@@ -495,6 +495,22 @@ task verifyExamples( type: JavaExec ) {
 	workingDir = projectDir
 }
 
+/**
+ * Course static gate
+ * The static half of tools/course/check-course.bxs: the course manifest and the lesson files agree, docs/ and its
+ * versioned mirror are identical, no lesson number is written into a title or a sentence, every relative link lands on a
+ * file, the home page path matches the manifest. It starts nothing and needs no module; the replay of every lesson's
+ * commands against the scripted model is run by hand or by the Course workflow (see tools/course/README.md).
+ */
+task verifyCourse( type: JavaExec ) {
+	group = "verification"
+	description = "Checks docs/course against its manifest and its mirror (no processes started)"
+	classpath = fileTree( dir: 'src/test/resources/libs', include: '*.jar' )
+	mainClass = 'ortus.boxlang.runtime.BoxRunner'
+	args = [ 'tools/course/check-course.bxs', '--static' ]
+	workingDir = projectDir
+}
+
 test {
     useJUnitPlatform()
     // ModuleCliProcessTest copies TestBox out of the dev install

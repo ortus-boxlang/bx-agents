@@ -366,6 +366,17 @@ class {
 					problems.append( "#name#: the link to #target# lands on no file" )
 				}
 			}
+			// the closing "Next:" line names the next lesson of the manifest (tools/course/fix-next.py writes it)
+			var position = lessons.find( path )
+			var closing = reFind( "(?m)^Next: \[[^\]]*\]\(([^)]+)\)\s*$", lesson.body, 1, true )
+			if ( position < lessons.len() ) {
+				var expected = listLast( lessons[ position + 1 ], "/" )
+				if ( !closing.pos[ 1 ] || mid( lesson.body, closing.pos[ 2 ], closing.len[ 2 ] ) != expected ) {
+					problems.append( "#name#: the closing `Next:` line should link to #expected# (run python3 tools/course/fix-next.py docs)" )
+				}
+			} else if ( closing.pos[ 1 ] ) {
+				problems.append( "#name#: the last lesson has a `Next:` line" )
+			}
 			for ( var b in parseBlocks( lesson.body ) ) {
 				if ( b.directives.keyExists( "java-launcher" ) ) {
 					continue
@@ -395,8 +406,8 @@ class {
 
 		// the home page path
 		var stages = fileRead( variables.repoRoot & "/docs/.theme/assets/agents-home.js" )
-		var slugs = reFindAll( "slug:\s*""[^""]+""", stages ).map( ( s ) => reReplace( s, "^slug:\s*""|""$", "", "all" ) )
-		if ( slugs.len() && slugs.toList() != stems().toList() ) {
+		var slugs = reFindAll( "(?m)^\t\t\t\[""[^""]+""", stages ).map( ( s ) => reReplace( s, "^\s*\[""|""$", "", "all" ) )
+		if ( slugs.toList() != stems().toList() ) {
 			problems.append( "The STAGES of docs/.theme/assets/agents-home.js do not list the lessons of the manifest, in its order" )
 		}
 		return problems
@@ -444,7 +455,7 @@ class {
 		var previous = ""
 		var needsModel = false
 
-		if ( !( preflight( 8080 ) && preflight( 8791 ) ) ) {
+		if ( !( o.noModel ?: false ) && !( preflight( 8080 ) && preflight( 8791 ) ) ) {
 			throw( type = "Course.PortBusy", message = "Port 8080 or 8791 is in use. The course needs both free (the scripted model and the web app)." )
 		}
 
@@ -473,7 +484,7 @@ class {
 				if ( !list.filter( ( s ) => s.kind != "skip" ).len() ) {
 					continue
 				}
-				if ( needsModel && !list.filter( ( s ) => s.kind == "run" && ( s.directives.name ?: "" ) == "fake" ).len() ) {
+				if ( needsModel && !( o.noModel ?: false ) && !list.filter( ( s ) => s.kind == "run" && ( s.directives.name ?: "" ) == "fake" ).len() ) {
 					startModel( ws )
 				}
 				needsModel = false
@@ -492,7 +503,7 @@ class {
 					}
 				}
 				stopBackground( false )
-				if ( failures.len() ) {
+				if ( failures.len() || stemName == ( o.to ?: "" ) ) {
 					break
 				}
 				var taken = takeSnapshot( ws & "/acme-support", work & "/snapshot-now" )
@@ -751,7 +762,8 @@ class {
 			if ( findNoCase( arguments.text, fileExists( p.log ) ? fileRead( p.log ) : "" ) ) {
 				return ""
 			}
-			if ( !p.process.isAlive() ) {
+			// the launcher of a server may return while the server it started goes on, so only a failure ends the wait
+			if ( !p.process.isAlive() && p.process.exitValue() != 0 ) {
 				break
 			}
 			sleep( 500 )
