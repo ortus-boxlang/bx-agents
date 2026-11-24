@@ -26,7 +26,7 @@ tags: [reference, build]
   lib/                 coldbox/, modules/ (qb, cbsecurity, cbauth, cbmailservices), java/
   runtime/             the BoxLang home
     boxlang.json       the template's engine config
-    modules/bxagents/  a copy of the bxagents module: the ONLY module the served app loads
+    modules/bx-agents/ a copy of the bxagents module, under its installed folder name: the ONLY module the served app loads
     global/  lib/  logs/
   boxlang_modules/     the project's own installed BoxLang modules
 ```
@@ -41,7 +41,7 @@ tags: [reference, build]
 
 - **Only `public/` is a web root.** Nothing in `app/`, `lib/`, `runtime/` or `boxlang_modules/` can be fetched by its address: `/config/agent-settings.json`, `/project/Agent.yml`, `/agent/instructions.md` and a listing of `/config/` were all downloadable without a token before this layout, and answer 404 now. An address nothing routes is a small JSON `404`, not an error page.
 - **Only `index.bxm` runs.** The server's default runs any `.bx` or `.bxm` under the web root as a request; the `passPredicate` limits that to the front controller, so a class under `app/` is not callable by address.
-- **Only the `bxagents` module loads.** The module is copied into `runtime/modules/bxagents` (with the BoxLang modules bundled inside it), and `runtime/` is the BoxLang home, so the machine's own `~/.boxlang/modules` is never read. The copy is skipped while a stamp (the module's `box.json` and the hash of its jars) is unchanged.
+- **Only the `bxagents` module loads.** The module is copied into `runtime/modules` as it is installed, folder name included (`bx-module install bx-agents` makes it `bx-agents`; a dev build's `build/modules/bxagents` stays `bxagents`), with the BoxLang modules bundled inside it. Any other folder there, such as a copy under the other name, is removed, and `runtime/` is the BoxLang home, so the machine's own `~/.boxlang/modules` is never read. The copy is skipped while a stamp (the module's `box.json` and the hash of its jars) is unchanged.
 - **The paths are relative**, so a copy of `.build` anywhere (a packaged `.bxa` unzipped on another machine) is served by starting the server in it. A folder name with a space in it does not work: the `boxlang-miniserver` launcher script does not quote `BOXLANG_HOME`.
 - `public/includes/` shows its file names (the server lists a folder that has no index file, and `miniserver.json` has no switch for it); it holds only what the browser is meant to load.
 
