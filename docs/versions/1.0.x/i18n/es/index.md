@@ -192,7 +192,7 @@ your-agent/
 │   ├── Application.bx
 │   └── index.bxm
 ├── lib/                  coldbox/  modules/
-└── runtime/              boxlang.json  modules/bxagents
+└── runtime/              boxlang.json  modules/bx-agents
 ```
 :::
 :::
