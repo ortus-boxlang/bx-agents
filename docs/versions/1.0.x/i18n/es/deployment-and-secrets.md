@@ -82,7 +82,7 @@ Ninguna contiene un secreto de proveedor. `BXAGENTS_TOKEN` es la única credenci
 | Variable | La usa | Efecto |
 |---|---|---|
 | `BX_AGENTS_ENV` | `build` | El entorno activo cuando no se indica `--environment` (por defecto `development`). Ver [Entornos](conventions/agent-yaml.md#entornos). |
-| `BXAGENTS_DB` | la app, `chat`, `token`, `notes`, `sessions`, `stats` | El archivo de la base de datos de chat. `serve` lo fija en `data/chat.db` dentro del proyecto; una app desplegada usa `database.path` dentro de la app salvo que esté definida. Ver [el almacén SQLite](conventions/web-ui.md#el-almacén-sqlite). |
+| `BXAGENTS_DB` | la app, `chat`, `token`, `notes`, `sessions`, `stats` | El archivo de la base de datos de chat. `serve` lo fija en el `chat.db` de la carpeta de datos del agente (`~/.bxagents/<nombre del agente>/chat.db` por defecto). Sin ella, la app le pregunta a esa carpeta de datos, así que una app desplegada también guarda el archivo en la suya; `database.path` es solo el recurso para un agente sin nombre. Ver [el almacén SQLite](conventions/web-ui.md#el-almacén-sqlite). |
 | `BXAGENTS_TOKEN` | `chat --connect` | El token a enviar, en lugar de `--token`. |
 | `BXAGENTS_USER_CONFIG` | `chat`, `extensions` | Otro archivo en lugar de `~/.bxagents/Agent.yml`. |
 | `BXAGENTS_SKILLS_URL` | `skills` | Otro registro de skills, en lugar de `--registry`. |

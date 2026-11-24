@@ -1,7 +1,10 @@
 /**
  * Records every terminal scene of scenes.json, each in its own pseudo terminal so the screen starts clean, and renders it to out/scenes/<id>.mp4.
  *
- *   boxlang record.bxs --boxlang-jar=<boxlang.jar> --module=<built module folder> --out=out [--home=<the "user's" home>] [--work=<scratch>] [--only=hook,chat] [--scenes=<another scenes file>] [--fps=24] [--fresh]
+ *   boxlang record.bxs --boxlang-jar=<boxlang.jar> --module=<built module folder> --out=out [--home=<the "user's" home>] [--work=<scratch>] [--only=hook,chat] [--scenes=<another scenes file>] [--fps=24] [--fresh] [--cast-only] [--mail=9300]
+ *
+ * --cast-only keeps the recording (<id>.cast) and draws nothing: render.bxs --still makes a screenshot from it (docs-shots.bxs).
+ * --mail=<port> adds a mail service that needs a sign in (../../fake-oauth-mcp.bxs on that port) to the demo agent, for `/connect mail`.
  *
  * It needs the demo agent from ../../webui/trailer/project, the scripted model (../../fakellm.bxs with model.json), `script` for the pseudo
  * terminal (drive.bxs) and ffmpeg (render.bxs). Port 8080 must be free: the demo agent's profiles use the `openai-compatible` provider.
@@ -72,6 +75,9 @@ function setup() {
 	fileWrite( bxHome & "/boxlang.json", '{ "whitespaceCompressionEnabled": false }' )
 	if ( !directoryExists( project ) ) {
 		directoryCopy( demo & "webui/trailer/project", project, true )
+		if ( len( opts.mail ?: "" ) ) {
+			fileAppend( project & "/Agent.yml", char( 10 ) & "mcpServers:" & char( 10 ) & "  - name: mail" & char( 10 ) & "    url: http://127.0.0.1:" & opts.mail & "/mcp" & char( 10 ) & "    oauth:" & char( 10 ) & "      scopes: [ mail.read ]" & char( 10 ) )
+		}
 		run( bl.merge( [ "module:bxagents", "build", "--projectRoot=" & project ] ) )
 		run( [ "git", "init", "-q", "-b", "main" ], project )
 		run( [ "git", "add", "-A" ], project )
@@ -115,7 +121,7 @@ function drive( required struct scene ) {
 	var spec = {
 		"title"  : arguments.scene.id,
 		"cols"   : cols,
-		"rows"   : rows,
+		"rows"   : arguments.scene.rows ?: rows,
 		"typeMs" : arguments.scene.typeMs ?: 48,
 		"command": command,
 		"cwd"    : cwd,
@@ -149,15 +155,24 @@ function record() {
 	setup()
 	var scenes = jsonDeserialize( fileRead( len( opts.scenes ?: "" ) ? expandPath( opts.scenes ) : here & "scenes.json" ) ).filter( s => len( s.start ?: "" ) && ( !only.len() || only.contains( s.id ) ) )
 	var model = start( bl.merge( [ demo & "fakellm.bxs", "--port=8080", "--script=" & here & "model.json" ] ), out, {}, out & "/fakellm.log" )
+	var mail = ""
+	if ( len( opts.mail ?: "" ) ) {
+		mail = start( bl.merge( [ demo & "fake-oauth-mcp.bxs", "--port=" & opts.mail ] ), expandPath( demo & "../.." ), {}, out & "/fake-mail.log" )
+	}
 	try {
 		sleep( 10000 )
 		for ( var scene in scenes ) {
 			println( scene.id & " recording" )
 			println( "   " & drive( scene ) )
-			println( "   " & render( scene ) )
+			if ( !opts.keyExists( "cast-only" ) ) {
+				println( "   " & render( scene ) )
+			}
 		}
 	} finally {
 		model.destroy()
+		if ( !isSimpleValue( mail ) ) {
+			mail.destroy()
+		}
 	}
 }
 record()

@@ -57,7 +57,7 @@ The default when `--template` is omitted entirely. This IS the base skeleton des
 
 ### `webui-chat`
 
-Adds `gateways/webui.bx`, exposing the built-in [web chat UI](conventions/web-ui.md) at `/chat`:
+Adds `gateways/webui.bx`, exposing the built-in [web chat UI](conventions/web-ui.md) at `/chat` (`bxAgents add gateway web` writes the same content to `gateways/web.bx`; the file name does not matter):
 
 ```javascript
 // gateways/webui.bx
@@ -199,7 +199,7 @@ class {
 
 ### `scheduled`
 
-Adds a [BoxLang scheduler](conventions/schedules.md) calling the agent on a cron schedule:
+Adds a [BoxLang scheduler](conventions/schedules.md) calling the agent on a daily schedule:
 
 ```javascript
 // schedules/Example.bx
@@ -215,7 +215,7 @@ class {
 }
 ```
 
-(`run()` sends the message to the project's default agent, the root agent. The build gives the class its helpers, so there is no `extends`.) This is real [`schedules/`](conventions/schedules.md) content, not a placeholder - edit `configure()` to add or change tasks with BoxLang's task DSL (`cron(...)`, `every(...)`, `everyDayAt(...)`, etc.), or add more files.
+(`run()` sends the message to the project's default agent, the root agent. The build gives the class its helpers, so there is no `extends`.) This is real [`schedules/`](conventions/schedules.md) content, not a placeholder - edit `configure()` to add or change tasks with BoxLang's task DSL (`every(...)`, `everyDayAt(...)`, `onWeekdays(...)`, etc.), or add more files. A six-field `cron(...)` works; a five-field one does not fire on BoxLang 1.19.0 (see [Cron](conventions/schedules.md#cron)).
 
 ### `multi-agent`
 

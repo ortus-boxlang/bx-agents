@@ -25,7 +25,18 @@ These are handled before verb dispatch and never reach a verb.
 
 ## Quoting flag values
 
-BoxLang 1.19.0's `boxlang` launcher script splits every argument at spaces, so `--description="Daily standup"` arrives as `--description=Daily` (`--description "a b c"` and `"--description=a b c"` too). Until that is fixed upstream, write values without spaces (`--description=Daily-standup`), fill the text in the generated file afterwards, or start the module through Java, which keeps the quoting: `java -cp boxlang-1.19.0.jar ortus.boxlang.runtime.BoxRunner module:bxagents new ... --description="a b c"`.
+BoxLang 1.19.0's `boxlang` launcher script splits every argument at spaces, so `--description="Daily standup"` arrives as `--description=Daily` (`--description "a b c"` and `"--description=a b c"` too). Single quotes, backslashes and `%20` do not help either: there is no way to type a value with a space through the `bxAgents` command until this is fixed upstream. A message that is split this way is not rejected, it is mis-read: `bxAgents invoke --message="Where is order 48213, and can I still return it?"` fails with `No build found at [.../is/.build]`, because `is` was taken as the project folder.
+
+Two ways round it:
+
+- **Start the module through Java, which keeps the quoting.** Define this once in your shell, and every example on these pages that quotes a value with spaces works as typed (replace the path with the BoxLang runtime jar, `boxlang-<version>.jar`, in the `lib` folder of your BoxLang install):
+
+  ```bash
+  bxAgents() { java -cp /path/to/boxlang-1.19.0.jar ortus.boxlang.runtime.BoxRunner module:bxagents "$@"; }
+  ```
+
+  Or run it in one line: `java -cp /path/to/boxlang-1.19.0.jar ortus.boxlang.runtime.BoxRunner module:bxagents new my-agent --description="a b c"`.
+- **Write the value without spaces** (`--description=Daily-standup`) and fill the text in the generated file afterwards.
 
 ## The banner
 
@@ -72,6 +83,8 @@ Always use the `--flag=value` form. The space-separated form is not supported.
 `completions/` holds ready-made completion scripts for bash, fish and PowerShell. See [Installation](getting-started/installation.md#tab-completion) for the one-line setup of each.
 
 ## Verbs
+
+An example below that quotes a value with spaces (`--description="..."`, `--message="..."`, `--when="..."`) needs the Java form from [Quoting flag values](#quoting-flag-values) when it is run through the `bxAgents` launcher.
 
 ::: cards
 ::: card title="new" icon="phosphor-duotone:sparkle" href="#new"
@@ -190,7 +203,7 @@ bxAgents new my-agent --forgebox=some-package-slug
   - `--model` is **required** when no questions are asked - a `provider/model` slug (see [the model slug](conventions/agent-bx.md#the-model-slug)).
   - `--name` defaults to the target directory's own basename.
   - Refuses to run if the target already contains an `Agent.yml` or an `Agent.bx`.
-  - Creates [`Agent.yml`](conventions/agent-yaml.md), `instructions.md`, a root [`Application.bx`](conventions/application-bx.md) (extends the class every build generates; never overwritten), every convention folder (empty), a root [`box.json`](conventions/box-json.md) (`testbox` as a development dependency, installed into `lib/testbox`), a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/specs/AgentSpec.bx`), a `.env` (commented API key stubs only; it deliberately does not set `BOXLANG_HOME`), a `.gitignore` (`.env` and `.env.*`, `.build/`, `dist/`, `data/chat.db*`, `lib/`, `boxlang_modules/`, `.agents/skills/`, editor files), and the standard dotfiles `.editorconfig`, `.gitattributes`, `.bxlint.json`, `.markdownlint.json` and a `.boxlang.json` listing every bx-ai setting at its default (the BoxLang runtime reads it when run from the project root; edit the values there). Never overwrites a file that already exists. BoxLang and `boxlang-miniserver` load a `.env` from the project root themselves, so the file also works for your API keys; BxAgents never reads, copies or packages it.
+  - Creates [`Agent.yml`](conventions/agent-yaml.md), `instructions.md`, a root [`Application.bx`](conventions/application-bx.md) (extends the class every build generates; never overwritten), every convention folder (empty), a root [`box.json`](conventions/box-json.md) (`testbox` as a development dependency, installed into `lib/testbox`), a ready-to-run [`tests/`](conventions/testing.md) folder (`tests/specs/AgentSpec.bx`), a `.env` (commented API key stubs only; it deliberately does not set `BOXLANG_HOME`), a `.gitignore` (`.env` and `.env.*`, `.build/`, `dist/`, `data/chat.db*` (a leftover: the chat database lives in the [data home](conventions/data.md), outside the project), `lib/`, `boxlang_modules/`, `.agents/skills/`, editor files), and the standard dotfiles `.editorconfig`, `.gitattributes`, `.bxlint.json`, `.markdownlint.json` and a `.boxlang.json` listing every bx-ai setting at its default (the BoxLang runtime reads it when run from the project root; edit the values there). Never overwrites a file that already exists. BoxLang and `boxlang-miniserver` load a `.env` from the project root themselves, so the file also works for your API keys; BxAgents never reads, copies or packages it.
   - `--class` (a bare boolean flag, like the others described above) writes the class-based [`Agent.bx`](conventions/agent-bx.md) instead of the default `Agent.yml`, for agents whose definition needs code (hooks, dynamic instructions). It applies to the root and to any subagents a template scaffolds, and only to `--template` mode - not to `--repo`/`--forgebox`.
   - `--template` picks one of 8 built-in starters, each layering a bit of pre-wired content on top of the base skeleton above (see [Agent Templates](agent-templates.md) for every generated file in full, plus how `--repo`/`--forgebox` sources work and how to publish your own):
     - `minimal` - the bare skeleton, nothing extra.
@@ -282,7 +295,7 @@ bxAgents add schedule                          # asks how often, the details, a 
 | `weekly mon 09:00` | Once a week (`mon` `tue` `wed` `thu` `fri` `sat` `sun`) | `.everyWeekOn( 1, "09:00" )` |
 | `monthly 1 09:00` | Once a month on that day, 1 to 28 so that no month skips it | `.everyMonthOn( 1, "09:00" )` |
 | `first-business-day 09:00`, `last-business-day 17:00` | On that business day of each month | `.onFirstBusinessDayOfTheMonth( "09:00" )` |
-| `0 9 * * 1-5`, `0 30 8 * * MON-FRI` | Any cron expression: five fields, or six with seconds in front | `.cron( "..." )` with six fields (a leading `0` is added to a five-field one), checked by BoxLang's own parser |
+| `0 9 * * 1-5`, `0 30 8 * * MON-FRI` | Any cron expression: five fields, or six with seconds in front | `.cron( "..." )` with six fields (a leading `0` is added to a five-field one), checked by BoxLang's own parser. Only the six-field form fires on BoxLang 1.19.0 |
 
 Times are 24 hour `HH:mm` in the scheduler's timezone.
 
@@ -345,7 +358,7 @@ The platforms are the ones the new wizard offers: `telegram`, `slack`, `discord`
 
 | Flag | Meaning |
 |---|---|
-| `--name=<name>` | The file, `gateways/<name>.bx`, or the second positional. Defaults to the type. A name in use is refused. |
+| `--name=<name>` | The file, `gateways/<name>.bx`, or the second positional. Defaults to the type, so `add gateway web` writes `gateways/web.bx`, while the wizard and the `webui-chat` template write `gateways/webui.bx`. The file name does not matter: the `exposes` value inside it says what it is. A name in use is refused. |
 | `--env=<config=NAME,...>` | Chat platforms: which variable holds which credential, for example `botTokenEnvVar=ACME_BOT`. Without it the usual names are used (`SLACK_BOT_TOKEN`, ...). Only names go in the gateway file; an empty stub for each goes in `.env`. |
 | `--policy=queue\|reject\|steer\|interrupt` | Chat platforms: what to do with a message that arrives while the agent is still answering. Written to Agent.yml's `gatewaySession` unless it is the default `queue`. |
 | `--path=<path>` | `web` and `api`: where it is served (`/chat` and `/api/chat` by default). A path another gateway uses is refused. |
@@ -598,7 +611,7 @@ Each slash command is written once, as a small class that answers with data (tex
 
 #### Conversations in the chat
 
-Every chat is a conversation, listed in the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`) under your user, the same list the web chat shows. The messages themselves are kept in the agent's [memory](conventions/agent-yaml.md#settings), so a conversation can be picked up again only as far as that memory lasts: the default `cache` memory is lost when the process ends, a `file` or `jdbc` memory is not.
+Every chat is a conversation, listed in the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`chat.db` in the [data home](conventions/data.md)) under your user, the same list the web chat shows. The messages themselves are kept in the agent's [memory](conventions/agent-yaml.md#settings), so a conversation can be picked up again only as far as that memory lasts: the default `cache` memory is lost when the process ends, a `file` or `jdbc` memory is not.
 
 | Command | Does |
 |---|---|
@@ -819,7 +832,7 @@ bxAgents hash-password --password="<your-password>"
 
 ### `token`
 
-The access tokens of a deployed agent, kept in the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`, or the file named by `BXAGENTS_DB`). The agent accepts them when its [`agentApi`](conventions/agent-bx.md#access-tokens-for-a-deployed-agent) has `tokens: true`.
+The access tokens of a deployed agent, kept in the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`chat.db` in the [data home](conventions/data.md), or the file named by `BXAGENTS_DB`). The agent accepts them when its [`agentApi`](conventions/agent-bx.md#access-tokens-for-a-deployed-agent) has `tokens: true`.
 
 ```bash
 bxAgents token create --name=laptop [--scope=chat|admin] [--expires=90d]
@@ -849,7 +862,7 @@ bxAgents users member --name=ada
 
 ### `notes`
 
-The notes an agent keeps, read from the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`, or the file named by `BXAGENTS_DB`). Limits come from the [`notes`](conventions/agent-yaml.md#notes) block of `Agent.yml`.
+The notes an agent keeps, read from the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`chat.db` in the [data home](conventions/data.md), or the file named by `BXAGENTS_DB`). Limits come from the [`notes`](conventions/agent-yaml.md#notes) block of `Agent.yml`.
 
 ```bash
 bxAgents notes list [--scope=user|agent] [--user=NAME] [--json]
@@ -868,7 +881,7 @@ bxAgents notes import --file=notes.json
 
 ### `vault`
 
-The secrets an agent uses at run time, sealed in the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`, or the file named by `BXAGENTS_DB`). See [the vault](conventions/vault.md).
+The secrets an agent uses at run time, sealed in the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`chat.db` in the [data home](conventions/data.md), or the file named by `BXAGENTS_DB`). See [the vault](conventions/vault.md).
 
 ```bash
 bxAgents vault list [--scope=agent|user|all] [--user=NAME] [--json]
@@ -1006,7 +1019,7 @@ bxAgents routines clean <name> [--older-than=30d | --all] [--yes]
 
 ### `sessions`
 
-The conversations in the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`, or the file named by `BXAGENTS_DB`), the same list `chat` and the web page show.
+The conversations in the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`chat.db` in the [data home](conventions/data.md), or the file named by `BXAGENTS_DB`), the same list `chat` and the web page show.
 
 ```bash
 bxAgents sessions list [--user=NAME] [--json]
@@ -1026,7 +1039,7 @@ bxAgents sessions import --file=chat.json [--name="New name"] [--user=NAME]
 
 ### `stats`
 
-What the project's model calls used, from the record the app keeps in the [shared chat database](conventions/web-ui.md#the-sqlite-store) (`data/chat.db`, or the file named by `BXAGENTS_DB`).
+What the project's model calls used, from the record the app keeps in the [shared chat database](conventions/web-ui.md#the-sqlite-store) (`chat.db` in the [data home](conventions/data.md), or the file named by `BXAGENTS_DB`).
 
 ```bash
 bxAgents stats [--days=30] [--by=model|provider|day|user] [--user=NAME] [--json]

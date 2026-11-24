@@ -21,7 +21,7 @@ ogImage: assets/og-home.png
 construido sobre [ColdBox](https://www.coldbox.org) y
 [BX AI](https://ai.boxlang.io). Describes un agente
 con archivos y carpetas - no con la superficie de API de un framework - y `bxAgents build`
-ensambla con ello una aplicación ColdBox real y ejecutable: una web app de doce páginas, una API con documento
+ensambla con ello una aplicación ColdBox real y ejecutable: una web app de trece páginas, una API con documento
 OpenAPI, doce tipos de gateway, rutinas, una vault, copias de seguridad y tests que no necesitan clave de API.
 
 ![Una sesión de terminal: bxAgents new crea el andamiaje de un proyecto, bxAgents build ensambla una aplicación ColdBox, bxAgents inspect imprime el agente, el modelo y el entorno, y bxAgents serve lo arranca en http://127.0.0.1:8080](assets/cli-quickstart.svg)
@@ -41,9 +41,9 @@ OpenAPI, doce tipos de gateway, rutinas, una vault, copias de seguridad y tests 
 | | |
 |---|---|
 | **Build** | [Las carpetas son la API](conventions/agent-yaml.md). Un [asistente](guides/new-wizard.md) y ocho plantillas. [Sub-agentes](conventions/subagents.md) con los que también puedes hablar directamente. [Skills](conventions/skills.md) del registro, o guardadas por el propio agente con tu aprobación. Tests sin tokens. |
-| **Run** | Una [web app](conventions/web-ui.md) con menú a la izquierda y doce páginas. Un [chat de terminal](guides/terminal-ui.md) con 33 comandos de barra. [Rutinas](conventions/routines.md) que las personas crean pidiéndolas. [Schedules](conventions/schedules.md), aprobaciones, un `.bxa` empaquetado y seis destinos de despliegue. |
+| **Run** | Una [web app](conventions/web-ui.md) con menú a la izquierda y trece páginas. Un [chat de terminal](guides/terminal-ui.md) con 36 comandos de barra. [Rutinas](conventions/routines.md) que las personas crean pidiéndolas. [Schedules](conventions/schedules.md), aprobaciones, un `.bxa` empaquetado y seis destinos de despliegue. |
 | **Remember** | Memoria en la base de datos del chat para cada agente, por persona, igual en la terminal, la web app y la API. Notas por persona y notas compartidas sobre el trabajo del agente. Un [directorio de datos](conventions/data.md) con volúmenes, y copias de seguridad con restauración. |
-| **Connect** | [Doce tipos de gateway](conventions/gateways/index.md), y rutinas que entregan en ellos. Una [API](guides/agent-api.md) con 76 rutas, OpenAPI y un cliente de BoxLang. [MCP](conventions/mcp.md) en ambos sentidos, con [inicio de sesión por persona](conventions/connect.md). Una [vault](conventions/vault.md) con registro de actividad. |
+| **Connect** | [Doce tipos de gateway](conventions/gateways/index.md), y rutinas que entregan en ellos. Una [API](guides/agent-api.md) con 82 rutas, OpenAPI y un cliente de BoxLang. [MCP](conventions/mcp.md) en ambos sentidos, con [inicio de sesión por persona](conventions/connect.md). Una [vault](conventions/vault.md) con registro de actividad. |
 | **Operate** | Roles de admin y miembro, tokens y personas, `allowedIPs` y límite de frecuencia. Cinco [logs](conventions/logs.md). El árbol del agente, sus archivos y el uso de tokens. Estado de cada gateway con botón de reconexión. `bxAgents doctor`. |
 | **Extend** | Las [extensiones](conventions/extensions.md) añaden comandos, teclas, elementos de estado, listeners, schedulers, slots de página, verbos de CLI, tools, skills y tipos de gateway. [Interceptors](conventions/interceptors.md), módulos y un `Agent.bx` basado en clase. |
 
@@ -70,12 +70,12 @@ Telegram, Slack, Discord, Email, WhatsApp, Teams, Twilio, GitHub y Signal, adem�
 :::
 ::: card title="Una web app, generada" icon="phosphor-duotone:globe-hemisphere-west" href="conventions/web-ui.md"
 Pídela en una entrada de `gateways/` y el build produce una app tematizable con menú a la izquierda y
-doce páginas: chat, conversaciones, rutinas, registro, memoria, vault, ajustes y, para admins, agente,
+trece páginas: chat, conversaciones, rutinas, registro, conectores, memoria, vault, ajustes y, para admins, agente,
 gateways, logs, acceso y datos.
 :::
 ::: card title="Un chat de terminal a pantalla completa" icon="phosphor-duotone:terminal-window" href="guides/terminal-ui.md"
 `bxAgents chat` conserva tu scrollback y tiene sesiones, rutinas, notas, adjuntos de `@archivo` e imágenes,
-33 comandos de barra, un medidor de contexto y grabación. Puede arrancar su propio servidor o conectarse a uno desplegado.
+36 comandos de barra, un medidor de contexto y grabación. Puede arrancar su propio servidor o conectarse a uno desplegado.
 :::
 :::
 
@@ -139,13 +139,13 @@ generado, y cómo publicar las tuyas.
 
 ## Una web app que no tuviste que construir
 
-Pon `exposes: "webui"` en un gateway y el build emite la app completa: un menú a la izquierda con doce páginas,
+Pon `exposes: "webui"` en un gateway y el build emite la app completa: un menú a la izquierda con trece páginas,
 chat con streaming y un menú Talk to para los sub-agentes, conversaciones filtrables, rutinas con sus informes,
 un registro de tools, skills y volúmenes, memoria y notas, una vault, temas claro y oscuro y una disposición móvil.
 Los admins tienen además Agent, Gateways, Logs, Access y Data and backups. Está conectada a tu agente a través de la misma
 API HTTP que puede llamar tu propio código.
 
-![La web app generada: el menú de la izquierda, una conversación con una llamada a una tool y una respuesta con formato, y el selector de modelo en el encabezado](assets/webui-chat-light.png)
+![La web app generada: el menú de la izquierda, una conversación con una llamada a una tool y una respuesta con formato, la cabecera con el interruptor de claro u oscuro, y el selector de modelo y el anillo de contexto en la barra sobre la conversación](assets/webui-chat-light.png)
 
 ::: columns
 ::: column
@@ -183,11 +183,14 @@ your-agent/
 ```text
 .build/app/
 ├── Application.bx
+├── bxagents/
+│   ├── Application.bx
+│   └── Scheduler.bx
 ├── config/
 │   ├── ColdBox.bx
 │   ├── WireBox.bx
-│   ├── Router.bx
-│   └── Scheduler.bx
+│   └── Router.bx
+├── schedules/
 ├── agent/
 │   └── GeneratedAgentFactory.bx
 ├── tools/  skills/  mcp/
@@ -237,7 +240,7 @@ GitHub y Signal - coordinados por una sola sesión con políticas `queue` / `ste
 Cada persona y cada hilo tienen su propia conversación, y los comandos de barra también funcionan allí.
 :::
 ::: card title="HTTP y MCP" icon="phosphor-duotone:stack" href="guides/agent-api.md"
-Todo agente sirve una API HTTP (76 rutas) con un documento OpenAPI, abierta en tu máquina o tras tokens,
+Todo agente sirve una API HTTP (82 rutas) con un documento OpenAPI, abierta en tu máquina o tras tokens,
 `allowedIPs` y un límite de frecuencia. Aloja servidores MCP locales desde `mcp/` para que
 otros clientes puedan llamar a tus tools.
 :::
