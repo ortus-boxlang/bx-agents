@@ -98,4 +98,4 @@ Reconstruye y prueba a pedirle a tu agente que revise un fragmento de código. (
 
 Referencia completa: [skills/](../conventions/skills.md).
 
-Siguiente: [Componer subagentes](11-composing-subagents.md)
+Siguiente: [Modelos y perfiles](12-named-model-configs.md)

@@ -45,4 +45,4 @@ Añade un perfil `fast` que apunte a un modelo más pequeño que el de tu agente
 
 Referencia completa: [Modelos y perfiles](../conventions/models.md).
 
-Siguiente: [Exponer tu agente por HTTP y MCP](13-exposing-http-and-mcp.md)
+Siguiente: [La UI web de chat generada](15-the-generated-web-chat-ui.md)

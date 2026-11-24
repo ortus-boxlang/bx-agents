@@ -156,4 +156,4 @@ has ido añadiendo tools, skills y subagentes desde [Dar tools a tu agente](09-g
 Referencia completa: [La UI web de chat](../conventions/web-ui.md). Para cambiar la app misma, ver
 [Trabajar en la app web](../guides/ui-development.md).
 
-Siguiente: [Programar trabajo en segundo plano](16-scheduling-background-work.md)
+Siguiente: [The Agent Asks First](approvals.md)

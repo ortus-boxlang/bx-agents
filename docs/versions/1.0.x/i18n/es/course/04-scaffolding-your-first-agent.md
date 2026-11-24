@@ -109,4 +109,4 @@ archivos a mano: `bxAgents add tool`, `add skill`, `add subagent`, `add gateway`
 los demás tipos de `add` hacen unas cuantas preguntas y escriben los archivos por ti (`--dry-run`
 los muestra antes). Las cuatro lecciones siguientes recorren lo que hace falta de verdad para ejecutarlo.
 
-Siguiente: [La definición del agente: Agent.yml](05-agent-bx.md)
+Siguiente: [La definición del agente - Agent.yml](05-agent-bx.md)

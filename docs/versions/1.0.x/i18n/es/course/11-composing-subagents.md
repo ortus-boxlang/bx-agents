@@ -85,4 +85,4 @@ el subagente investigador - es invocable exactamente igual que cualquier otra to
 
 Referencia completa: [subagents/](../conventions/subagents.md).
 
-Siguiente: [Modelos y perfiles](12-named-model-configs.md)
+Siguiente: [Routines and Reports](routines-and-reports.md)

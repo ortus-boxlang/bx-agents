@@ -73,4 +73,4 @@ una y el agente. Una expresión cron que pases a `--when` se escribe como un `.c
 
 Referencia completa: [schedules/](../conventions/schedules.md).
 
-Siguiente: [Alojar y consumir servidores MCP](17-hosting-mcp-servers.md)
+Siguiente: [Exponer tu agente por HTTP y MCP](13-exposing-http-and-mcp.md)

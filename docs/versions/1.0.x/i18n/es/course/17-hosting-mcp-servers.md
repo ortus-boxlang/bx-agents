@@ -101,4 +101,4 @@ propio agente.
 `bxAgents add mcp server` escribe por ti el archivo de `mcp/` y la entrada de `gateways/`. Referencia
 completa: [mcp/](../conventions/mcp.md).
 
-Siguiente: [Interceptores y dependencias de módulos](18-interceptors-and-modules.md)
+Siguiente: [Who Is Allowed](users-roles-and-tokens.md)

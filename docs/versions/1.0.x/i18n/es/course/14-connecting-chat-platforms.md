@@ -147,4 +147,4 @@ secciones de plataforma de la referencia completa de abajo; la forma es la misma
 
 Referencia completa: [gateways/](../conventions/gateways/index.md).
 
-Siguiente: [La UI web de chat generada](15-the-generated-web-chat-ui.md)
+Siguiente: [Alojar y consumir servidores MCP](17-hosting-mcp-servers.md)

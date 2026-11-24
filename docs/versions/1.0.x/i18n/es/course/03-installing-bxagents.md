@@ -70,4 +70,4 @@ variables de entorno que necesita no están definidas.
 
 Consulta [Instalación](../getting-started/installation.md) para la página de referencia completa.
 
-Siguiente: [Crear el andamiaje de tu primer agente](04-scaffolding-your-first-agent.md)
+Siguiente: [A Model That Needs No Key](practice-model.md)
