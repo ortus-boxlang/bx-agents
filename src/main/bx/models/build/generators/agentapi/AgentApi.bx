@@ -600,13 +600,13 @@ class {
 				caller : callerOf( event ),
 				limit  : val( rc.limit ?: 25 ),
 				source : rc.source ?: "",
-				all    : isBoolean( rc.all ?: "" ) && rc.all,
+				all    : queryFlag( rc.all ?: "" ),
 				offset : val( rc.offset ?: 0 ),
 				q      : rc.q ?: "",
 				agent  : rc.agent ?: "",
 				since  : rc.since ?: "",
 				before : rc.before ?: "",
-				facets : isBoolean( rc.facets ?: "" ) && rc.facets
+				facets : queryFlag( rc.facets ?: "" )
 			)
 		)
 	}
@@ -863,7 +863,15 @@ class {
 		return isStruct( body ) ? body : {}
 	}
 
-	/** True only for a real true: a JSON boolean, not the number 1 or a word */
+	/**
+	 * A query-string flag (`?all=1`): on for 1, true and yes in any case, off for 0, false, no, blank, anything else and absent.
+	 * A query string has no types, so 1 is the way a client says yes. A JSON body uses `flag()` instead.
+	 */
+	private boolean function queryFlag( any value = "" ) {
+		return isSimpleValue( arguments.value ) && isBoolean( arguments.value ) && arguments.value
+	}
+
+	/** True only for a real true: a JSON boolean, not the number 1 or a word. For a request body; a query string uses `queryFlag()` */
 	private boolean function flag( any value = false ) {
 		return isBoolean( arguments.value ) && !isNumeric( arguments.value ) && arguments.value
 	}
@@ -890,7 +898,9 @@ class {
 		var verb = event.getHTTPMethod()
 		routineAction( event, ( manager, who ) => verb == "POST"
 			? manager.create( who, toString( body.name ?: "" ), toString( body.schedule ?: "" ), toString( body.prompt ?: "" ), toString( body.destination ?: "" ), toString( body.chat ?: "" ) )
-			: manager.list( who, flag( rc.all ?: false ) ) )
+			: ( queryFlag( rc.all ?: "" ) && !who.isAdmin()
+				? failed( "forbidden", "Only an admin may list everyone's routines" )
+				: manager.list( who, queryFlag( rc.all ?: "" ) ) ) )
 	}
 
 	/** One routine with its prompt. Query: name */
