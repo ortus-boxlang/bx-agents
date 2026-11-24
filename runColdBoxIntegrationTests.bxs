@@ -988,6 +988,25 @@ try {
 	}
 	println( "+ Confirmed: conversations are per caller, a stranger's conversation id is a 404, no token is a 401" )
 
+	// run control: a run belongs to the caller that started it, and the id the client sends is its own to name
+	issuedSharedBy1 = issuedCall( "POST", "/events", goodToken, '{"input":"hello","threadId":"it-shared-1"}' )
+	issuedSharedBy2 = issuedCall( "POST", "/events", adminToken, '{"input":"hello","threadId":"it-shared-1"}' )
+	if ( issuedSharedBy1.status != 200 || issuedSharedBy2.status != 200 || !reFind( 'threadId"\s*:\s*"it-shared-1"', issuedSharedBy1.body ) || !reFind( 'threadId"\s*:\s*"it-shared-1"', issuedSharedBy2.body ) || issuedSharedBy1.body.find( 'u:laptop' ) || issuedSharedBy2.body.find( 'u:boss' ) ) {
+		throw( type = "BxAgents.ThreadIdNotTheClients", message = "Two callers on one thread id should each be told that id: #left( issuedSharedBy1.body, 200 )# / #left( issuedSharedBy2.body, 200 )#" )
+	}
+	for ( issuedControl in [ { path : "/cancel", body : '{"threadId":"it-shared-1"}', key : "cancelled" }, { path : "/steer", body : '{"threadId":"it-shared-1","input":"hijack"}', key : "steered" } ] ) {
+		// nothing is running now, so the answer is false for both; what this proves is that the route answers for a second caller and names no one else's id
+		issuedAnswer2 = issuedCall( "POST", issuedControl.path, adminToken, issuedControl.body )
+		if ( issuedAnswer2.status != 200 || jsonDeserialize( issuedAnswer2.body )[ issuedControl.key ] ?: true ) {
+			throw( type = "BxAgents.RunControlReachedAStranger", message = "POST #issuedControl.path# by another caller should answer #issuedControl.key#: false: #left( issuedAnswer2.body, 200 )#" )
+		}
+	}
+	issuedStranger = issuedCall( "POST", "/resume", adminToken, '{"threadId":"it-shared-1","decision":"approve"}' )
+	if ( issuedStranger.status != 403 || !issuedStranger.body.find( "not_your_run" ) ) {
+		throw( type = "BxAgents.ResumeReachedAStranger", message = "Resuming a thread that waits for nobody of yours should be 403 not_your_run (HTTP #issuedStranger.status#): #left( issuedStranger.body, 200 )#" )
+	}
+	println( "+ Confirmed: two callers can use one thread id and each is told its own; cancel and steer by another caller answer false and resume is 403 not_your_run" )
+
 	// revoking takes effect on the next request, without a restart
 	issuedTokens.revoke( "laptop" )
 	bx:http url="#issuedBase#/tools" method="GET" result="issuedAfterRevoke" timeout=30 {

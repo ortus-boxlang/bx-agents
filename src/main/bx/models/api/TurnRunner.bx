@@ -12,6 +12,11 @@
  * Frames: thread { threadId }, chunk <what the model sent>, tool { id, name, arguments, status, ms },
  * suspended { threadId, pendingActions }, error { message }, done "[DONE]".
  *
+ * A run belongs to the caller that started it. The thread id is the client's to choose, so the id handed to bx-ai (its
+ * registry of runs, its checkpoints) is scoped by the caller, `u:<caller id, URL-encoded>:<thread id>` (see `scope()`):
+ * another caller who names the same id reaches a different slot, and cannot cancel, steer or resume the run. Frames and
+ * answers carry the client's own id.
+ *
  * A request is { input, conversationId?, threadId?, params?, options?, attachments?, images? }; `images` (paths) only for a runner built with localImages. Of `options` and `params`
  * only `options.profile` is used, and `params` loses the keys TurnOptions refuses.
  */
@@ -52,7 +57,7 @@ class {
 	 * @caller The Caller
 	 * @request { input, conversationId?, threadId?, params?, options?, attachments? }
 	 *
-	 * @return An Outcome: the turn { threadId, work } or bad_profile / bad_attachment
+	 * @return An Outcome: the turn { threadId, scoped, work } or bad_profile / bad_attachment
 	 */
 	any function prepareTurn( required any caller, required struct request ) {
 		var threadId = len( arguments.request.threadId ?: "" ) ? arguments.request.threadId : createUUID()
@@ -69,7 +74,7 @@ class {
 			return Outcome::failed( "bad_profile", "profile is not offered here" )
 		}
 		options[ "userId" ] = arguments.caller.id()
-		options[ "threadId" ] = threadId
+		options[ "threadId" ] = scoped( arguments.caller, threadId )
 
 		var input = arguments.request.input ?: ""
 		var conversationId = arguments.request.conversationId ?: ""
@@ -129,6 +134,7 @@ class {
 		}
 		return Outcome::done( {
 			threadId : threadId,
+			scoped   : options.threadId,
 			work     : ( onChunk ) => {
 				try {
 					return thisAgent.stream( onChunk, input, params, options )
@@ -153,7 +159,7 @@ class {
 	 * @threadId The run
 	 * @request { decision : approve | approve_session | reject, editedData?, reason? }
 	 *
-	 * @return An Outcome: the turn { threadId, work }, bad_request or not_your_run
+	 * @return An Outcome: the turn { threadId, scoped, work }, bad_request or not_your_run (also when nothing of the caller is waiting on that id)
 	 */
 	any function prepareResume( required any caller, required string threadId, required struct request ) {
 		var decision = arguments.request.decision ?: ""
@@ -162,19 +168,23 @@ class {
 		}
 		var checkpointer = variables.agent.getCheckpointer()
 		if ( !isNull( checkpointer ) ) {
-			var state = checkpointer.loadState( arguments.threadId )
-			if ( !state.isEmpty() && ownerOf( state ) != arguments.caller.id() ) {
-				return Outcome::failed( "not_your_run", "This run belongs to another caller" )
+			var state = checkpointer.loadState( scoped( arguments.caller, arguments.threadId ) )
+			// the checkpoint is kept under the caller's own scope, so a run another caller started is not found here, and
+			// neither is one that is not waiting: both are the same answer, so an id cannot be probed
+			if ( state.isEmpty() || ownerOf( state ) != arguments.caller.id() ) {
+				return Outcome::failed( "not_your_run", "No run of yours is waiting on that thread id" )
 			}
 		}
 		var thisAgent = variables.agent
 		var threadId = arguments.threadId
+		var agentThread = scoped( arguments.caller, arguments.threadId )
 		var decidedBy = arguments.caller.id()
 		var edited = arguments.request.editedData ?: {}
 		var reason = arguments.request.reason ?: ""
 		return Outcome::done( {
 			threadId : threadId,
-			work     : ( onChunk ) => thisAgent.resumeStream( onChunk, decision, threadId, edited, decidedBy, reason )
+			scoped   : agentThread,
+			work     : ( onChunk ) => thisAgent.resumeStream( onChunk, decision, agentThread, edited, decidedBy, reason )
 		} )
 	}
 
@@ -268,6 +278,7 @@ class {
 			open = arguments.isOpen
 		}
 		var threadId = arguments.turn.threadId
+		var agentThread = arguments.turn.scoped
 		var work = arguments.turn.work
 		var calls = {}
 		var counter = { value : 0 }
@@ -275,7 +286,7 @@ class {
 
 		// bx-ai announces every tool call in the process. Only this thread's are sent on.
 		var interceptor = BoxRegisterInterceptor( ( data ) => {
-			if ( !open() || !belongsToThread( data, threadId ) ) {
+			if ( !open() || !belongsToThread( data, agentThread ) ) {
 				return
 			}
 			var name = data.name
@@ -325,8 +336,8 @@ class {
 	// ----------------------------------------------------------------------------------
 
 	/**
-	 * Stops a run at its next checkpoint (before the next model call or tool call). The thread id is all it takes: it
-	 * is handed only to the client that started the run.
+	 * Stops a run at its next checkpoint (before the next model call or tool call). A run belongs to the caller that
+	 * started it: another caller's thread id does not reach it, so the answer is false.
 	 *
 	 * @caller   The Caller
 	 * @threadId The run, from the first frame of its stream
@@ -338,12 +349,12 @@ class {
 		if ( !len( arguments.threadId ) ) {
 			return Outcome::failed( "bad_request", "threadId is required" )
 		}
-		return Outcome::done( { "cancelled" : variables.agent.cancelRun( arguments.threadId, arguments.reason ) } )
+		return Outcome::done( { "cancelled" : variables.agent.cancelRun( scoped( arguments.caller, arguments.threadId ), arguments.reason ) } )
 	}
 
 	/**
-	 * Splices a message into a run in flight, read by the model before its next step. Like cancel, the thread id is
-	 * all it takes.
+	 * Splices a message into a run in flight, read by the model before its next step. Like cancel, only the caller
+	 * that started the run reaches it.
 	 *
 	 * @caller   The Caller
 	 * @threadId The run, from the first frame of its stream
@@ -355,7 +366,7 @@ class {
 		if ( !len( arguments.threadId ) || !len( arguments.input ) ) {
 			return Outcome::failed( "bad_request", "threadId and input are required" )
 		}
-		return Outcome::done( { "steered" : variables.agent.steerRun( arguments.threadId, arguments.input ) } )
+		return Outcome::done( { "steered" : variables.agent.steerRun( scoped( arguments.caller, arguments.threadId ), arguments.input ) } )
 	}
 
 	/**
@@ -371,7 +382,7 @@ class {
 		if ( isNull( checkpointer ) ) {
 			return Outcome::done( { "pending" : false } )
 		}
-		var state = checkpointer.loadState( arguments.threadId )
+		var state = checkpointer.loadState( scoped( arguments.caller, arguments.threadId ) )
 		if ( !state.isEmpty() && ownerOf( state ) != arguments.caller.id() ) {
 			return Outcome::done( { "pending" : false } )
 		}
@@ -383,6 +394,31 @@ class {
 	}
 
 	// ----------------------------------------------------------------------------------
+
+	/**
+	 * The id bx-ai knows a run by. The client picks its thread id, so on its own it could name somebody else's run;
+	 * scoped by the caller, it cannot. The caller id is URL-encoded, so it never holds a colon and `u:<a>:<b>` can be
+	 * split in only one way: `a:b` + `c` and `a` + `b:c` come out as `u:a%3Ab:c` and `u:a:b:c`.
+	 */
+	static string function scope( required string callerId, required string threadId ) {
+		return "u:" & createObject( "java", "java.net.URLEncoder" ).encode( arguments.callerId, "UTF-8" ) & ":" & arguments.threadId
+	}
+
+	/**
+	 * @return The client's own thread id from an id made by scope(); anything else (a routine's or a gateway's) as it is
+	 */
+	static string function unscope( required string agentThreadId ) {
+		var id = arguments.agentThreadId
+		if ( left( id, 2 ) != "u:" ) {
+			return id
+		}
+		var cut = find( ":", id, 3 )
+		return cut ? mid( id, cut + 1 ) : id
+	}
+
+	private string function scoped( required any caller, required string threadId ) {
+		return static.scope( arguments.caller.id(), arguments.threadId )
+	}
 
 	private boolean function profileAllowed( required struct options ) {
 		return isNull( variables.offered ) ? !len( arguments.options.profile ?: "" ) : variables.offered.allows( arguments.options )

@@ -109,7 +109,7 @@ Pictures go in `attachments`, as `[ { "name": "a.png", "mime": "image/png", "dat
 
 ## Run control
 
-The thread id from a run's first frame is all `cancel` and `steer` take. A paused run can only be resumed by the caller who started it.
+The thread id from a run's first frame is what `cancel` and `steer` take. A run belongs to the caller that started it, so the same id from another caller reaches nothing (`cancelled: false`, `steered: false`), and two callers can use the same thread id without sharing a run. A paused run can only be resumed by the caller who started it.
 
 | Call | Does |
 |---|---|

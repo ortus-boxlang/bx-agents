@@ -381,7 +381,7 @@ function production() {
 
 ### Stopping and steering a run
 
-`POST /cancel` and `POST /steer` take the `threadId` from the first frame of the run's stream, and that is all they need. A thread id that is not running here gets `cancelled: false` (or `steered: false`). Resuming a paused run is different: only the caller who started it may (`POST /resume`), anyone else gets `403` with `code: "not_your_run"`.
+`POST /cancel` and `POST /steer` take the `threadId` from the first frame of the run's stream. A run belongs to the caller that started it: the server hands bx-ai an id scoped to the caller (`u:<caller>:<threadId>`), so another caller's `threadId` reaches nothing, and a thread id that is not running for you gets `cancelled: false` (or `steered: false`). There is no admin override. Resuming a paused run is different: only the caller who started it may (`POST /resume`), anyone else gets `403` with `code: "not_your_run"`.
 
 ### Open or token
 

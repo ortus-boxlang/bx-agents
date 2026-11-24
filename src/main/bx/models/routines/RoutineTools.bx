@@ -14,6 +14,7 @@
  * act on, and shows when a routine will next run in the app's time zone so the person can be told.
  */
 import bxModules.bxagents.models.api.Caller;
+import bxModules.bxagents.models.api.TurnRunner;
 import bxModules.bxagents.models.api.Outcome;
 import bxModules.bxagents.models.routines.RoutineRunner;
 import bxModules.bxagents.models.util.ToolNames;
@@ -142,7 +143,7 @@ class {
 	 * @return { ok : true, ... } or { ok : false, reason }
 	 */
 	struct function act( required any chatRequest, required function call ) {
-		var threadId = arguments.chatRequest.getThreadId() ?: ""
+		var threadId = TurnRunner::unscope( arguments.chatRequest.getThreadId() ?: "" )
 		if ( RoutineRunner::isRoutineThread( threadId ) || !isNull( variables.service().byThread( threadId ) ) ) {
 			return { ok : false, reason : "You are running as a scheduled routine, and a routine cannot make or change routines. Put what you want changed in your report so the person can do it." }
 		}
