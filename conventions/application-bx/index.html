@@ -248,7 +248,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-the-generated-base-does">What the generated base does</a></li><li class="toc-level-2"><a href="#override-a-hook-or-add-a-setting">Override a hook, or add a setting</a></li><li class="toc-level-2"><a href="#the-bxagents-mapping">The bxagents mapping</a></li><li class="toc-level-2"><a href="#paths">Paths</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#where-it-ends-up">Where it ends up</a></li><li class="toc-level-2"><a href="#what-the-generated-base-does">What the generated base does</a></li><li class="toc-level-2"><a href="#override-a-hook-or-add-a-setting">Override a hook, or add a setting</a></li><li class="toc-level-2"><a href="#the-bxagents-name">The bxagents name</a></li><li class="toc-level-2"><a href="#paths">Paths</a></li></ul></details>
 		
 
 		
@@ -260,56 +260,85 @@
 </symbol>
 </svg>
 <h1 id="applicationbx"><a href="#applicationbx" id="applicationbx" name="applicationbx" class="anchor"></a>Application.bx</h1>
-<p>A project has its own <code>Application.bx</code> at its root. It is the file the runtime loads, so the settings and lifecycle hooks of your app live here. It <strong>extends</strong> a class BxAgents generates on every build, which holds the wiring:</p>
+<p>A project has its own <code>Application.bx</code> at its root. It is where the settings and lifecycle hooks of your app live. It <strong>extends</strong> a class BxAgents generates on every build, which holds the base:</p>
 <pre><code class="language-javascript">// Application.bx
 class extends=&quot;bxagents.Application&quot; {
 
 }
 </code></pre>
-<p><code>bxAgents new</code> writes this file. Build copies it into the generated app as it is. A project without one gets exactly this file generated, so older projects keep building.</p>
+<p><code>bxAgents new</code> writes this file. A project without one gets the thin class above, so older projects keep building. <code>bxagents.Application</code> is the name you write; the build points it at the generated class (<code>app.bxagents.Application</code>, below), so a file written for an older BxAgents needs no change.</p>
+<h2 id="where-it-ends-up"><a href="#where-it-ends-up" id="where-it-ends-up" name="where-it-ends-up" class="anchor"></a>Where it ends up</h2>
+<p>The built app follows the <a href="https://github.com/coldbox-templates/boxlang">ColdBox BoxLang template</a>: the web root is <code>.build/public</code> and the code is <code>.build/app</code>. The Application.bx the server loads is <code>.build/public/Application.bx</code>. It is <strong>derived from the template's own <code>public/Application.bx</code> and changed to suit</strong>, and it ends as a thin class that extends the generated base, <code>.build/app/bxagents/Application.bx</code>:</p>
+<pre><code class="language-javascript">// .build/public/Application.bx (yours, or this when the project has none)
+class extends=&quot;app.bxagents.Application&quot; {
+}
+</code></pre>
+<p>What is derived from the template's file, in the template's own terms, and lives in the generated base: the <code>COLDBOX_APP_ROOT_PATH</code>, <code>COLDBOX_APP_MAPPING</code> and <code>COLDBOX_WEB_MAPPING</code> settings (<code>/app</code> and <code>/</code>), the call of <code>new coldbox.system.Bootstrap( ... )</code> followed by <code>loadColdbox()</code> in <code>onApplicationStart()</code>, and <code>onRequestStart()</code> handing the request to the bootstrap.</p>
+<p>What is changed:</p>
+<ul>
+<li>the lifecycle is not in the web root: it is in the base, so <code>public/</code> holds a thin class and the logic is not served;</li>
+<li>the app's <code>name</code>, sessions, the web UI's datasource and <code>this.schedulers</code> are generated from the project;</li>
+<li>the data home, the logs and bx-ai's settings are set up before ColdBox loads, and the tools, MCP servers, gateways and interceptors are registered once it has;</li>
+<li>the template's <code>onApplicationEnd()</code>, <code>onSessionStart()</code>, <code>onSessionEnd()</code> and <code>onMissingTemplate()</code> are not carried (a class that extends the base can define them);</li>
+<li>three hooks are added, <code>before()</code>, <code>after()</code> and <code>beforeRequest()</code>.</li>
+</ul>
+<p>The template's own file is still in the module (it is vendored, see <code>templates/coldbox-boxlang/VERSION</code>) and is what the build lays out first; the generator then replaces it.</p>
 <h2 id="what-the-generated-base-does"><a href="#what-the-generated-base-does" id="what-the-generated-base-does" name="what-the-generated-base-does" class="anchor"></a>What the generated base does</h2>
-<p>On every build <code>bxagents/Application.bx</code> is written into <code>.build/app/</code> and sets up:</p>
+<p>On every build the base class is written into <code>.build/app/bxagents/</code> and sets up:</p>
 <ul>
 <li>the app <code>name</code>, sessions (on when there is a web UI) and the web UI's database;</li>
-<li>ColdBox, started from <code>onApplicationStart()</code>, with the bx-ai settings applied first;</li>
-<li>tools, MCP servers, gateways and <a href="/conventions/interceptors/index.html">interceptors</a>, registered at startup;</li>
-<li><code>this.schedulers</code>, listing the project's <a href="/conventions/schedules/index.html">schedules/</a>.</li>
+<li>the data home, the logs, and bx-ai's settings (applied before ColdBox loads, because the agents are built while it loads);</li>
+<li>ColdBox, started from <code>onApplicationStart()</code>;</li>
+<li>tools, MCP servers, gateways and <a href="/conventions/interceptors/index.html">interceptors</a>, registered once ColdBox has loaded;</li>
+<li><code>this.schedulers</code>, listing the project's <a href="/conventions/schedules/index.html">schedules/</a> as <code>app.schedules.&lt;Name&gt;</code>.</li>
 </ul>
 <p>It starts with a comment saying it is generated. Do not edit it: the next build overwrites it.</p>
 <h2 id="override-a-hook-or-add-a-setting"><a href="#override-a-hook-or-add-a-setting" id="override-a-hook-or-add-a-setting" name="override-a-hook-or-add-a-setting" class="anchor"></a>Override a hook, or add a setting</h2>
-<p>Your class loads after the base's, so a setting you assign wins, and a method you define replaces the base's. To add to a hook instead of replacing it, call <code>super</code>:</p>
+<p>Your class loads after the base, so a setting you assign wins, and a method you define replaces the base's. To add to a hook instead of replacing it, call <code>super</code>:</p>
 <pre><code class="language-javascript">// Application.bx
 class extends=&quot;bxagents.Application&quot; {
 
 	this.sessionTimeout = createTimeSpan( 0, 4, 0, 0 )
 
-	function onApplicationStart() {
-		var started = super.onApplicationStart()
+	// once ColdBox has loaded (and the tools, gateways and interceptors are registered)
+	function after() {
+		super.after()
 		application.startedAt = now()
-		return started
 	}
 
 }
 </code></pre>
+<p>The three hooks:</p>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Hook</th><th>Runs</th></tr>
+</thead>
+<tbody>
+<tr><td><code>before()</code></td><td>at the start of the app's start, before ColdBox loads: the data home, the logs, bx-ai's settings</td></tr>
+<tr><td><code>after()</code></td><td>once ColdBox has loaded: tools, MCP servers, gateways, interceptors, the web store</td></tr>
+<tr><td><code>beforeRequest()</code></td><td>at the start of every request, before ColdBox gets it (it waits for a request body the server has not finished reading)</td></tr>
+</tbody>
+</table></div>
 <div class="adm-block adm-warning">
 <div class="adm-heading">
 <svg class="adm-icon"><use xlink:href="#adm-warning" /></svg><span>Warning</span>
 </div>
 <div class="adm-body">
-<p>Replacing <code>onApplicationStart()</code> or <code>onRequestStart()</code> without calling <code>super</code> removes the wiring above (ColdBox never starts). Always call the <code>super</code> method unless that is what you mean.</p>
+<p>Replacing a hook without calling <code>super</code> removes what it holds (with <code>before()</code>, no data home and no bx-ai settings; with <code>after()</code>, no tools or gateways). Call the <code>super</code> method unless that is what you mean.</p>
 </div>
 </div>
-<h2 id="the-bxagents-mapping"><a href="#the-bxagents-mapping" id="the-bxagents-mapping" name="the-bxagents-mapping" class="anchor"></a>The <code>bxagents</code> mapping</h2>
-<p><code>bxagents.Application</code> and <code>bxagents.Scheduler</code> resolve to the <code>bxagents/</code> folder inside the built app, so the files they extend are copied with it and nothing depends on the module being installed where the app runs. Runtime helpers that the built app needs live there.</p>
-<p>The folder exists after a build. Before the first <code>bxAgents build</code>, an IDE cannot follow <code>bxagents.Application</code>; the class itself is not in your project.</p>
+<p>You can still override <code>onApplicationStart()</code> and <code>onRequestStart()</code> themselves (your class is the Application) and call <code>super.onApplicationStart()</code>; the hooks are the lighter way to add to them.</p>
+<h2 id="the-bxagents-name"><a href="#the-bxagents-name" id="the-bxagents-name" name="the-bxagents-name" class="anchor"></a>The <code>bxagents</code> name</h2>
+<p><code>bxagents.Application</code> and <code>bxagents.Scheduler</code> are the names you write. In the built app they are the classes under <code>.build/app/bxagents/</code>, reached through the template's <code>/app</code> mapping: <code>app.bxagents.Application</code> and <code>app.bxagents.Scheduler</code>. The build rewrites the <code>extends</code> of your Application.bx and of your schedulers, so the files they extend are copied with the app and nothing depends on the module being installed where the app runs.</p>
+<p>The generated classes exist after a build. Before the first <code>bxAgents build</code>, an IDE cannot follow <code>bxagents.Application</code>; the class itself is not in your project.</p>
 <h2 id="paths"><a href="#paths" id="paths" name="paths" class="anchor"></a>Paths</h2>
-<p>The base lives one folder down, so it resolves paths from the app folder, not from its own location. If you write code in <code>Application.bx</code> that reads a file, use <code>expandPath( &quot;/...&quot; )</code> from the app root.</p>
+<p>The base lives one folder down, so it resolves paths from the app folder, not from its own location. The web root <code>/</code> is <code>.build/public</code> now, so <code>expandPath( &quot;/&quot; )</code> is <strong>not</strong> the app: use <code>expandPath( &quot;/app&quot; )</code> (the template's mapping) for a file in the app, for example <code>expandPath( &quot;/app/config/agent-settings.json&quot; )</code>.</p>
 
 	
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/application-bx.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/application-bx.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Nov 24, 2026, 12&#x3a;00&#x3a;39 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Application.bx&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fconventions%2Fapplication-bx%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/conventions/application-bx.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Edit this page</a><a href="/conventions/application-bx.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Download Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Last updated Nov 24, 2026, 2&#x3a;02&#x3a;57 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Application.bx&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fconventions%2Fapplication-bx%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
@@ -353,7 +382,7 @@ class extends=&quot;bxagents.Application&quot; {
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#what-the-generated-base-does">What the generated base does</a></li><li class="toc-level-2"><a href="#override-a-hook-or-add-a-setting">Override a hook, or add a setting</a></li><li class="toc-level-2"><a href="#the-bxagents-mapping">The bxagents mapping</a></li><li class="toc-level-2"><a href="#paths">Paths</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="On this page"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> On this page</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#where-it-ends-up">Where it ends up</a></li><li class="toc-level-2"><a href="#what-the-generated-base-does">What the generated base does</a></li><li class="toc-level-2"><a href="#override-a-hook-or-add-a-setting">Override a hook, or add a setting</a></li><li class="toc-level-2"><a href="#the-bxagents-name">The bxagents name</a></li><li class="toc-level-2"><a href="#paths">Paths</a></li></ul></nav>
 				</aside>
 			
 		</div>

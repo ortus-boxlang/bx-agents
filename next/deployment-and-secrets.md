@@ -12,10 +12,10 @@ Secrets never enter the artifact - they are supplied to the **process**, at the 
 
 ```mermaid
 flowchart LR
-    P["your project"] -->|"bxAgents build"| B[".build/app/<br/>a plain ColdBox app"]
+    P["your project"] -->|"bxAgents build"| B[".build/<br/>app/ public/ lib/ runtime/"]
     B -->|"bxAgents package"| A["dist/name-version.bxa<br/>+ .sha256 + redacted manifest.json"]
     A -->|"bxAgents deploy"| T["a target:<br/>local / ssh / ftp / sftp<br/>docker / digitalocean"]
-    T --> RUN["boxlang-miniserver runs the unzipped app"]
+    T --> RUN["boxlang-miniserver runs in the unzipped folder"]
     ENV["environment variables<br/>OPENAI_API_KEY, CLAUDE_API_KEY,<br/>every *EnvVar a gateway names"] -->|"read at RUNTIME by bx-ai"| RUN
 
     style A fill:#eaf6ec,stroke:#155724
@@ -26,7 +26,7 @@ Nothing on the left of `ENV` ever holds a secret value: `.env`/dotfiles are excl
 
 ## Packaging
 
-`bxAgents package` zips `.build/app/` into a portable `.bxa` artifact:
+`bxAgents package` zips the built app into a portable `.bxa` artifact. What is zipped is the packaging set of the [ColdBox BoxLang template](https://github.com/coldbox-templates/boxlang): `app/`, `lib/`, `public/`, `runtime/` (without its logs, class cache and the other files a running server creates in its home), `boxlang_modules/` and `miniserver.json`, all from `.build/` (see [what is in `.build`](build-pipeline.md#what-is-in-build-and-what-is-served)). `manifest.json` and the build's work folders are not part of it.
 
 ```bash
 bxAgents package --version=1.0.0
@@ -46,7 +46,7 @@ The `.bxa` is **relocatable**: it carries every file the agent reads at runtime 
 
 ## Excluding files: `.bxaignore`
 
-An optional `.bxaignore` at the project root, one glob pattern per line (`#`-prefixed lines are comments), excludes matching paths from the packaged `.bxa`. Patterns are matched against paths inside the built app (`.build/app`): a pattern with no `/` matches at any depth, one with a `/` is anchored at the app's root, a trailing `/` names a folder and everything under it, and `*` also crosses `/`.
+An optional `.bxaignore` at the project root, one glob pattern per line (`#`-prefixed lines are comments), excludes matching paths from the packaged `.bxa`. Patterns are matched against paths inside `.build` (so `app/skills/old/`, not `skills/old/`, which is where they were matched before the app and the web root were split): a pattern with no `/` matches at any depth, one with a `/` is anchored at the root of `.build`, a trailing `/` names a folder and everything under it, and `*` also crosses `/`.
 
 ```text
 # .bxaignore
@@ -54,7 +54,7 @@ An optional `.bxaignore` at the project root, one glob pattern per line (`#`-pre
 scratch/
 ```
 
-This is on top of a hard-coded, always-on exclusion of `.env`/`.env.*`/dotfiles at the packaging layer - even if `.bxaignore` doesn't mention them, and even if they somehow ended up inside `.build/app`, they never make it into the zip.
+This is on top of a hard-coded, always-on exclusion of `.env`/`.env.*`/dotfiles at the packaging layer - even if `.bxaignore` doesn't mention them, and even if they somehow ended up inside `.build`, they never make it into the zip.
 
 ## Secret redaction
 
@@ -106,4 +106,11 @@ Six pluggable targets ship out of the box - `local` (copy the newest `.bxa` some
 
 No target ever reads a secret from `deploy/*` config - credentials (registry passwords, SSH keys, the DigitalOcean API token) are always resolved from environment variables at deploy time, the same "secrets stay external" rule as everywhere else in this doc. See [deploy/](conventions/deploy.md#secrets-stay-external) for the exact env var each target expects.
 
-To run a packaged `.bxa` somewhere else manually: unzip it (it's a plain ColdBox app) and point `boxlang-miniserver` at the extracted directory, setting whatever secret environment variables that deployment needs.
+To run a packaged `.bxa` somewhere else manually: unzip it into a folder (its path must not hold a space: the `boxlang-miniserver` launcher script does not quote it), go into that folder, and start the server there with the runtime as its home, setting whatever secret environment variables that deployment needs:
+
+```bash
+cd /srv/my-agent
+BOXLANG_HOME="$PWD/runtime" boxlang-miniserver miniserver.json
+```
+
+`miniserver.json` names everything by paths relative to the folder it is in (`webRoot: public`, `configPath: runtime/boxlang.json`, `serverHome: runtime`), so the same file serves the app wherever it is unzipped, and only `public/` is reachable from outside. It binds `127.0.0.1:8080` as packaged: edit `host` (and `port`) for the machine it runs on, or put a reverse proxy in front.

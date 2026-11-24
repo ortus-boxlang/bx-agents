@@ -103,7 +103,7 @@ Después edita `instructions.md` y añade las carpetas de convención que necesi
 ```bash
 bxAgents build
 ```
-Descubrimiento, validación, manifiesto y generación de código - dentro de `.build/app/`.
+Descubrimiento, validación, manifiesto y generación de código - dentro de `.build/` (el código en `app/`, la raíz web en `public/`).
 :::
 ::: step "Hablar con él"
 ```bash
@@ -181,21 +181,18 @@ your-agent/
 :::
 ::: column
 ```text
-.build/app/
-├── Application.bx
-├── bxagents/
+.build/
+├── miniserver.json
+├── app/                  el código (no se sirve)
+│   ├── bxagents/         Application.bx  Scheduler.bx
+│   ├── config/           Coldbox.bx  WireBox.bx  Router.bx
+│   ├── schedules/  agent/  tools/  skills/  mcp/
+│   └── handlers/  interceptors/
+├── public/               la raíz web: la única carpeta servida
 │   ├── Application.bx
-│   └── Scheduler.bx
-├── config/
-│   ├── ColdBox.bx
-│   ├── WireBox.bx
-│   └── Router.bx
-├── schedules/
-├── agent/
-│   └── GeneratedAgentFactory.bx
-├── tools/  skills/  mcp/
-├── handlers/  interceptors/
-└── index.bxm
+│   └── index.bxm
+├── lib/                  coldbox/  modules/
+└── runtime/              boxlang.json  modules/bxagents
 ```
 :::
 :::
@@ -204,7 +201,7 @@ your-agent/
 La mayoría de los frameworks de agentes cablean tools, skills, rutas y tareas programadas
 **en tiempo de petición**, en cada arranque. BxAgents hace lo contrario: `bxAgents build`
 ejecuta el descubrimiento, la validación y la generación de código exactamente una vez, y
-produce una aplicación ColdBox normal bajo `.build/app/`.
+produce una aplicación ColdBox normal en `.build/`: el código en `app/`, la raíz web en `public/`.
 
 Arrancarla - mediante `bxAgents serve`, un proceso
 [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver)

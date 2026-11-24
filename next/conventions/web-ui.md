@@ -416,9 +416,9 @@ The reason is a real gap, not a preference: **bx-ai's `IAiMemory` has no enumera
 | [`qb`](https://github.com/coldbox-modules/qb) | QueryBuilder for the sign-in accounts in `ChatDb` |
 | `ChatStore` | In the BxAgents module, shared with the terminal chat. Owns the tables and their versions, in plain SQLite SQL |
 | `models/ChatDb.bx` | Generated, only the sign-in accounts. Hands out query builders; its `migrate()` calls `ChatStore` |
-| A start-up statement in the generated base `Application` | Generated. Builds `ChatDb` at boot so migration runs then, not on whichever request touches the database first |
+| A start-up statement in the generated base class (`Application.bx`) | Generated. Builds `ChatDb` at boot so migration runs then, not on whichever request touches the database first |
 
-The datasource is registered in the generated base `Application` (`bxagents/Application.bx`) and the grammar is pinned in `config/ColdBox.bx`:
+The datasource is registered in the generated base class (`bxagents/Application.bx`) and the grammar is pinned in `config/Coldbox.bx`:
 
 ```javascript
 // bxagents/Application.bx (generated)
@@ -428,7 +428,7 @@ this.datasources[ "bxagents" ] = {
 }
 this.datasource = "bxagents"   // NOT this.defaultDatasource - see below
 
-// config/ColdBox.bx (generated)
+// config/Coldbox.bx (generated)
 qb : {
 	defaultGrammar : "SQLiteGrammar@qb",
 	defaultOptions : { datasource : "bxagents" }

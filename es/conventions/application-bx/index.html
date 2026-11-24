@@ -246,7 +246,7 @@
 		
 		
 		
-			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#qué-hace-la-base-generada">Qu&eacute; hace la base generada</a></li><li class="toc-level-2"><a href="#sobrescribir-un-hook-o-añadir-un-ajuste">Sobrescribir un hook o a&ntilde;adir un ajuste</a></li><li class="toc-level-2"><a href="#el-mapeo-bxagents">El mapeo bxagents</a></li><li class="toc-level-2"><a href="#rutas">Rutas</a></li></ul></details>
+			<details class="bxsites-toc-mobile toc-mobile d-xl-none"><summary class="toc-mobile__summary"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</summary><ul class="list-unstyled"><li class="toc-level-2"><a href="#dónde-acaba">D&oacute;nde acaba</a></li><li class="toc-level-2"><a href="#qué-hace-la-base-generada">Qu&eacute; hace la base generada</a></li><li class="toc-level-2"><a href="#sobrescribir-un-hook-o-añadir-un-ajuste">Sobrescribir un hook o a&ntilde;adir un ajuste</a></li><li class="toc-level-2"><a href="#el-nombre-bxagents">El nombre bxagents</a></li><li class="toc-level-2"><a href="#rutas">Rutas</a></li></ul></details>
 		
 
 		
@@ -258,20 +258,37 @@
 </symbol>
 </svg>
 <h1 id="applicationbx"><a href="#applicationbx" id="applicationbx" name="applicationbx" class="anchor"></a>Application.bx</h1>
-<p>Un proyecto tiene su propio <code>Application.bx</code> en la raíz. Es el archivo que carga el runtime, así que los ajustes y los hooks de ciclo de vida de tu app viven aquí. <strong>Extiende</strong> una clase que BxAgents genera en cada build, que contiene el cableado:</p>
+<p>Un proyecto tiene su propio <code>Application.bx</code> en la raíz. Es donde viven los ajustes y los hooks de ciclo de vida de tu app. <strong>Extiende</strong> una clase que BxAgents genera en cada build, que contiene el cableado:</p>
 <pre><code class="language-javascript">// Application.bx
 class extends=&quot;bxagents.Application&quot; {
 
 }
 </code></pre>
-<p><code>bxAgents new</code> escribe este archivo. El build lo copia tal cual a la app generada. Un proyecto que no tenga uno recibe exactamente este archivo generado, así que los proyectos antiguos siguen compilando.</p>
+<p><code>bxAgents new</code> escribe este archivo. Un proyecto que no tenga uno recibe la clase fina de arriba, así que los proyectos antiguos siguen compilando. <code>bxagents.Application</code> es el nombre que escribes; el build lo apunta a la clase generada (<code>app.bxagents.Application</code>, más abajo), así que un archivo escrito para un BxAgents anterior no necesita cambios.</p>
+<h2 id="dónde-acaba"><a href="#dónde-acaba" id="dónde-acaba" name="dónde-acaba" class="anchor"></a>Dónde acaba</h2>
+<p>La app construida sigue la <a href="https://github.com/coldbox-templates/boxlang">plantilla ColdBox BoxLang</a>: la raíz web es <code>.build/public</code> y el código es <code>.build/app</code>. El Application.bx que carga el servidor es <code>.build/public/Application.bx</code>. Está <strong>derivado del <code>public/Application.bx</code> de la plantilla y modificado a conveniencia</strong>, y termina como una clase fina que extiende la base generada, <code>.build/app/bxagents/Application.bx</code>:</p>
+<pre><code class="language-javascript">// .build/public/Application.bx (el tuyo, o este si el proyecto no tiene)
+class extends=&quot;app.bxagents.Application&quot; {
+}
+</code></pre>
+<p>Lo que se deriva del archivo de la plantilla, en los términos de la propia plantilla, y vive en la base generada: los ajustes <code>COLDBOX_APP_ROOT_PATH</code>, <code>COLDBOX_APP_MAPPING</code> y <code>COLDBOX_WEB_MAPPING</code> (<code>/app</code> y <code>/</code>), la llamada a <code>new coldbox.system.Bootstrap( ... )</code> seguida de <code>loadColdbox()</code> en <code>onApplicationStart()</code>, y <code>onRequestStart()</code> pasando la petición al bootstrap.</p>
+<p>Lo que cambia:</p>
+<ul>
+<li>el ciclo de vida no está en la raíz web: está en la base, así que <code>public/</code> tiene una clase fina y la lógica no se sirve;</li>
+<li>el <code>name</code> de la app, las sesiones, el datasource de la interfaz web y <code>this.schedulers</code> se generan a partir del proyecto;</li>
+<li>el data home, los logs y los ajustes de bx-ai se preparan antes de que cargue ColdBox, y las tools, los servidores MCP, los gateways y los interceptores se registran cuando ya cargó;</li>
+<li><code>onApplicationEnd()</code>, <code>onSessionStart()</code>, <code>onSessionEnd()</code> y <code>onMissingTemplate()</code> de la plantilla no se trasladan (una clase que extienda la base puede definirlos);</li>
+<li>se añaden tres hooks, <code>before()</code>, <code>after()</code> y <code>beforeRequest()</code>.</li>
+</ul>
+<p>El archivo de la plantilla sigue en el módulo (va incluido, ver <code>templates/coldbox-boxlang/VERSION</code>) y es lo primero que coloca el build; el generador lo reemplaza después.</p>
 <h2 id="qué-hace-la-base-generada"><a href="#qué-hace-la-base-generada" id="qué-hace-la-base-generada" name="qué-hace-la-base-generada" class="anchor"></a>Qué hace la base generada</h2>
-<p>En cada build se escribe <code>bxagents/Application.bx</code> en <code>.build/app/</code> y se configura:</p>
+<p>En cada build se escribe la clase base en <code>.build/app/bxagents/</code> y se configura:</p>
 <ul>
 <li>el <code>name</code> de la app, las sesiones (activadas cuando hay una interfaz web) y la base de datos de la interfaz web;</li>
-<li>ColdBox, iniciado desde <code>onApplicationStart()</code>, con los ajustes de bx-ai aplicados primero;</li>
-<li>las tools, los servidores MCP, los gateways y los <a href="/es/conventions/interceptors/index.html">interceptores</a>, registrados al arrancar;</li>
-<li><code>this.schedulers</code>, con la lista de los <a href="/es/conventions/schedules/index.html">schedules/</a> del proyecto.</li>
+<li>el data home, los logs y los ajustes de bx-ai (aplicados antes de que cargue ColdBox, porque los agentes se construyen mientras carga);</li>
+<li>ColdBox, iniciado desde <code>onApplicationStart()</code>;</li>
+<li>las tools, los servidores MCP, los gateways y los <a href="/es/conventions/interceptors/index.html">interceptores</a>, registrados cuando ColdBox ya cargó;</li>
+<li><code>this.schedulers</code>, con la lista de los <a href="/es/conventions/schedules/index.html">schedules/</a> del proyecto como <code>app.schedules.&lt;Nombre&gt;</code>.</li>
 </ul>
 <p>Empieza con un comentario que indica que está generado. No lo edites: el siguiente build lo sobrescribe.</p>
 <h2 id="sobrescribir-un-hook-o-añadir-un-ajuste"><a href="#sobrescribir-un-hook-o-añadir-un-ajuste" id="sobrescribir-un-hook-o-añadir-un-ajuste" name="sobrescribir-un-hook-o-añadir-un-ajuste" class="anchor"></a>Sobrescribir un hook o añadir un ajuste</h2>
@@ -281,33 +298,45 @@ class extends=&quot;bxagents.Application&quot; {
 
 	this.sessionTimeout = createTimeSpan( 0, 4, 0, 0 )
 
-	function onApplicationStart() {
-		var started = super.onApplicationStart()
+	// cuando ColdBox ya cargó (y las tools, gateways e interceptores están registrados)
+	function after() {
+		super.after()
 		application.startedAt = now()
-		return started
 	}
 
 }
 </code></pre>
+<p>Los tres hooks:</p>
+<div class="bxsites-table-wrap"><table class="table">
+<thead>
+<tr><th>Hook</th><th>Corre</th></tr>
+</thead>
+<tbody>
+<tr><td><code>before()</code></td><td>al inicio del arranque de la app, antes de que cargue ColdBox: el data home, los logs, los ajustes de bx-ai</td></tr>
+<tr><td><code>after()</code></td><td>cuando ColdBox ya cargó: tools, servidores MCP, gateways, interceptores, el almacén web</td></tr>
+<tr><td><code>beforeRequest()</code></td><td>al inicio de cada request, antes de que ColdBox lo reciba (espera un cuerpo que el servidor no terminó de leer)</td></tr>
+</tbody>
+</table></div>
 <div class="adm-block adm-warning">
 <div class="adm-heading">
 <svg class="adm-icon"><use xlink:href="#adm-warning" /></svg><span>Warning</span>
 </div>
 <div class="adm-body">
-<p>Reemplazar <code>onApplicationStart()</code> o <code>onRequestStart()</code> sin llamar a <code>super</code> elimina el cableado anterior (ColdBox nunca arranca). Llama siempre al método <code>super</code>, salvo que eso sea lo que quieres.</p>
+<p>Reemplazar un hook sin llamar a <code>super</code> elimina lo que contiene (sin <code>before()</code>, no hay data home ni ajustes de bx-ai; sin <code>after()</code>, no hay tools ni gateways). Llama al método <code>super</code>, salvo que eso sea lo que quieres.</p>
 </div>
 </div>
-<h2 id="el-mapeo-bxagents"><a href="#el-mapeo-bxagents" id="el-mapeo-bxagents" name="el-mapeo-bxagents" class="anchor"></a>El mapeo <code>bxagents</code></h2>
-<p><code>bxagents.Application</code> y <code>bxagents.Scheduler</code> se resuelven a la carpeta <code>bxagents/</code> dentro de la app construida, así que los archivos que extienden se copian con ella y nada depende de que el módulo esté instalado donde se ejecuta la app. Los helpers de runtime que necesita la app construida viven ahí.</p>
-<p>La carpeta existe después de un build. Antes del primer <code>bxAgents build</code>, un IDE no puede seguir <code>bxagents.Application</code>; la clase en sí no está en tu proyecto.</p>
+<p>Todavía puedes sobrescribir <code>onApplicationStart()</code> y <code>onRequestStart()</code> (tu clase es la Application) y llamar a <code>super.onApplicationStart()</code>; los hooks son la forma más ligera de añadirles algo.</p>
+<h2 id="el-nombre-bxagents"><a href="#el-nombre-bxagents" id="el-nombre-bxagents" name="el-nombre-bxagents" class="anchor"></a>El nombre <code>bxagents</code></h2>
+<p><code>bxagents.Application</code> y <code>bxagents.Scheduler</code> son los nombres que escribes. En la app construida son las clases de <code>.build/app/bxagents/</code>, alcanzadas por el mapeo <code>/app</code> de la plantilla: <code>app.bxagents.Application</code> y <code>app.bxagents.Scheduler</code>. El build reescribe el <code>extends</code> de tu Application.bx y de tus schedulers, así que los archivos que extienden se copian con la app y nada depende de que el módulo esté instalado donde se ejecuta.</p>
+<p>Las clases generadas existen después de un build. Antes del primer <code>bxAgents build</code>, un IDE no puede seguir <code>bxagents.Application</code>; la clase en sí no está en tu proyecto.</p>
 <h2 id="rutas"><a href="#rutas" id="rutas" name="rutas" class="anchor"></a>Rutas</h2>
-<p>La base vive una carpeta más abajo, así que resuelve las rutas desde la carpeta de la app, no desde su propia ubicación. Si escribes código en <code>Application.bx</code> que lee un archivo, usa <code>expandPath( &quot;/...&quot; )</code> desde la raíz de la app.</p>
+<p>La raíz web <code>/</code> es ahora <code>.build/public</code>, así que <code>expandPath( &quot;/&quot; )</code> <strong>no</strong> es la app: usa <code>expandPath( &quot;/app&quot; )</code> (el mapeo de la plantilla) para un archivo de la app, por ejemplo <code>expandPath( &quot;/app/config/agent-settings.json&quot; )</code>.</p>
 
 	
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/application-bx.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/application-bx.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Nov 24, 2026, 12&#x3a;00&#x3a;39 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Application.bx&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fapplication-bx%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/conventions/application-bx.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/conventions/application-bx.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Nov 24, 2026, 2&#x3a;02&#x3a;57 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Application.bx&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fconventions%2Fapplication-bx%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 
@@ -351,7 +380,7 @@ class extends=&quot;bxagents.Application&quot; {
 			
 			
 				<aside class="col-xl-2 toc-sidebar d-none d-xl-block">
-					<nav class="toc bxsites-toc mb-4" aria-label="En esta p&aacute;gina"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#qué-hace-la-base-generada">Qu&eacute; hace la base generada</a></li><li class="toc-level-2"><a href="#sobrescribir-un-hook-o-añadir-un-ajuste">Sobrescribir un hook o a&ntilde;adir un ajuste</a></li><li class="toc-level-2"><a href="#el-mapeo-bxagents">El mapeo bxagents</a></li><li class="toc-level-2"><a href="#rutas">Rutas</a></li></ul></nav>
+					<nav class="toc bxsites-toc mb-4" aria-label="En esta p&aacute;gina"><div class="toc-title bxsites-toc__title"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v16"/><path d="M6 8h6"/><path d="M6 14h9"/><path d="M6 20h4"/></svg> En esta p&aacute;gina</div><ul class="list-unstyled"><li class="toc-level-2"><a href="#dónde-acaba">D&oacute;nde acaba</a></li><li class="toc-level-2"><a href="#qué-hace-la-base-generada">Qu&eacute; hace la base generada</a></li><li class="toc-level-2"><a href="#sobrescribir-un-hook-o-añadir-un-ajuste">Sobrescribir un hook o a&ntilde;adir un ajuste</a></li><li class="toc-level-2"><a href="#el-nombre-bxagents">El nombre bxagents</a></li><li class="toc-level-2"><a href="#rutas">Rutas</a></li></ul></nav>
 				</aside>
 			
 		</div>

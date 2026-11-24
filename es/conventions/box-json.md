@@ -28,13 +28,13 @@ BxAgents nunca instala nada. Instala los paquetes como lo haces normalmente, con
 
 | Qué | Carpeta en el proyecto | Qué hace `build` con ello |
 |---|---|---|
-| Módulos BoxLang (`bx-playwright`, ...) | `boxlang_modules/` | BoxLang carga esta carpeta desde la raíz del proyecto, así que `chat`, `invoke` y `test` los encuentran. `build` la copia a `.build/app/boxlang_modules`, para que `serve` y un `.bxa` empaquetado también la lleven. |
+| Módulos BoxLang (`bx-playwright`, ...) | `boxlang_modules/` | BoxLang carga esta carpeta desde la raíz del proyecto, así que `chat`, `invoke` y `test` los encuentran. `build` la copia a `.build/boxlang_modules`, para que `serve` y un `.bxa` empaquetado también la lleven. |
 | Librerías y módulos ColdBox | `lib/coldbox`, `lib/modules/<nombre>` | Se copian a la app sobre los incluidos, así un proyecto puede añadir o reemplazar una librería. |
 | Herramientas de pruebas (TestBox, ...) | `lib/<nombre>` o `tests/` | No se copian: la app no las necesita. |
 
 ## Dependencias de desarrollo
 
-Un módulo BoxLang que solo está en `devDependencies` se deja fuera de `.build/app`, y el build indica cuál. Un módulo se asocia con `box.json` por el `slug` de su propio `box.json`, o por el nombre de su carpeta (`bxplaywright` para `bx-playwright`). Uno listado en ambas secciones se conserva.
+Un módulo BoxLang que solo está en `devDependencies` se deja fuera de `.build`, y el build indica cuál. Un módulo se asocia con `box.json` por el `slug` de su propio `box.json`, o por el nombre de su carpeta (`bxplaywright` para `bx-playwright`). Uno listado en ambas secciones se conserva.
 
 ## Usar un módulo instalado
 

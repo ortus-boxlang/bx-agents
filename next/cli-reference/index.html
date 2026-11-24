@@ -705,10 +705,17 @@ bxAgents skills remove &lt;name&gt;
 <p>Run the full <a href="/next/build-pipeline/index.html">build pipeline</a>.</p>
 <pre><code class="language-bash">bxAgents build [--environment=production] [--verbose] [--generatorVersion=1.0.0]
 </code></pre>
-<p>Writes <code>.build/app/</code> and <code>.build/manifest.json</code>. Fails with every collected validation error if the project is invalid.</p>
+<p>Writes <code>.build/</code> (<code>app/</code>, <code>public/</code>, <code>lib/</code>, <code>runtime/</code>, <code>boxlang_modules/</code> and <code>miniserver.json</code>, see <a href="/next/build-pipeline/index.html#what-is-in-build-and-what-is-served">what is in <code>.build</code></a>) and <code>.build/manifest.json</code>. Fails with every collected validation error if the project is invalid.</p>
 <ul>
-<li><code>--verbose</code> prints one line per build phase live as it runs - what got resolved/discovered/validated, per-phase counts (models, tools, gateways, warnings, etc.), which agents ended up registered in <code>config/WireBox.bx</code> and under which names, how many <code>schedules/*.bx</code> schedulers were found, and a final <code>Build completed in Xms</code> timing line. Useful for debugging a slow or unexpectedly-behaving build. Silent otherwise - <code>--verbose</code> costs nothing when not passed.</li>
-<li><code>--generatorVersion</code> overrides the string stamped into <code>manifest.json</code>'s <code>generator.version</code> (see <a href="/next/manifest/index.html">The Manifest</a>) - defaults to <code>&quot;dev&quot;</code> when omitted. Exists for tooling that builds against a specific released version of this module and wants that recorded in the manifest, rather than the local dev default.</li>
+<li>
+<p><code>BXAGENTS_MODULE_DIR</code> names the module folder to copy into <code>.build/runtime/modules/bxagents</code> when BxAgents is not running from an installed module (a source checkout: <code>build/modules/bxagents</code>); <code>none</code> copies nothing. It is read with <code>getSystemSetting()</code>. <code>build</code>, <code>serve</code>, <code>test</code> and <code>invoke --server</code> also take a <code>moduleDir</code> option that wins over it (the test suite uses it).</p>
+</li>
+<li>
+<p><code>--verbose</code> prints one line per build phase live as it runs - what got resolved/discovered/validated, per-phase counts (models, tools, gateways, warnings, etc.), which agents ended up registered in <code>config/WireBox.bx</code> and under which names, how many <code>schedules/*.bx</code> schedulers were found, and a final <code>Build completed in Xms</code> timing line. Useful for debugging a slow or unexpectedly-behaving build. Silent otherwise - <code>--verbose</code> costs nothing when not passed.</p>
+</li>
+<li>
+<p><code>--generatorVersion</code> overrides the string stamped into <code>manifest.json</code>'s <code>generator.version</code> (see <a href="/next/manifest/index.html">The Manifest</a>) - defaults to <code>&quot;dev&quot;</code> when omitted. Exists for tooling that builds against a specific released version of this module and wants that recorded in the manifest, rather than the local dev default.</p>
+</li>
 </ul>
 <h3 id="test"><a href="#test" id="test" name="test" class="anchor"></a><code>test</code></h3>
 <p>Run your project's own <a href="/next/conventions/testing/index.html"><code>tests/specs</code></a> via TestBox.</p>
@@ -720,18 +727,20 @@ bxAgents skills remove &lt;name&gt;
 <li>Prints pass/fail/error/skipped counts plus one line per failure, and exits non-zero if anything failed.</li>
 </ul>
 <h3 id="serve"><a href="#serve" id="serve" name="serve" class="anchor"></a><code>serve</code></h3>
-<p>Launch a real <a href="https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver"><code>boxlang-miniserver</code></a> process pointed at <code>.build/app</code>.</p>
+<p>Launch a real <a href="https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver"><code>boxlang-miniserver</code></a> process serving <code>.build/public</code>.</p>
 <pre><code class="language-bash">bxAgents serve [--port=8080] [--host=127.0.0.1]
 </code></pre>
 <ul>
-<li>Requires a prior <code>build</code> - fails clearly if <code>.build/app</code> doesn't exist.</li>
+<li>Requires a prior <code>build</code> - fails clearly if <code>.build/app</code> doesn't exist, or if the build has no <code>public/</code> (it was made before the app/public layout: build again).</li>
 <li>Fails clearly if <code>boxlang-miniserver</code> isn't found on <code>PATH</code>.</li>
 <li>The root address answers too: <code>/</code> redirects (302) to the web UI when the project has one, and otherwise returns a small JSON pointer to the API's <code>health</code> route (on <code>agentApi.path</code>), or a plain 404 when the API is off. It names nothing about the agent.</li>
 <li>Always serves the agent at <code>/__bxagents</code> (<code>POST /invoke</code>, <code>POST /stream</code>, <code>POST /batch</code>, <code>GET /info</code>), whatever the project declares in <a href="/next/conventions/gateways/index.html"><code>gateways/</code></a> - see <a href="/next/conventions/agent-bx/index.html#the-always-on-agent-route">the always-on agent route</a> for how to require a token on it, or turn it off.</li>
 <li><strong>Binds to <code>127.0.0.1</code> by default.</strong> A generated app is not authenticated unless you configured it to be (the web UI's API-key gate and sign-in are both opt-in), so the default keeps a development server off the network. Pass <code>--host=0.0.0.0</code> to bind all interfaces deliberately - the startup line tells you which of the two you got.</li>
 <li><code>--port</code> must be an integer in 1-65535; anything else fails immediately rather than inside the server process.</li>
-<li>Writes <code>.build/miniserver.json</code> (rewrites enabled, <code>rewriteFileName: &quot;index.bxm&quot;</code>, health check on) before launching, and <code>.build/runtime/config/boxlang.json</code>, which turns off whitespace compression (it would collapse the blank lines that end each SSE frame) and points the app at the installed BxAgents module and the modules bundled inside it.</li>
-<li>Scopes the server's own BoxLang runtime home to <code>.build/runtime</code> (via <code>serverHome</code>) rather than the shared <code>~/.boxlang</code> default, so each project's compiled-class cache and config overrides are isolated - and <code>clean</code> sweeps it for free, since it already wipes <code>.build</code> wholesale. <code>chat --server</code> and <code>invoke --server</code> get this too, since they reuse <code>serve</code> internally. <code>test</code> runs its child process with its own home in <code>.build/test-runtime</code>. Both are set through the child's environment when it starts, never by writing a file into the project root.</li>
+<li>Writes <code>.build/miniserver.json</code> before launching: <code>webRoot: public</code>, <code>configPath: runtime/boxlang.json</code> (the ColdBox BoxLang template's engine config, whitespace compression off), <code>serverHome: runtime</code>, rewrites to <code>index.bxm</code>, health check on, and a pass predicate that lets only <code>index.bxm</code> run. Every path is relative to <code>.build</code>, and the server is started <strong>in <code>.build</code></strong> with <code>BOXLANG_HOME=.build/runtime</code> - which is what the template's <code>${user-dir}</code> means.</li>
+<li>Serves <strong>only <code>.build/public</code></strong>: the app's code, its config (<code>agent-settings.json</code>, <code>Agent.yml</code>, instructions) and the libraries are not under the web root, so they cannot be downloaded; an unknown address is a JSON <code>404</code>.</li>
+<li>Loads <strong>only the <code>bxagents</code> module</strong> (with the BoxLang modules bundled inside it, and the project's own <code>boxlang_modules/</code>): the module is copied into <code>.build/runtime/modules/bxagents</code>, and <code>runtime/</code> is the BoxLang home, so the modules installed on the machine are never loaded into the served app. <code>chat --server</code> and <code>invoke --server</code> get this too, since they reuse <code>serve</code> internally. <code>test</code> runs its child process with its own home in <code>.build/test-runtime</code>, loading the <code>bxagents</code> module alone as well. Both are set through the child's environment when it starts, never by writing a file into the project root.</li>
+<li>A project (or an unpacked app) under a path with a <strong>space</strong> does not start: the <code>boxlang-miniserver</code> launcher script does not quote <code>BOXLANG_HOME</code>.</li>
 <li><strong>The scaffolded <code>.env</code> does not set <code>BOXLANG_HOME</code>.</strong> Each project gets its own runtime home when bxAgents serves or runs it, so a project that runs under <code>boxlang module:bxagents ...</code> from its own root keeps working: the <code>boxlang</code> launcher reads the project <code>.env</code>, and a relative <code>BOXLANG_HOME</code> there points the launcher at an empty folder. <code>build</code>, <code>doctor</code>, <code>inspect</code>, the in-process <code>chat</code> and the default <code>invoke</code> run inside the bxAgents process you started, and a runtime home cannot change mid-process, so they use your own home. They keep per-project state in the project's <code>.build/</code> and the data home only; BoxLang's compiled-class cache in your home is named after each source file's full path, so two projects do not overwrite each other. <code>bxAgents doctor</code> warns when an older project's <code>.env</code> still has a relative <code>BOXLANG_HOME</code> line; delete it.</li>
 </ul>
 <h3 id="chat"><a href="#chat" id="chat" name="chat" class="anchor"></a><code>chat</code></h3>
@@ -963,7 +972,7 @@ bxAgents invoke --message=&quot;...&quot; --server [--port=&lt;port&gt;]
 <ul>
 <li>Requires a prior <code>build</code> - reads <code>.build/manifest.json</code>; fails clearly if it's missing.</li>
 <li><code>--version</code> defaults to <code>1.0.0</code>.</li>
-<li>Writes <code>dist/{agentName}-{version}.bxa</code>, a sibling <code>.sha256</code>, and a redacted <code>manifest.json</code> copy. See <a href="/next/deployment-and-secrets/index.html">Deployment &amp; Secrets</a>.</li>
+<li>Writes <code>dist/{agentName}-{version}.bxa</code> (the <code>app</code>, <code>lib</code>, <code>public</code>, <code>runtime</code>, <code>boxlang_modules</code> folders and <code>miniserver.json</code> of <code>.build</code>), a sibling <code>.sha256</code>, and a redacted <code>manifest.json</code> copy. See <a href="/next/deployment-and-secrets/index.html">Deployment &amp; Secrets</a>.</li>
 </ul>
 <h3 id="deploy"><a href="#deploy" id="deploy" name="deploy" class="anchor"></a><code>deploy</code></h3>
 <p>Ship a built/packaged project to a real deployment target via the pluggable <a href="/next/conventions/deploy/index.html"><code>deploy/</code></a> convention.</p>
@@ -974,7 +983,7 @@ bxAgents deploy --destination=/path/to/somewhere [--target=local]
 <ul>
 <li><code>--name=&lt;entry&gt;</code> dispatches to whatever target the named <code>deploy/&lt;entry&gt;.bx</code>/<code>.json</code> entry declares (<code>local</code>, <code>ssh</code>, <code>ftp</code>, <code>sftp</code>, <code>docker</code>, or <code>digitalocean</code>).</li>
 <li>The flag-only form (<code>--target=local --destination=...</code>, or no <code>--target</code> at all) works with no <code>deploy/</code> folder present - only <code>local</code> supports it; every other target requires a named entry, since it needs more configuration than a couple of flags can carry.</li>
-<li><code>local</code>/<code>ssh</code>/<code>ftp</code>/<code>sftp</code> require a prior <code>package</code>; <code>docker</code>/<code>digitalocean</code> require a prior <code>build</code> (they build straight from <code>.build/app</code>).</li>
+<li><code>local</code>/<code>ssh</code>/<code>ftp</code>/<code>sftp</code> require a prior <code>package</code>; <code>docker</code>/<code>digitalocean</code> require a prior <code>build</code> (they build straight from <code>.build</code>; the Docker recipe is <a href="/next/conventions/deploy/index.html#docker">unverified</a>).</li>
 <li><code>ftp</code>/<code>sftp</code> use the <a href="https://github.com/ortus-boxlang/bx-ftp"><code>bx-ftp</code></a> module, which BxAgents bundles.</li>
 </ul>
 <h3 id="hash-password"><a href="#hash-password" id="hash-password" name="hash-password" class="anchor"></a><code>hash-password</code></h3>

@@ -30,11 +30,11 @@ The rules and the full tables of building blocks are in [`ui/AGENTS.md`](https:/
 
 ## How an agent gets it
 
-For each `gateways/*.bx` entry with `exposes: "webui"`, the build (`WebAppModule`) copies the module to `<app>/modules/bxagentsui` and writes `config/bxagentsui.json`: where the app is mounted (`basePath`, the entry's `path`), where the agent API is (`apiBase`), the branding, the theme, and the files of the project's extensions. `ModuleConfig.bx` reads that file when ColdBox registers the module, so the module answers at the entry's path.
+For each `gateways/*.bx` entry with `exposes: "webui"`, the build (`WebAppModule`) copies the module to `.build/app/modules/bxagentsui`, puts the built scripts and styles (`includes/build/assets`) where the browser fetches them, in `.build/public/includes/bxagentsui/build/assets` (the module's own folders are not under the web root), and writes `config/bxagentsui.json`: where the app is mounted (`basePath`, the entry's `path`), where the agent API is (`apiBase`), the branding, the theme, and the files of the project's extensions. `ModuleConfig.bx` reads that file when ColdBox registers the module, so the module answers at the entry's path.
 
 The build of the scripts and styles is committed in `includes/build`. An agent build never runs Node, so a change to a script or a style ships only once `npm run build` has run and its output is committed.
 
-With `BXAGENTS_UI_LINK=true` the build links the module instead of copying it, so a change to a view shows on the next request. `npm run stack` sets it. Only a linked module serves `<path>/_kit`, a page with every partial and magic working; a built agent answers 404 there.
+With `BXAGENTS_UI_LINK=true` the build links the module instead of copying it (and links `public/includes/bxagentsui` to the module's `includes` folder), so a change to a view shows on the next request. `npm run stack` sets it. Only a linked module serves `<path>/_kit`, a page with every partial and magic working; a built agent answers 404 there.
 
 ## Set it up once
 

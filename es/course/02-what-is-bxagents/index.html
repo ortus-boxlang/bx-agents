@@ -256,14 +256,14 @@
 <p>La mayoría de los frameworks de agentes cablean tools, skills, rutas y tareas programadas
 <strong>en tiempo de petición</strong>, en cada arranque. BxAgents hace lo contrario: <code>bxAgents build</code>
 ejecuta el descubrimiento, la validación y la generación de código exactamente <strong>una vez</strong>,
-y produce una aplicación ColdBox normal bajo <code>.build/app/</code>.</p>
+y produce una aplicación ColdBox normal en <code>.build/</code>, con la estructura de la plantilla ColdBox BoxLang: el código en <code>app/</code>, la raíz web en <code>public/</code>.</p>
 <p>Arrancarla después - mediante <code>bxAgents serve</code>, un proceso
 <a href="https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver"><code>boxlang-miniserver</code></a>
 real, o un <code>.bxa</code> portable desplegado en cualquier sitio donde corra BoxLang - es entonces
 simplemente arrancar una aplicación corriente. Sin escaneo de convenciones, sin recorrido
 dinámico de archivos, sin trabajo de build diferido al camino de la petición.</p>
 <pre><code class="language-mermaid">flowchart LR
-    A[&quot;your convention tree&lt;br/&gt;Agent.yml, tools/, skills/, ...&quot;] --&gt;|&quot;bxAgents build&quot;| B[&quot;.build/app/&lt;br/&gt;a plain ColdBox application&quot;]
+    A[&quot;your convention tree&lt;br/&gt;Agent.yml, tools/, skills/, ...&quot;] --&gt;|&quot;bxAgents build&quot;| B[&quot;.build/&lt;br/&gt;app/ + public/: a plain ColdBox application&quot;]
     B --&gt;|&quot;bxAgents serve / chat / invoke&quot;| C[&quot;running agent&quot;]
     B --&gt;|&quot;bxAgents package&quot;| D[&quot;dist/name-version.bxa&quot;]
     D --&gt;|&quot;bxAgents deploy&quot;| E[&quot;a real target&quot;]
@@ -299,21 +299,18 @@ convierte a la derecha:</p>
 ├── interceptors/
 └── modules/
 </code></pre>
-</div><div class="bxsites-column"><pre><code class="language-text">.build/app/
-├── Application.bx
-├── bxagents/
+</div><div class="bxsites-column"><pre><code class="language-text">.build/
+├── miniserver.json
+├── app/                  el código (no se sirve)
+│   ├── bxagents/         Application.bx  Scheduler.bx
+│   ├── config/           Coldbox.bx  WireBox.bx  Router.bx
+│   ├── schedules/  agent/  tools/  skills/  mcp/
+│   └── handlers/  interceptors/
+├── public/               la raíz web: la única carpeta servida
 │   ├── Application.bx
-│   └── Scheduler.bx
-├── config/
-│   ├── ColdBox.bx
-│   ├── WireBox.bx
-│   └── Router.bx
-├── schedules/
-├── agent/
-│   └── GeneratedAgentFactory.bx
-├── tools/  skills/  mcp/
-├── handlers/  interceptors/
-└── index.bxm
+│   └── index.bxm
+├── lib/                  coldbox/  modules/
+└── runtime/              boxlang.json  modules/bxagents
 </code></pre>
 </div></div>
 <h2 id="por-qué-esto-importa"><a href="#por-qué-esto-importa" id="por-qué-esto-importa" name="por-qué-esto-importa" class="anchor"></a>Por qué esto importa</h2>
@@ -330,7 +327,7 @@ para más detalle cuando quieras.</p>
 
 	
 	
-		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/course/02-what-is-bxagents.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/course/02-what-is-bxagents.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Nov 24, 2026, 12&#x3a;00&#x3a;39 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Lecci%C3%B3n%202%3A%20%C2%BFQu%C3%A9%20es%20BxAgents%3F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fcourse%2F02-what-is-bxagents%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
+		<div class="page-meta"><a href="https://github.com/ortus-boxlang/bx-agents/edit/development/docs/versions/1.0.x/i18n/es/course/02-what-is-bxagents.md" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg> Editar esta p&aacute;gina</a><a href="/es/course/02-what-is-bxagents.md" download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 15v-3l1.5 2 1.5-2v3"/><path d="M14.5 12v4M13 15.5l1.5 1.5 1.5-1.5"/></svg> Descargar Markdown</a><span class="page-meta__item"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> &Uacute;ltima actualizaci&oacute;n Nov 24, 2026, 2&#x3a;02&#x3a;57 PM</span><a href="https://github.com/ortus-boxlang/bx-agents/issues/new?title=Issue%20with%3A%20Lecci%C3%B3n%202%3A%20%C2%BFQu%C3%A9%20es%20BxAgents%3F&amp;body=Found%20on%3A%20https%3A%2F%2Fbxagents.ai%2Fes%2Fcourse%2F02-what-is-bxagents%2Findex.html" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report an issue</a></div>
 	
 </article>
 

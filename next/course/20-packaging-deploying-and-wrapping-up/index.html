@@ -257,10 +257,10 @@
 connection, a web UI, a schedule, and a test suite. This last lesson ships it.</p>
 <h2 id="the-chain-end-to-end"><a href="#the-chain-end-to-end" id="the-chain-end-to-end" name="the-chain-end-to-end" class="anchor"></a>The chain, end to end</h2>
 <pre><code class="language-mermaid">flowchart LR
-    P[&quot;your project&quot;] --&gt;|&quot;bxAgents build&quot;| B[&quot;.build/app/&lt;br/&gt;a plain ColdBox app&quot;]
+    P[&quot;your project&quot;] --&gt;|&quot;bxAgents build&quot;| B[&quot;.build/&lt;br/&gt;app/ public/ lib/ runtime/&quot;]
     B --&gt;|&quot;bxAgents package&quot;| A[&quot;dist/name-version.bxa&lt;br/&gt;+ .sha256 + redacted manifest.json&quot;]
     A --&gt;|&quot;bxAgents deploy&quot;| T[&quot;a target:&lt;br/&gt;local / ssh / ftp / sftp&lt;br/&gt;docker / digitalocean&quot;]
-    T --&gt; RUN[&quot;boxlang-miniserver runs the unzipped app&quot;]
+    T --&gt; RUN[&quot;boxlang-miniserver runs in the unzipped folder&quot;]
     ENV[&quot;environment variables&quot;] --&gt;|&quot;read at RUNTIME by bx-ai&quot;| RUN
 
     style A fill:#eaf6ec,stroke:#155724
@@ -273,7 +273,8 @@ runtime.</p>
 <h2 id="package"><a href="#package" id="package" name="package" class="anchor"></a>Package</h2>
 <pre><code class="language-bash">bxAgents package --version=1.0.0
 </code></pre>
-<p>Zips <code>.build/app/</code> into <code>dist/{agentName}-{version}.bxa</code>, a <code>.sha256</code> checksum, and a
+<p>Zips the built app (<code>app/</code>, <code>lib/</code>, <code>public/</code>, <code>runtime/</code>, <code>boxlang_modules/</code> and
+<code>miniserver.json</code> of <code>.build/</code>) into <code>dist/{agentName}-{version}.bxa</code>, a <code>.sha256</code> checksum, and a
 redacted <code>manifest.json</code>. Packaging twice over the same build produces byte-identical
 zip bytes - useful for verifying a CI-built artifact matches a locally-built one. An
 optional <code>.bxaignore</code> (one glob per line) excludes extra paths.</p>

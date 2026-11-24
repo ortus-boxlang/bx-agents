@@ -81,7 +81,7 @@ bxAgents build
 bxAgents chat
 ```
 
-`build` ensambla todo lo anterior en una aplicación ColdBox normal bajo `.build/app` (consulta [El pipeline de build](../build-pipeline.md)); `chat` carga el agente generado en el mismo proceso y abre el [chat de terminal](terminal-ui.md). Escribe `/` para ver los comandos y `/tools` para ver que `sayHello` está ahí. Prueba con:
+`build` ensambla todo lo anterior en una aplicación ColdBox normal en `.build` (`app/` y `public/`) (consulta [El pipeline de build](../build-pipeline.md)); `chat` carga el agente generado en el mismo proceso y abre el [chat de terminal](terminal-ui.md). Escribe `/` para ver los comandos y `/tools` para ver que `sayHello` está ahí. Prueba con:
 
 ```text
 My name is Ada.

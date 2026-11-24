@@ -45,7 +45,7 @@ class extends="bxModules.bxagents.models.testing.BaseAgentSpec" {
 ```
 
 `BaseAgentSpec` construye tu agente una vez por bundle de specs, contra una **copia temporal
-desechable** de tu proyecto - nunca toca tu `.build/app` real, así que probar nunca destroza un
+desechable** de tu proyecto - nunca toca tu `.build` real, así que probar nunca destroza un
 ciclo real de `build`/`serve`/`package`. El agente construido se expone como `agent`.
 
 ## Probar no necesita ninguna clave de API

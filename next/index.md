@@ -123,7 +123,7 @@ Then edit `instructions.md` and add whichever convention folders you need.
 ```bash
 bxAgents build
 ```
-Discovery, validation, manifest, code generation - into `.build/app/`.
+Discovery, validation, manifest, code generation - into `.build/` (the code in `app/`, the web root in `public/`).
 :::
 ::: step "Talk to it"
 ```bash
@@ -202,21 +202,19 @@ your-agent/
 :::
 ::: column
 ```text
-.build/app/
-├── Application.bx
-├── bxagents/
+.build/
+├── miniserver.json
+├── app/                  the code (not served)
 │   ├── Application.bx
-│   └── Scheduler.bx
-├── config/
-│   ├── ColdBox.bx
-│   ├── WireBox.bx
-│   └── Router.bx
-├── schedules/
-├── agent/
-│   └── GeneratedAgentFactory.bx
-├── tools/  skills/  mcp/
-├── handlers/  interceptors/
-└── index.bxm
+│   ├── bxagents/         Application.bx  Scheduler.bx
+│   ├── config/           Coldbox.bx  WireBox.bx  Router.bx
+│   ├── schedules/  agent/  tools/  skills/  mcp/
+│   └── handlers/  interceptors/
+├── public/               the web root (the only served folder)
+│   ├── Application.bx
+│   └── index.bxm
+├── lib/                  coldbox/  modules/
+└── runtime/              boxlang.json  modules/bxagents
 ```
 :::
 :::
@@ -224,7 +222,7 @@ your-agent/
 ::: expandable "Why assemble at build time instead of at request time?"
 Most agent frameworks wire tools, skills, routes and schedules together **at request time**,
 on every boot. BxAgents does the opposite: `bxAgents build` runs discovery, validation and
-code generation exactly once, producing a plain ColdBox application under `.build/app/`.
+code generation exactly once, producing a plain ColdBox application in `.build/`: the code in `app/`, the web root in `public/`.
 
 Starting it - via `bxAgents serve`, a real
 [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver)

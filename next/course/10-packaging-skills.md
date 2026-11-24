@@ -61,8 +61,8 @@ with the same name wins. `skills update` and `skills remove` do what they say.
 ## How it's wired at runtime
 
 `skills/` is copied verbatim into the generated app, the same wipe-then-write,
-dotfile-excluding copy as `tools/`. The generated `config/ColdBox.bx` always points
-bx-ai's own `skillsDirectory` module setting at `/skills` - you never need to set this
+dotfile-excluding copy as `tools/`. The generated `config/bxai-settings.json` always points
+bx-ai's own `skillsDirectory` module setting at `/app/skills` - you never need to set this
 yourself, even though bx-ai's own default is a different path (`/.agents/skills`).
 
 ## Tools vs. skills - when to reach for which

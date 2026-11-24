@@ -57,7 +57,7 @@ Copy the newest `.bxa` to a destination directory. No `deploy/` folder needed.
 Ship over `scp`, optionally restart the remote service over `ssh`.
 :::
 ::: card title="docker" icon="phosphor-duotone:cube" href="#docker"
-Build an image from `.build/app` and push it to a registry.
+Build an image from `.build` and push it to a registry.
 :::
 ::: card title="digitalocean" icon="phosphor-duotone:cloud-arrow-up" href="#digitalocean"
 Push-and-minimal-provision against the DigitalOcean App Platform API.
@@ -96,7 +96,7 @@ Requires a prior `bxAgents package`. Shells out to the real `scp`/`ssh` binaries
 
 ### `docker`
 
-Builds a Docker image from `.build/app` and pushes it to a container registry, shelling out to the real `docker` CLI.
+Builds a Docker image from `.build` (the app, its libraries, the web root and the runtime home) and pushes it to a container registry, shelling out to the real `docker` CLI.
 
 ```javascript
 {
@@ -106,7 +106,19 @@ Builds a Docker image from `.build/app` and pushes it to a container registry, s
 }
 ```
 
-Requires a prior `bxAgents build` (not `package` - it builds straight from `.build/app`). The built-in Dockerfile template is based on the real, published [`ortussolutions/boxlang:miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/docker) image - override it entirely by adding your own `deploy/Dockerfile`, or point at a different one via `dockerfile: "/absolute/path"`.
+Requires a prior `bxAgents build` (not `package` - it builds straight from `.build`). The built-in Dockerfile template is based on the real, published [`ortussolutions/boxlang:miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/docker) image - override it entirely by adding your own `deploy/Dockerfile`, or point at a different one via `dockerfile: "/absolute/path"`. It is:
+
+```dockerfile
+FROM ortussolutions/boxlang:miniserver
+WORKDIR /app
+COPY . /app
+ENV BOXLANG_HOME=/app/runtime
+RUN sed -i 's/"host": *"[^"]*"/"host": "0.0.0.0"/' /app/miniserver.json
+EXPOSE 8080
+```
+
+!!! warning "Unverified"
+    This recipe is read from the BoxLang Docker and MiniServer documentation and has **not been run**: no Docker was available where it was written. It copies the whole build into `/app`, relies on the image finding `/app/miniserver.json` (documented) and starting in `/app` (not confirmed; the two documentation pages even name different variables for the engine config), and makes `runtime/` the BoxLang home so that only the bundled `bxagents` module loads. A `.dockerignore` written into `.build` keeps the manifest, the work folders and what a running server wrote into `runtime/` out of the image. Build it once and check `GET /__bxagents/health` before relying on it.
 
 `docker login` only runs when both `DOCKER_USERNAME` and `DOCKER_PASSWORD` are set in the environment - a registry an already-authenticated local Docker daemon can reach needs neither.
 

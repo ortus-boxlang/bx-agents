@@ -57,7 +57,7 @@ Copia el `.bxa` más nuevo a un directorio destino. No se necesita carpeta `depl
 Envía vía `scp`, opcionalmente reinicia el servicio remoto vía `ssh`.
 :::
 ::: card title="docker" icon="phosphor-duotone:cube" href="#docker"
-Construye una imagen desde `.build/app` y la sube a un registro.
+Construye una imagen desde `.build` y la sube a un registro.
 :::
 ::: card title="digitalocean" icon="phosphor-duotone:cloud-arrow-up" href="#digitalocean"
 Push-y-provisión-mínima contra la API de DigitalOcean App Platform.
@@ -96,7 +96,7 @@ Requiere un `bxAgents package` previo. Invoca los binarios reales `scp`/`ssh` - 
 
 ### `docker`
 
-Construye una imagen Docker desde `.build/app` y la sube a un registro de contenedores, invocando la CLI real de `docker`.
+Construye una imagen Docker desde `.build` (la app, sus librerías, la raíz web y el home de runtime) y la sube a un registro de contenedores, invocando la CLI real de `docker`.
 
 ```javascript
 {
@@ -106,7 +106,19 @@ Construye una imagen Docker desde `.build/app` y la sube a un registro de conten
 }
 ```
 
-Requiere un `bxAgents build` previo (no `package` - construye directamente desde `.build/app`). La plantilla de Dockerfile incorporada se basa en la imagen real y publicada [`ortussolutions/boxlang:miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/docker) - sobreescríbela por completo añadiendo tu propio `deploy/Dockerfile`, o apunta a uno diferente vía `dockerfile: "/absolute/path"`.
+Requiere un `bxAgents build` previo (no `package` - construye directamente desde `.build`). La plantilla de Dockerfile incorporada se basa en la imagen real y publicada [`ortussolutions/boxlang:miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/docker) - sobreescríbela por completo añadiendo tu propio `deploy/Dockerfile`, o apunta a uno diferente vía `dockerfile: "/absolute/path"`. El incorporado es:
+
+```dockerfile
+FROM ortussolutions/boxlang:miniserver
+WORKDIR /app
+COPY . /app
+ENV BOXLANG_HOME=/app/runtime
+RUN sed -i 's/"host": *"[^"]*"/"host": "0.0.0.0"/' /app/miniserver.json
+EXPOSE 8080
+```
+
+!!! warning "Sin verificar"
+    Esta receta está leída de la documentación de Docker y MiniServer de BoxLang y **no se ha ejecutado**: no había Docker donde se escribió. Copia todo el build en `/app`, confía en que la imagen encuentre `/app/miniserver.json` (documentado) y arranque en `/app` (no confirmado), y hace de `runtime/` el home de BoxLang para que solo cargue el módulo `bxagents` incluido. Constrúyela una vez y comprueba `GET /__bxagents/health` antes de depender de ella.
 
 `docker login` solo se ejecuta cuando tanto `DOCKER_USERNAME` como `DOCKER_PASSWORD` están configuradas en el entorno - un registro que un daemon Docker local ya autenticado puede alcanzar no necesita ninguna de las dos.
 

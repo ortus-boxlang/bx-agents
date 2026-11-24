@@ -256,14 +256,15 @@
 <p>Most agent frameworks wire tools, skills, routes and schedules together <strong>at request
 time</strong>, on every boot. BxAgents does the opposite: <code>bxAgents build</code> runs discovery,
 validation and code generation exactly <strong>once</strong>, producing a plain ColdBox application
-under <code>.build/app/</code>.</p>
+in <code>.build/</code>, laid out like the ColdBox BoxLang template: the code in <code>app/</code>, the web
+root in <code>public/</code>.</p>
 <p>Starting it afterwards - via <code>bxAgents serve</code>, a real
 <a href="https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver"><code>boxlang-miniserver</code></a>
 process, or a portable <code>.bxa</code> deployed anywhere BoxLang runs - is then just booting an
 ordinary app. No convention scanning, no dynamic file walking, no build-time work
 deferred into the request path.</p>
 <pre><code class="language-mermaid">flowchart LR
-    A[&quot;your convention tree&lt;br/&gt;Agent.yml, tools/, skills/, ...&quot;] --&gt;|&quot;bxAgents build&quot;| B[&quot;.build/app/&lt;br/&gt;a plain ColdBox application&quot;]
+    A[&quot;your convention tree&lt;br/&gt;Agent.yml, tools/, skills/, ...&quot;] --&gt;|&quot;bxAgents build&quot;| B[&quot;.build/&lt;br/&gt;app/ + public/: a plain ColdBox application&quot;]
     B --&gt;|&quot;bxAgents serve / chat / invoke&quot;| C[&quot;running agent&quot;]
     B --&gt;|&quot;bxAgents package&quot;| D[&quot;dist/name-version.bxa&quot;]
     D --&gt;|&quot;bxAgents deploy&quot;| E[&quot;a real target&quot;]
@@ -300,21 +301,18 @@ on the right:</p>
 ├── interceptors/
 └── modules/
 </code></pre>
-</div><div class="bxsites-column"><pre><code class="language-text">.build/app/
-├── Application.bx
-├── bxagents/
+</div><div class="bxsites-column"><pre><code class="language-text">.build/
+├── miniserver.json
+├── app/                  the code (not served)
+│   ├── bxagents/         Application.bx  Scheduler.bx
+│   ├── config/           Coldbox.bx  WireBox.bx  Router.bx
+│   ├── schedules/  agent/  tools/  skills/  mcp/
+│   └── handlers/  interceptors/
+├── public/               the web root: the only served folder
 │   ├── Application.bx
-│   └── Scheduler.bx
-├── config/
-│   ├── ColdBox.bx
-│   ├── WireBox.bx
-│   └── Router.bx
-├── schedules/
-├── agent/
-│   └── GeneratedAgentFactory.bx
-├── tools/  skills/  mcp/
-├── handlers/  interceptors/
-└── index.bxm
+│   └── index.bxm
+├── lib/                  coldbox/  modules/
+└── runtime/              boxlang.json  modules/bxagents
 </code></pre>
 </div></div>
 <h2 id="why-this-matters"><a href="#why-this-matters" id="why-this-matters" name="why-this-matters" class="anchor"></a>Why this matters</h2>

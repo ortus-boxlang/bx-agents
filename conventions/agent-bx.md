@@ -406,6 +406,10 @@ JSON body (`code: unauthorized`), and never reaches the agent.
 
 ![The Access page in the web app: the token list and the form that makes a token](../assets/webui/webui-access.png)
 
+### What else a client can fetch
+
+Only the built app's `public/` folder is a web root (see [what is in `.build`](../build-pipeline.md#what-is-in-build-and-what-is-served)). The app's own files are not under it, so the agent's settings, `Agent.yml`, `instructions.md`, the generated config and the libraries cannot be downloaded by address, with or without a token, and a class under the app is not callable by address: before the app and the web root were split, `/config/agent-settings.json`, `/project/Agent.yml`, `/agent/instructions.md` and a listing of `/config/` answered 200 to anyone who could reach the port, token or not. What is served from `public/` is the template's static files, the web page's built scripts and styles under `/includes/`, and the front controller `index.bxm` that every other address is rewritten to; an address nothing routes is a JSON `404`.
+
 ### Access tokens for a deployed agent
 
 One shared secret (`tokenEnvVar`) is enough for a single caller. To let several people or machines in, each with a name you can revoke, turn on issued tokens:

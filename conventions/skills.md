@@ -99,7 +99,7 @@ Skills from skills.boxlang.io are installed with `bxAgents skills install <owner
 
 bx-ai reads its skills folder once, when the runtime starts, which is before an app's settings are applied. So the generated agent factory adds the app's `skills/` folder to bx-ai's list of global skills itself, before any agent is built, and then the extensions' skills and the skills the agent saved in its data home. Every agent is given that one list, so the same skills are listed by `GET /skills`, the Registry page and `/skills`, and loaded by the agent's skill tool. It works the same for `serve`, for `chat` and for a packaged app, since all of them build agents from the same factory.
 
-The generated app also writes `{ "skillsDirectory": "/skills" }` to `config/bxai-settings.json` (not `config/ColdBox.bx`, because ColdBox's `moduleSettings` does not reach bx-ai, a BoxLang module).
+The generated app also writes `{ "skillsDirectory": "/app/skills" }` to `config/bxai-settings.json` (not `config/Coldbox.bx`, because ColdBox's `moduleSettings` does not reach bx-ai, a BoxLang module).
 
 !!! info
     bx-ai's own default `skillsDirectory` is `/.agents/skills`, a different path than BxAgents' `skills/` convention. You never need to set it. Skills installed under your project's `.agents/skills/` are copied into the app's `skills/` at build time.

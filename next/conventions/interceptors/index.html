@@ -292,13 +292,13 @@ class {
 <p>An interceptor with <strong>no</strong> <code>@scope</code> annotation at all defaults to <code>agent</code> - the narrower, safer default, since <code>runtime</code> scope has effects beyond this one app.</p>
 <p>An <code>@scope</code> value that isn't <code>agent</code> or <code>runtime</code> (case-insensitive) fails the build with a clear error - there's no silent fallback for a typo'd scope.</p>
 <h2 id="generated-wiring"><a href="#generated-wiring" id="generated-wiring" name="generated-wiring" class="anchor"></a>Generated wiring</h2>
-<p>For each <code>agent</code>-scope interceptor, the generated base <code>Application</code> (<a href="/next/conventions/application-bx/index.html"><code>bxagents/Application.bx</code></a>) registers an instance with ColdBox's interceptor service from <code>onApplicationStart()</code>:</p>
+<p>For each <code>agent</code>-scope interceptor, the generated base class (<a href="/next/conventions/application-bx/index.html"><code>bxagents/Application.bx</code></a>) registers an instance with ColdBox's interceptor service from <code>after()</code>, once ColdBox has loaded:</p>
 <pre><code class="language-javascript">application.cbController.getInterceptorService().register(
-	target: application.cbController.getWireBox().getInstance( &quot;interceptors.AuditLogger&quot; ),
+	target: application.cbController.getWireBox().getInstance( &quot;app.interceptors.AuditLogger&quot; ),
 	name: &quot;AuditLogger&quot;
 )
 </code></pre>
-<p>Every agent-scope interceptor is registered exactly once. The generated <code>config/ColdBox.bx</code> has no <code>interceptors</code> array: a declarative array there never reaches ColdBox's interceptor service on the stack BxAgents generates for, so the registration happens at startup instead.</p>
+<p>Every agent-scope interceptor is registered exactly once. The generated <code>config/Coldbox.bx</code> has no <code>interceptors</code> array: the registration happens at startup instead. (A declarative array was once measured not to reach ColdBox's interceptor service, but against a config file ColdBox was not loading; that was not measured again, and the registration at startup works.)</p>
 
 	
 
