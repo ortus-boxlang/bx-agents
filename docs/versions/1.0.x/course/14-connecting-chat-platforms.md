@@ -1,5 +1,5 @@
 ---
-title: "Lesson 14: Connecting Chat Platforms"
+title: "Connecting Chat Platforms"
 icon: phosphor-duotone:chats-circle
 summary: Channel-adapter gateways - nine chat platforms plus http/cli/mock, all one GatewaySession.
 description: Channel-adapter gateways - nine chat platforms plus http/cli/mock, all one GatewaySession.
@@ -11,7 +11,7 @@ tags: [course, conventions, gateways]
 The other kind of `gateways/*` entry - one with a `type` key instead of `exposes` -
 registers a bx-ai `IGateway`, a channel adapter for external delivery or
 human-in-the-loop approval. This is a real "chat bot" connection, distinct from the
-REST exposure you built in [Lesson 13](13-exposing-http-and-mcp.md).
+REST exposure you built in [Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md).
 
 ## Two request-driven types: `mock` and `cli`
 
@@ -140,4 +140,4 @@ reference below; the shape is consistent across all nine.
 
 Full reference: [gateways/](../conventions/gateways/index.md).
 
-Next: [Lesson 15 - The Generated Web Chat UI](15-the-generated-web-chat-ui.md)
+Next: [The Generated Web Chat UI](15-the-generated-web-chat-ui.md)

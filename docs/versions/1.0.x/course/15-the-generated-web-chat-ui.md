@@ -1,5 +1,5 @@
 ---
-title: "Lesson 15: The Generated Web Chat UI"
+title: "The Generated Web Chat UI"
 icon: phosphor-duotone:globe-hemisphere-west
 summary: A complete browser chat client - sidebar, streaming, approvals, SQLite store.
 description: A complete browser chat client - sidebar, streaming, approvals, SQLite store.
@@ -34,7 +34,7 @@ project never needs Node installed at all.
 
 This is the web app, here branded with
 [`examples/webui-agent`](https://github.com/ortus-boxlang/bx-agents/tree/development/examples/webui-agent)'s
-`theme`/`title`/`icon` config from [Lesson 13](13-exposing-http-and-mcp.md)'s exposure
+`theme`/`title`/`icon` config from [Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md)'s exposure
 concept, taken further. `bxAgents build && bxAgents serve` in that example serves the
 same app.
 
@@ -80,7 +80,7 @@ buttons.
 The **Settings** page has **Appearance**: each visitor picks light, dark or system, an accent color,
 the text size and the density, saved in their own browser. It never changes your `theme`, which
 stays the default. The **Access** page lists, creates and revokes tokens for admins, when the server
-sets `agentApi.manageTokens: true` ([Lesson 13](13-exposing-http-and-mcp.md)).
+sets `agentApi.manageTokens: true` ([Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md)).
 
 ## Without accounts: one shared workspace
 
@@ -135,7 +135,7 @@ a matching `x-bxagents-token` header. The app's pages themselves are deliberatel
 gated, since a browser's plain page navigation can't send a custom header: the page asks for the
 secret in a **Password** dialog that opens by itself when the server answers `401`, and from the
 key button in the header. For several people, use issued tokens or list `users`
-([Lesson 13](13-exposing-http-and-mcp.md) covers tokens, `allowedIPs` and `rateLimit`).
+([Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md) covers tokens, `allowedIPs` and `rateLimit`).
 
 ## Try it
 
@@ -145,9 +145,9 @@ bxAgents serve --port=8080
 ```
 
 Open `http://localhost:8080/chat` in a browser (or just `http://localhost:8080/`, which redirects there) and talk to your agent - the same one
-you've been building tools, skills and subagents onto since [Lesson 9](09-giving-your-agent-tools.md).
+you've been building tools, skills and subagents onto since [Giving Your Agent Tools](09-giving-your-agent-tools.md).
 
 Full reference: [The web chat UI](../conventions/web-ui.md). To change the app itself, see
 [Work on the web app](../guides/ui-development.md).
 
-Next: [Lesson 16 - Scheduling Background Work](16-scheduling-background-work.md)
+Next: [Scheduling Background Work](16-scheduling-background-work.md)

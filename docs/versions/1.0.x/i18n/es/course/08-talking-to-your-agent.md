@@ -1,5 +1,5 @@
 ---
-title: "Lección 8: Hablar con tu agente"
+title: "Hablar con tu agente"
 icon: phosphor-duotone:chat-circle-text
 summary: chat, invoke y serve - tres formas de ejecutar exactamente el mismo agente construido.
 description: chat, invoke y serve - tres formas de ejecutar exactamente el mismo agente construido.
@@ -8,7 +8,7 @@ tags: [course, cli]
 
 # Hablar con tu agente
 
-Una vez construido tu proyecto ([Lección 7](07-building-your-agent.md)), hay tres formas de
+Una vez construido tu proyecto ([Construir tu agente](07-building-your-agent.md)), hay tres formas de
 ejecutarlo - todas cargan exactamente el mismo `GeneratedAgentFactory.bx` y construyen
 exactamente el mismo árbol de agentes, así que nunca divergen entre sí.
 
@@ -56,7 +56,7 @@ miniserver real y conduce el chat sobre HTTP contra la API de agente de tu
 proyecto, y `--connect` hace lo mismo contra un servidor que ya tengas en marcha. Ambos
 modos HTTP hacen **streaming** de la respuesta token a token y arrastran la conversación entre
 turnos. Si el servidor tiene su API en otro sitio (`agentApi.path`), añade `--api-path=/donde`.
-Si pide un token ([Lección 13](13-exposing-http-and-mcp.md)), pasa `--token=<token>` o define `BXAGENTS_TOKEN`.
+Si pide un token ([Exponer tu agente por HTTP y MCP](13-exposing-http-and-mcp.md)), pasa `--token=<token>` o define `BXAGENTS_TOKEN`.
 
 ## `invoke` - un único turno no interactivo
 
@@ -74,7 +74,7 @@ internamente, solo que sin la pantalla de chat - sin ningún requisito previo de
 Añade `--server` para lanzar en su lugar un proceso `boxlang-miniserver` real y desechable y
 enviar el mensaje como una petición HTTP genuina a la API de agente de tu proyecto -
 no hace falta ninguna entrada en `gateways/` (esas llegan en la
-[Lección 13](13-exposing-http-and-mcp.md)). Como `serve`, necesita `boxlang-miniserver` en el `PATH`.
+[Exponer tu agente por HTTP y MCP](13-exposing-http-and-mcp.md)). Como `serve`, necesita `boxlang-miniserver` en el `PATH`.
 
 ## `serve` - un servidor HTTP real
 
@@ -83,7 +83,7 @@ bxAgents serve --port=8080
 ```
 
 Requiere un `build` previo y requiere `boxlang-miniserver` en el `PATH` (consulta la
-[Lección 3](03-installing-bxagents.md)). Lanza un proceso de servidor real que sirve
+[Instalar BxAgents](03-installing-bxagents.md)). Lanza un proceso de servidor real que sirve
 `.build/public` (el código de `.build/app` no es alcanzable desde la web), arrancado en
 `.build` con su propio directorio BoxLang `.build/runtime`, de modo que la caché de clases
 compiladas de cada proyecto queda aislada y los módulos BoxLang instalados en tu máquina no
@@ -93,7 +93,7 @@ se cargan en él.
 
 Todas estas formas necesitan un modelo real para hablar con un proveedor real - pero todavía
 no te hace falta uno. (Más adelante, `bxAgents models test` envía a cada modelo una pregunta diminuta, así que una clave o un nombre de modelo equivocados salen a la luz antes que un chat.) Añade una sobrescritura de entorno `test` a `Agent.yml` (se cubre por completo en
-la [Lección 19](19-testing-your-agent.md)):
+[Probar tu agente](19-testing-your-agent.md)):
 
 ```yaml
 environments:
@@ -112,9 +112,9 @@ bxAgents chat
 ```
 
 Saluda al agente cuyo andamiaje creaste y para el que escribiste instrucciones en las
-[Lecciones 4-6](04-scaffolding-your-first-agent.md). Es un agente real en ejecución - lo que
+[Crear el andamiaje de tu primer agente](04-scaffolding-your-first-agent.md). Es un agente real en ejecución - lo que
 pasa es que todavía no le has dado nada que *hacer*. Eso empieza en la próxima lección.
 
 Referencia completa: [Inicio rápido](../getting-started/quick-start.md), [Referencia de la CLI](../cli-reference.md).
 
-Siguiente: [Lección 9 - Dar tools a tu agente](09-giving-your-agent-tools.md)
+Siguiente: [Dar tools a tu agente](09-giving-your-agent-tools.md)

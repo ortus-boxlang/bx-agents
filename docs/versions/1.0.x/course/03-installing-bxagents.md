@@ -1,5 +1,5 @@
 ---
-title: "Lesson 3: Installing BxAgents"
+title: "Installing BxAgents"
 icon: phosphor-duotone:package
 summary: Install BoxLang and BxAgents, and verify the bxAgents command works.
 description: Install BoxLang and BxAgents, and verify the bxAgents command works.
@@ -58,7 +58,7 @@ This course uses the short `bxAgents <verb>` form throughout.
 
 ## Optional, for later lessons
 
-- **`serve`**, **`chat --server`** and **`invoke --server`** ([Lesson 8](08-talking-to-your-agent.md))
+- **`serve`**, **`chat --server`** and **`invoke --server`** ([Talking to Your Agent](08-talking-to-your-agent.md))
   additionally need the standalone [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver)
   binary on `PATH`.
 
@@ -69,4 +69,4 @@ which environment variables it needs are not set.
 
 See [Installation](../getting-started/installation.md) for the full reference page.
 
-Next: [Lesson 4 - Scaffolding Your First Agent](04-scaffolding-your-first-agent.md)
+Next: [Scaffolding Your First Agent](04-scaffolding-your-first-agent.md)

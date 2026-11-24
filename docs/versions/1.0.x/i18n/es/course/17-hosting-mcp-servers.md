@@ -1,5 +1,5 @@
 ---
-title: "Lección 17: Alojar y consumir servidores MCP"
+title: "Alojar y consumir servidores MCP"
 icon: phosphor-duotone:link-simple
 summary: MCP en ambos sentidos - consume servidores remotos desde Agent.yml, aloja los tuyos bajo mcp/.
 description: MCP en ambos sentidos - consume servidores remotos desde Agent.yml, aloja los tuyos bajo mcp/.
@@ -11,7 +11,7 @@ tags: [course, conventions, mcp]
 El Model Context Protocol (MCP) funciona en dos direcciones dentro de un proyecto BxAgents, y
 nada las une - un agente que consume servidores remotos no tiene por qué alojar ninguno, y un
 servidor alojado solo es accesible si una entrada de `gateways/` lo expone (consulta la
-[Lección 13](13-exposing-http-and-mcp.md)).
+[Exponer tu agente por HTTP y MCP](13-exposing-http-and-mcp.md)).
 
 ```mermaid
 flowchart LR
@@ -53,7 +53,7 @@ error de build. Los subagentes pueden declarar sus propios `mcpServers` de forma
 ## Alojar un servidor local
 
 Cada archivo `mcp/*.bx` es un servidor MCP local que aloja tu proyecto, y expone un subconjunto
-con nombre de tus `tools/` (de la [Lección 9](09-giving-your-agent-tools.md)) como tools MCP:
+con nombre de tus `tools/` (de [Dar tools a tu agente](09-giving-your-agent-tools.md)) como tools MCP:
 
 ```javascript
 // mcp/localServer.bx
@@ -76,7 +76,7 @@ copia literalmente, y se emite una sentencia de registro al arrancar.
 ## Exponerlo por HTTP
 
 Un servidor local no es accesible por sí solo - combínalo con la entrada de exposición de
-`gateways/` que viste en la [Lección 13](13-exposing-http-and-mcp.md):
+`gateways/` que viste en [Exponer tu agente por HTTP y MCP](13-exposing-http-and-mcp.md):
 
 ```javascript
 // gateways/expose-mcp.bx
@@ -93,7 +93,7 @@ class {
 
 ## Pruébalo
 
-Aloja la tool `GetTime` que escribiste en la [Lección 9](09-giving-your-agent-tools.md) como
+Aloja la tool `GetTime` que escribiste en [Dar tools a tu agente](09-giving-your-agent-tools.md) como
 su propio servidor MCP, exponla en `/mcp/tools`, construye y ejecuta `serve` - ahora es
 accesible para cualquier cliente MCP externo, con independencia de la interfaz de chat de tu
 propio agente.
@@ -101,4 +101,4 @@ propio agente.
 `bxAgents add mcp server` escribe por ti el archivo de `mcp/` y la entrada de `gateways/`. Referencia
 completa: [mcp/](../conventions/mcp.md).
 
-Siguiente: [Lección 18 - Interceptores y dependencias de módulos](18-interceptors-and-modules.md)
+Siguiente: [Interceptores y dependencias de módulos](18-interceptors-and-modules.md)

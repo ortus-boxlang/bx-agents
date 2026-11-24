@@ -1,5 +1,5 @@
 ---
-title: "Lesson 16: Scheduling Background Work"
+title: "Scheduling Background Work"
 icon: phosphor-duotone:clock-countdown
 summary: schedules/*.bx - BoxLang schedulers, one file each, saying when with the task's own methods.
 description: schedules/*.bx - BoxLang schedulers, one file each, saying when with the task's own methods.
@@ -36,7 +36,7 @@ BoxLang's task methods say when: `.every( 15, "minutes" )`, `.everyDayAt( "09:00
 
 `run( ... )` sends a message to the **default agent**, the root agent your
 `Agent.yml` defines. `agent( "TheAgentName" )` gets any other agent in the tree by the
-`name` its definition declares (see [Lesson 11](11-composing-subagents.md)):
+`name` its definition declares (see [Composing Subagents](11-composing-subagents.md)):
 
 ```javascript
 task( "weekly-digest" )
@@ -74,4 +74,4 @@ runs and the agent. A cron expression you pass to `--when` is written as a six-f
 
 Full reference: [schedules/](../conventions/schedules.md).
 
-Next: [Lesson 17 - Hosting and Consuming MCP Servers](17-hosting-mcp-servers.md)
+Next: [Hosting and Consuming MCP Servers](17-hosting-mcp-servers.md)

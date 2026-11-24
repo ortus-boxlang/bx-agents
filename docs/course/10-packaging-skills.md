@@ -1,5 +1,5 @@
 ---
-title: "Lesson 10: Packaging Skills"
+title: "Packaging Skills"
 icon: phosphor-duotone:graduation-cap
 summary: Claude Agent Skills - one subfolder per SKILL.md, loaded on demand.
 description: Claude Agent Skills - one subfolder per SKILL.md, loaded on demand.
@@ -98,4 +98,4 @@ Rebuild and try asking your agent to review a snippet of code. (Or scaffold the 
 
 Full reference: [skills/](../conventions/skills.md).
 
-Next: [Lesson 11 - Composing Subagents](11-composing-subagents.md)
+Next: [Composing Subagents](11-composing-subagents.md)

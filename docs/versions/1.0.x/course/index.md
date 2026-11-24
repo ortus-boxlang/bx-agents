@@ -35,4 +35,4 @@ An agent with its own tools and a packaged skill, reachable from a full-screen t
 a browser chat UI, an HTTP API and chat platforms, with a test suite that runs with no API key, and a packaged `.bxa`
 ready to deploy.
 
-Ready? Start with [Lesson 1: Welcome to BxAgents](01-welcome.md).
+Ready? Start with [Welcome to BxAgents](01-welcome.md).

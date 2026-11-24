@@ -1,5 +1,5 @@
 ---
-title: "Lesson 5: The Agent Definition - Agent.yml"
+title: "The Agent Definition - Agent.yml"
 icon: phosphor-duotone:robot
 summary: The one required file - a plain YAML file that says what your agent is.
 description: The one required file - a plain YAML file that says what your agent is.
@@ -23,8 +23,8 @@ instructions: |
 ```
 
 That is a complete agent. `bxAgents new` scaffolds this shape for you (see
-[Lesson 4](04-scaffolding-your-first-agent.md)), with the system prompt in an
-`instructions.md` beside it (see [Lesson 6](06-instructions-and-system-prompt.md)).
+[Scaffolding Your First Agent](04-scaffolding-your-first-agent.md)), with the system prompt in an
+`instructions.md` beside it (see [instructions.md and the System Prompt](06-instructions-and-system-prompt.md)).
 
 !!! info
     A folder holds **one** agent definition. An `Agent.yml` together with an
@@ -39,13 +39,13 @@ That is a complete agent. `bxAgents new` scaffolds this shape for you (see
 | `model` | A `provider/model` slug (see below). |
 | `description` | Optional. |
 | `instructions` | Inline system prompt. An `instructions.md` beside the file wins when both exist. |
-| `tools` | Module tools this agent gets, as `item@module` or `*@module` (see [Lesson 9](09-giving-your-agent-tools.md)). |
+| `tools` | Module tools this agent gets, as `item@module` or `*@module` (see [Giving Your Agent Tools](09-giving-your-agent-tools.md)). |
 | `toolOptions` | Options for a module's tools, keyed by module name. |
-| `subAgents` | Names of sibling folders under `subagents/` (see [Lesson 11](11-composing-subagents.md)). |
-| `mcpServers` | Remote MCP servers the agent can call (see [Lesson 17](17-hosting-mcp-servers.md)). |
+| `subAgents` | Names of sibling folders under `subagents/` (see [Composing Subagents](11-composing-subagents.md)). |
+| `mcpServers` | Remote MCP servers the agent can call (see [Hosting and Consuming MCP Servers](17-hosting-mcp-servers.md)). |
 | `security`, `memory`, `checkpointer` | Guardrails, conversation memory and human-in-the-loop state. |
-| `gatewaySession` | How chat gateways queue messages, which slash commands they answer and whether they read attachments (see [Lesson 14](14-connecting-chat-platforms.md)). |
-| `agentApi` | The always-on agent API: who may call it (tokens, allowed addresses, rate limit) and where it is served (see [Lesson 13](13-exposing-http-and-mcp.md)). |
+| `gatewaySession` | How chat gateways queue messages, which slash commands they answer and whether they read attachments (see [Connecting Chat Platforms](14-connecting-chat-platforms.md)). |
+| `agentApi` | The always-on agent API: who may call it (tokens, allowed addresses, rate limit) and where it is served (see [Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md)). |
 | `environments` | Per-environment overrides (see below). |
 | `provider`, `params`, `options`, `providers`, `profiles`, `notes` (short notes the agent keeps), `usage` (record token counts for `bxAgents stats`), `tui` (the look of the terminal chat), `extensions`, and more | Further settings, all listed in the [Agent.yml](../conventions/agent-yaml.md) reference. |
 
@@ -69,7 +69,7 @@ separate arguments. BxAgents splits the slug **on the first `/` only**:
 | `mock/mock-model` | `mock` | `mock-model` |
 
 `mock` is a real provider that never makes a network call - useful for tests (see
-[Lesson 19](19-testing-your-agent.md)) and for following this course with no API key
+[Testing Your Agent](19-testing-your-agent.md)) and for following this course with no API key
 at all.
 
 ## Adding settings
@@ -102,7 +102,7 @@ environments:
 The active environment resolves, highest wins: `--environment` CLI flag >
 `BX_AGENTS_ENV` env var > `"development"` default. `bxAgents build --environment=production`
 picks it up. Only the active block is applied, on top of the top-level keys. You'll use
-this exact mechanism for the `mock` provider in your tests ([Lesson 19](19-testing-your-agent.md)),
+this exact mechanism for the `mock` provider in your tests ([Testing Your Agent](19-testing-your-agent.md)),
 which is why `bxAgents new` already gives you a `test` block.
 
 Full reference: [Agent.yml](../conventions/agent-yaml.md).
@@ -135,4 +135,4 @@ Scaffold one with `bxAgents new --class`, or start in YAML and switch later: cre
 `Agent.bx`, move the settings across, and delete the `Agent.yml`. Full reference:
 [Agent.bx](../conventions/agent-bx.md).
 
-Next: [Lesson 6 - instructions.md and the System Prompt](06-instructions-and-system-prompt.md)
+Next: [instructions.md and the System Prompt](06-instructions-and-system-prompt.md)

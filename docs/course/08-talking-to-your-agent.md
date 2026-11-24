@@ -1,5 +1,5 @@
 ---
-title: "Lesson 8: Talking to Your Agent"
+title: "Talking to Your Agent"
 icon: phosphor-duotone:chat-circle-text
 summary: chat, invoke and serve - three ways to run the exact same built agent.
 description: chat, invoke and serve - three ways to run the exact same built agent.
@@ -8,7 +8,7 @@ tags: [course, cli]
 
 # Talking to Your Agent
 
-Once you've built your project ([Lesson 7](07-building-your-agent.md)), there are
+Once you've built your project ([Building Your Agent](07-building-your-agent.md)), there are
 three ways to run it - all load the exact same `GeneratedAgentFactory.bx` and build
 the exact same agent tree, so they never diverge from each other.
 
@@ -55,7 +55,7 @@ chat over HTTP against your project's agent API, and `--connect` does the
 same against a server you already have running. Both HTTP modes **stream** the reply
 token by token and carry the conversation across turns. If the server keeps its API
 somewhere else (`agentApi.path`), add `--api-path=/where`. If it wants a token
-([Lesson 13](13-exposing-http-and-mcp.md)), pass `--token=<token>` or set `BXAGENTS_TOKEN`.
+([Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md)), pass `--token=<token>` or set `BXAGENTS_TOKEN`.
 
 ## `invoke` - one non-interactive turn
 
@@ -72,7 +72,7 @@ prints `{"response": "..."}` instead of plain text.
 
 Add `--server` to instead launch a real, throwaway `boxlang-miniserver` process and
 send the message as a genuine HTTP request to your project's agent API -
-no `gateways/` entry needed (those come in [Lesson 13](13-exposing-http-and-mcp.md)). Like
+no `gateways/` entry needed (those come in [Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md)). Like
 `serve`, it needs `boxlang-miniserver` on `PATH`.
 
 ## `serve` - a real HTTP server
@@ -82,7 +82,7 @@ bxAgents serve --port=8080
 ```
 
 Requires a prior `build` and requires `boxlang-miniserver` on `PATH` (see
-[Lesson 3](03-installing-bxagents.md)). Launches a real server process serving
+[Installing BxAgents](03-installing-bxagents.md)). Launches a real server process serving
 `.build/public` (the code in `.build/app` is not reachable from the web), started in
 `.build` with its own `.build/runtime` BoxLang home, so each project's compiled-class
 cache stays isolated and the BoxLang modules installed on your machine are not loaded
@@ -93,7 +93,7 @@ into it.
 Every one of these needs a real model to talk to a real provider - but you don't need
 one yet. (`bxAgents models test` later sends each model one tiny question, so a wrong key or
 model name shows before a chat does.) Add a `test` environment override to `Agent.yml` (covered fully in
-[Lesson 19](19-testing-your-agent.md)):
+[Testing Your Agent](19-testing-your-agent.md)):
 
 ```yaml
 environments:
@@ -112,9 +112,9 @@ bxAgents chat
 ```
 
 Say hello to the agent you scaffolded and wrote instructions for in
-[Lessons 4-6](04-scaffolding-your-first-agent.md). It's a real, running agent - you
+[Scaffolding Your First Agent](04-scaffolding-your-first-agent.md). It's a real, running agent - you
 just haven't given it anything to *do* yet. That starts next lesson.
 
 Full reference: [Quick Start](../getting-started/quick-start.md), [CLI Reference](../cli-reference.md).
 
-Next: [Lesson 9 - Giving Your Agent Tools](09-giving-your-agent-tools.md)
+Next: [Giving Your Agent Tools](09-giving-your-agent-tools.md)

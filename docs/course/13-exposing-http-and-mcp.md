@@ -1,5 +1,5 @@
 ---
-title: "Lesson 13: Exposing Your Agent over HTTP and MCP"
+title: "Exposing Your Agent over HTTP and MCP"
 icon: phosphor-duotone:plugs-connected
 summary: gateways/ entries with an exposes key turn your agent into a real HTTP route.
 description: gateways/ entries with an exposes key turn your agent into a real HTTP route.
@@ -17,7 +17,7 @@ other kind, channel adapters that connect to chat platforms.
 flowchart TD
     F["a file under gateways/"] --> Q{"does configure() return<br/>an 'exposes' key?"}
     Q -->|"yes"| E["EXPOSURE<br/>a route into your agent"]
-    Q -->|"no - it has 'type' instead"| C["CHANNEL ADAPTER<br/>Lesson 14"]
+    Q -->|"no - it has 'type' instead"| C["CHANNEL ADAPTER<br/>Connecting Chat Platforms"]
 
     style E fill:#d4edda,stroke:#155724
 ```
@@ -56,7 +56,7 @@ class {
 }
 ```
 
-You'll write that `mcp/*.bx` entry in [Lesson 17](17-hosting-mcp-servers.md).
+You'll write that `mcp/*.bx` entry in [Hosting and Consuming MCP Servers](17-hosting-mcp-servers.md).
 
 ## Exposing the web chat UI
 
@@ -72,7 +72,7 @@ class {
 }
 ```
 
-This one is big enough to earn its own lesson - see [Lesson 15](15-the-generated-web-chat-ui.md).
+This one is big enough to earn its own lesson - see [The Generated Web Chat UI](15-the-generated-web-chat-ui.md).
 
 ## The agent API that is always there
 
@@ -132,9 +132,9 @@ curl -X POST http://localhost:8080/api/chat/invoke \
 ```
 
 (Or skip `serve` entirely and reach for `bxAgents invoke --message=Hello --server`
-from [Lesson 8](08-talking-to-your-agent.md), which exercises this exact route without
+from [Talking to Your Agent](08-talking-to-your-agent.md), which exercises this exact route without
 you having to manage the server process yourself.)
 
 Full reference: [gateways/](../conventions/gateways/index.md).
 
-Next: [Lesson 14 - Connecting Chat Platforms](14-connecting-chat-platforms.md)
+Next: [Connecting Chat Platforms](14-connecting-chat-platforms.md)

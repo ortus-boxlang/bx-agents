@@ -1,5 +1,5 @@
 ---
-title: "Lesson 9: Giving Your Agent Tools"
+title: "Giving Your Agent Tools"
 icon: phosphor-duotone:wrench
 summary: Any @AITool-annotated function under tools/ becomes a callable tool.
 description: Any @AITool-annotated function under tools/ becomes a callable tool.
@@ -91,4 +91,4 @@ bxAgents chat
 
 Full reference: [tools/](../conventions/tools.md).
 
-Next: [Lesson 10 - Packaging Skills](10-packaging-skills.md)
+Next: [Packaging Skills](10-packaging-skills.md)

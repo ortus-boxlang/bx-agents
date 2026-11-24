@@ -1,5 +1,5 @@
 ---
-title: "Lesson 6: instructions.md and the System Prompt"
+title: "instructions.md and the System Prompt"
 icon: phosphor-duotone:note-pencil
 summary: The optional file that becomes your agent's system prompt.
 description: The optional file that becomes your agent's system prompt.
@@ -47,7 +47,7 @@ instructions: |
 Do this for a short prompt, or when you'd rather keep everything about the agent in one
 file. If both exist, `instructions.md` wins; if neither exists, the build fails and says
 so. A prompt that must be generated or templated in code belongs in the advanced
-class-based `Agent.bx` (see the end of [Lesson 5](05-agent-bx.md)).
+class-based `Agent.bx` (see the end of [The Agent Definition - Agent.yml](05-agent-bx.md)).
 
 ## Which one should you pick?
 
@@ -60,9 +60,9 @@ etc.).
 
 ## Try it
 
-Open the `instructions.md` that [Lesson 4](04-scaffolding-your-first-agent.md)'s
+Open the `instructions.md` that [Scaffolding Your First Agent](04-scaffolding-your-first-agent.md)'s
 `bxAgents new` created and write a real system prompt for whatever kind of agent you
 want to build in this course - a support bot, a code reviewer, anything. You'll build
 and run it in the next two lessons.
 
-Next: [Lesson 7 - Building Your Agent](07-building-your-agent.md)
+Next: [Building Your Agent](07-building-your-agent.md)

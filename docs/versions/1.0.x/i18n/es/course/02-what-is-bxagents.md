@@ -1,5 +1,5 @@
 ---
-title: "Lección 2: ¿Qué es BxAgents?"
+title: "¿Qué es BxAgents?"
 icon: phosphor-duotone:lightbulb
 summary: Por qué convenciones en lugar de configuración, y por qué el ensamblado ocurre una sola vez en tiempo de build.
 description: Por qué convenciones en lugar de configuración, y por qué el ensamblado ocurre una sola vez en tiempo de build.
@@ -41,12 +41,12 @@ necesitas, no por adelantado.
 
 `Agent.yml` son ajustes en texto plano - un nombre, un modelo y cualquier extra opcional -
 y el build lo convierte en un agente real de BX AI. La mayoría de los agentes no necesitan
-código. Escribirás el tuyo en la [Lección 5](05-agent-bx.md).
+código. Escribirás el tuyo en [La definición del agente - Agent.yml](05-agent-bx.md).
 
 Cuando la propia definición necesita código (hooks, instrucciones dinámicas, tools
 registradas por código), existe una opción avanzada: un `Agent.bx` basado en clase que
-extiende el propio `AiAgent` de BX AI, y que el build **instancia** tal cual. La Lección 5
-termina con cuándo recurrir a ella.
+extiende el propio `AiAgent` de BX AI, y que el build **instancia** tal cual. El final de [La definición del agente](05-agent-bx.md)
+explica cuándo recurrir a ella.
 
 ## Qué produce realmente `build`
 
@@ -91,11 +91,11 @@ your-agent/
 
 Reconstruir un proyecto **sin cambios** produce una salida idéntica byte a byte, hasta un
 manifiesto sellado con un hash que registra exactamente qué entró en el build (más sobre
-esto en la [Lección 20](20-packaging-deploying-and-wrapping-up.md)). Ese es justamente el
+esto en [Empaquetar, desplegar y cerrar](20-packaging-deploying-and-wrapping-up.md)). Ese es justamente el
 sentido de pagar el coste del ensamblado una sola vez, en tiempo de build, en vez de diferir
 parte de él al manejo de peticiones.
 
 Consulta la [portada de BxAgents](../index.md) y [El pipeline de build](../build-pipeline.md)
 para más detalle cuando quieras.
 
-Siguiente: [Lección 3 - Instalar BxAgents](03-installing-bxagents.md)
+Siguiente: [Instalar BxAgents](03-installing-bxagents.md)

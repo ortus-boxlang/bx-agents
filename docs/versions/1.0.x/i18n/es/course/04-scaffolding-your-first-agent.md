@@ -1,5 +1,5 @@
 ---
-title: "Lección 4: Crear el andamiaje de tu primer agente"
+title: "Crear el andamiaje de tu primer agente"
 icon: phosphor-duotone:sparkle
 summary: Ejecuta bxAgents new y mira exactamente qué te crea.
 description: Ejecuta bxAgents new y mira exactamente qué te crea.
@@ -8,7 +8,7 @@ tags: [course, getting-started]
 
 # Crear el andamiaje de tu primer agente
 
-Con BoxLang y BxAgents instalados ([Lección 3](03-installing-bxagents.md)),
+Con BoxLang y BxAgents instalados ([Instalar BxAgents](03-installing-bxagents.md)),
 crea el andamiaje de tu primer proyecto:
 
 ```bash
@@ -16,7 +16,7 @@ bxAgents new my-agent --model=openai/gpt-5
 ```
 
 `--model` es un slug `provider/model` (verás exactamente cómo se
-interpreta en la [Lección 5](05-agent-bx.md)). Pásalo para una ejecución apta para scripts: sin
+interpreta en [La definición del agente - Agent.yml](05-agent-bx.md)). Pásalo para una ejecución apta para scripts: sin
 `--model`, en una terminal, `new` te hace preguntas (consulta el [asistente de `new`](../guides/new-wizard.md)).
 `--name` y `--description` son opcionales;
 `--name` toma por defecto el nombre del propio directorio de destino. `new` se niega a
@@ -84,14 +84,14 @@ environments:
 ```
 
 Esa es toda la definición del agente - más sobre cada clave en la
-[Lección 5](05-agent-bx.md). Si necesitas código en la definición, pasa `--class` y `new`
-crea en su lugar un `Agent.bx` basado en clase (también se explica al final de la
-Lección 5).
+[La definición del agente - Agent.yml](05-agent-bx.md). Si necesitas código en la definición, pasa `--class` y `new`
+crea en su lugar un `Agent.bx` basado en clase (también se explica al final de
+[La definición del agente](05-agent-bx.md)).
 
 ## La suite de pruebas se prepara sola
 
 `new` también ejecuta `box install` en la raíz del proyecto creado (su `box.json` lista TestBox), de modo que
-`bxAgents test` ([Lección 19](19-testing-your-agent.md)) funciona de inmediato sin ningún
+`bxAgents test` ([Probar tu agente](19-testing-your-agent.md)) funciona de inmediato sin ningún
 paso aparte. Esto es de mejor esfuerzo - si `box` no está en el `PATH` o la instalación
 falla, `new` sigue teniendo éxito y simplemente te dice que lo ejecutes tú. Pasa
 `--skipInstall` para desactivarlo por completo.
@@ -109,4 +109,4 @@ archivos a mano: `bxAgents add tool`, `add skill`, `add subagent`, `add gateway`
 los demás tipos de `add` hacen unas cuantas preguntas y escriben los archivos por ti (`--dry-run`
 los muestra antes). Las cuatro lecciones siguientes recorren lo que hace falta de verdad para ejecutarlo.
 
-Siguiente: [Lección 5 - La definición del agente: Agent.yml](05-agent-bx.md)
+Siguiente: [La definición del agente: Agent.yml](05-agent-bx.md)

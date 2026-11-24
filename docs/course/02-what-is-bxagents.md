@@ -1,5 +1,5 @@
 ---
-title: "Lesson 2: What Is BxAgents?"
+title: "What Is BxAgents?"
 icon: phosphor-duotone:lightbulb
 summary: Why conventions over configuration, and why assembly happens once at build time.
 description: Why conventions over configuration, and why assembly happens once at build time.
@@ -42,11 +42,11 @@ actually need them, not up front.
 
 `Agent.yml` is plain settings - a name, a model, and any optional extras - and the
 build turns it into a real BX AI agent. No code is needed for most agents. You'll write
-your first one in [Lesson 5](05-agent-bx.md).
+your first one in [The Agent Definition - Agent.yml](05-agent-bx.md).
 
 When the definition itself needs code (hooks, dynamic instructions, tools registered in
 code), there is an advanced option: a class-based `Agent.bx` that extends BX AI's own
-`AiAgent`, which the build **instantiates** as-is. Lesson 5 ends with when to reach for
+`AiAgent`, which the build **instantiates** as-is. [The Agent Definition](05-agent-bx.md) ends with when to reach for
 it.
 
 ## What `build` actually produces
@@ -93,11 +93,11 @@ your-agent/
 
 Rebuilding an **unchanged** project produces byte-identical output, down to a hash-
 stamped manifest recording exactly what went into the build (more on that in
-[Lesson 20](20-packaging-deploying-and-wrapping-up.md)). That's the whole point of
+[Packaging, Deploying, and Wrapping Up](20-packaging-deploying-and-wrapping-up.md)). That's the whole point of
 paying the assembly cost once, at build time, rather than deferring any of it into
 request handling.
 
 See [BxAgents home](../index.md) and [The Build Pipeline](../build-pipeline.md) for
 more detail whenever you want it.
 
-Next: [Lesson 3 - Installing BxAgents](03-installing-bxagents.md)
+Next: [Installing BxAgents](03-installing-bxagents.md)

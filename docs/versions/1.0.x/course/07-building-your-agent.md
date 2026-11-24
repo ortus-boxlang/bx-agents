@@ -1,5 +1,5 @@
 ---
-title: "Lesson 7: Building Your Agent"
+title: "Building Your Agent"
 icon: phosphor-duotone:hammer
 summary: bxAgents build and the five-phase pipeline that turns your project into an app.
 description: bxAgents build and the five-phase pipeline that turns your project into an app.
@@ -82,4 +82,4 @@ only folder a server serves), and a manifest describing exactly what went into i
 
 Full reference: [The Build Pipeline](../build-pipeline.md).
 
-Next: [Lesson 8 - Talking to Your Agent](08-talking-to-your-agent.md)
+Next: [Talking to Your Agent](08-talking-to-your-agent.md)

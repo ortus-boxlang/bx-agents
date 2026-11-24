@@ -1,5 +1,5 @@
 ---
-title: "Lesson 17: Hosting and Consuming MCP Servers"
+title: "Hosting and Consuming MCP Servers"
 icon: phosphor-duotone:link-simple
 summary: MCP in both directions - consume remote servers from Agent.yml, host your own under mcp/.
 description: MCP in both directions - consume remote servers from Agent.yml, host your own under mcp/.
@@ -11,7 +11,7 @@ tags: [course, conventions, mcp]
 Model Context Protocol (MCP) works in two directions in a BxAgents project, and
 nothing links them - an agent consuming remote servers need not host one, and a hosted
 server is only reachable if a `gateways/` entry exposes it (see
-[Lesson 13](13-exposing-http-and-mcp.md)).
+[Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md)).
 
 ```mermaid
 flowchart LR
@@ -53,7 +53,7 @@ declare their own `mcpServers` independently.
 ## Hosting a local server
 
 Each `mcp/*.bx` file is a local MCP server your project hosts, exposing a named subset
-of your `tools/` (from [Lesson 9](09-giving-your-agent-tools.md)) as MCP tools:
+of your `tools/` (from [Giving Your Agent Tools](09-giving-your-agent-tools.md)) as MCP tools:
 
 ```javascript
 // mcp/localServer.bx
@@ -76,7 +76,7 @@ registration statement is emitted at startup.
 ## Exposing it over HTTP
 
 A local server isn't reachable on its own - pair it with the `gateways/` exposure
-entry you saw in [Lesson 13](13-exposing-http-and-mcp.md):
+entry you saw in [Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md):
 
 ```javascript
 // gateways/expose-mcp.bx
@@ -93,11 +93,11 @@ class {
 
 ## Try it
 
-Host the `GetTime` tool you wrote in [Lesson 9](09-giving-your-agent-tools.md) as its
+Host the `GetTime` tool you wrote in [Giving Your Agent Tools](09-giving-your-agent-tools.md) as its
 own MCP server (`tools: [ "currentTime" ]`, the tool's function name), expose it at `/mcp/tools`, build, and `serve` - it's now reachable by
 any outside MCP client, independent of your agent's own chat interface.
 
 `bxAgents add mcp server` writes the `mcp/` file and the `gateways/` entry for you. Full
 reference: [mcp/](../conventions/mcp.md).
 
-Next: [Lesson 18 - Interceptors and Module Dependencies](18-interceptors-and-modules.md)
+Next: [Interceptors and Module Dependencies](18-interceptors-and-modules.md)

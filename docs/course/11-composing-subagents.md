@@ -1,5 +1,5 @@
 ---
-title: "Lesson 11: Composing Subagents"
+title: "Composing Subagents"
 icon: phosphor-duotone:tree-structure
 summary: Nested agents, each an ordinary BxAgents project of its own, wired as callable tools.
 description: Nested agents, each an ordinary BxAgents project of its own, wired as callable tools.
@@ -86,4 +86,4 @@ to the researcher subagent - it's callable exactly like any other tool.
 
 Full reference: [subagents/](../conventions/subagents.md).
 
-Next: [Lesson 12 - Models and Profiles](12-named-model-configs.md)
+Next: [Models and Profiles](12-named-model-configs.md)

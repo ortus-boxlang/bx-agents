@@ -1,5 +1,5 @@
 ---
-title: "Lesson 19: Testing Your Agent"
+title: "Testing Your Agent"
 icon: phosphor-duotone:test-tube
 summary: A ready-to-run TestBox suite, mockResponses(), and matchers built for agent behavior.
 description: A ready-to-run TestBox suite, mockResponses(), and matchers built for agent behavior.
@@ -8,7 +8,7 @@ tags: [course, testing]
 
 # Testing Your Agent
 
-Every project scaffolded via `bxAgents new` ([Lesson 4](04-scaffolding-your-first-agent.md))
+Every project scaffolded via `bxAgents new` ([Scaffolding Your First Agent](04-scaffolding-your-first-agent.md))
 already has a root `box.json` (TestBox as a development dependency) and a ready-to-run
 `tests/` folder with `tests/specs/AgentSpec.bx`, a spec that passes out of the box.
 
@@ -59,7 +59,7 @@ environments:
     model: mock/mock-model
 ```
 
-This is the same `mock` provider you met in [Lesson 5](05-agent-bx.md) - no network
+This is the same `mock` provider you met in [The Agent Definition - Agent.yml](05-agent-bx.md) - no network
 call, no API key, deterministic CI.
 
 ## `mockResponses()`
@@ -78,7 +78,7 @@ var response = agent.run( "What's the weather in Miami?" )
 
 A plain string scripts a final reply. A `{ toolCalls: [...] }` struct scripts a
 tool-call turn - the named tool **actually executes for real** against your real
-`tools/` implementation (from [Lesson 9](09-giving-your-agent-tools.md)); only the
+`tools/` implementation (from [Giving Your Agent Tools](09-giving-your-agent-tools.md)); only the
 LLM's own reply is scripted, never the tool's behavior.
 
 ## Matchers built for agent behavior
@@ -97,7 +97,7 @@ expect( agent ).notToHaveCalledTool( "getStockPrice" )
 ## Try it
 
 Write a spec that scripts a tool call for the `GetTime` tool from
-[Lesson 9](09-giving-your-agent-tools.md), and assert `toHaveCalledTool( "currentTime" )`.
+[Giving Your Agent Tools](09-giving-your-agent-tools.md), and assert `toHaveCalledTool( "currentTime" )`.
 
 ```bash
 bxAgents test
@@ -108,4 +108,4 @@ failure - suitable as a CI gate before you deploy in the next lesson.
 
 Full reference: [tests/](../conventions/testing.md).
 
-Next: [Lesson 20 - Packaging, Deploying, and Wrapping Up](20-packaging-deploying-and-wrapping-up.md)
+Next: [Packaging, Deploying, and Wrapping Up](20-packaging-deploying-and-wrapping-up.md)

@@ -1,5 +1,5 @@
 ---
-title: "Lesson 1: Welcome to BxAgents"
+title: "Welcome to BxAgents"
 icon: phosphor-duotone:hand-waving
 summary: What this course covers, what you'll build, and how each lesson is organized.
 description: What this course covers, what you'll build, and how each lesson is organized.
@@ -62,4 +62,4 @@ Every lesson links back to the full [Conventions](../conventions/agent-yaml.md) 
 for anything this course only summarizes - the course is the guided path, the
 Conventions section is the exhaustive reference you'll come back to later.
 
-Next: [Lesson 2 - What Is BxAgents?](02-what-is-bxagents.md)
+Next: [What Is BxAgents?](02-what-is-bxagents.md)

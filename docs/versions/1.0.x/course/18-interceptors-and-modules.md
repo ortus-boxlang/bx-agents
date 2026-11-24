@@ -1,5 +1,5 @@
 ---
-title: "Lesson 18: Interceptors and Module Dependencies"
+title: "Interceptors and Module Dependencies"
 icon: phosphor-duotone:funnel
 summary: ColdBox lifecycle hooks scoped by @scope, and BoxLang module dependencies under modules/.
 description: ColdBox lifecycle hooks scoped by @scope, and BoxLang module dependencies under modules/.
@@ -41,7 +41,7 @@ choice, since `runtime` scope has effects beyond one app. An `@scope` value that
 `agent` or `runtime` fails the build with a clear error.
 
 You've already seen a **generated** interceptor without writing one yourself - when you list
-`users` on the web chat ([Lesson 15](15-the-generated-web-chat-ui.md)), its sign-in gate is
+`users` on the web chat ([The Generated Web Chat UI](15-the-generated-web-chat-ui.md)), its sign-in gate is
 registered exactly this way, just written by BxAgents instead of by you.
 
 ## `extensions/` - add to the chat and the served agent
@@ -100,7 +100,7 @@ A module folder may include a `module.json` with a `dependsOn` array naming othe
 This is BxAgents' own dependency-declaration convention for validation purposes - it's
 independent of BoxLang's own module-loading mechanism, and today `build` validates and
 records these folders in the manifest without loading them into the generated app. **Circular dependencies** are
-rejected the same way subagent cycles are (see [Lesson 11](11-composing-subagents.md)):
+rejected the same way subagent cycles are (see [Composing Subagents](11-composing-subagents.md)):
 full cycle path reported, no code generation until the graph is acyclic. A
 `module.json` is entirely optional - a module folder with none is assumed to have no
 declared dependencies.
@@ -114,4 +114,4 @@ logs every incoming request via `writeLog()`, rebuild, and check
 
 Full reference: [interceptors/](../conventions/interceptors.md), [modules/](../conventions/modules.md).
 
-Next: [Lesson 19 - Testing Your Agent](19-testing-your-agent.md)
+Next: [Testing Your Agent](19-testing-your-agent.md)

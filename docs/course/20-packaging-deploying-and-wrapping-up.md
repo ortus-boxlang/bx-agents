@@ -1,5 +1,5 @@
 ---
-title: "Lesson 20: Packaging, Deploying, and Wrapping Up"
+title: "Packaging, Deploying, and Wrapping Up"
 icon: phosphor-duotone:cloud-arrow-up
 summary: Package to a .bxa, ship it to a real target, and where to go from here.
 description: Package to a .bxa, ship it to a real target, and where to go from here.
@@ -85,7 +85,7 @@ You get the agent and subagent tree with each model, the tools and skills, what 
 Every `build` also writes `.build/manifest.json`, a hash-stamped record of exactly what went into the build - agent name, model,
 environment, and one entry per discovered file with a SHA-256 content hash. This is
 what makes rebuilding an unchanged project byte-identical, the idea you first met back
-in [Lesson 2](02-what-is-bxagents.md). Open it in any editor; `inspect` shows its version and file count in the `build` section.
+in [What Is BxAgents?](02-what-is-bxagents.md). Open it in any editor; `inspect` shows its version and file count in the `build` section.
 
 ## Cleaning up
 
@@ -99,7 +99,7 @@ Removes only `.build/` and `dist/` - your source conventions are never touched.
 
 A deployed agent is no longer on your own machine, so decide who may call it. The agent API is open
 by default, which is right on a laptop and wrong on the internet. Before you deploy, set `agentApi`
-in `Agent.yml` ([Lesson 13](13-exposing-http-and-mcp.md)): a shared secret in an environment
+in `Agent.yml` ([Exposing Your Agent over HTTP and MCP](13-exposing-http-and-mcp.md)): a shared secret in an environment
 variable, `tokens: true` for per-person tokens, and `allowedIPs` or `rateLimit` where they fit.
 Run `token` where the agent's database is (on the server), make one for each person or program,
 and talk to the deployment from your own terminal:
@@ -138,10 +138,10 @@ You've now used `new`, `build`, `test`, `chat`, `invoke`, `serve`, `package`, `d
 The full reference for every convention folder this course walked through.
 :::
 ::: card title="The Build Pipeline" icon="phosphor-duotone:factory" href="../build-pipeline.md"
-Exactly what `build` does, in order, in more depth than Lesson 7 covered.
+Exactly what `build` does, in order, in more depth than Building Your Agent covered.
 :::
 ::: card title="Deployment & Secrets" icon="phosphor-duotone:lock-key" href="../deployment-and-secrets.md"
-The full packaging and secrets story from Lesson 20, in depth.
+The full packaging and secrets story from this lesson, in depth.
 :::
 :::
 

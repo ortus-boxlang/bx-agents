@@ -1,5 +1,5 @@
 ---
-title: "Lesson 4: Scaffolding Your First Agent"
+title: "Scaffolding Your First Agent"
 icon: phosphor-duotone:sparkle
 summary: Run bxAgents new and see exactly what it creates for you.
 description: Run bxAgents new and see exactly what it creates for you.
@@ -8,7 +8,7 @@ tags: [course, getting-started]
 
 # Scaffolding Your First Agent
 
-With BoxLang and BxAgents installed ([Lesson 3](03-installing-bxagents.md)),
+With BoxLang and BxAgents installed ([Installing BxAgents](03-installing-bxagents.md)),
 scaffold your first project:
 
 ```bash
@@ -16,7 +16,7 @@ bxAgents new my-agent --model=openai/gpt-5
 ```
 
 `--model` is a `provider/model` slug (you'll see exactly how this gets
-parsed in [Lesson 5](05-agent-bx.md)). Pass it for a script-friendly run: without
+parsed in [The Agent Definition - Agent.yml](05-agent-bx.md)). Pass it for a script-friendly run: without
 `--model`, at a terminal, `new` asks you questions instead (see [`new` wizard](../guides/new-wizard.md)).
 `--name` and `--description` are optional;
 `--name` defaults to the target directory's own name. `new` refuses to run if the
@@ -82,14 +82,14 @@ environments:
     model: mock/mock-model
 ```
 
-That is the whole agent definition - more on each key in [Lesson 5](05-agent-bx.md).
+That is the whole agent definition - more on each key in [The Agent Definition - Agent.yml](05-agent-bx.md).
 If you need code in the definition, pass `--class` and `new` scaffolds a class-based
-`Agent.bx` instead (also covered at the end of Lesson 5).
+`Agent.bx` instead (also covered at the end of [The Agent Definition](05-agent-bx.md)).
 
 ## The test suite runs itself
 
 `new` also runs `box install` in the scaffolded project root (its `box.json` lists TestBox, installed into `lib/testbox`), so `bxAgents test`
-([Lesson 19](19-testing-your-agent.md)) works immediately with no separate step. This
+([Testing Your Agent](19-testing-your-agent.md)) works immediately with no separate step. This
 is best-effort - if `box` isn't on `PATH` or the install fails, `new` still succeeds
 and just tells you to run it yourself. Pass `--skipInstall` to opt out entirely.
 
@@ -106,4 +106,4 @@ files by hand: `bxAgents add tool`, `add skill`, `add subagent`, `add gateway`, 
 the other `add` kinds ask a few questions and write the files for you (`--dry-run` shows them
 first). The next four lessons walk through what's actually required to run it.
 
-Next: [Lesson 5 - The Agent Definition: Agent.yml](05-agent-bx.md)
+Next: [The Agent Definition: Agent.yml](05-agent-bx.md)

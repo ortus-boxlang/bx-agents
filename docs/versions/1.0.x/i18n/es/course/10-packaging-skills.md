@@ -1,5 +1,5 @@
 ---
-title: "Lección 10: Empaquetar skills"
+title: "Empaquetar skills"
 icon: phosphor-duotone:graduation-cap
 summary: Claude Agent Skills - una subcarpeta por SKILL.md, cargadas bajo demanda.
 description: Claude Agent Skills - una subcarpeta por SKILL.md, cargadas bajo demanda.
@@ -98,4 +98,4 @@ Reconstruye y prueba a pedirle a tu agente que revise un fragmento de código. (
 
 Referencia completa: [skills/](../conventions/skills.md).
 
-Siguiente: [Lección 11 - Componer subagentes](11-composing-subagents.md)
+Siguiente: [Componer subagentes](11-composing-subagents.md)
