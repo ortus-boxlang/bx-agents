@@ -1,0 +1,802 @@
+/**
+ * Checks the course in docs/course/ and replays what its lessons tell a learner to type.
+ *
+ * Two parts:
+ *
+ *  - Static checks (no processes): the manifest and the files agree, the docs/ copy and the versioned mirror are
+ *    identical, no lesson number is written into a title or a sentence, every relative link lands on a file, no
+ *    flag value with spaces is quoted in a command, the home page path and the course index say the right count.
+ *  - A replay: for each lesson, in manifest order, the fences that have a `title` are run in a fresh workspace.
+ *    A fence titled with a file path is written, a bash fence titled `Terminal N` is run, and a `text` fence titled
+ *    `You see` right after it is the output the command must print.
+ *
+ * What a lesson can say, as HTML comments on the line before a fence:
+ *
+ *   <!-- course: manual -->                       shown to learners, never run
+ *   <!-- course: append -->                       a file fence is added to the file instead of replacing it
+ *   <!-- course: expect-fail -->                  the command must exit non-zero
+ *   <!-- course: background name=fake ready="text" [ready-url=http://...] [keep] -->
+ *                                                 start the command, wait for the text or the address, go on
+ *   <!-- course: wait seconds=90 until="text" name=serve -->
+ *                                                 wait until a background process printed the text
+ *   <!-- course: java-launcher -->                the quoted-value rule does not apply to this block
+ *   <!-- course: network -->                      needs the internet; skipped unless --network is given
+ *
+ * Output is matched line by line after the ANSI escapes and trailing spaces are removed. A line that is exactly `...`
+ * matches any number of lines (also none) and `<anything>` inside a line matches any text on that line.
+ */
+class {
+
+	property name="repoRoot";
+	property name="lessonDir";
+	property name="mirrorDir";
+
+	variables.processes = {}
+	variables.cwd = ""
+	variables.out = []
+
+	/**
+	 * @param repoRoot The root of the repository
+	 */
+	function init( required string repoRoot ) {
+		variables.repoRoot = normalize( arguments.repoRoot )
+		variables.lessonDir = variables.repoRoot & "/docs/course"
+		variables.mirrorDir = variables.repoRoot & "/docs/versions/1.0.x/course"
+		return this
+	}
+
+	function normalize( required string path ) {
+		return reReplace( replace( arguments.path, "\", "/", "all" ), "/+$", "" )
+	}
+
+	// ------------------------------------------------------------------ the manifest
+
+	/**
+	 * @param file A courses.yaml
+	 * @return The lessons of the course, in order, as file paths relative to docs/ (course/01-welcome.md)
+	 */
+	array function manifest( string file = variables.repoRoot & "/docs/data/courses.yaml" ) {
+		var lessons = []
+		var inLessons = false
+		for ( var line in fileRead( arguments.file ).listToArray( char( 10 ) ) ) {
+			if ( reFind( "^\s*lessons:\s*$", line ) ) {
+				inLessons = true
+			} else if ( inLessons && reFind( "^\s*-\s+\S", line ) ) {
+				lessons.append( reReplace( trim( line ), "^-\s+", "" ) )
+			} else if ( inLessons && reFind( "^\S", line ) ) {
+				inLessons = false
+			}
+		}
+		return lessons
+	}
+
+	string function stem( required string lessonPath ) {
+		return reReplace( listLast( arguments.lessonPath, "/" ), "\.md$", "" )
+	}
+
+	array function stems() {
+		return manifest().map( ( l ) => stem( l ) )
+	}
+
+	// ------------------------------------------------------------------ reading a lesson
+
+	/**
+	 * @return { title, summary, icon, body : the text after the frontmatter }
+	 */
+	struct function readLesson( required string file ) {
+		var text = replace( fileRead( arguments.file ), char( 13 ), "", "all" )
+		var result = { title : "", summary : "", icon : "", body : text }
+		if ( left( text, 4 ) == "---" & char( 10 ) ) {
+			var end = find( char( 10 ) & "---", text, 4 )
+			if ( end ) {
+				var front = mid( text, 5, end - 4 )
+				result.body = mid( text, end + 5, len( text ) )
+				for ( var key in [ "title", "summary", "icon" ] ) {
+					var m = reFind( "(?m)^#key#:\s*(.+)$", front, 1, true )
+					if ( m.pos[ 1 ] ) {
+						result[ key ] = reReplace( mid( front, m.pos[ 2 ], m.len[ 2 ] ), "^[""']|[""']\s*$", "", "all" )
+					}
+				}
+			}
+		}
+		return result
+	}
+
+	/**
+	 * Splits a lesson into its fenced blocks.
+	 *
+	 * @return An array of { lang, title, body, directives : struct, line }
+	 */
+	array function parseBlocks( required string markdown ) {
+		var blocks = []
+		var lines = replace( arguments.markdown, char( 13 ), "", "all" ).listToArray( char( 10 ), true )
+		var i = 1
+		var pending = {}
+		while ( i <= lines.len() ) {
+			var line = lines[ i ]
+			var comment = reFind( "^\s*<!--\s*course:\s*(.*?)\s*-->\s*$", line, 1, true )
+			if ( comment.pos[ 1 ] ) {
+				structAppend( pending, parseDirective( mid( line, comment.pos[ 2 ], comment.len[ 2 ] ) ) )
+				i++
+				continue
+			}
+			var open = reFind( "^(\s*)(`{3,})(.*)$", line, 1, true )
+			if ( open.pos[ 1 ] ) {
+				var indent = len( mid( line, open.pos[ 2 ], open.len[ 2 ] ) )
+				var ticks = mid( line, open.pos[ 3 ], open.len[ 3 ] )
+				var info = trim( mid( line, open.pos[ 4 ], open.len[ 4 ] ) )
+				var body = []
+				var startLine = i
+				i++
+				while ( i <= lines.len() && !reFind( "^\s*#ticks#\s*$", lines[ i ] ) ) {
+					var content = lines[ i ]
+					if ( indent > 0 && reFind( "^\s{#indent#}", content ) ) {
+						content = mid( content, indent + 1, len( content ) )
+					}
+					body.append( content )
+					i++
+				}
+				var titleMatch = reFind( "title=""([^""]*)""", info, 1, true )
+				blocks.append( {
+					lang       : trim( listFirst( info, " " ) ),
+					title      : titleMatch.pos[ 1 ] ? mid( info, titleMatch.pos[ 2 ], titleMatch.len[ 2 ] ) : "",
+					body       : body.toList( char( 10 ) ),
+					directives : pending,
+					line       : startLine
+				} )
+				pending = {}
+				i++
+				continue
+			}
+			// a directive belongs to the next fence only when nothing but blank lines come between
+			if ( len( trim( line ) ) ) {
+				pending = {}
+			}
+			i++
+		}
+		return blocks
+	}
+
+	/**
+	 * @param text The text inside the comment after "course:", such as `background name=fake ready="x" keep`
+	 * @return A struct of the words (true) and the key=value pairs
+	 */
+	struct function parseDirective( required string text ) {
+		var result = {}
+		var rest = trim( arguments.text )
+		var first = reFind( "^([a-z-]+)", rest, 1, true )
+		result[ mid( rest, first.pos[ 1 ], first.len[ 1 ] ) ] = true
+		rest = mid( rest, first.len[ 1 ] + 1, len( rest ) )
+		var found = reFindAll( "([a-z-]+)=(""[^""]*""|\S+)|\b([a-z-]+)\b", rest )
+		for ( var token in found ) {
+			var pair = reFind( "^([a-z-]+)=(.*)$", token )
+			if ( pair ) {
+				result[ listFirst( token, "=" ) ] = reReplace( mid( token, find( "=", token ) + 1, len( token ) ), "^""|""$", "", "all" )
+			} else {
+				result[ token ] = true
+			}
+		}
+		return result
+	}
+
+	/**
+	 * @return Every match of the pattern in the text
+	 */
+	array function reFindAll( required string pattern, required string text ) {
+		var matcher = createObject( "java", "java.util.regex.Pattern" ).compile( arguments.pattern ).matcher( arguments.text )
+		var all = []
+		while ( matcher.find() ) {
+			all.append( matcher.group() )
+		}
+		return all
+	}
+
+	/**
+	 * Turns the blocks of a lesson into steps the replay runs.
+	 *
+	 * @return An array of { kind : file | run | skip, ... }
+	 */
+	array function steps( required array blocks ) {
+		var steps = []
+		for ( var b in arguments.blocks ) {
+			var title = b.title
+			if ( title == "You see" ) {
+				if ( !steps.len() || steps.last().kind != "run" ) {
+					throw( type = "Course.Orphan", message = "A ""You see"" block (line #b.line#) does not follow a command block" )
+				}
+				steps.last().expected = b.body
+				continue
+			}
+			if ( !len( title ) ) {
+				continue
+			}
+			if ( b.directives.keyExists( "manual" ) ) {
+				steps.append( { kind : "skip", line : b.line } )
+				continue
+			}
+			if ( reFindNoCase( "^Terminal \d+$", title ) && listFindNoCase( "bash,sh,shell", b.lang ) ) {
+				steps.append( { kind : "run", script : b.body, directives : b.directives, terminal : title, line : b.line, expected : javaCast( "null", "" ) } )
+			} else if ( reFind( "[/.]", title ) && !reFind( "\s", title ) ) {
+				steps.append( { kind : "file", path : title, body : b.body, append : b.directives.keyExists( "append" ), line : b.line } )
+			}
+		}
+		return steps
+	}
+
+	// ------------------------------------------------------------------ matching output
+
+	string function clean( required string text ) {
+		var lines = replace( arguments.text, char( 13 ), "", "all" ).listToArray( char( 10 ), true )
+		var kept = []
+		for ( var line in lines ) {
+			line = reReplace( line, "\x1B\[[0-9;?]*[A-Za-z]", "", "all" )
+			if ( findNoCase( "Picked up JAVA_TOOL_OPTIONS", line ) || findNoCase( "Picked up _JAVA_OPTIONS", line ) ) {
+				continue
+			}
+			kept.append( reReplace( line, "\s+$", "" ) )
+		}
+		// no blank lines at the ends
+		while ( kept.len() && !len( kept.first() ) ) {
+			kept.deleteAt( 1 )
+		}
+		while ( kept.len() && !len( kept.last() ) ) {
+			kept.deleteAt( kept.len() )
+		}
+		return kept.toList( char( 10 ) )
+	}
+
+	boolean function lineMatches( required string expected, required string actual ) {
+		if ( find( "<anything>", arguments.expected ) ) {
+			var parts = arguments.expected.split( "<anything>", -1 )
+			var pattern = "^" & parts.map( ( p ) => createObject( "java", "java.util.regex.Pattern" ).quote( p ) ).toList( ".*" ) & "$"
+			return reFind( "(?s)" & pattern, arguments.actual ) > 0
+		}
+		return arguments.expected == arguments.actual
+	}
+
+	/**
+	 * @return true when the output matches the expected text
+	 */
+	boolean function matches( required string expected, required string actual ) {
+		var exp = clean( arguments.expected ).listToArray( char( 10 ), true )
+		var act = clean( arguments.actual ).listToArray( char( 10 ), true )
+		if ( !len( clean( arguments.expected ) ) ) {
+			exp = []
+		}
+		if ( !len( clean( arguments.actual ) ) ) {
+			act = []
+		}
+		var memo = {}
+		var walk = ( e, a ) => {
+			var key = e & ":" & a
+			if ( memo.keyExists( key ) ) {
+				return memo[ key ]
+			}
+			var result = false
+			if ( e > exp.len() ) {
+				result = a > act.len()
+			} else if ( exp[ e ] == "..." ) {
+				result = walk( e + 1, a ) || ( a <= act.len() && walk( e, a + 1 ) )
+			} else {
+				result = a <= act.len() && lineMatches( exp[ e ], act[ a ] ) && walk( e + 1, a + 1 )
+			}
+			memo[ key ] = result
+			return result
+		}
+		return walk( 1, 1 )
+	}
+
+	// ------------------------------------------------------------------ static checks
+
+	/**
+	 * @return An array of messages, empty when all is well
+	 */
+	array function staticChecks() {
+		var problems = []
+		var lessons = manifest()
+		var yamlFile = variables.repoRoot & "/docs/data/courses.yaml"
+
+		// the manifest and the files
+		var onDisk = directoryList( variables.lessonDir, false, "name", "*.md" ).filter( ( n ) => n != "index.md" )
+		var listed = lessons.map( ( l ) => listLast( l, "/" ) )
+		for ( var name in listed ) {
+			if ( !onDisk.contains( name ) ) {
+				problems.append( "The manifest lists #name# and docs/course has no such file" )
+			}
+			if ( listed.findAll( name ).len() > 1 ) {
+				problems.append( "The manifest lists #name# more than once" )
+			}
+		}
+		for ( var name in onDisk ) {
+			if ( !listed.contains( name ) ) {
+				problems.append( "docs/course/#name# is not in the manifest" )
+			}
+		}
+
+		// the mirror
+		if ( fileRead( yamlFile ) != fileRead( variables.repoRoot & "/docs/versions/1.0.x/data/courses.yaml" ) ) {
+			problems.append( "docs/data/courses.yaml and the versioned copy differ" )
+		}
+		for ( var name in onDisk.append( "index.md" ) ) {
+			var mirror = variables.mirrorDir & "/" & name
+			if ( !fileExists( mirror ) ) {
+				problems.append( "docs/versions/1.0.x/course/#name# is missing" )
+			} else if ( fileRead( mirror ) != fileRead( variables.lessonDir & "/" & name ) ) {
+				problems.append( "docs/course/#name# and its versioned copy differ" )
+			}
+		}
+
+		// the pages
+		var number = lessons.len()
+		for ( var path in lessons ) {
+			var file = variables.repoRoot & "/docs/" & path
+			if ( !fileExists( file ) ) {
+				continue
+			}
+			var name = listLast( path, "/" )
+			var lesson = readLesson( file )
+			if ( !len( lesson.title ) ) { problems.append( "#name#: no title" ) }
+			if ( !len( lesson.summary ) ) { problems.append( "#name#: no summary" ) }
+			if ( !len( lesson.icon ) ) { problems.append( "#name#: no icon" ) }
+			if ( reFind( "^(Lesson|Lecci.n)\s+\d+", lesson.title ) ) {
+				problems.append( "#name#: the title carries a lesson number (the course numbers them)" )
+			}
+			var prose = stripFences( lesson.body )
+			var numbered = reFindAll( "(Lesson|Lecci.n)\s+\d+", prose )
+			if ( numbered.len() ) {
+				problems.append( "#name#: the text says `#numbered.first()#`; name the lesson instead of numbering it" )
+			}
+			for ( var link in reFindAll( "\]\(([A-Za-z0-9_./-]+\.md)(\x23[^)]*)?\)", prose ) ) {
+				var target = reReplace( link, "^\]\(|(\x23[^)]*)?\)$", "", "all" )
+				if ( !fileExists( getDirectoryFromPath( file ) & target ) ) {
+					problems.append( "#name#: the link to #target# lands on no file" )
+				}
+			}
+			for ( var b in parseBlocks( lesson.body ) ) {
+				if ( b.directives.keyExists( "java-launcher" ) ) {
+					continue
+				}
+				if ( reFindNoCase( "^Terminal \d+$", b.title ) && reFind( "--[a-z-]+=""[^""]* [^""]*""|--[a-z-]+ ""[^""]* [^""]*""|--[a-z-]+='[^']* [^']*'", b.body ) ) {
+					problems.append( "#name#, line #b.line#: a flag value with spaces is quoted; the BoxLang 1.19.0 launcher splits it" )
+				}
+			}
+		}
+
+		// the counts the home page and the index say
+		var words = { 20 : "Twenty", 29 : "Twenty-nine" }
+		for ( var file in [ "docs/.theme/home.bxm", "docs/course/index.md" ] ) {
+			var text = fileRead( variables.repoRoot & "/" & file )
+			for ( var hit in reFindAll( "\b(\d+)[- ]lessons?\b", text ) ) {
+				var n = val( hit )
+				if ( n != number ) {
+					problems.append( "#file# says `#hit#` and the course has #number# lessons" )
+				}
+			}
+		}
+
+		// the home page path
+		var stages = fileRead( variables.repoRoot & "/docs/.theme/assets/agents-home.js" )
+		var slugs = reFindAll( "slug:\s*""[^""]+""", stages ).map( ( s ) => reReplace( s, "^slug:\s*""|""$", "", "all" ) )
+		if ( slugs.len() && slugs.toList() != stems().toList() ) {
+			problems.append( "The STAGES of docs/.theme/assets/agents-home.js do not list the lessons of the manifest, in its order" )
+		}
+		return problems
+	}
+
+	string function stripFences( required string text ) {
+		return reReplace( arguments.text, "(?ms)^\s*(`{3,}).*?^\s*\1\s*$", "", "all" )
+	}
+
+	// ------------------------------------------------------------------ the replay
+
+	/**
+	 * Replays the lessons.
+	 *
+	 * @options { work, bxagents, from, only, emit, keep, network, verbose, timeout }
+	 * @return { failures : array, ran : number of steps }
+	 */
+	struct function replay( required struct options ) {
+		var o = arguments.options
+		var work = normalize( o.work )
+		var home = work & "/home"
+		var ws = home & "/bxagents-course"
+		var stemList = stems()
+		var checkpoints = variables.repoRoot & "/tools/course/checkpoints"
+		var failures = []
+		var ran = 0
+		variables.work = work
+		variables.home = home
+		variables.ws = ws
+		variables.options = o
+		variables.out = []
+
+		if ( directoryExists( work ) ) {
+			treeDelete( work )
+		}
+		directoryCreate( home, true )
+		directoryCreate( work & "/bin" )
+		directoryCreate( work & "/logs" )
+		prepareLauncher( o )
+		prepareKit( ws )
+
+		var from = o.from ?: ""
+		var only = o.only ?: ""
+		var started = !len( from ) && !len( only )
+		var previous = ""
+		var order = []
+
+		if ( !( preflight( 8080 ) && preflight( 8791 ) ) ) {
+			throw( type = "Course.PortBusy", message = "Port 8080 or 8791 is in use. The course needs both free (the scripted model and the web app)." )
+		}
+
+		try {
+			for ( var stemName in stemList ) {
+				var file = variables.lessonDir & "/" & stemName & ".md"
+				if ( !started ) {
+					if ( stemName == from || stemName == only ) {
+						started = true
+						// pick up the project where the lessons before it left it
+						if ( len( previous ) && directoryExists( checkpoints & "/" & previous ) ) {
+							restore( checkpoints & "/" & previous, ws & "/acme-support" )
+							directoryCopy( checkpoints & "/" & previous, work & "/snapshot-prev", true )
+						}
+						startModel( ws )
+					} else {
+						previous = checkpointFor( stemName, checkpoints, previous )
+						continue
+					}
+				}
+				if ( len( only ) && stemName != only ) {
+					continue
+				}
+				var lesson = readLesson( file )
+				var list = steps( parseBlocks( lesson.body ) )
+				if ( !list.filter( ( s ) => s.kind != "skip" ).len() ) {
+					continue
+				}
+				println( "== #stemName#" )
+				variables.cwd = ws
+				for ( var s in list ) {
+					if ( s.kind == "skip" ) {
+						continue
+					}
+					ran++
+					var problem = runStep( s, stemName )
+					if ( len( problem ) ) {
+						failures.append( "#stemName#, line #s.line#: #problem#" )
+						println( "   FAIL line #s.line#: #problem#" )
+						break
+					}
+				}
+				stopBackground( false )
+				if ( failures.len() ) {
+					break
+				}
+				var taken = takeSnapshot( ws & "/acme-support", work & "/snapshot-now" )
+				if ( taken ) {
+					var changed = !directoryExists( work & "/snapshot-prev" ) || !sameTree( work & "/snapshot-now", work & "/snapshot-prev" )
+					var committed = checkpoints & "/" & stemName
+					if ( changed ) {
+						if ( o.emit ) {
+							if ( directoryExists( committed ) ) { treeDelete( committed ) }
+							directoryCopy( work & "/snapshot-now", committed, true )
+						} else if ( !directoryExists( committed ) ) {
+							failures.append( "#stemName#: the lesson changes the project and has no checkpoint (run with --emit-checkpoints)" )
+						} else if ( !sameTree( work & "/snapshot-now", committed ) ) {
+							failures.append( "#stemName#: the project after the lesson differs from tools/course/checkpoints/#stemName# (run with --emit-checkpoints and review the diff)" )
+						}
+						if ( directoryExists( work & "/snapshot-prev" ) ) { treeDelete( work & "/snapshot-prev" ) }
+						directoryCopy( work & "/snapshot-now", work & "/snapshot-prev", true )
+					} else if ( directoryExists( committed ) ) {
+						if ( o.emit ) {
+							treeDelete( committed )
+						} else {
+							failures.append( "#stemName#: tools/course/checkpoints/#stemName# exists and the lesson no longer changes the project" )
+						}
+					}
+				}
+			}
+			if ( o.emit && !len( from ) && !len( only ) ) {
+				fileWrite( checkpoints & "/ORDER", stemList.toList( char( 10 ) ) & char( 10 ) )
+			}
+		} finally {
+			stopBackground( true )
+			if ( !( o.keep ?: false ) ) {
+				treeDelete( work )
+			}
+		}
+		return { failures : failures, ran : ran }
+	}
+
+	private string function checkpointFor( required string stemName, required string checkpoints, required string previous ) {
+		return directoryExists( arguments.checkpoints & "/" & arguments.stemName ) ? arguments.stemName : arguments.previous
+	}
+
+	private void function treeDelete( required string path ) {
+		if ( !directoryExists( arguments.path ) ) {
+			return
+		}
+		// directoryDelete() follows symbolic links (see AGENTS.md), so let the system remove the tree
+		var p = createObject( "java", "java.lang.ProcessBuilder" ).init( [ "rm", "-rf", "--", arguments.path ] ).start()
+		p.waitFor()
+	}
+
+	private boolean function preflight( required numeric port ) {
+		try {
+			var socket = createObject( "java", "java.net.Socket" ).init( "127.0.0.1", arguments.port )
+			socket.close()
+			return false
+		} catch ( any e ) {
+			return true
+		}
+	}
+
+	/**
+	 * Puts a `bxAgents` command on the PATH of the replay when the machine has none
+	 */
+	private void function prepareLauncher( required struct o ) {
+		var command = arguments.o.bxagents ?: ""
+		if ( !len( command ) ) {
+			var probe = shell( "command -v bxAgents", variables.work, 20 )
+			if ( probe.code == 0 ) {
+				return
+			}
+			command = "boxlang module:bxagents"
+		}
+		fileWrite( variables.work & "/bin/bxAgents", "##!/bin/sh" & char( 10 ) & "exec #command# ""$@""" & char( 10 ) )
+		shell( "chmod +x '#variables.work#/bin/bxAgents'", variables.work, 20 )
+	}
+
+	/**
+	 * Unpacks the kit the way the first lessons tell a learner to, with a quick script for the model
+	 */
+	private void function prepareKit( required string ws ) {
+		directoryCreate( arguments.ws, true )
+		directoryCopy( variables.repoRoot & "/tools/course/kit", arguments.ws & "/kit", true )
+		fileCopy( variables.repoRoot & "/tools/demo/fakellm.bxs", arguments.ws & "/kit/fakellm.bxs" )
+		if ( directoryExists( variables.repoRoot & "/tools/course/checkpoints" ) ) {
+			directoryCopy( variables.repoRoot & "/tools/course/checkpoints", arguments.ws & "/kit/checkpoints", true )
+		}
+		// the same answers, without the pauses that make a demo pleasant
+		var model = jsonDeserialize( fileRead( arguments.ws & "/kit/demos/model.json" ) )
+		model.thinkMs = 20
+		model.chunkMs = 1
+		fileWrite( arguments.ws & "/kit/demos/model.json", jsonSerialize( model ) )
+		shell( "chmod +x '#arguments.ws#/kit/resume.sh' 2>/dev/null; true", variables.work, 20 )
+	}
+
+	private void function startModel( required string ws ) {
+		var step = { kind : "run", script : "cd '#arguments.ws#/kit' && boxlang fakellm.bxs", directives : { background : true, name : "fake", ready : "fakellm listening", keep : true }, terminal : "Terminal 1", line : 0 }
+		var problem = runStep( step, "kit" )
+		if ( len( problem ) ) {
+			throw( type = "Course.Model", message = "The scripted model did not start: #problem#" )
+		}
+	}
+
+	private void function restore( required string from, required string to ) {
+		if ( directoryExists( arguments.to ) ) {
+			treeDelete( arguments.to )
+		}
+		directoryCopy( arguments.from, arguments.to, true )
+	}
+
+	// ------------------------------------------------------------------ one step
+
+	/**
+	 * @return "" when the step passed, else what went wrong
+	 */
+	private string function runStep( required struct s, required string stemName ) {
+		if ( arguments.s.kind == "file" ) {
+			var target = variables.ws & "/" & arguments.s.path
+			directoryCreate( getDirectoryFromPath( target ), true, true )
+			var body = arguments.s.body & char( 10 )
+			if ( arguments.s.append && fileExists( target ) ) {
+				var existing = fileRead( target )
+				body = existing & ( right( existing, 1 ) == char( 10 ) ? "" : char( 10 ) ) & body
+			}
+			fileWrite( target, body )
+			return ""
+		}
+		var d = arguments.s.directives
+		if ( d.keyExists( "network" ) && !( variables.options.network ?: false ) ) {
+			return ""
+		}
+		if ( d.keyExists( "wait" ) ) {
+			return waitFor( d.name ?: "", d.until ?: "", val( d.seconds ?: 60 ) )
+		}
+		if ( d.keyExists( "background" ) ) {
+			return startBackground( arguments.s )
+		}
+		var result = shell( arguments.s.script, variables.cwd, val( variables.options.timeout ?: 300 ), true )
+		if ( len( result.cwd ) && directoryExists( result.cwd ) ) {
+			variables.cwd = result.cwd
+		}
+		var expectFail = d.keyExists( "expect-fail" )
+		if ( expectFail && result.code == 0 ) {
+			return "the command was expected to fail and exited 0"
+		}
+		if ( !expectFail && result.code != 0 ) {
+			return "the command exited #result.code#:" & char( 10 ) & indent( result.output )
+		}
+		if ( !isNull( arguments.s.expected ) ) {
+			if ( !matches( arguments.s.expected, result.output ) ) {
+				return "the output differs." & char( 10 ) & "  expected:" & char( 10 ) & indent( clean( arguments.s.expected ) ) & char( 10 ) & "  actual:" & char( 10 ) & indent( clean( result.output ) )
+			}
+		}
+		return ""
+	}
+
+	private string function indent( required string text ) {
+		return arguments.text.listToArray( char( 10 ), true ).map( ( l ) => "    | " & l ).toList( char( 10 ) )
+	}
+
+	/**
+	 * Runs a script in bash with the course's HOME and PATH.
+	 *
+	 * @return { code, output, cwd : where the script ended }
+	 */
+	struct function shell( required string script, required string dir, numeric timeout = 300, boolean strict = false ) {
+		var logFile = variables.work & "/logs/step-" & createUUID() & ".txt"
+		var cwdFile = logFile & ".cwd"
+		// one shell, not a subshell, so a `cd` carries to the next block; `strict` stops at the first failing command
+		var wrapper = "cd '#arguments.dir#' || exit 99" & char( 10 ) & "trap 'pwd > ""#cwdFile#""' EXIT" & char( 10 ) & ( arguments.strict ? "set -e -o pipefail" & char( 10 ) : "" ) & arguments.script
+		var builder = createObject( "java", "java.lang.ProcessBuilder" ).init( [ "bash", "-c", wrapper ] )
+		builder.redirectErrorStream( true )
+		builder.redirectOutput( createObject( "java", "java.io.File" ).init( logFile ) )
+		var env = builder.environment()
+		env.put( "HOME", variables.home ?: variables.work )
+		env.put( "PATH", variables.work & "/bin:" & env.get( "PATH" ) )
+		env.put( "NO_COLOR", "1" )
+		env.put( "BXAGENTS_TOKEN", "" )
+		var process = builder.start()
+		var done = process.waitFor( arguments.timeout, createObject( "java", "java.util.concurrent.TimeUnit" ).SECONDS )
+		var code = 124
+		if ( done ) {
+			code = process.exitValue()
+		} else {
+			process.descendants().toArray().each( ( h ) => h.destroyForcibly() )
+			process.destroyForcibly()
+		}
+		var output = fileExists( logFile ) ? fileRead( logFile ) : ""
+		var endedIn = fileExists( cwdFile ) ? trim( fileRead( cwdFile ) ) : ""
+		if ( !done ) {
+			output &= char( 10 ) & "(timed out after #arguments.timeout# seconds)"
+		}
+		return { code : code, output : output, cwd : endedIn }
+	}
+
+	private string function startBackground( required struct s ) {
+		var d = arguments.s.directives
+		var name = d.name ?: "bg"
+		var logFile = variables.work & "/logs/bg-#name#.txt"
+		var script = "cd '#variables.cwd#' && " & arguments.s.script
+		var builder = createObject( "java", "java.lang.ProcessBuilder" ).init( [ "bash", "-c", script ] )
+		builder.redirectErrorStream( true )
+		builder.redirectOutput( createObject( "java", "java.io.File" ).init( logFile ) )
+		var env = builder.environment()
+		env.put( "HOME", variables.home )
+		env.put( "PATH", variables.work & "/bin:" & env.get( "PATH" ) )
+		env.put( "NO_COLOR", "1" )
+		variables.processes[ name ] = { process : builder.start(), log : logFile, keep : d.keyExists( "keep" ) }
+		var wait = val( d.seconds ?: 120 )
+		if ( len( d[ "ready-url" ] ?: "" ) ) {
+			for ( var i = 1; i <= wait; i++ ) {
+				var probe = shell( "curl -s -o /dev/null -w '%{http_code}' --max-time 2 '#d[ "ready-url" ]#'", variables.work, 10 )
+				if ( trim( probe.output ) == "200" ) {
+					break
+				}
+				if ( !variables.processes[ name ].process.isAlive() ) {
+					return "the background command [#name#] stopped:" & char( 10 ) & indent( clean( fileRead( logFile ) ) )
+				}
+				sleep( 1000 )
+				if ( i == wait ) {
+					return "[#name#] did not answer at #d[ "ready-url" ]# in #wait# seconds:" & char( 10 ) & indent( clean( fileRead( logFile ) ) )
+				}
+			}
+		}
+		if ( len( d.ready ?: "" ) ) {
+			var problem = waitFor( name, d.ready, wait )
+			if ( len( problem ) ) {
+				return problem
+			}
+		}
+		// what it printed so far can be checked, like the output of any command
+		if ( !isNull( arguments.s.expected ) && !matches( arguments.s.expected, fileRead( logFile ) ) ) {
+			return "the output of [#name#] differs." & char( 10 ) & "  expected:" & char( 10 ) & indent( clean( arguments.s.expected ) ) & char( 10 ) & "  actual:" & char( 10 ) & indent( clean( fileRead( logFile ) ) )
+		}
+		return ""
+	}
+
+	private string function waitFor( required string name, required string text, required numeric seconds ) {
+		if ( !variables.processes.keyExists( arguments.name ) ) {
+			return "no background command called [#arguments.name#]"
+		}
+		var p = variables.processes[ arguments.name ]
+		for ( var i = 1; i <= arguments.seconds * 2; i++ ) {
+			if ( findNoCase( arguments.text, fileExists( p.log ) ? fileRead( p.log ) : "" ) ) {
+				return ""
+			}
+			if ( !p.process.isAlive() ) {
+				break
+			}
+			sleep( 500 )
+		}
+		return "[#arguments.name#] did not print [#arguments.text#] in #arguments.seconds# seconds. Its output:" & char( 10 ) & indent( clean( fileExists( p.log ) ? fileRead( p.log ) : "" ) )
+	}
+
+	/**
+	 * Stops the background commands a lesson started (all, at the end, or only those not marked `keep`)
+	 */
+	private void function stopBackground( required boolean everything ) {
+		for ( var name in duplicate( variables.processes ).keyArray() ) {
+			var p = variables.processes[ name ]
+			if ( arguments.everything || !p.keep ) {
+				p.process.descendants().toArray().each( ( h ) => h.destroyForcibly() )
+				p.process.destroyForcibly()
+				variables.processes.delete( name )
+			}
+		}
+		if ( !arguments.everything ) {
+			sleep( 500 )
+		}
+	}
+
+	// ------------------------------------------------------------------ checkpoints
+
+	/**
+	 * Copies the source files of a project: what the lessons write and what `bxAgents` scaffolds, never what it builds
+	 *
+	 * @return true when there was a project to copy
+	 */
+	private boolean function takeSnapshot( required string project, required string target ) {
+		if ( directoryExists( arguments.target ) ) {
+			treeDelete( arguments.target )
+		}
+		if ( !directoryExists( arguments.project ) ) {
+			return false
+		}
+		directoryCreate( arguments.target, true )
+		for ( var file in [ "Agent.yml", "instructions.md", "Application.bx", "box.json", ".env" ] ) {
+			if ( fileExists( arguments.project & "/" & file ) ) {
+				fileCopy( arguments.project & "/" & file, arguments.target & "/" & file )
+			}
+		}
+		for ( var dir in [ "tools", "skills", "subagents", "gateways", "schedules", "mcp", "interceptors", "extensions", "tests", "modules" ] ) {
+			if ( directoryExists( arguments.project & "/" & dir ) ) {
+				for ( var f in directoryList( arguments.project & "/" & dir, true, "path", "*", "asc", "file" ) ) {
+					f = normalize( f )
+					var relative = mid( f, len( normalize( arguments.project ) ) + 2, len( f ) )
+					directoryCreate( getDirectoryFromPath( arguments.target & "/" & relative ), true, true )
+					fileCopy( f, arguments.target & "/" & relative )
+				}
+			}
+		}
+		return true
+	}
+
+	private boolean function sameTree( required string a, required string b ) {
+		var listA = fileTree( arguments.a )
+		var listB = fileTree( arguments.b )
+		if ( listA.keyArray().sort( "text" ).toList() != listB.keyArray().sort( "text" ).toList() ) {
+			return false
+		}
+		for ( var key in listA ) {
+			if ( listA[ key ] != listB[ key ] ) {
+				return false
+			}
+		}
+		return true
+	}
+
+	private struct function fileTree( required string root ) {
+		var tree = {}
+		var base = normalize( arguments.root )
+		for ( var f in directoryList( base, true, "path", "*", "asc", "file" ) ) {
+			f = normalize( f )
+			var relative = mid( f, len( base ) + 2, len( f ) )
+			tree[ relative ] = fileRead( f )
+		}
+		return tree
+	}
+
+}
