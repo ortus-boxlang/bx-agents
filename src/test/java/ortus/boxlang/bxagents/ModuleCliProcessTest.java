@@ -239,7 +239,8 @@ public class ModuleCliProcessTest {
 		assertTrue( Files.exists( projectDir.resolve( ".build/public/Application.bx" ) ), "a real Application.bx should have been generated in the web root" );
 		assertTrue( Files.exists( projectDir.resolve( ".build/app/Application.bx" ) ), "the template's guard should be in the app folder" );
 		assertTrue( Files.exists( projectDir.resolve( ".build/runtime/boxlang.json" ) ), "the template's engine config should have been laid out" );
-		assertTrue( Files.exists( projectDir.resolve( ".build/runtime/modules/bxagents/ModuleConfig.bx" ) ), "the bxagents module should have been copied into the app's runtime" );
+		assertTrue( Files.exists( projectDir.resolve( ".build/runtime/modules/bxagents/ModuleConfig.bx" ) ),
+		    "the bxagents module should have been copied into the app's runtime" );
 		assertTrue( Files.exists( projectDir.resolve( ".build/miniserver.json" ) ), "the server config should have been written" );
 		assertTrue( Files.exists( projectDir.resolve( ".build/manifest.json" ) ), "a real manifest.json should have been written" );
 	}
