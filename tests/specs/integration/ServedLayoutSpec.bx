@@ -259,6 +259,8 @@ class extends="testbox.system.BaseSpec" {
 					fileWrite( dir & "/miniserver.json", jsonSerialize( { port : controlPort, host : "127.0.0.1", webRoot : "public" } ) );
 					var controlEnv = createObject( "java", "java.util.HashMap" ).init();
 					controlEnv.put( "JAVA_TOOL_OPTIONS", childOptions );
+					// CI sets BOXLANG_HOME for the whole job: point it at the fake machine home so the engine's own module directory is the decoy's
+					controlEnv.put( "BOXLANG_HOME", fakeHome & "/.boxlang" );
 					var control = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( executable, dir & "/miniserver.json", false, controlEnv, dir );
 					processes.append( control );
 					var deadline = getTickCount() + 30000;
