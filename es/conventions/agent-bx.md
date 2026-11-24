@@ -341,7 +341,7 @@ function production() {
 
 ### Detener y dirigir una ejecución
 
-`POST /cancel` y `POST /steer` reciben el `threadId` del primer frame del stream de la ejecución, y no necesitan más. Un id de hilo que no está corriendo aquí recibe `cancelled: false` (o `steered: false`). Reanudar una ejecución en pausa es distinto: solo puede hacerlo quien la inició (`POST /resume`); cualquier otro recibe `403` con `code: "not_your_run"`.
+`POST /cancel` y `POST /steer` reciben el `threadId` del primer frame del stream de la ejecución. Una ejecución pertenece a quien la inició: el servidor entrega a bx-ai un id acotado a quien llama (`u:<usuario>:<threadId>`), así que el `threadId` de otro usuario no alcanza nada, y un id de hilo que no está corriendo para ti recibe `cancelled: false` (o `steered: false`). No hay excepción para administradores. Reanudar una ejecución en pausa es distinto: solo puede hacerlo quien la inició (`POST /resume`); cualquier otro recibe `403` con `code: "not_your_run"`.
 
 ### Abierta o con token
 
