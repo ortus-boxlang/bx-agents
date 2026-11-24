@@ -1,0 +1,33 @@
+/**
+ * The probe behind `bxAgents models test` and /ping. An agent's model comes back from bx-ai's getConfig() with the
+ * service's display name as its provider ( `OpenAICompatible`, `DockerModelRunner` ), which aiChat() does not know.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "runtime.ModelProbe", function() {
+
+			it( "finds the provider of a display name bx-ai gave out, not 'is not supported'", function() {
+				// no server listens: the call fails, but on the connection and not on the provider lookup
+				var outcome = new bxagents.models.runtime.ModelProbe().ping( "", {
+					provider : "OpenAICompatible",
+					params   : { model : "my-model", baseURL : "http://127.0.0.1:1/v1" }
+				} );
+				expect( outcome.ok ).toBeFalse();
+				expect( outcome.reason ).notToInclude( "is not supported" );
+			} );
+
+			it( "maps every display name to the provider id aiService() takes", function() {
+				var parser = new bxagents.models.build.ModelSlugParser();
+				expect( parser.providerId( "OpenAICompatible" ) ).toBe( "openai-compatible" );
+				expect( parser.providerId( "DockerModelRunner" ) ).toBe( "docker" );
+				expect( parser.providerId( "HuggingFace" ) ).toBe( "huggingface" );
+				expect( parser.providerId( "Ollama" ) ).toBe( "ollama" );
+				expect( parser.providerId( "openai-compatible" ) ).toBe( "openai-compatible" );
+				expect( parser.providerId( "somethingElse" ) ).toBe( "somethingElse" );
+			} );
+
+		} );
+	}
+
+}
