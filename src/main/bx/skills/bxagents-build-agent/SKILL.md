@@ -5,7 +5,7 @@ description: >
 ---
 # Building a bxAgents agent
 
-An agent is a folder. `Agent.yml` plus `instructions.md` is enough; the build turns the folder into a running app in `.build/app/`.
+An agent is a folder. `Agent.yml` plus `instructions.md` is enough; the build turns the folder into a running app in `.build/` (the code in `app/`, the web root in `public/`).
 
 ## Project layout
 
@@ -89,11 +89,11 @@ Run `bxAgents <verb>` (or `boxlang module:bxAgents <verb>`). `bxAgents --help` l
 | `add tool\|interceptor\|schedule\|mcp\|gateway\|subagent\|skill\|provider\|profile\|capability\|extension` | Add one thing to a project. `--dry-run` shows files, `--force` replaces |
 | `inspect [--section=tools,env] [--json]` | Report how the agent is composed, from source, before any build |
 | `doctor [--json]` | Check runtime, project validation, missing env vars and API keys. Read only |
-| `build [--environment=NAME] [--verbose]` | Validate and generate `.build/app/`. Prints every error found |
+| `build [--environment=NAME] [--verbose]` | Validate and generate `.build/` (`app/`, `public/`, `lib/`, `runtime/`). Prints every error found |
 | `test` | Run `tests/specs` with TestBox against the mock provider (needs `box install`) |
 | `chat` | Terminal chat (see bxagents-chat) |
 | `invoke --message="..." [--json] [--server]` | One non-interactive turn, for scripts |
-| `serve [--port=8080] [--host=127.0.0.1]` | Start a miniserver on `.build/app`. Needs a prior `build` |
+| `serve [--port=8080] [--host=127.0.0.1]` | Start a miniserver on `.build/public`. Needs a prior `build` |
 | `package [--version=1.0.0]` | Write `dist/<name>-<version>.bxa` |
 | `deploy --name=<entry>` | Ship using a `deploy/` entry |
 | `clean [--force]` | Remove `.build/` and `dist/` |

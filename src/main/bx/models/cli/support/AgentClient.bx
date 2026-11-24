@@ -234,21 +234,16 @@ class {
 	 * sub-route emits through the `SSE()` BIF, so emitter and parser ship
 	 * together.
 	 *
-	 * ### One runtime directive makes or breaks this
+	 * ### The whitespace compression setting
 	 *
-	 * SSE frames are terminated by a BLANK line, and the web runtime's
-	 * **whitespace compression is on by default** and collapses consecutive
-	 * newlines - eating exactly those terminators. Measured against a live
-	 * `/__bxagents/stream`: with compression on the body carried **zero**
-	 * occurrences of `\n\n` and this call reported `totalEvents: 0`; with
-	 * `whitespaceCompressionEnabled: false` the identical route parsed cleanly.
-	 * It is not specific to ColdBox or to this client - a bare `SSE()` endpoint
-	 * loses its terminators the same way, and a browser `EventSource` would fire
-	 * nothing either.
+	 * SSE frames are terminated by a BLANK line, and the web runtime's whitespace compression collapses blank lines. Measured on
+	 * BoxLang and boxlang-miniserver 1.19.0, on and off: this route (`/__bxagents/stream`, ColdBox `toAi()` over the `SSE()` BIF) carries
+	 * 14 terminators and 14 frames, 8 of them content deltas, both ways, so a native stream does NOT need the setting off on this engine;
+	 * only a stream written by hand with `writeOutput( "...\n\n" )` loses its terminators with it on (0 against 3). An earlier comment here
+	 * said the opposite and could not be reproduced.
 	 *
-	 * `Serve.bx` sets that directive for every served project, and this repo's
-	 * own `boxlang.json` sets it for the test suite. A project served some other
-	 * way needs it too, or this method sees an empty stream.
+	 * The setting is off all the same: it is the one patched line of the vendored `runtime/boxlang.json` of every built app
+	 * (see `templates/coldbox-boxlang/VERSION`), as a safety net, and this repo's `boxlang.json` sets it for the suite.
 	 *
 	 * @baseUrl The server root to talk to
 	 * @message The prompt to send
