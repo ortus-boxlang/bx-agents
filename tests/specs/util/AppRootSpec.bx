@@ -1,0 +1,30 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "AppRoot", function() {
+
+			it( "is the folder the process works in outside a web boot, where there is no /app mapping", function() {
+				// a project may well have an app/ folder of its own: only the runtime's /app mapping makes it the app root
+				expect( new bxagents.models.util.AppRoot().path() ).toBe( expandPath( "/" ) );
+			} );
+
+			it( "is what every module code site that used to ask expandPath( '/' ) for the app now asks", function() {
+				var sites = [
+					"models/skills/SkillWiring.bx",
+					"models/runtime/RuntimeSettings.bx",
+					"models/routines/RoutineWiring.bx",
+					"models/build/generators/agentapi/AgentApi.bx",
+					"models/build/toolmodules/BxAiFileToolsModule.bx",
+					"models/gateways/CommandGatewaySession.bx"
+				];
+				for ( var site in sites ) {
+					var source = fileRead( expandPath( "/bxagents/" & site ) );
+					expect( source ).notToInclude( 'projectRoot : expandPath( "/" )', site );
+					expect( source ).toInclude( 'models.util.AppRoot@bxagents', site );
+				}
+			} );
+
+		} );
+	}
+
+}

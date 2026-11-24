@@ -1,3 +1,4 @@
+import bxModules.bxagents.models.util.TreeDelete;
 /**
  * Runs a project's own `tests/specs` via TestBox - the `test` CLI verb's
  * real implementation (M15). Generalizes this repo's own `runTests.bxs`
@@ -40,10 +41,11 @@ class {
 
 	/**
 	 * @projectRoot Absolute path to the project root (containing tests/specs)
+	 * @moduleDir The bxagents module folder the child loads, or "none"; empty takes BXAGENTS_MODULE_DIR, else the installed module
 	 *
 	 * @return { exitCode, totalBundles, totalSuites, totalSpecs, totalPass, totalFail, totalError, totalSkipped, failures: [ { bundle, suite, spec, message } ] }
 	 */
-	struct function run( required string projectRoot ) {
+	struct function run( required string projectRoot, string moduleDir = "" ) {
 		var root = arguments.projectRoot.reReplace( "[\/]+$", "" )
 		var testsDir = root & "/tests"
 		var specsDir = testsDir & "/specs"
@@ -76,7 +78,7 @@ class {
 					"/specs"   : specsDir,
 					"/testbox" : testBoxDir
 				},
-				modulesDirectory : currentModulesDirectory( root )
+				modulesDirectory : childModulesDirectory( root, workDir, arguments.moduleDir )
 			} ) )
 
 			fileWrite( scriptPath, renderRunnerScript( reportPath ) )
@@ -107,8 +109,10 @@ class {
 				failures     : extractFailures( report )
 			}
 		} finally {
+			// never through a link: the module is reached through one (see childModulesDirectory()), and directoryDelete( path, true )
+			// follows it and empties the module's own folder
 			if ( directoryExists( workDir ) ) {
-				directoryDelete( workDir, true )
+				TreeDelete::tree( workDir )
 			}
 		}
 	}
@@ -174,7 +178,40 @@ class {
 	}
 
 	/**
-	 * @return This runtime's own configured modulesDirectory list, as strings - carried over into the child process's boxlang.json so bxModules.bxagents.* (e.g. BaseAgentSpec) resolves identically there
+	 * The module folders the test run's own runtime loads: the `bxagents` module alone (so bxModules.bxagents.* in
+	 * BaseAgentSpec resolves there), then the project's own boxlang_modules/. The machine's module directory is not named:
+	 * BoxLang loads every module in a directory it is given, and a test run has no business with the others installed there.
+	 *
+	 * The module is reached through a link in the run's work folder, so the directory handed over holds nothing else.
+	 * Where this code is not running from an installed module (a source checkout, whose module is reached by a mapping), the
+	 * list is this runtime's own, as it was before.
+	 *
+	 * @projectRoot Absolute path to the project root
+	 * @workDir The run's throwaway work folder
+	 *
+	 * @return The module directories, as strings
+	 */
+	private array function childModulesDirectory( string projectRoot = "", required string workDir, string moduleDir = "" ) {
+		var source = new "models.build.layout.ModuleCopier@bxagents"().sourceDir( arguments.moduleDir )
+		if ( !len( source ) ) {
+			return currentModulesDirectory( arguments.projectRoot )
+		}
+		var only = arguments.workDir & "/modules"
+		directoryCreate( path = only, createPath = true, ignoreExists = true )
+		createObject( "java", "java.nio.file.Files" ).createSymbolicLink(
+			createObject( "java", "java.nio.file.Paths" ).get( only & "/bxagents", [] ),
+			createObject( "java", "java.nio.file.Paths" ).get( source, [] ),
+			[]
+		)
+		var dirs = [ only ]
+		if ( len( arguments.projectRoot ?: "" ) && directoryExists( arguments.projectRoot & "/boxlang_modules" ) ) {
+			dirs.append( arguments.projectRoot & "/boxlang_modules" )
+		}
+		return dirs
+	}
+
+	/**
+	 * @return This runtime's own configured modulesDirectory list, as strings - carried over into the child process's boxlang.json so bxModules.bxagents.* (e.g. BaseAgentSpec) resolves identically there. Used only when this code does not run from an installed module
 	 */
 	private array function currentModulesDirectory( string projectRoot = "" ) {
 		var configured = createObject( "java", "ortus.boxlang.runtime.BoxRuntime" )

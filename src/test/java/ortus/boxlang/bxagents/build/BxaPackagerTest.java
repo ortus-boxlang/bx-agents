@@ -106,4 +106,28 @@ public class BxaPackagerTest {
 		assertFalse( names.contains( "notes/todo.txt" ) );
 	}
 
+	@DisplayName( "It packages only the top-level entries it is told to, so a build folder's manifest and work folders stay out" )
+	@Test
+	public void testIncludesOnlyNamedTopLevelEntries( @TempDir Path buildDir, @TempDir Path distDir ) throws IOException {
+		writeFile( buildDir, "app/Application.bx", "class { abort; }" );
+		writeFile( buildDir, "public/index.bxm", "" );
+		writeFile( buildDir, "runtime/boxlang.json", "{}" );
+		writeFile( buildDir, "miniserver.json", "{}" );
+		writeFile( buildDir, "manifest.json", "{}" );
+		writeFile( buildDir, "runtime-interceptors/Work.bx", "class {}" );
+		writeFile( buildDir, "runtime/logs/runtime.log", "a log" );
+
+		Path bxaPath = BxaPackager.pack( buildDir.toString(), distDir.toString(), "test-agent-1.0.0", List.of( "runtime/logs/" ),
+		    List.of( "app", "public", "runtime", "miniserver.json" ) );
+
+		List<String> names = zipEntryNames( bxaPath );
+		assertTrue( names.contains( "app/Application.bx" ) );
+		assertTrue( names.contains( "public/index.bxm" ) );
+		assertTrue( names.contains( "runtime/boxlang.json" ) );
+		assertTrue( names.contains( "miniserver.json" ) );
+		assertFalse( names.contains( "manifest.json" ), "a file that is not in the list stays out" );
+		assertFalse( names.contains( "runtime-interceptors/Work.bx" ), "a folder that is not in the list stays out" );
+		assertFalse( names.contains( "runtime/logs/runtime.log" ), "an ignore pattern still applies inside an included folder" );
+	}
+
 }

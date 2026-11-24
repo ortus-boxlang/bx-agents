@@ -1,15 +1,20 @@
 /**
- * Builds a Docker image from a project's `.build/app` and optionally pushes
+ * Builds a Docker image from a project's `.build` (the app, its libraries, the web root and the runtime home, see
+ * models/build/layout/BuildLayout) and optionally pushes
  * it to a container registry (M16) - shells out to the real `docker` CLI
  * (`docker build`/`docker login`/`docker push`) via `ProcessBuilder`,
  * matching `MiniServerLauncher.java`'s established "shell out, don't add a
  * dependency" pattern.
  *
  * The built-in Dockerfile template is based on the real, published
- * `ortussolutions/boxlang:miniserver` image (confirmed via
- * https://boxlang.ortusbooks.com/getting-started/running-boxlang/docker -
- * it serves `/app` as the webroot on port 8080 by default). A project can
- * override it entirely with its own `deploy/Dockerfile`.
+ * `ortussolutions/boxlang:miniserver` image. UNVERIFIED: nothing here could run Docker, so this recipe is read from
+ * https://boxlang.ortusbooks.com/getting-started/running-boxlang/docker and /miniserver, not proven. It puts the whole
+ * `.build` in `/app` (so `/app/miniserver.json`, which the image is documented to pick up, names `public` as the web
+ * root, `runtime/boxlang.json` as the engine config and `runtime` as the home, all relative to the working
+ * directory `/app`), sets BOXLANG_HOME to `/app/runtime` so only the bundled bxagents module loads, and binds
+ * `0.0.0.0` (a container is reached from outside it). What still needs a run on a machine with Docker: that the
+ * entrypoint starts in `/app` and reads `/app/miniserver.json`, since the two documentation pages name different variables
+ * for the config. A project can override the whole file with its own `deploy/Dockerfile`.
  *
  * `registry.type` accepts `dockerhub`, `ghcr`, or `docr` (DigitalOcean
  * Container Registry) - this is deliberately the SAME shape the
@@ -34,13 +39,31 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 
 	variables.REGISTRY_HOSTS = { "dockerhub" : "", "ghcr" : "ghcr.io", "docr" : "registry.digitalocean.com" }
 
+	// UNVERIFIED (no Docker where this was written): see the class docblock
 	variables.DEFAULT_DOCKERFILE = "FROM ortussolutions/boxlang:miniserver" & char( 10 ) &
+		"WORKDIR /app" & char( 10 ) &
 		"COPY . /app" & char( 10 ) &
+		"ENV BOXLANG_HOME=/app/runtime" & char( 10 ) &
+		"RUN sed -i 's/""host"": *""[^""]*""/""host"": ""0.0.0.0""/' /app/miniserver.json" & char( 10 ) &
 		"EXPOSE 8080" & char( 10 )
+
+	// what stays out of the image: the manifest, the interceptor work folder and what a running server wrote in its home
+	variables.DOCKERIGNORE = "manifest.json" & char( 10 ) &
+		"runtime-interceptors" & char( 10 ) &
+		"runtime/logs" & char( 10 ) &
+		"runtime/classes" & char( 10 ) &
+		"runtime/cache" & char( 10 ) &
+		"runtime/config" & char( 10 ) &
+		"runtime/tmp" & char( 10 ) &
+		"runtime/maven.md" & char( 10 ) &
+		"runtime/pom.xml" & char( 10 ) &
+		"runtime/version.properties" & char( 10 ) &
+		".module-copy-*" & char( 10 ) &
+		".dockerignore" & char( 10 )
 
 	/**
 	 * @config This target's own resolved `deploy/*` entry (see the class docblock's `@config` shape)
-	 * @context { projectRoot, appDir, distDir, manifest } - `appDir` (from `build`) is used as the docker build context
+	 * @context { projectRoot, buildDir, appDir, distDir, manifest } - `buildDir` (`.build`, from `build`) is the docker build context
 	 *
 	 * @return { success, message, details: { imageRef, registry } }
 	 */
@@ -53,13 +76,14 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 			)
 		}
 
-		var appDir = arguments.context.appDir
-		if ( !directoryExists( appDir ) ) {
+		var buildDir = arguments.context.buildDir ?: ( ( arguments.context.projectRoot ?: "" ) & "/.build" )
+		if ( !directoryExists( buildDir & "/app" ) || !directoryExists( buildDir & "/public" ) ) {
 			throw(
 				type    = "BxAgents.NotBuilt",
-				message = "No build found at [#appDir#] - run `build` first"
+				message = "No build found at [#buildDir#] - run `build` first"
 			)
 		}
+		fileWrite( buildDir & "/.dockerignore", variables.DOCKERIGNORE )
 
 		var imageRef = buildImageRef( arguments.config )
 		var dockerfilePath = resolveDockerfile( arguments.config, arguments.context )
@@ -77,7 +101,7 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 			}
 		}
 
-		var buildResult = runProcess( buildDockerBuildCommand( imageRef, dockerfilePath, appDir ) )
+		var buildResult = runProcess( buildDockerBuildCommand( imageRef, dockerfilePath, buildDir ) )
 		if ( buildResult.exitCode != 0 ) {
 			throw(
 				type    = "BxAgents.DeployFailed",
@@ -101,6 +125,20 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 	}
 
 	/**
+	 * @return The Dockerfile written when the project has no `deploy/Dockerfile` of its own. UNVERIFIED against a real Docker (see the class docblock)
+	 */
+	string function dockerfileText() {
+		return variables.DEFAULT_DOCKERFILE
+	}
+
+	/**
+	 * @return The `.dockerignore` written into the build folder: what the image does not carry
+	 */
+	string function dockerignoreText() {
+		return variables.DOCKERIGNORE
+	}
+
+	/**
 	 * @config This target's own resolved `deploy/*` entry - `registry.type`/`registry.repository`/`tag` are used
 	 *
 	 * @return The fully-qualified image reference, e.g. "ghcr.io/org/repo:latest"
@@ -117,7 +155,7 @@ class implements="models.deploy.IDeploymentTarget@bxagents" {
 	/**
 	 * @imageRef The fully-qualified image reference from buildImageRef()
 	 * @dockerfilePath Absolute path to the Dockerfile to build with
-	 * @contextDir The docker build context directory (the project's `.build/app`)
+	 * @contextDir The docker build context directory (the project's `.build`)
 	 *
 	 * @return The `docker build` argv as an array, ready for ProcessBuilder
 	 */

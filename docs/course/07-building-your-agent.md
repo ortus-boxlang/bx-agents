@@ -16,7 +16,8 @@ bxAgents build
 
 This runs the full build pipeline - config resolution, discovery, validation, code
 generation, manifest normalization - and writes a real ColdBox application to
-`.build/app/`, plus `.build/manifest.json`.
+`.build/`, laid out like the ColdBox BoxLang template (the code in `app/`, the web root
+in `public/`), plus `.build/manifest.json`.
 
 ## The five phases, in order
 
@@ -27,7 +28,7 @@ flowchart TD
     C -->|"any error"| X["Build throws.<br/>.build/app is never written"]
     C -->|"clean"| D["4 · Generate"]
     D --> E["5 · Normalize + write manifest"]
-    E --> F[".build/manifest.json<br/>+ .build/app"]
+    E --> F[".build/manifest.json<br/>+ .build/app and .build/public"]
 
     style C fill:#fff3cd,stroke:#856404
     style X fill:#f8d7da,stroke:#721c24
@@ -76,8 +77,8 @@ cd my-agent
 bxAgents build --verbose
 ```
 
-You should see a `.build/app/` directory appear, and a manifest describing exactly
-what went into it. You'll talk to this built agent in the next lesson.
+You should see a `.build/` directory appear, with `app/` (the code) and `public/` (the
+only folder a server serves), and a manifest describing exactly what went into it. You'll talk to this built agent in the next lesson.
 
 Full reference: [The Build Pipeline](../build-pipeline.md).
 

@@ -1,5 +1,9 @@
 class extends="testbox.system.BaseSpec" {
 
+	// The specs that start a server only check what `serve` writes and starts, and stop the process at once. A served app carries the
+	// bxagents module in its own runtime; a source checkout has no installed one, so runTests.bxs names a stand-in folder in
+	// BXAGENTS_MODULE_DIR once, at the start of the run.
+
 	function run() {
 		describe( "cli.Serve", function() {
 
@@ -73,9 +77,76 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( result.serverHome ).toBe( projectRoot & "/.build/runtime" );
 
+				// by a path relative to .build, where the server runs (see the next spec): the same file serves a packaged copy anywhere
 				var config = jsonDeserialize( fileRead( result.configPath ) );
-				expect( config.serverHome ).toBe( projectRoot & "/.build/runtime" );
+				expect( config.serverHome ).toBe( "runtime" );
 				expect( directoryExists( projectRoot & "/.build/runtime" ) ).toBeTrue();
+			} );
+
+			it( "serves public/ with the template's engine config, by relative paths, from .build", function() {
+				var executable = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).findExecutable();
+				if ( isNull( executable ) ) {
+					return;
+				}
+
+				var projectRoot = newTempProject( "full-project" );
+				buildVerb.run( { projectRoot : projectRoot } );
+
+				var result = serveVerb.run( { projectRoot : projectRoot } );
+				try {
+					expect( result.configPath ).toBe( projectRoot & "/.build/miniserver.json" );
+					var config = jsonDeserialize( fileRead( result.configPath ) );
+					expect( config.webRoot ).toBe( "public" );
+					expect( config.configPath ).toBe( "runtime/boxlang.json" );
+					expect( config.rewrites ).toBeTrue();
+					expect( config.rewriteFileName ).toBe( "index.bxm" );
+					expect( config.healthCheck ).toBeTrue();
+					expect( result.publicDir ).toBe( projectRoot & "/.build/public" );
+
+					// the working folder of the server is .build, which is what `${user-dir}` means in runtime/boxlang.json (Linux only: /proc)
+					var proc = createObject( "java", "java.io.File" ).init( "/proc/" & result.process.pid() & "/cwd" );
+					if ( proc.exists() ) {
+						expect( createObject( "java", "java.nio.file.Files" ).readSymbolicLink( proc.toPath() ).toString() ).toBe( projectRoot & "/.build" );
+					}
+				} finally {
+					result.process.destroy();
+				}
+			} );
+
+			it( "never names the machine's own module directory: no modulesDirectory, no config under the runtime home", function() {
+				var executable = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).findExecutable();
+				if ( isNull( executable ) ) {
+					return;
+				}
+
+				var projectRoot = newTempProject( "full-project" );
+				buildVerb.run( { projectRoot : projectRoot } );
+				var result = serveVerb.run( { projectRoot : projectRoot } );
+				result.process.destroy();
+
+				expect( fileRead( result.configPath ) ).notToInclude( "modulesDirectory" );
+				expect( fileExists( projectRoot & "/.build/runtime/config/boxlang.json" ) ).toBeFalse();
+				// the one module is the copy in the app's own runtime
+				expect( directoryList( projectRoot & "/.build/runtime/modules", false, "name" ) ).toBe( [ "bxagents" ] );
+			} );
+
+			it( "stops with a clear error when the build has no bxagents module to load", function() {
+				var projectRoot = newTempProject( "full-project" );
+				buildVerb.run( { projectRoot : projectRoot } );
+				directoryDelete( projectRoot & "/.build/runtime/modules/bxagents", true );
+				// "none": no module to copy, even though this suite runs from a built one
+				expect( function() {
+					serveVerb.run( { projectRoot : projectRoot, moduleDir : "none" } );
+				} ).toThrow( "BxAgents.NoModuleInBuild" );
+			} );
+
+			it( "tells a build made before the app/public layout to build again", function() {
+				var projectRoot = newTempProject( "full-project" );
+				buildVerb.run( { projectRoot : projectRoot } );
+				directoryDelete( projectRoot & "/.build/public", true );
+				expect( function() {
+					serveVerb.run( { projectRoot : projectRoot } );
+				} ).toThrow( "BxAgents.NotBuilt" );
 			} );
 
 			/**

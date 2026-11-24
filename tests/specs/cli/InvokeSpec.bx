@@ -107,10 +107,16 @@ class extends="testbox.system.BaseSpec" {
 					return;
 				}
 
+				// the served app loads the bxagents module from its own runtime: the BUILT module (`shadowJar createModuleStructure`), not the
+				// suite's stand-in. Skipped, like the miniserver itself, when it has not been built.
+				var builtModule = expandPath( "/" ) & "build/modules/bxagents";
+				if ( !fileExists( builtModule & "/ModuleConfig.bx" ) ) {
+					return;
+				}
 				var dir = newTempProject( "invoke-agent" );
-				buildVerb.run( { projectRoot : dir } );
+				buildVerb.run( { projectRoot : dir, moduleDir : builtModule } );
 
-				var result = invokeVerb.run( { projectRoot : dir, message : "Hello there", server : true } );
+				var result = invokeVerb.run( { projectRoot : dir, message : "Hello there", server : true, moduleDir : builtModule } );
 
 				expect( result.exitCode ).toBe( 0 );
 				expect( result.message ).toBe( "Mock response" );

@@ -1,0 +1,117 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "ModuleCopier", function() {
+
+			beforeEach( function() {
+				variables.tmp = createTempDirectory( prefix = "bxagents-modcopy-" );
+				variables.module = tmp & "/bxagents";
+				variables.runtime = tmp & "/build/runtime";
+				directoryCreate( module & "/libs", true );
+				directoryCreate( module & "/modules/bxai", true );
+				directoryCreate( module & "/models", true );
+				fileWrite( module & "/ModuleConfig.bx", "class {}" );
+				fileWrite( module & "/box.json", '{ "name": "bxagents", "version": "1.0.0" }' );
+				fileWrite( module & "/libs/bx-agents-1.0.0.jar", "jar-bytes-1" );
+				fileWrite( module & "/modules/bxai/box.json", '{ "version": "3.8.0" }' );
+				fileWrite( module & "/models/Thing.bx", "class {}" );
+				variables.copier = new bxagents.models.build.layout.ModuleCopier();
+			} );
+
+			afterEach( function() {
+				directoryDelete( tmp, true );
+			} );
+
+			it( "copies only the bxagents module folder, under that name, into runtime/modules", function() {
+				var result = copier.copy( module, runtime );
+				expect( result.copied ).toBeTrue();
+				expect( directoryExists( runtime & "/modules/bxagents/models" ) ).toBeTrue();
+				expect( fileExists( runtime & "/modules/bxagents/modules/bxai/box.json" ) ).toBeTrue();
+				expect( directoryList( runtime & "/modules", false, "name" ) ).toBe( [ "bxagents" ] );
+			} );
+
+			it( "skips the copy while the stamp (box.json version and the hash of the jars) is unchanged", function() {
+				copier.copy( module, runtime );
+				fileWrite( runtime & "/modules/bxagents/marker.txt", "still here" );
+				var again = copier.copy( module, runtime );
+				expect( again.copied ).toBeFalse();
+				expect( again.reason ).toBe( "unchanged" );
+				expect( fileExists( runtime & "/modules/bxagents/marker.txt" ) ).toBeTrue();
+			} );
+
+			it( "copies again when a jar changes, even with the same version", function() {
+				copier.copy( module, runtime );
+				fileWrite( module & "/libs/bx-agents-1.0.0.jar", "jar-bytes-2" );
+				var again = copier.copy( module, runtime );
+				expect( again.copied ).toBeTrue();
+				expect( fileRead( runtime & "/modules/bxagents/libs/bx-agents-1.0.0.jar" ) ).toBe( "jar-bytes-2" );
+			} );
+
+			it( "copies again when the version changes, and when a nested module changes", function() {
+				copier.copy( module, runtime );
+				fileWrite( module & "/box.json", '{ "name": "bxagents", "version": "1.0.1" }' );
+				expect( copier.copy( module, runtime ).copied ).toBeTrue();
+				fileWrite( module & "/modules/bxai/box.json", '{ "version": "3.9.0" }' );
+				expect( copier.copy( module, runtime ).copied ).toBeTrue();
+			} );
+
+			it( "replaces the whole folder, so a file the new module no longer has does not survive", function() {
+				copier.copy( module, runtime );
+				fileWrite( runtime & "/modules/bxagents/old.bx", "stale" );
+				fileWrite( module & "/libs/bx-agents-1.0.0.jar", "jar-bytes-3" );
+				copier.copy( module, runtime );
+				expect( fileExists( runtime & "/modules/bxagents/old.bx" ) ).toBeFalse();
+			} );
+
+			it( "never leaves a stamp on a folder that was not completely copied", function() {
+				// a folder with the right name but no stamp is what an interrupted copy leaves in the other designs
+				directoryCreate( runtime & "/modules/bxagents", true );
+				fileWrite( runtime & "/modules/bxagents/half.bx", "half" );
+				var result = copier.copy( module, runtime );
+				expect( result.copied ).toBeTrue();
+				expect( fileExists( runtime & "/modules/bxagents/half.bx" ) ).toBeFalse();
+				// and the work folder is gone: nothing but the finished module is left in the build
+				expect( directoryList( tmp & "/build", false, "name" ).filter( n => n.startsWith( ".module-copy" ) ).len() ).toBe( 0 );
+			} );
+
+			it( "removes the leftovers of an earlier interrupted copy", function() {
+				directoryCreate( tmp & "/build/.module-copy-dead", true );
+				fileWrite( tmp & "/build/.module-copy-dead/x", "x" );
+				copier.copy( module, runtime );
+				expect( directoryExists( tmp & "/build/.module-copy-dead" ) ).toBeFalse();
+			} );
+
+			it( "does nothing, and says why, when there is no installed module to copy (a source checkout)", function() {
+				var result = copier.copy( "", runtime );
+				expect( result.copied ).toBeFalse();
+				expect( result.reason ).toBe( "no-module" );
+				expect( directoryExists( runtime & "/modules/bxagents" ) ).toBeFalse();
+			} );
+
+			it( "finds the module folder from a path that looks like src/main/bx only when it is named bxagents", function() {
+				// this spec reaches the code through the /bxagents mapping, which is the repository's src/main/bx: not an installed module
+				expect( copier.installedModuleDir() ).toBe( "" );
+			} );
+
+			describe( "which folder is the module to copy", function() {
+
+				// getSystemSetting() answers from a per-key cache, so these pass the folder as the argument and never change BXAGENTS_MODULE_DIR
+
+				it( "is the folder it is asked for, when it has a ModuleConfig.bx", function() {
+					expect( copier.sourceDir( module ) ).toBe( module );
+				} );
+
+				it( "is nothing when it is asked for none", function() {
+					expect( copier.sourceDir( "none" ) ).toBe( "" );
+				} );
+
+				it( "ignores a folder that is not a module, and falls back to what BXAGENTS_MODULE_DIR or the installed module gives", function() {
+					expect( copier.sourceDir( tmp & "/not-a-module" ) ).toBe( copier.sourceDir() );
+				} );
+
+			} );
+
+		} );
+	}
+
+}

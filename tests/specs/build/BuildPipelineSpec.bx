@@ -17,6 +17,11 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			// the generated wiring: the base class public/Application.bx extends
+			private function wiring( required struct result ) {
+				return fileRead( result.appDir & "/bxagents/Application.bx" );
+			}
+
 			private function newTempProject( required string fixtureName ) {
 				var dir = createTempDirectory( prefix = "bxagents-pipeline-" );
 				directoryCopy( fixtures & "/" & arguments.fixtureName, dir, true );
@@ -28,7 +33,7 @@ class extends="testbox.system.BaseSpec" {
 				var projectRoot = newTempProject( "yaml-inline-instructions" );
 				var result = pipeline.build( projectRoot );
 
-				expect( fileExists( result.appDir & "/Application.bx" ) ).toBeTrue();
+				expect( fileExists( result.publicDir & "/Application.bx" ) ).toBeTrue();
 				expect( result.manifest.agent.name ).toBe( "yaml-inline-agent" );
 				expect( result.manifest.agent.model ).toBe( "mock/mock-model" );
 			} );
@@ -40,7 +45,7 @@ class extends="testbox.system.BaseSpec" {
 
 				var result = pipeline.build( projectRoot );
 
-				expect( fileExists( result.appDir & "/boxlang_modules/bxfake/ModuleConfig.bx" ) ).toBeTrue();
+				expect( fileExists( result.buildDir & "/boxlang_modules/bxfake/ModuleConfig.bx" ) ).toBeTrue();
 			} );
 
 			it( "leaves a devDependency module out of the app", function() {
@@ -55,8 +60,8 @@ class extends="testbox.system.BaseSpec" {
 
 				var result = pipeline.build( projectRoot );
 
-				expect( directoryExists( result.appDir & "/boxlang_modules/bxkeep" ) ).toBeTrue();
-				expect( directoryExists( result.appDir & "/boxlang_modules/bxdev" ) ).toBeFalse();
+				expect( directoryExists( result.buildDir & "/boxlang_modules/bxkeep" ) ).toBeTrue();
+				expect( directoryExists( result.buildDir & "/boxlang_modules/bxdev" ) ).toBeFalse();
 			} );
 
 			it( "builds a full project end-to-end, producing .build/app and .build/manifest.json", function() {
@@ -64,8 +69,10 @@ class extends="testbox.system.BaseSpec" {
 				var result = pipeline.build( projectRoot );
 
 				expect( directoryExists( result.appDir ) ).toBeTrue();
-				expect( fileExists( result.appDir & "/Application.bx" ) ).toBeTrue();
-				expect( fileExists( result.appDir & "/config/ColdBox.bx" ) ).toBeTrue();
+				expect( fileExists( result.publicDir & "/Application.bx" ) ).toBeTrue();
+				// the app folder's own Application.bx is the template's guard against a direct request
+				expect( fileRead( result.appDir & "/Application.bx" ) ).toInclude( "abort;" );
+				expect( fileExists( result.appDir & "/config/Coldbox.bx" ) ).toBeTrue();
 				expect( fileExists( result.appDir & "/config/WireBox.bx" ) ).toBeTrue();
 				expect( fileExists( result.appDir & "/config/Router.bx" ) ).toBeTrue();
 				expect( fileExists( result.appDir & "/agent/GeneratedAgentFactory.bx" ) ).toBeTrue();
@@ -137,10 +144,10 @@ class extends="testbox.system.BaseSpec" {
 				var result = pipeline.build( projectRoot );
 
 				var scheduler = fileRead( result.appDir & "/schedules/Nightly.bx" );
-				expect( scheduler ).toInclude( 'class extends="bxagents.Scheduler" {' );
+				expect( scheduler ).toInclude( 'class extends="app.bxagents.Scheduler" {' );
 				expect( scheduler ).toInclude( '.cron( "0 0 * * *" )' );
 				expect( fileExists( result.appDir & "/bxagents/Scheduler.bx" ) ).toBeTrue();
-				expect( fileRead( result.appDir & "/bxagents/Application.bx" ) ).toInclude( '"schedules.Nightly"' );
+				expect( wiring( result ) ).toInclude( '"app.schedules.Nightly"' );
 				// the old ColdBox scheduler path is gone
 				expect( fileExists( result.appDir & "/config/Scheduler.bx" ) ).toBeFalse();
 			} );
@@ -155,18 +162,18 @@ class extends="testbox.system.BaseSpec" {
 				expect( schedules[ 1 ].path ).toBe( "schedules/Nightly.bx" );
 			} );
 
-			it( "copies the project's own root Application.bx into the app as it is, and generates one when there is none", function() {
+			it( "makes the project's own root Application.bx the web root's Application.bx, extending the generated base, and generates a thin one when there is none", function() {
 				var projectRoot = newTempProject( "full-project" );
 				var own = 'class extends="bxagents.Application" {' & char( 10 ) & "	// mine" & char( 10 ) & "}" & char( 10 );
 				fileWrite( projectRoot & "/Application.bx", own );
 
 				var result = pipeline.build( projectRoot );
-				expect( fileRead( result.appDir & "/Application.bx" ) ).toBe( own );
+				expect( fileRead( result.publicDir & "/Application.bx" ) ).toBe( replace( own, 'extends="bxagents.Application"', 'extends="app.bxagents.Application"' ) );
 
 				fileDelete( projectRoot & "/Application.bx" );
 				var rebuilt = pipeline.build( projectRoot );
-				expect( fileRead( rebuilt.appDir & "/Application.bx" ) ).toInclude( 'class extends="bxagents.Application" {' );
-				expect( fileRead( rebuilt.appDir & "/Application.bx" ) ).notToInclude( "mine" );
+				expect( fileRead( rebuilt.publicDir & "/Application.bx" ) ).toInclude( 'class extends="app.bxagents.Application"' );
+				expect( fileRead( rebuilt.publicDir & "/Application.bx" ) ).notToInclude( "mine" );
 			} );
 
 			it( "wipes a scheduler the project no longer has on rebuild", function() {
@@ -176,7 +183,7 @@ class extends="testbox.system.BaseSpec" {
 
 				var rebuilt = pipeline.build( projectRoot );
 				expect( fileExists( rebuilt.appDir & "/schedules/Nightly.bx" ) ).toBeFalse();
-				expect( fileRead( rebuilt.appDir & "/bxagents/Application.bx" ) ).notToInclude( "this.schedulers" );
+				expect( wiring( rebuilt ) ).notToInclude( "this.schedulers" );
 			} );
 
 			it( "puts a project's agent-scope interceptor where the generated Application.bx looks it up", function() {
@@ -186,7 +193,7 @@ class extends="testbox.system.BaseSpec" {
 				// Registered through ColdBox's class registration, which WireBox resolves to
 				// <appDir>/interceptors/AuditLogger.bx. One folder deeper and the app fails to start
 				// with "Instance not found" (measured by booting examples/advanced-agent).
-				expect( fileRead( result.appDir & "/bxagents/Application.bx" ) ).toInclude( 'registerInterceptor( interceptorClass: "interceptors.AuditLogger", interceptorName: "AuditLogger" )' );
+				expect( wiring( result ) ).toInclude( 'registerInterceptor( interceptorClass: "app.interceptors.AuditLogger", interceptorName: "AuditLogger" )' );
 				expect( fileExists( result.appDir & "/interceptors/AuditLogger.bx" ) ).toBeTrue();
 				expect( directoryExists( result.appDir & "/interceptors/interceptors" ) ).toBeFalse();
 			} );
@@ -197,7 +204,7 @@ class extends="testbox.system.BaseSpec" {
 
 				// `@scope agent` is also WireBox's own scope annotation: getInstance() on such a class
 				// died with "The key [agent] was not found in the struct" on a real boot.
-				expect( fileRead( result.appDir & "/bxagents/Application.bx" ) ).notToInclude( 'getInstance( "interceptors.AuditLogger" )' );
+				expect( wiring( result ) ).notToInclude( 'getInstance( "app.interceptors.AuditLogger" )' );
 			} );
 
 			it( "builds the connectors a person can connect to into the app: only, exclude and override applied", function() {
@@ -250,7 +257,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "gives a project with chat gateways the shared chat database, migrated at start", function() {
 				var projectRoot = newTempProject( "gateways-telegram" );
 				var result = pipeline.build( projectRoot );
-				var appSource = fileRead( result.appDir & "/bxagents/Application.bx" );
+				var appSource = wiring( result );
 
 				expect( appSource ).toInclude( 'ChatStore@bxagents"( "" ).migrate()' );
 				expect( appSource ).toInclude( "data/chat.db" );
@@ -259,11 +266,12 @@ class extends="testbox.system.BaseSpec" {
 			it( 'calls aiToolRegistry().scan("tools") at startup only when the project declares tools', function() {
 				var withTools = newTempProject( "full-project" );
 				var withToolsResult = pipeline.build( withTools );
-				expect( fileRead( withToolsResult.appDir & "/bxagents/Application.bx" ) ).toInclude( 'aiToolRegistry().scan( "tools" )' );
+				// "app.tools": bx-ai expands the dotted path against a mapping (expandPath( "/app/tools" )), so it must be a mapping path, not one relative to the app
+				expect( wiring( withToolsResult ) ).toInclude( 'aiToolRegistry().scan( "app.tools" )' );
 
 				var withoutTools = newTempProject( "valid-minimal" );
 				var withoutToolsResult = pipeline.build( withoutTools );
-				expect( fileRead( withoutToolsResult.appDir & "/bxagents/Application.bx" ) ).notToInclude( "aiToolRegistry().scan(" );
+				expect( wiring( withoutToolsResult ) ).notToInclude( "aiToolRegistry().scan(" );
 			} );
 
 			it( "throws BxAgents.BuildValidationFailed and produces no .build/app for an invalid project", function() {
@@ -290,7 +298,7 @@ class extends="testbox.system.BaseSpec" {
 				var projectRoot = newTempProject( "gateways-mixed" );
 				var result = pipeline.build( projectRoot );
 
-				var content = fileRead( result.appDir & "/bxagents/Application.bx" );
+				var content = wiring( result );
 				expect( content ).toInclude( 'aiGatewayRegistry().register( aiGateway( "http"' );
 				expect( content ).toInclude( 'aiGatewayRegistry().register( aiGateway( "mock"' );
 				expect( content ).toInclude( "mcpServer(" );

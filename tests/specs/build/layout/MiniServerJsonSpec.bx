@@ -1,0 +1,57 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "MiniServerJson", function() {
+
+			beforeEach( function() {
+				variables.tmp = createTempDirectory( prefix = "bxagents-msjson-" );
+			} );
+
+			afterEach( function() {
+				directoryDelete( tmp, true );
+			} );
+
+			it( "serves public/ with the runtime config and home, by paths relative to .build", function() {
+				var config = new bxagents.models.build.layout.MiniServerJson().render( 8123, "127.0.0.1" );
+				expect( config.port ).toBe( 8123 );
+				expect( config.host ).toBe( "127.0.0.1" );
+				expect( config.webRoot ).toBe( "public" );
+				expect( config.configPath ).toBe( "runtime/boxlang.json" );
+				expect( config.serverHome ).toBe( "runtime" );
+				expect( config.rewrites ).toBeTrue();
+				expect( config.rewriteFileName ).toBe( "index.bxm" );
+				expect( config.healthCheck ).toBeTrue();
+			} );
+
+			it( "lets only index.bxm run: a .bx class or another page under the web root is never executed", function() {
+				var config = new bxagents.models.build.layout.MiniServerJson().render( 8080, "127.0.0.1" );
+				expect( config.passPredicate ).toInclude( "index" );
+				expect( config.passPredicate ).notToInclude( "bx[ms]" );
+			} );
+
+			it( "names the one page a test may add, and nothing else, in the pass predicate", function() {
+				var json = new bxagents.models.build.layout.MiniServerJson();
+				expect( json.passPredicate() ).toBe( "regex( '^/(index)\.bxm(/.*)?$' )" );
+				expect( json.passPredicate( [ "runner-coldbox.bxm" ] ) ).toBe( "regex( '^/(index|runner-coldbox)\.bxm(/.*)?$' )" );
+				expect( function() {
+					json.passPredicate( [ "a|b.bxm" ] );
+				} ).toThrow( "BxAgents.InvalidPage" );
+			} );
+
+			it( "writes miniserver.json into the build folder", function() {
+				var file = new bxagents.models.build.layout.MiniServerJson().write( tmp, 8080, "0.0.0.0" );
+				expect( file ).toBe( tmp & "/miniserver.json" );
+				expect( jsonDeserialize( fileRead( file ) ).host ).toBe( "0.0.0.0" );
+			} );
+
+			it( "never holds an absolute path, so a packaged app boots from any folder", function() {
+				var config = new bxagents.models.build.layout.MiniServerJson().render( 8080, "127.0.0.1" );
+				for ( var key in [ "webRoot", "configPath", "serverHome" ] ) {
+					expect( config[ key ] ).notToMatch( "^(/|[A-Za-z]:)" );
+				}
+			} );
+
+		} );
+	}
+
+}

@@ -806,23 +806,25 @@ class {
 	}
 
 	/**
-	 * The project's own Application.bx. Every build generates `bxagents/Application.bx` in the app with the wiring (ColdBox,
-	 * agents, gateways, interceptors, schedulers); this class extends it, so a hook or a setting added here wins.
+	 * The project's own Application.bx. Every build generates the wiring (ColdBox, agents, gateways, interceptors,
+	 * schedulers) in `app/bxagents/` of the built app; this class extends it, so a setting added here wins and a hook
+	 * added here runs with it. The build points `bxagents.Application` at the generated class.
 	 *
 	 * @return The rendered Application.bx source
 	 */
 	private string function renderApplicationBx() {
 		var lines = [
-			"// Your application's Application.bx. It extends the class BxAgents generates on every build",
-			"// (.build/app/bxagents/Application.bx), which holds the wiring for ColdBox, the agent, gateways,",
-			"// interceptors and schedules. Add settings and hooks here; to add to a hook rather than replace",
+			"// Your application's Application.bx. It extends the class BxAgents generates on every build,",
+			"// which holds the wiring for ColdBox, the agent, gateways, interceptors and schedules.",
+			"// Add settings (this.sessionTimeout = ...) and hooks here. To add to a hook rather than replace",
 			"// it, call the same method on super:",
 			"//",
-			"//   function onApplicationStart() {",
-			"//       super.onApplicationStart()",
-			"//       // your own startup work",
-			"//       return true",
+			"//   function after() {",
+			"//       super.after()",
+			"//       // your own startup work, once ColdBox has loaded",
 			"//   }",
+			"//",
+			"// The hooks are before() (before ColdBox loads), after() (once it has) and beforeRequest().",
 			'class extends="bxagents.Application" {',
 			"",
 			"}",

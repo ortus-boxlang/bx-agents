@@ -45,7 +45,7 @@ class extends="bxModules.bxagents.models.testing.BaseAgentSpec" {
 ```
 
 `BaseAgentSpec` builds your agent once per spec bundle, against a **throwaway temp
-copy** of your project - it never touches your real `.build/app`, so testing never
+copy** of your project - it never touches your real `.build`, so testing never
 clobbers a real `build`/`serve`/`package` cycle. The built agent is exposed as `agent`.
 
 ## Testing needs no API key

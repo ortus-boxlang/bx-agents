@@ -142,7 +142,7 @@ The entry's discovered name is its **filename** (`localServer.bx` → `localServ
 
 `cors` is optional and defaults to an empty string (no CORS header) when omitted - passed straight through as `mcpServer()`'s 4th positional argument.
 
-At build time, the file is copied verbatim into the generated app's `mcp/` folder, and a registration statement is emitted into the generated base `Application` ([`bxagents/Application.bx`](application-bx.md))'s `onApplicationStart()`:
+At build time, the file is copied verbatim into the generated app's `mcp/` folder, and a registration statement is emitted into the generated base class ([`bxagents/Application.bx`](application-bx.md))'s `after()`, which runs once ColdBox has loaded:
 
 ```javascript
 mcpServer( "localServer", "Internal tools MCP server", "1.0.0", "*" )

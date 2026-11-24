@@ -28,13 +28,13 @@ BxAgents never installs anything. Install packages the way you normally do, with
 
 | What | Folder in the project | What `build` does with it |
 |---|---|---|
-| BoxLang modules (`bx-playwright`, ...) | `boxlang_modules/` | BoxLang loads this folder from the project root, so `chat`, `invoke` and `test` find them. `build` copies it to `.build/app/boxlang_modules`, so `serve` and a packaged `.bxa` carry it too. |
+| BoxLang modules (`bx-playwright`, ...) | `boxlang_modules/` | BoxLang loads this folder from the project root, so `chat`, `invoke` and `test` find them. `build` copies it to `.build/boxlang_modules`, so `serve` and a packaged `.bxa` carry it too. |
 | ColdBox libraries and modules | `lib/coldbox`, `lib/modules/<name>` | Copied into the app over the bundled ones, so a project can add or override a library. |
 | Test tools (TestBox, ...) | `lib/<name>` or `tests/` | Not copied: the app does not need them. |
 
 ## Development dependencies
 
-A BoxLang module that is only in `devDependencies` is left out of `.build/app`, and the build says which. A module is matched to `box.json` by the `slug` in its own `box.json`, or by its folder name (`bxplaywright` for `bx-playwright`). One listed in both sections is kept.
+A BoxLang module that is only in `devDependencies` is left out of `.build`, and the build says which. A module is matched to `box.json` by the `slug` in its own `box.json`, or by its folder name (`bxplaywright` for `bx-playwright`). One listed in both sections is kept.
 
 ## Using an installed module
 

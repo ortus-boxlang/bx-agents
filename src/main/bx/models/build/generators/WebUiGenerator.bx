@@ -19,10 +19,11 @@ class {
 	/**
 	 * @discovery The raw discovery struct from ProjectDiscoverer.discover() (only .gateways is used)
 	 * @appDir Absolute path to the generated ColdBox app dir, e.g. "<projectRoot>/.build/app"
+	 * @publicDir Absolute path to the web root, e.g. "<projectRoot>/.build/public": where the web app's built scripts and styles are put. Defaults to `public/` beside the app dir
 	 *
 	 * @return { hasWebUi, webUiAuthInterceptorName } - webUiAuthInterceptorName is "" when no webui entry configures an apiKeyEnvVar
 	 */
-	struct function generate( required struct discovery, required string appDir, struct config = {} ) {
+	struct function generate( required struct discovery, required string appDir, struct config = {}, string publicDir = "" ) {
 		var entries = collectWebUiEntries( arguments.discovery )
 		if ( !entries.len() ) {
 			return { hasWebUi : false, webUiAuthInterceptorName : "" }
@@ -42,7 +43,8 @@ class {
 			apiBase,
 			renderThemeTokens( entries[ 1 ].config.theme ?: {} ),
 			readCustomCss( entries[ 1 ] ),
-			new "models.extensions.ExtensionSettings@bxagents"().disableList( isStruct( arguments.config.extensions ?: "" ) ? arguments.config.extensions : {} )
+			new "models.extensions.ExtensionSettings@bxagents"().disableList( isStruct( arguments.config.extensions ?: "" ) ? arguments.config.extensions : {} ),
+			arguments.publicDir
 		)
 
 		// Accounts decide whether a sign-in is wired in, so they are resolved first. The page itself calls the agent API

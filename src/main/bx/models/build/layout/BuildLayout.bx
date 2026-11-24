@@ -1,0 +1,67 @@
+/**
+ * The folders of a built app, named once.
+ *
+ * `.build/` follows the ColdBox BoxLang application template: `app/` is the code, `public/` is the only
+ * folder the web server serves, `lib/` holds ColdBox and its modules, `runtime/` is the BoxLang home
+ * (its engine config and the one module the app needs) and `boxlang_modules/` holds the project's own
+ * installed modules. `miniserver.json` tells the standalone server where all of that is, by paths
+ * relative to `.build`, which is also the folder the server runs in.
+ *
+ *   .build/
+ *     miniserver.json
+ *     app/               generated code (Application.bx is the template's `abort;` guard)
+ *     public/            web root: Application.bx, index.bxm and the static files meant for the browser
+ *     lib/               coldbox/, modules/*, java/
+ *     runtime/           boxlang.json, modules/bxagents (the only module), global/, logs/, lib/
+ *     boxlang_modules/   the project's own installed BoxLang modules
+ *
+ * Everything that needs to know where something is asks this class, so a path is never rebuilt by hand
+ * from a string.
+ */
+class {
+
+	/**
+	 * @projectRoot Absolute path to the project root
+	 *
+	 * @return { buildDir, appDir, publicDir, libDir, runtimeDir, modulesDir, boxlangModulesDir, miniserverJson }, none with a trailing slash
+	 */
+	struct function of( required string projectRoot ) {
+		var build = arguments.projectRoot.reReplace( "[\\/]+$", "" ).replace( "\", "/", "all" ) & "/.build"
+		return {
+			buildDir          : build,
+			appDir            : build & "/app",
+			publicDir         : build & "/public",
+			libDir            : build & "/lib",
+			runtimeDir        : build & "/runtime",
+			modulesDir        : build & "/runtime/modules",
+			boxlangModulesDir : build & "/boxlang_modules",
+			miniserverJson    : build & "/miniserver.json"
+		}
+	}
+
+	/**
+	 * @return The folders of `.build` a packaged app carries (the template's own packaging set)
+	 */
+	array function packagedFolders() {
+		return [ "app", "boxlang_modules", "lib", "public", "runtime" ]
+	}
+
+	/**
+	 * @return The files of `.build` a packaged app carries
+	 */
+	array function packagedFiles() {
+		return [ "miniserver.json" ]
+	}
+
+	/**
+	 * What a running server leaves in `runtime/` is not part of the app: its logs, the classes it compiles at
+	 * start (the template's `clearClassFilesOnStartup` is on) and the other things the engine creates in its home
+	 * (measured after a run: config/, cache/, classes/, logs/, tmp/, maven.md, pom.xml, version.properties).
+	 *
+	 * @return `.bxaignore`-style globs, relative to `.build`
+	 */
+	array function packageIgnores() {
+		return [ "runtime/logs/", "runtime/classes/", "runtime/cache/", "runtime/config/", "runtime/tmp/", "runtime/maven.md", "runtime/pom.xml", "runtime/version.properties" ]
+	}
+
+}

@@ -16,7 +16,7 @@ The web app is a ColdBox module, `bxagentsui`, built the cbGenesis way. Read thi
 | Project shapes (other paths, a password, no accounts) | `ui/dev/shapes/`, `ui/tests/shapes/` |
 | Tours for screenshots and video | `ui/tests/media/` |
 
-A built agent copies the module to `modules/bxagentsui` and writes `config/bxagentsui.json` (see
+A built agent copies the module to `.build/app/modules/bxagentsui`, its built assets to `.build/public/includes/bxagentsui` (the only part the web root serves) and writes `config/bxagentsui.json` (see
 `src/main/bx/models/build/generators/WebAppModule.bx`). The module mounts itself at `basePath` from that file.
 
 ## Rules

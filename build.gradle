@@ -283,6 +283,8 @@ task createModuleStructure(type: Copy) {
         into 'libs'
     }
     from( 'src/main/bx' ) {
+		// the vendored ColdBox BoxLang template is copied below, byte for byte: no token filter, and it holds binary files
+		exclude 'templates/coldbox-boxlang/**'
 		include '**/*.bx'
 		include '**/*.bxm'
 		include '**/*.bxs'
@@ -304,6 +306,10 @@ task createModuleStructure(type: Copy) {
 		} else {
 			filter{ line -> line.replaceAll( '@build.number@', project.buildID ) }
 		}
+    }
+    // the ColdBox BoxLang application template, a pinned snapshot (see its VERSION): what every build lays out, copied as it is
+    from( 'src/main/bx' ) {
+		include 'templates/coldbox-boxlang/**'
     }
     // the web app module's Vite build (scripts, styles and the manifest naming them), copied as built: no token filter
     from( 'src/main/bx' ) {

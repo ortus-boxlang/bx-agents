@@ -54,6 +54,21 @@ public class MiniServerLauncherTest {
 		} );
 	}
 
+	@DisplayName( "launch() starts the child in the working directory it is given (a built app's paths are relative to .build)" )
+	@Test
+	public void testLaunchWorkingDirectory( @org.junit.jupiter.api.io.TempDir Path dir ) throws Exception {
+		assumeTrue( !System.getProperty( "os.name", "" ).toLowerCase().contains( "win" ), "needs /usr/bin/env" );
+		Path env = Path.of( "/usr/bin/env" );
+		assumeTrue( Files.isExecutable( env ), "needs /usr/bin/env" );
+
+		// `env pwd` runs pwd, which prints the folder the child was started in
+		Process	process	= MiniServerLauncher.launch( env.toString(), "pwd", false, java.util.Map.of(), dir.toString() );
+		String	printed	= new String( process.getInputStream().readAllBytes() ).trim();
+		process.waitFor();
+
+		assertEquals( dir.toRealPath().toString(), Path.of( printed ).toRealPath().toString() );
+	}
+
 	@DisplayName( "launch() hands the extra environment variables to the child process" )
 	@Test
 	public void testLaunchPassesEnvironment( @org.junit.jupiter.api.io.TempDir Path dir ) throws Exception {

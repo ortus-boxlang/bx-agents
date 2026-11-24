@@ -1,11 +1,52 @@
 /**
  * `serve` CLI verb - launches `boxlang-miniserver` (a separate standalone
  * binary, confirmed via ortus-boxlang/boxlang-miniserver source; this module
- * never boots a server in-process) pointed at a built project's
- * `.build/app`, via a generated `.build/miniserver.json`.
+ * never boots a server in-process) on a built project's `.build/public`, via
+ * `.build/miniserver.json`.
  *
  * Requires a prior `build`. If `boxlang-miniserver` isn't found on PATH,
  * fails with a clear, actionable error rather than silently doing nothing.
+ *
+ * ### What is served
+ *
+ * `.build` follows the ColdBox BoxLang template (see models/build/layout/BuildLayout): the code is `app/`, the
+ * web root is `public/`, and nothing else is reachable over HTTP. `miniserver.json` names every folder by a
+ * path relative to `.build`, and the server is started with `.build` as its working directory, which is
+ * what the template's `${user-dir}` means. The same file therefore serves a project from where it was built, a
+ * packaged copy unpacked anywhere, and a container.
+ *
+ * ### Which modules the served app loads
+ *
+ * Exactly the `bxagents` module (with the modules nested in it) and the project's own `boxlang_modules/`: the
+ * module is copied into `.build/runtime/modules/bxagents` (see ModuleCopier) and `serverHome` is
+ * `.build/runtime`, so BoxLang's `<home>/modules` is that folder. This verb used to add the machine's own
+ * module directory to the served app's config, which loaded every module installed there into the served app.
+ * It no longer names that directory anywhere. Measured: with neither `serverHome` nor BOXLANG_HOME set, BoxLang
+ * uses `~/.boxlang/modules`, and a decoy module placed there loaded; with the home set to `.build/runtime`
+ * the module list was exactly bxagents and its nested modules.
+ *
+ * ### Engine config
+ *
+ * `configPath` is the template's `runtime/boxlang.json` (with its whitespace compression turned off, see
+ * `templates/coldbox-boxlang/VERSION`). A `config/boxlang.json` under the home is ignored when `configPath` is
+ * given (measured with a decoy), so this verb no longer writes one.
+ *
+ * ### Why whitespace compression is off
+ *
+ * The web runtime's whitespace compression is on by default and collapses blank lines, and a Server-Sent
+ * Events frame ends with one. Measured on BoxLang and boxlang-miniserver 1.19.0, with it ON and OFF:
+ *
+ *   - `POST /__bxagents/stream` (a native `SSE()` emitter through ColdBox `toAi()`): 14 frame terminators, 14 frames,
+ *     8 content deltas both ways; `route().toSSE()` 5 and a two-line `SSE()` page 4, intact both ways. The native
+ *     emitter's output evidently does not pass through the filter.
+ *   - a handler that writes an event stream by hand with `writeOutput( "event: tick\ndata: hello N\n\n" )` three
+ *     times: 3 terminators with compression off, 0 with it on (77 bytes against 82).
+ *
+ * So on 1.19.0 the setting only matters for hand-written event streams, and an earlier note here claiming the
+ * native stream lost its terminators did not reproduce. It stays off in the vendored runtime/boxlang.json as a safety net: it costs
+ * nothing and keeps a hand-written stream (and any older engine that did filter the emitter) working.
+ *
+ * ### Binding
  *
  * Binds to `127.0.0.1` (loopback) unless `--host` says otherwise. It used to
  * default to `0.0.0.0`, which put the served agent in reach of everyone on
@@ -16,29 +57,11 @@
  * that way when that is genuinely what's wanted, and the verb's own output
  * always states which interface it bound to.
  *
- * Scopes the server's own BoxLang runtime home to `.build/runtime` via
- * `serverHome` (confirmed as a real, supported `MiniServerConfig` field -
- * `boxlang-web`'s own `MiniServer.class` help text: "-s, --serverHome
- * <PATH>  BoxLang server home directory (default: ~/.boxlang)") - a real
- * bug this closed: with no `serverHome` set, EVERY served BX Agents
- * project on a machine defaulted to sharing the same global `~/.boxlang`
- * (compiled class cache, and critically any machine-level
- * `~/.boxlang/config/boxlang.json` override, which would then silently
- * apply to every served project equally). Scoping it under `.build/`
- * means `clean` (which already wipes `.build` wholesale) sweeps it too,
- * for a genuinely complete reset - no separate cleanup code needed here.
- *
- * This fix only reaches `serve` and anything that reuses it (`invoke
- * --server`) - both spawn a brand-new, separate JVM process whose launch
- * config we write ourselves. It does NOT reach the in-process verbs
- * (`chat`, `build`, `test`, default `invoke`): those run inside the
- * ALREADY-STARTED `bxAgents` process, whose own BoxLang runtime (and
- * therefore its home) was resolved before any of our BoxLang code -
- * including `ModuleConfig.bx`'s own `main()` - ever got a chance to run
- * (the engine has to exist to interpret that code at all). `BoxRuntime`
- * is a JVM-wide singleton; its home is fixed at first initialization, so
- * nothing our own verb classes do can change it retroactively for the
- * process they're already running in.
+ * This reaches `serve` and anything that reuses it (`invoke --server`, `chat --server`) - they spawn a brand-new JVM
+ * whose launch config this verb writes. It does NOT reach the in-process verbs (`chat`, `build`, `test`, default
+ * `invoke`): those run inside the ALREADY-STARTED `bxAgents` process, whose own BoxLang runtime (and therefore its
+ * home) was resolved before any of our BoxLang code ever got a chance to run. `BoxRuntime` is a JVM-wide singleton;
+ * its home is fixed at first initialization.
  */
 class {
 
@@ -52,12 +75,19 @@ class {
 		}
 
 		var root = projectRoot.reReplace( "[\/]+$", "" )
-		var appDir = root & "/.build/app"
+		var layout = new "models.build.layout.BuildLayout@bxagents"().of( root )
+		var appDir = layout.appDir
 
 		if ( !directoryExists( appDir ) ) {
 			throw(
 				type    = "BxAgents.NotBuilt",
 				message = "No build found at [#appDir#] - run `build` first"
+			)
+		}
+		if ( !directoryExists( layout.publicDir ) ) {
+			throw(
+				type    = "BxAgents.NotBuilt",
+				message = "The build at [#layout.buildDir#] has no public/ folder: it was made before the app/public layout. Run `build` again."
 			)
 		}
 
@@ -77,55 +107,19 @@ class {
 		// still opts into every interface, deliberately and visibly.
 		var host = arguments.options.host ?: "127.0.0.1"
 		var boundTo = host == "0.0.0.0" ? "ALL network interfaces" : "#host# only"
-		var configPath = root & "/.build/miniserver.json"
-		var serverHome = root & "/.build/runtime"
+		var serverHome = layout.runtimeDir
 
-		directoryCreate( path = serverHome, createPath = true, ignoreExists = true )
+		// The served app needs the bxagents module in its own runtime (and nothing else from the machine). The build put it
+		// there; this makes sure of it, which is a no-op while its stamp is unchanged.
+		var copied = new "models.build.layout.ModuleCopier@bxagents"().copy( new "models.build.layout.ModuleCopier@bxagents"().sourceDir( arguments.options.moduleDir ?: "" ), serverHome )
+		if ( !directoryExists( serverHome & "/modules/bxagents" ) ) {
+			throw(
+				type    = "BxAgents.NoModuleInBuild",
+				message = "The build has no bxagents module in [#serverHome#/modules/bxagents], so the served app could not load. It is copied from the installed module: run `build` with BX Agents installed as a module, or set BXAGENTS_MODULE_DIR to the built module folder."
+			)
+		}
 
-		// SSE frames are terminated by a BLANK line, and the web runtime's
-		// whitespace compression - ON by default - collapses consecutive
-		// newlines, which eats exactly those terminators. Measured against a
-		// live `/__bxagents/stream`: with compression on, the body carried zero
-		// occurrences of `\n\n` and `http().sse( true )` reported
-		// `totalEvents: 0`; with it off, the same route parsed cleanly. So
-		// `chat --server`/`--connect` streaming depends on this directive.
-		//
-		// Safe to write because `serverHome` is already scoped to `.build/runtime`
-		// (see the class docblock) - this is THIS project's runtime home, not the
-		// machine's `~/.boxlang`, and `clean` sweeps it with the rest of `.build`.
-		var runtimeConfigDir = serverHome & "/config"
-		directoryCreate( path = runtimeConfigDir, createPath = true, ignoreExists = true )
-		// The served app needs this module (its gateways, tool loader, ...) and,
-		// through it, the BoxLang modules bundled inside it (bxai, sqlite, ...).
-		// `serverHome` is isolated, so none of the machine's installed modules are
-		// visible unless the module's own location is named here.
-		var runtimeConfig = { whitespaceCompressionEnabled : false }
-		var moduleFolders = []
-		var modulesParent = installedModulesDirectory()
-		if ( len( modulesParent ) ) {
-			moduleFolders.append( modulesParent )
-		}
-		// BoxLang modules the project installed with `install` (copied into the app by `build`)
-		if ( directoryExists( appDir & "/boxlang_modules" ) ) {
-			moduleFolders.append( appDir & "/boxlang_modules" )
-		}
-		if ( moduleFolders.len() ) {
-			runtimeConfig[ "modulesDirectory" ] = moduleFolders
-		}
-		fileWrite(
-			runtimeConfigDir & "/boxlang.json",
-			jsonSerialize( runtimeConfig )
-		)
-
-		fileWrite( configPath, jsonSerialize( {
-			port            : port,
-			host            : host,
-			webRoot         : appDir,
-			rewrites        : true,
-			rewriteFileName : "index.bxm",
-			healthCheck     : true,
-			serverHome      : serverHome
-		} ) )
+		var configPath = new "models.build.layout.MiniServerJson@bxagents"().write( layout.buildDir, port, host )
 
 		// The web chat and `chat` open the same database file, in the project's data/ folder
 		var paths = new "models.store.ChatStorePath@bxagents"()
@@ -135,42 +129,30 @@ class {
 		// This project's own runtime home, also through the child's environment: a BOXLANG_HOME already set in the
 		// environment this process inherited would otherwise be the home of every project served from here.
 		environment.put( "BOXLANG_HOME", javaCast( "string", serverHome ) )
+		// `_environment` adds variables to the child's, for a test that needs the server to see a different machine (see ServedLayoutSpec)
+		for ( var extra in ( arguments.options._environment ?: {} ) ) {
+			environment.put( javaCast( "string", extra ), javaCast( "string", arguments.options._environment[ extra ] ) )
+		}
 
-		var process = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( executable, configPath, true, environment )
+		// started in .build: the paths in miniserver.json are relative to it, and so is ${user-dir} in the engine config
+		var process = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).launch( executable, configPath, true, environment, layout.buildDir )
 
 		// an open API that other machines can reach is said out loud, once, at the start
 		var warning = new "models.api.ExposureWarning@bxagents"().of( appDir, host, port )
 
 		return {
 			exitCode   : 0,
-			message    : "Serving [#appDir#] on http://#host#:#port# - bound to #boundTo#" & ( len( warning ) ? char( 10 ) & warning : "" ),
+			message    : "Serving [#layout.publicDir#] (the app is in [#appDir#]) on http://#host#:#port# - bound to #boundTo#" & ( len( warning ) ? char( 10 ) & warning : "" ),
 			warning    : warning,
 			process    : process,
 			configPath : configPath,
 			host       : host,
 			port       : port,
 			serverHome : serverHome,
+			buildDir   : layout.buildDir,
+			publicDir  : layout.publicDir,
 			database   : databaseFile
 		}
-	}
-
-	/**
-	 * The directory holding this module's own folder (e.g. `~/.boxlang/modules`)
-	 * - what the served app's `modulesDirectory` must name for it to load
-	 * `bxagents` and the modules nested inside it. Empty when this verb is not
-	 * running from an installed `bxagents` module folder (a source checkout),
-	 * where there is nothing to point at.
-	 *
-	 * @return Absolute path, or "" when not running from an installed module
-	 */
-	private string function installedModulesDirectory() {
-		var moduleRoot = createObject( "java", "java.nio.file.Paths" )
-			.get( getDirectoryFromPath( getCurrentTemplatePath() ) & "../..", [] )
-			.normalize()
-		if ( moduleRoot.getFileName().toString() != "bxagents" || !fileExists( moduleRoot.toString() & "/ModuleConfig.bx" ) ) {
-			return ""
-		}
-		return moduleRoot.getParent().toString().replace( "\", "/", "all" )
 	}
 
 	/**

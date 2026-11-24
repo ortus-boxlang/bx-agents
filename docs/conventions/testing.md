@@ -44,7 +44,7 @@ class extends="bxModules.bxagents.models.testing.BaseAgentSpec" {
 }
 ```
 
-`BaseAgentSpec` builds your agent once per spec bundle (`beforeAll()`), against a **throwaway temp copy** of your project - it never touches your real `.build/app`, so running tests never clobbers (or is clobbered by) a real `build`/`serve`/`package` cycle. The built agent is exposed as `agent`.
+`BaseAgentSpec` builds your agent once per spec bundle (`beforeAll()`), against a **throwaway temp copy** of your project - it never touches your real `.build`, so running tests never clobbers (or is clobbered by) a real `build`/`serve`/`package` cycle. The built agent is exposed as `agent`.
 
 ## Testing against the mock provider
 

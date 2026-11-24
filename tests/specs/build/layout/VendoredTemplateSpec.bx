@@ -1,0 +1,52 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "the vendored ColdBox BoxLang template", function() {
+
+			beforeEach( function() {
+				variables.root = expandPath( "/bxagents/templates/coldbox-boxlang" );
+			} );
+
+			it( "records where it came from: source, version, the exact commit and the one patch", function() {
+				var version = fileRead( root & "/VERSION" );
+				expect( version ).toInclude( "https://github.com/coldbox-templates/boxlang" );
+				expect( reFind( "(?m)^commit:\s+[0-9a-f]{40}$", version ) ).toBeGT( 0 );
+				expect( reFind( "(?m)^version:\s+[0-9]+\.[0-9]+\.[0-9]+", version ) ).toBeGT( 0 );
+				expect( reFind( "(?m)^tag:", version ) ).toBeGT( 0 );
+				expect( version ).toInclude( "whitespaceCompressionEnabled" );
+			} );
+
+			it( "keeps the licence and the notice that name the origin", function() {
+				expect( fileExists( root & "/LICENSE" ) ).toBeTrue();
+				expect( fileRead( root & "/LICENSE" ) ).toInclude( "Apache License" );
+				expect( fileRead( root & "/NOTICE" ) ).toInclude( "coldbox-templates/boxlang" );
+			} );
+
+			it( "vendors only what the running app needs", function() {
+				for ( var file in [ "app/Application.bx", "public/Application.bx", "public/index.bxm", "public/favicon.ico", "public/robots.txt", "public/includes/images/ColdBoxLogo2015_300.png", "public/includes/i18n/i18n_goes_here.txt", "runtime/boxlang.json" ] ) {
+					expect( fileExists( root & "/" & file ) ).toBeTrue( file );
+				}
+				// no tests, resources, workflows or build files of the template
+				for ( var absent in [ "tests", "resources", ".github", "Build.bx", "pom.xml" ] ) {
+					expect( directoryExists( root & "/" & absent ) || fileExists( root & "/" & absent ) ).toBeFalse( absent );
+				}
+			} );
+
+			it( "has the engine's whitespace compression off, in exactly one line", function() {
+				var config = fileRead( root & "/runtime/boxlang.json" );
+				expect( config ).toInclude( '"whitespaceCompressionEnabled": false,' );
+				expect( config ).notToInclude( '"whitespaceCompressionEnabled": true' );
+			} );
+
+			it( "keeps the mappings the layout depends on, relative to the folder the server runs in", function() {
+				var config = fileRead( root & "/runtime/boxlang.json" );
+				for ( var mapping in [ '"/app" :  {"path": "${user-dir}/app"', '"/public" : "${user-dir}/public"', '"/modules" :  {"path": "${user-dir}/lib/modules", "external": true }' ] ) {
+					expect( config ).toInclude( mapping );
+				}
+				expect( config ).toInclude( '"${user-dir}/runtime/modules"' );
+			} );
+
+		} );
+	}
+
+}

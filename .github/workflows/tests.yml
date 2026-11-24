@@ -155,10 +155,14 @@ jobs:
         run: |
           echo "=== generated app tree ==="
           find tests/.coldbox-app -maxdepth 4 -type f 2>/dev/null | head -60 || true
-          echo "=== Application.bx ==="
-          cat tests/.coldbox-app/.build/app/Application.bx 2>/dev/null || true
-          echo "=== config/ColdBox.bx ==="
-          cat tests/.coldbox-app/.build/app/config/ColdBox.bx 2>/dev/null || true
+          echo "=== public/Application.bx ==="
+          cat tests/.coldbox-app/.build/public/Application.bx 2>/dev/null || true
+          echo "=== app/bxagents/Wiring.bx ==="
+          cat tests/.coldbox-app/.build/app/bxagents/Wiring.bx 2>/dev/null || true
+          echo "=== miniserver.json ==="
+          cat tests/.coldbox-app/.build/miniserver.json 2>/dev/null || true
+          echo "=== config/Coldbox.bx ==="
+          cat tests/.coldbox-app/.build/app/config/Coldbox.bx 2>/dev/null || true
           echo "=== models/ChatDb.bx ==="
           cat tests/.coldbox-app/.build/app/models/ChatDb.bx 2>/dev/null || true
           # Where the TestBox runner page got to before it stopped. The
@@ -166,8 +170,8 @@ jobs:
           # got far enough - this copy survives any failure mode.
           echo "=== models/UserSeeder.bx ==="
           cat tests/.coldbox-app/.build/app/models/UserSeeder.bx 2>/dev/null || echo "(not generated)"
-          echo "=== Application.bx onApplicationStart (does the seed call appear?) ==="
-          grep -n "UserSeeder\|loadColdbox\|aiToolRegistry" tests/.coldbox-app/.build/app/Application.bx 2>/dev/null || echo "(none)"
+          echo "=== Wiring.bx startup statements (does the seed call appear?) ==="
+          grep -n "UserSeeder\|aiToolRegistry" tests/.coldbox-app/.build/app/bxagents/Wiring.bx 2>/dev/null || echo "(none)"
           echo "=== users table contents ==="
           if command -v sqlite3 >/dev/null 2>&1; then
             sqlite3 tests/.coldbox-app/.build/app/data/e2e-chat.db \
@@ -176,7 +180,7 @@ jobs:
             echo "(sqlite3 not on PATH)"
           fi
           echo "=== runner progress markers ==="
-          cat tests/.coldbox-app/.build/app/runner-progress.txt 2>/dev/null || echo "(no progress file)"
+          cat tests/.coldbox-app/.build/public/runner-progress.txt 2>/dev/null || echo "(no progress file)"
 
       - name: Verify examples/ build
         run: ./gradlew verifyExamples --stacktrace --console=plain
@@ -204,6 +208,9 @@ jobs:
             **/build/test-results/**
             **/tests/results/**
             tests/.coldbox-app/.build/app/**
+            tests/.coldbox-app/.build/public/**
+            tests/.coldbox-app/.build/miniserver.json
+            tests/.coldbox-app/.build/runtime/logs/**
 
       - name: Inform Slack
         if: ${{ failure() && github.ref == 'refs/heads/development' }}

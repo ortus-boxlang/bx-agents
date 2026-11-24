@@ -1,0 +1,93 @@
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "BuildLayout", function() {
+
+			it( "names every folder of .build the way the ColdBox BoxLang template does", function() {
+				var layout = new bxagents.models.build.layout.BuildLayout().of( "/work/acme/" );
+				expect( layout.buildDir ).toBe( "/work/acme/.build" );
+				expect( layout.appDir ).toBe( "/work/acme/.build/app" );
+				expect( layout.publicDir ).toBe( "/work/acme/.build/public" );
+				expect( layout.libDir ).toBe( "/work/acme/.build/lib" );
+				expect( layout.runtimeDir ).toBe( "/work/acme/.build/runtime" );
+				expect( layout.modulesDir ).toBe( "/work/acme/.build/runtime/modules" );
+				expect( layout.boxlangModulesDir ).toBe( "/work/acme/.build/boxlang_modules" );
+				expect( layout.miniserverJson ).toBe( "/work/acme/.build/miniserver.json" );
+			} );
+
+			it( "lists what a packaged app carries and what it leaves out", function() {
+				var layout = new bxagents.models.build.layout.BuildLayout();
+				expect( layout.packagedFolders() ).toBe( [ "app", "boxlang_modules", "lib", "public", "runtime" ] );
+				expect( layout.packagedFiles() ).toBe( [ "miniserver.json" ] );
+				expect( layout.packageIgnores() ).toInclude( "runtime/logs/" );
+				expect( layout.packageIgnores() ).toInclude( "runtime/classes/" );
+			} );
+
+		} );
+
+		describe( "TemplateAssembler", function() {
+
+			beforeEach( function() {
+				variables.dirs = [];
+				variables.build = createTempDirectory( prefix = "bxagents-layout-" ) & "/.build";
+				dirs.append( getDirectoryFromPath( build ) );
+			} );
+
+			afterEach( function() {
+				for ( var dir in dirs ) {
+					if ( directoryExists( dir ) ) {
+						directoryDelete( dir, true );
+					}
+				}
+			} );
+
+			it( "lays out the template's public folder, engine config and app guard, verbatim", function() {
+				var template = expandPath( "/bxagents/templates/coldbox-boxlang" );
+				new bxagents.models.build.layout.TemplateAssembler().assemble( build );
+
+				for ( var file in [ "public/Application.bx", "public/index.bxm", "public/favicon.ico", "public/robots.txt", "public/includes/images/ColdBoxLogo2015_300.png", "runtime/boxlang.json", "app/Application.bx" ] ) {
+					expect( hash( fileReadBinary( build & "/" & file ) ) ).toBe( hash( fileReadBinary( template & "/" & file ) ), file );
+				}
+			} );
+
+			it( "creates the empty folders the template's conventions name", function() {
+				new bxagents.models.build.layout.TemplateAssembler().assemble( build );
+				for ( var folder in [ "lib/modules", "lib/java", "boxlang_modules", "runtime/global/components", "runtime/global/classes", "runtime/logs", "runtime/lib", "runtime/modules" ] ) {
+					expect( directoryExists( build & "/" & folder ) ).toBeTrue( folder );
+				}
+			} );
+
+			it( "does not ship the .gitkeep placeholders or the licence files into the app", function() {
+				new bxagents.models.build.layout.TemplateAssembler().assemble( build );
+				expect( directoryList( build, true, "path", "*.gitkeep" ).len() ).toBe( 0 );
+				expect( fileExists( build & "/NOTICE" ) ).toBeFalse();
+				expect( fileExists( build & "/VERSION" ) ).toBeFalse();
+			} );
+
+			it( "replaces public/ each time, so a stale file never survives a rebuild, and keeps what the server wrote in runtime/", function() {
+				var assembler = new bxagents.models.build.layout.TemplateAssembler();
+				assembler.assemble( build );
+				fileWrite( build & "/public/stale.txt", "old" );
+				fileWrite( build & "/runtime/logs/runtime.log", "kept" );
+				assembler.assemble( build );
+				expect( fileExists( build & "/public/stale.txt" ) ).toBeFalse();
+				expect( fileRead( build & "/runtime/logs/runtime.log" ) ).toBe( "kept" );
+			} );
+
+			it( "removes the runtime/config/boxlang.json an earlier BxAgents wrote, which named the machine's module directory", function() {
+				directoryCreate( build & "/runtime/config", true );
+				fileWrite( build & "/runtime/config/boxlang.json", '{ "modulesDirectory": [ "/home/someone/.boxlang/modules" ] }' );
+				new bxagents.models.build.layout.TemplateAssembler().assemble( build );
+				expect( fileExists( build & "/runtime/config/boxlang.json" ) ).toBeFalse();
+			} );
+
+			it( "reports the pinned template version it laid out", function() {
+				var result = new bxagents.models.build.layout.TemplateAssembler().assemble( build );
+				expect( result.commit ).toMatch( "^[0-9a-f]{40}$" );
+				expect( result.version ).toMatch( "^[0-9]+\.[0-9]+\.[0-9]+" );
+			} );
+
+		} );
+	}
+
+}

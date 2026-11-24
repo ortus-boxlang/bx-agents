@@ -524,7 +524,9 @@ Run the full [build pipeline](build-pipeline.md).
 bxAgents build [--environment=production] [--verbose] [--generatorVersion=1.0.0]
 ```
 
-Writes `.build/app/` and `.build/manifest.json`. Fails with every collected validation error if the project is invalid.
+Writes `.build/` (`app/`, `public/`, `lib/`, `runtime/`, `boxlang_modules/` and `miniserver.json`, see [what is in `.build`](build-pipeline.md#what-is-in-build-and-what-is-served)) and `.build/manifest.json`. Fails with every collected validation error if the project is invalid.
+
+- `BXAGENTS_MODULE_DIR` names the module folder to copy into `.build/runtime/modules/bxagents` when BxAgents is not running from an installed module (a source checkout: `build/modules/bxagents`); `none` copies nothing. It is read with `getSystemSetting()`. `build`, `serve`, `test` and `invoke --server` also take a `moduleDir` option that wins over it (the test suite uses it).
 
 - `--verbose` prints one line per build phase live as it runs - what got resolved/discovered/validated, per-phase counts (models, tools, gateways, warnings, etc.), which agents ended up registered in `config/WireBox.bx` and under which names, how many `schedules/*.bx` schedulers were found, and a final `Build completed in Xms` timing line. Useful for debugging a slow or unexpectedly-behaving build. Silent otherwise - `--verbose` costs nothing when not passed.
 - `--generatorVersion` overrides the string stamped into `manifest.json`'s `generator.version` (see [The Manifest](manifest.md)) - defaults to `"dev"` when omitted. Exists for tooling that builds against a specific released version of this module and wants that recorded in the manifest, rather than the local dev default.
@@ -543,20 +545,22 @@ bxAgents test
 
 ### `serve`
 
-Launch a real [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) process pointed at `.build/app`.
+Launch a real [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) process serving `.build/public`.
 
 ```bash
 bxAgents serve [--port=8080] [--host=127.0.0.1]
 ```
 
-- Requires a prior `build` - fails clearly if `.build/app` doesn't exist.
+- Requires a prior `build` - fails clearly if `.build/app` doesn't exist, or if the build has no `public/` (it was made before the app/public layout: build again).
 - Fails clearly if `boxlang-miniserver` isn't found on `PATH`.
 - The root address answers too: `/` redirects (302) to the web UI when the project has one, and otherwise returns a small JSON pointer to the API's `health` route (on `agentApi.path`), or a plain 404 when the API is off. It names nothing about the agent.
 - Always serves the agent at `/__bxagents` (`POST /invoke`, `POST /stream`, `POST /batch`, `GET /info`), whatever the project declares in [`gateways/`](conventions/gateways/index.md) - see [the always-on agent route](conventions/agent-bx.md#the-always-on-agent-route) for how to require a token on it, or turn it off.
 - **Binds to `127.0.0.1` by default.** A generated app is not authenticated unless you configured it to be (the web UI's API-key gate and sign-in are both opt-in), so the default keeps a development server off the network. Pass `--host=0.0.0.0` to bind all interfaces deliberately - the startup line tells you which of the two you got.
 - `--port` must be an integer in 1-65535; anything else fails immediately rather than inside the server process.
-- Writes `.build/miniserver.json` (rewrites enabled, `rewriteFileName: "index.bxm"`, health check on) before launching, and `.build/runtime/config/boxlang.json`, which turns off whitespace compression (it would collapse the blank lines that end each SSE frame) and points the app at the installed BxAgents module and the modules bundled inside it.
-- Scopes the server's own BoxLang runtime home to `.build/runtime` (via `serverHome`) rather than the shared `~/.boxlang` default, so each project's compiled-class cache and config overrides are isolated - and `clean` sweeps it for free, since it already wipes `.build` wholesale. `chat --server` and `invoke --server` get this too, since they reuse `serve` internally. `test` runs its child process with its own home in `.build/test-runtime`. Both are set through the child's environment when it starts, never by writing a file into the project root.
+- Writes `.build/miniserver.json` before launching: `webRoot: public`, `configPath: runtime/boxlang.json` (the ColdBox BoxLang template's engine config, whitespace compression off), `serverHome: runtime`, rewrites to `index.bxm`, health check on, and a pass predicate that lets only `index.bxm` run. Every path is relative to `.build`, and the server is started **in `.build`** with `BOXLANG_HOME=.build/runtime` - which is what the template's `${user-dir}` means.
+- Serves **only `.build/public`**: the app's code, its config (`agent-settings.json`, `Agent.yml`, instructions) and the libraries are not under the web root, so they cannot be downloaded; an unknown address is a JSON `404`.
+- Loads **only the `bxagents` module** (with the BoxLang modules bundled inside it, and the project's own `boxlang_modules/`): the module is copied into `.build/runtime/modules/bxagents`, and `runtime/` is the BoxLang home, so the modules installed on the machine are never loaded into the served app. `chat --server` and `invoke --server` get this too, since they reuse `serve` internally. `test` runs its child process with its own home in `.build/test-runtime`, loading the `bxagents` module alone as well. Both are set through the child's environment when it starts, never by writing a file into the project root.
+- A project (or an unpacked app) under a path with a **space** does not start: the `boxlang-miniserver` launcher script does not quote `BOXLANG_HOME`.
 - **The scaffolded `.env` does not set `BOXLANG_HOME`.** Each project gets its own runtime home when bxAgents serves or runs it, so a project that runs under `boxlang module:bxagents ...` from its own root keeps working: the `boxlang` launcher reads the project `.env`, and a relative `BOXLANG_HOME` there points the launcher at an empty folder. `build`, `doctor`, `inspect`, the in-process `chat` and the default `invoke` run inside the bxAgents process you started, and a runtime home cannot change mid-process, so they use your own home. They keep per-project state in the project's `.build/` and the data home only; BoxLang's compiled-class cache in your home is named after each source file's full path, so two projects do not overwrite each other. `bxAgents doctor` warns when an older project's `.env` still has a relative `BOXLANG_HOME` line; delete it.
 
 ### `chat`
@@ -801,7 +805,7 @@ bxAgents package [--version=1.0.0]
 
 - Requires a prior `build` - reads `.build/manifest.json`; fails clearly if it's missing.
 - `--version` defaults to `1.0.0`.
-- Writes `dist/{agentName}-{version}.bxa`, a sibling `.sha256`, and a redacted `manifest.json` copy. See [Deployment & Secrets](deployment-and-secrets.md).
+- Writes `dist/{agentName}-{version}.bxa` (the `app`, `lib`, `public`, `runtime`, `boxlang_modules` folders and `miniserver.json` of `.build`), a sibling `.sha256`, and a redacted `manifest.json` copy. See [Deployment & Secrets](deployment-and-secrets.md).
 
 ### `deploy`
 
@@ -815,7 +819,7 @@ bxAgents deploy --destination=/path/to/somewhere [--target=local]
 
 - `--name=<entry>` dispatches to whatever target the named `deploy/<entry>.bx`/`.json` entry declares (`local`, `ssh`, `ftp`, `sftp`, `docker`, or `digitalocean`).
 - The flag-only form (`--target=local --destination=...`, or no `--target` at all) works with no `deploy/` folder present - only `local` supports it; every other target requires a named entry, since it needs more configuration than a couple of flags can carry.
-- `local`/`ssh`/`ftp`/`sftp` require a prior `package`; `docker`/`digitalocean` require a prior `build` (they build straight from `.build/app`).
+- `local`/`ssh`/`ftp`/`sftp` require a prior `package`; `docker`/`digitalocean` require a prior `build` (they build straight from `.build`; the Docker recipe is [unverified](conventions/deploy.md#docker)).
 - `ftp`/`sftp` use the [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp) module, which BxAgents bundles.
 
 ### `hash-password`

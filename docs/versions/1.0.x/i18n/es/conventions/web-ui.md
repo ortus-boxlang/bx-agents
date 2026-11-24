@@ -410,7 +410,7 @@ La razón es un vacío real, no una preferencia: **el `IAiMemory` de bx-ai no ti
 | `models/ChatDb.bx` | Generado, solo las cuentas de inicio de sesión. Entrega query builders; su `migrate()` llama a `ChatStore` |
 | Una sentencia de arranque en `Application.bx` | Generado. Construye `ChatDb` en el arranque para que la migración se ejecute entonces, no en cualquier request que toque primero la base de datos |
 
-El datasource se registra en `Application.bx` y la gramática se fija en `config/ColdBox.bx`:
+El datasource se registra en el clase base generada (`bxagents/Application.bx`) y la gramática se fija en `config/Coldbox.bx`:
 
 ```javascript
 // Application.bx (generado)
@@ -420,7 +420,7 @@ this.datasources[ "bxagents" ] = {
 }
 this.datasource = "bxagents"   // NO this.defaultDatasource - ver abajo
 
-// config/ColdBox.bx (generado)
+// config/Coldbox.bx (generado)
 qb : {
 	defaultGrammar : "SQLiteGrammar@qb",
 	defaultOptions : { datasource : "bxagents" }
