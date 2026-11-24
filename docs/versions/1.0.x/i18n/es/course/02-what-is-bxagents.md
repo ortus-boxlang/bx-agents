@@ -11,7 +11,7 @@ tags: [course, getting-started]
 La mayoría de los frameworks de agentes cablean tools, skills, rutas y tareas programadas
 **en tiempo de petición**, en cada arranque. BxAgents hace lo contrario: `bxAgents build`
 ejecuta el descubrimiento, la validación y la generación de código exactamente **una vez**,
-y produce una aplicación ColdBox normal bajo `.build/app/`.
+y produce una aplicación ColdBox normal en `.build/`, con la estructura de la plantilla ColdBox BoxLang: el código en `app/`, la raíz web en `public/`.
 
 Arrancarla después - mediante `bxAgents serve`, un proceso
 [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver)
@@ -21,7 +21,7 @@ dinámico de archivos, sin trabajo de build diferido al camino de la petición.
 
 ```mermaid
 flowchart LR
-    A["your convention tree<br/>Agent.yml, tools/, skills/, ..."] -->|"bxAgents build"| B[".build/app/<br/>a plain ColdBox application"]
+    A["your convention tree<br/>Agent.yml, tools/, skills/, ..."] -->|"bxAgents build"| B[".build/<br/>app/ + public/: a plain ColdBox application"]
     B -->|"bxAgents serve / chat / invoke"| C["running agent"]
     B -->|"bxAgents package"| D["dist/name-version.bxa"]
     D -->|"bxAgents deploy"| E["a real target"]
@@ -71,18 +71,18 @@ your-agent/
 :::
 ::: column
 ```text
-.build/app/
-├── Application.bx
-├── config/
-│   ├── ColdBox.bx
-│   ├── WireBox.bx
-│   ├── Router.bx
-│   └── Scheduler.bx
-├── agent/
-│   └── GeneratedAgentFactory.bx
-├── tools/  skills/  mcp/
-├── handlers/  interceptors/
-└── index.bxm
+.build/
+├── miniserver.json
+├── app/                  el código (no se sirve)
+│   ├── bxagents/         Wiring.bx  Scheduler.bx
+│   ├── config/           Coldbox.bx  WireBox.bx  Router.bx
+│   ├── schedules/  agent/  tools/  skills/  mcp/
+│   └── handlers/  interceptors/
+├── public/               la raíz web: la única carpeta servida
+│   ├── Application.bx
+│   └── index.bxm
+├── lib/                  coldbox/  modules/
+└── runtime/              boxlang.json  modules/bxagents
 ```
 :::
 :::

@@ -242,16 +242,21 @@ try {
 	println( "ColdBox Integration - Bundles: " & results.totalBundles & " | Suites: " & results.totalSuites & " | Specs: " & results.totalSpecs )
 	println( "Pass: " & results.totalPass & " | Fail: " & results.totalFail & " | Error: " & results.totalError & " | Skipped: " & results.totalSkipped )
 
-	if ( totalFail > 0 ) {
-		for ( bundleStat in results.bundleStats ) {
-			for ( suiteStat in ( bundleStat.suiteStats ?: [] ) ) {
-				for ( specStat in ( suiteStat.specStats ?: [] ) ) {
-					if ( specStat.status == "Failed" || specStat.status == "Error" ) {
-						failDetail = specStat.failMessage ?: ( specStat.error.message ?: "" )
-						println( "  [#specStat.status#] #bundleStat.name# > #suiteStat.name# > #specStat.name#: #failDetail#" )
-					}
+	// a failure can sit in a describe() inside a describe(): walk the nested suites too, or its detail is never printed
+	function printFailures( required string path, required array suites ) {
+		for ( var suiteStat in arguments.suites ) {
+			for ( var specStat in ( suiteStat.specStats ?: [] ) ) {
+				if ( specStat.status == "Failed" || specStat.status == "Error" ) {
+					println( "  [#specStat.status#] #arguments.path# > #suiteStat.name# > #specStat.name#: #specStat.failMessage ?: ( specStat.error.message ?: '' )#" )
 				}
 			}
+			printFailures( arguments.path & " > " & suiteStat.name, suiteStat.suiteStats ?: [] )
+		}
+	}
+
+	if ( totalFail > 0 ) {
+		for ( bundleStat in results.bundleStats ) {
+			printFailures( bundleStat.name, bundleStat.suiteStats ?: [] )
 		}
 	}
 
@@ -368,7 +373,8 @@ try {
 		onDelta : ( delta ) => { streamDeltas.append( delta ) }
 	)
 
-	if ( !streamDeltas.len() ) {
+	// more than one delta: a body buffered whole and parsed at the end would give one
+	if ( streamDeltas.len() < 2 ) {
 		throw(
 			type    = "BxAgents.AgentStreamNoDeltas",
 			message = "Streaming /__bxagents/stream produced no deltas at all. Check that the stream route answers frames at all (a response pipeline that collapses blank lines, such as whitespaceCompressionEnabled, eats the lines that end an SSE frame; see Serve.bx for what was measured)."

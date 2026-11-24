@@ -39,12 +39,27 @@ Each of these cost real debugging time here:
 - A Java class can be public while the type it returns is package-private, so it is unusable from BoxLang. `ortus.boxlang.runtime.net.SSEParser` is public; the `SSEEvent` it returns is not, and `toStruct()` on it throws `NoMethodException`. Not a problem in practice - drive SSE through `http().sse( true )`, which parses internally - but it is why you cannot hand-drive that parser.
 - `listFindNoCase( "true,false", "yes" )` is **1**: BoxLang reads `yes` and `no` as booleans when it compares, so a list or `==` check cannot tell `yes` from `true`. To accept only the words `true` and `false`, use `reFindNoCase( "^(true|false)$", value )`.
 - A `try/catch` at the **top level** of a `.bxs` script (outside any function) can trigger `java.lang.VerifyError: Inconsistent stackmap frames`. Wrap it in a function.
+- **`getSystemSetting()` keeps its first answer per key for the life of the process**, a miss included: after `System.setProperty( "X", "a" )` it answers `a`; after setting `b`, `""` or clearing it, still `a`, and a key asked before it existed keeps answering the default (measured on 1.19.0). A setting a run or a test changes after its first read goes through `models/util/Env.bx`.
+- **`directoryDelete( path, true )` follows symbolic links** and empties what they point at. Anything that can hold a link (a dev build links the web app module's source; a test run links the module) is deleted with `TreeDelete::tree()`. A test run of the `test` verb once emptied `build/modules/bxagents` this way.
+- An **unscoped assignment inside a function is local** to it: `coldbox = {...}` in `configure()` is invisible to ColdBox, which reads `variables.coldbox`. The generated config did this for as long as it existed, hidden by the next item.
+- ColdBox's config file is **`config/Coldbox.bx`** (lower-case b). On a case-sensitive file system a file called `ColdBox.bx` is never loaded, and nothing says so.
+- `expandPath( "/" )` is the **web root**, which is `.build/public` in a served app: the app is `expandPath( "/app" )` (the template's mapping). Code that means the app asks `models/util/AppRoot.bx`, which also works outside a web boot.
+- A bare class path in generated code (`schedules.Pulse`, `agent.GeneratedAgentFactory`, `interceptors.X`, `bxagents.Scheduler`) is **not found** in the built app: write `app.<folder>.<Class>`. `aiToolRegistry().scan( "tools" )` does not fail, it silently finds nothing.
+- The launcher script of `boxlang-miniserver` puts `$BOXLANG_HOME` unquoted on the java command line (`-XX:SharedArchiveFile=`), so a project or unpacked app under a path with a **space** does not start.
 
 ## Server-Sent Events
 
 SSE here is **native on both sides** and should stay that way: ColdBox's `toAi()` `/stream` emits through BoxLang's `SSE()` BIF, and `AgentClient.stream()` consumes with `http( url ).sse( true ).onChunk( ... )`. Do not write a frame parser - `ortus.boxlang.runtime.net.SSEParser` already does it.
 
-The one thing to know: **SSE frames are terminated by a blank line, and the web runtime's whitespace compression is ON by default and collapses them.** With it on, a `/stream` body carries zero `\n\n` and the native client reports `totalEvents: 0` - the stream looks broken and the emitter looks at fault, but the bug is one config directive. `Serve.bx` sets `whitespaceCompressionEnabled: false` for served projects and this repo's `boxlang.json` sets it for the suite. If streaming ever goes silent, check that first.
+The one thing to know: **SSE frames are terminated by a blank line, and the web runtime's whitespace compression is ON by default and collapses blank lines.** What that does was measured on BoxLang and boxlang-miniserver 1.19.0, with the setting on and off:
+
+| writer | terminators, on | terminators, off |
+|---|---|---|
+| ColdBox `toAi()` `/__bxagents/stream` (native `SSE()`) | 14 terminators, 14 frames, 8 content deltas | the same |
+| `route().toSSE()`, a two-line `SSE()` page | 5, 4 | the same |
+| a handler that calls `writeOutput( "event: tick\ndata: hello N\n\n" )` three times | **0** (77 bytes) | 3 (82 bytes) |
+
+So on this engine the native emitters survive compression and only a hand-written event stream breaks. An earlier version of this file said the native stream lost every terminator with it on and the client reported `totalEvents: 0`; that did not reproduce, and nothing found out what produced it. The setting stays off anyway, as a safety net: it is the one patched line of the vendored `runtime/boxlang.json` (see `templates/coldbox-boxlang/VERSION`) and this repo's `boxlang.json` sets it for the suite. If streaming ever goes silent, check that first, but count the frames before blaming it.
 
 ## Architecture
 
@@ -60,6 +75,25 @@ The one thing to know: **SSE frames are terminated by a blank line, and the web 
 - JLine finds its terminal providers through the thread's **context class loader**, which under BoxLang is the runtime's loader and cannot see this module's jar. Without `TuiScreen.open()` swapping it, every provider is "not found" and JLine silently settles for a dumb terminal (`Unable to find terminal provider exec`). Anything new that creates a JLine terminal needs the same swap.
 - The prompts are plain objects (keys in, `Row`s out) so they test without a terminal: `TuiPromptsTest`. Test the screen itself in a pseudo terminal against the real runtime (`java ... BoxRunner module:bxagents new` under a pty), not only in isolation; the class loader bug above only appeared there.
 - Honor `NO_COLOR` and `TERM=dumb` (`Theme`), and keep a plain fallback (`PlainPrompter`) so a pipe or CI never needs a terminal.
+
+## The built app (`.build/`)
+
+`bxAgents build` lays out `.build/` like the ColdBox BoxLang application template (https://github.com/coldbox-templates/boxlang), and only `.build/public` is served:
+
+```
+.build/
+  miniserver.json    webRoot public, configPath runtime/boxlang.json, serverHome runtime (paths relative to .build)
+  app/               the generated code: Application.bx is the template's `abort;` guard
+  public/            the web root: Application.bx, index.bxm, robots.txt, includes/
+  lib/               coldbox/, modules/* (from the module's lib/), java/
+  runtime/           boxlang.json (the template's), modules/bxagents (the ONLY module), global/, logs/ ; also BOXLANG_HOME
+  boxlang_modules/   the project's own installed BoxLang modules
+```
+
+- The template is **vendored**, never fetched: `src/main/bx/templates/coldbox-boxlang` (commit and version in `VERSION`), refreshed by a person with `tools/refresh-coldbox-template.sh`, which shows the diff. The only change to an upstream file is one line of `runtime/boxlang.json`.
+- The server must be started with **`.build` as its working directory** (`${user-dir}` in the engine config) and `BOXLANG_HOME=<build>/runtime`. Without a home, BoxLang loads every module in `~/.boxlang/modules` (measured with a decoy module), so no code names the machine's module directory: `Serve.bx`, the test runner and `ModuleCopier` copy or link the one `bxagents` module instead.
+- `public/Application.bx` is the template's own file with fenced `// >>> BXAGENTS` blocks inserted (the default, `ColdBoxAppGenerator.defaultVariant()`), or a thin stub extending a generated base (`BXAGENTS_APPLICATION_VARIANT=stub`); see docs/conventions/application-bx.md.
+- Tests that boot a served app need the BUILT module: `./gradlew --no-daemon shadowJar createModuleStructure`, then they find `build/modules/bxagents` themselves (`BXAGENTS_MODULE_DIR`, see `ModuleCopier.sourceDir()`). The unit suite builds hundreds of projects, so `runTests.bxs` points that variable at a stand-in folder.
 
 ## Build And Packaging
 

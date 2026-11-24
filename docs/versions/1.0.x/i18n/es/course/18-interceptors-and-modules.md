@@ -113,7 +113,7 @@ una carpeta de módulo que no lo tenga se asume que no declara dependencias.
 Prueba `bxAgents add extension hello --with=command` y `/hello` en el chat. Después añade un `interceptors/RequestLogger.bx` con una anotación explícita `@scope agent` que
 registre cada petición entrante mediante `writeLog()`, reconstruye, y comprueba
 `.build/app/interceptors/` para ver la copia, más su registro en
-`.build/app/Application.bx`.
+`.build/app/bxagents/Wiring.bx`.
 
 Referencia completa: [interceptors/](../conventions/interceptors.md), [modules/](../conventions/modules.md).
 

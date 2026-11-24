@@ -11,7 +11,8 @@ tags: [course, getting-started]
 Most agent frameworks wire tools, skills, routes and schedules together **at request
 time**, on every boot. BxAgents does the opposite: `bxAgents build` runs discovery,
 validation and code generation exactly **once**, producing a plain ColdBox application
-under `.build/app/`.
+in `.build/`, laid out like the ColdBox BoxLang template: the code in `app/`, the web
+root in `public/`.
 
 Starting it afterwards - via `bxAgents serve`, a real
 [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver)
@@ -21,7 +22,7 @@ deferred into the request path.
 
 ```mermaid
 flowchart LR
-    A["your convention tree<br/>Agent.yml, tools/, skills/, ..."] -->|"bxAgents build"| B[".build/app/<br/>a plain ColdBox application"]
+    A["your convention tree<br/>Agent.yml, tools/, skills/, ..."] -->|"bxAgents build"| B[".build/<br/>app/ + public/: a plain ColdBox application"]
     B -->|"bxAgents serve / chat / invoke"| C["running agent"]
     B -->|"bxAgents package"| D["dist/name-version.bxa"]
     D -->|"bxAgents deploy"| E["a real target"]
@@ -72,21 +73,18 @@ your-agent/
 :::
 ::: column
 ```text
-.build/app/
-├── Application.bx
-├── bxagents/
+.build/
+├── miniserver.json
+├── app/                  the code (not served)
+│   ├── bxagents/         Wiring.bx  Scheduler.bx
+│   ├── config/           Coldbox.bx  WireBox.bx  Router.bx
+│   ├── schedules/  agent/  tools/  skills/  mcp/
+│   └── handlers/  interceptors/
+├── public/               the web root: the only served folder
 │   ├── Application.bx
-│   └── Scheduler.bx
-├── config/
-│   ├── ColdBox.bx
-│   ├── WireBox.bx
-│   └── Router.bx
-├── schedules/
-├── agent/
-│   └── GeneratedAgentFactory.bx
-├── tools/  skills/  mcp/
-├── handlers/  interceptors/
-└── index.bxm
+│   └── index.bxm
+├── lib/                  coldbox/  modules/
+└── runtime/              boxlang.json  modules/bxagents
 ```
 :::
 :::

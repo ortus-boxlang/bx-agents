@@ -34,7 +34,7 @@ The build copies each file into the app as `schedules/<Name>.bx`, lists them in 
 
 ## What you get without writing an `extends`
 
-The build adds `extends="bxagents.Scheduler"` to any scheduler class that names no parent of its own. That class is copied into the app (`bxagents/Scheduler.bx`) and gives your scheduler these methods:
+The build adds `extends="bxagents.Scheduler"` to any scheduler class that names no parent of its own. That class is copied into the app (`app/bxagents/Scheduler.bx`, reached as `app.bxagents.Scheduler` through the template's `/app` mapping; `bxagents.Scheduler` is the name you write and the build points it there) and gives your scheduler these methods:
 
 | Method | What it does |
 |---|---|

@@ -12,7 +12,7 @@ Los secretos nunca entran en el artefacto - se suministran al **proceso**, en el
 
 ```mermaid
 flowchart LR
-    P["tu proyecto"] -->|"bxAgents build"| B[".build/app/<br/>una app ColdBox normal"]
+    P["tu proyecto"] -->|"bxAgents build"| B[".build/<br/>app/ public/ lib/ runtime/"]
     B -->|"bxAgents package"| A["dist/name-version.bxa<br/>+ .sha256 + manifest.json redactado"]
     A -->|"bxAgents deploy"| T["un destino:<br/>local / ssh / ftp / sftp<br/>docker / digitalocean"]
     T --> RUN["boxlang-miniserver ejecuta la app descomprimida"]
@@ -26,7 +26,7 @@ Nada a la izquierda de `ENV` guarda jamás un valor secreto: los `.env`/dotfiles
 
 ## Empaquetado
 
-`bxAgents package` comprime `.build/app/` en un artefacto `.bxa` portable:
+`bxAgents package` comprime la app construida en un artefacto `.bxa` portable. Lo que se comprime es el conjunto de empaquetado de la [plantilla ColdBox BoxLang](https://github.com/coldbox-templates/boxlang): `app/`, `lib/`, `public/`, `runtime/` (sin sus logs, la caché de clases y lo que un servidor en marcha crea en su home), `boxlang_modules/` y `miniserver.json`, todo desde `.build/`. El `manifest.json` y las carpetas de trabajo del build no forman parte.
 
 ```bash
 bxAgents package --version=1.0.0
@@ -46,7 +46,7 @@ El `.bxa` es **reubicable**: lleva cada archivo que el agente lee en tiempo de e
 
 ## Excluir archivos: `.bxaignore`
 
-Un `.bxaignore` opcional en la raíz del proyecto, un patrón glob por línea (las líneas con prefijo `#` son comentarios), excluye las rutas coincidentes del `.bxa` empaquetado:
+Un `.bxaignore` opcional en la raíz del proyecto, un patrón glob por línea (las líneas con prefijo `#` son comentarios), excluye las rutas coincidentes del `.bxa` empaquetado. Los patrones se comparan con las rutas dentro de `.build` (así `app/skills/viejo/`, no `skills/viejo/`):
 
 ```text
 # .bxaignore
@@ -54,7 +54,7 @@ Un `.bxaignore` opcional en la raíz del proyecto, un patrón glob por línea (l
 scratch/
 ```
 
-Esto se suma a una exclusión codificada y siempre activa de `.env`/`.env.*`/dotfiles en la capa de empaquetado - incluso si `.bxaignore` no los menciona, y aunque de alguna manera hayan terminado dentro de `.build/app`, nunca llegan al zip.
+Esto se suma a una exclusión codificada y siempre activa de `.env`/`.env.*`/dotfiles en la capa de empaquetado - incluso si `.bxaignore` no los menciona, y aunque de alguna manera hayan terminado dentro de `.build`, nunca llegan al zip.
 
 ## Redacción de secretos
 
@@ -100,4 +100,11 @@ Seis destinos pluggable vienen incluidos - `local` (copiar el `.bxa` más nuevo 
 
 Ningún destino lee jamás un secreto desde la configuración de `deploy/*` - las credenciales (contraseñas de registro, claves SSH, el token de API de DigitalOcean) siempre se resuelven desde variables de entorno en tiempo de despliegue, la misma regla de "los secretos permanecen externos" que en cualquier otro lugar de este documento. Ver [deploy/](conventions/deploy.md#secrets-stay-external) para la variable de entorno exacta que espera cada destino.
 
-Para ejecutar un `.bxa` empaquetado en otro lugar manualmente: descomprímelo (es una aplicación ColdBox normal) y apunta `boxlang-miniserver` al directorio extraído, configurando las variables de entorno secretas que ese despliegue necesite.
+Para ejecutar un `.bxa` empaquetado en otro lugar manualmente: descomprímelo en una carpeta (su ruta no debe tener espacios), entra en ella y arranca el servidor ahí con el runtime como home, configurando las variables de entorno secretas que ese despliegue necesite:
+
+```bash
+cd /srv/my-agent
+BOXLANG_HOME="$PWD/runtime" boxlang-miniserver miniserver.json
+```
+
+`miniserver.json` nombra todo con rutas relativas a su carpeta, así que el mismo archivo sirve la app donde se desempaquete, y solo `public/` es alcanzable desde fuera. Escucha en `127.0.0.1:8080` tal como se empaqueta: edita `host` (y `port`) o pon un proxy inverso delante.

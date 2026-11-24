@@ -106,7 +106,7 @@ The scaffolded `tests/specs/AgentSpec.bx` passes out of the box - it builds your
 bxAgents build
 ```
 
-Runs the full [build pipeline](../build-pipeline.md) - config resolution, discovery, validation, code generation, manifest normalization - and writes a real ColdBox application to `.build/app/`, plus `.build/manifest.json`. Run `bxAgents build --environment=production` to build against an `Agent.yml` environment override (see [Agent.yml](../conventions/agent-yaml.md#environments)).
+Runs the full [build pipeline](../build-pipeline.md) - config resolution, discovery, validation, code generation, manifest normalization - and writes a real ColdBox application to `.build/` (the code in `app/`, the web root in `public/`), plus `.build/manifest.json`. Run `bxAgents build --environment=production` to build against an `Agent.yml` environment override (see [Agent.yml](../conventions/agent-yaml.md#environments)).
 
 If your project fails validation (duplicate tool names, an unknown model provider, a gateway entry with a bad path, ...) `build` fails with every collected error - not just the first one.
 

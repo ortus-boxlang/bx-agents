@@ -16,7 +16,7 @@ publica.
 
 ```mermaid
 flowchart LR
-    P["your project"] -->|"bxAgents build"| B[".build/app/<br/>a plain ColdBox app"]
+    P["your project"] -->|"bxAgents build"| B[".build/<br/>app/ public/ lib/ runtime/"]
     B -->|"bxAgents package"| A["dist/name-version.bxa<br/>+ .sha256 + redacted manifest.json"]
     A -->|"bxAgents deploy"| T["a target:<br/>local / ssh / ftp / sftp<br/>docker / digitalocean"]
     T --> RUN["boxlang-miniserver runs the unzipped app"]
@@ -37,7 +37,7 @@ en vivo, en tiempo de ejecución.
 bxAgents package --version=1.0.0
 ```
 
-Comprime `.build/app/` en `dist/{agentName}-{version}.bxa`, una suma de comprobación `.sha256`,
+Comprime la app construida (`app/`, `lib/`, `public/`, `runtime/`, `boxlang_modules/` y `miniserver.json` de `.build/`) en `dist/{agentName}-{version}.bxa`, una suma de comprobación `.sha256`,
 y un `manifest.json` redactado. Empaquetar dos veces sobre el mismo build produce bytes de zip
 idénticos - útil para verificar que un artefacto construido en CI coincide con uno construido
 localmente. Un `.bxaignore` opcional (un patrón glob por línea) excluye rutas adicionales.

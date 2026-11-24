@@ -110,7 +110,7 @@ declared dependencies.
 Try `bxAgents add extension hello --with=command` and `/hello` in the chat. Then add an `interceptors/RequestLogger.bx` with an explicit `@scope agent` annotation that
 logs every incoming request via `writeLog()`, rebuild, and check
 `.build/app/interceptors/` for the copy plus its registration in
-`.build/app/bxagents/Application.bx`.
+`.build/app/bxagents/Wiring.bx`.
 
 Full reference: [interceptors/](../conventions/interceptors.md), [modules/](../conventions/modules.md).
 

@@ -40,13 +40,13 @@ An `@scope` value that isn't `agent` or `runtime` (case-insensitive) fails the b
 
 ## Generated wiring
 
-For each `agent`-scope interceptor, the generated base `Application` ([`bxagents/Application.bx`](application-bx.md)) registers an instance with ColdBox's interceptor service from `onApplicationStart()`:
+For each `agent`-scope interceptor, the generated wiring ([`bxagents/Wiring.bx`](application-bx.md)) registers an instance with ColdBox's interceptor service from `after()`, once ColdBox has loaded:
 
 ```javascript
 application.cbController.getInterceptorService().register(
-	target: application.cbController.getWireBox().getInstance( "interceptors.AuditLogger" ),
+	target: application.cbController.getWireBox().getInstance( "app.interceptors.AuditLogger" ),
 	name: "AuditLogger"
 )
 ```
 
-Every agent-scope interceptor is registered exactly once. The generated `config/ColdBox.bx` has no `interceptors` array: a declarative array there never reaches ColdBox's interceptor service on the stack BxAgents generates for, so the registration happens at startup instead.
+Every agent-scope interceptor is registered exactly once. The generated `config/Coldbox.bx` has no `interceptors` array: the registration happens at startup instead. (A declarative array was once measured not to reach ColdBox's interceptor service, but against a config file ColdBox was not loading; that was not measured again, and the registration at startup works.)

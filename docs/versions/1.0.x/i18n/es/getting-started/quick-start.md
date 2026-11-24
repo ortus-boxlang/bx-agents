@@ -101,7 +101,7 @@ El `tests/specs/AgentSpec.bx` generado pasa de inmediato - construye tu agente c
 bxAgents build
 ```
 
-Ejecuta el [pipeline de build](../build-pipeline.md) completo - resolución de configuración, descubrimiento, validación, generación de código, normalización de manifest - y escribe una aplicación ColdBox real en `.build/app/`, más `.build/manifest.json`. Ejecuta `bxAgents build --environment=production` para construir contra un override de entorno de `Agent.yml` (ver [Agent.yml](../conventions/agent-yaml.md#entornos)).
+Ejecuta el [pipeline de build](../build-pipeline.md) completo - resolución de configuración, descubrimiento, validación, generación de código, normalización de manifest - y escribe una aplicación ColdBox real en `.build/` (el código en `app/`, la raíz web en `public/`), más `.build/manifest.json`. Ejecuta `bxAgents build --environment=production` para construir contra un override de entorno de `Agent.yml` (ver [Agent.yml](../conventions/agent-yaml.md#entornos)).
 
 Si tu proyecto falla la validación (nombres de tool duplicados, un proveedor de modelo desconocido, una entrada de gateway con una ruta incorrecta, ...) `build` falla con todos los errores recopilados - no solo el primero.
 

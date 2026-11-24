@@ -60,8 +60,8 @@ nombre gana. `skills update` y `skills remove` hacen lo que dicen.
 ## Cómo se cablea en tiempo de ejecución
 
 `skills/` se copia literalmente a la aplicación generada, con la misma copia de
-borrar-y-escribir y exclusión de archivos ocultos que `tools/`. El `config/ColdBox.bx`
-generado siempre apunta el ajuste de módulo `skillsDirectory` de bx-ai a `/skills` - nunca
+borrar-y-escribir y exclusión de archivos ocultos que `tools/`. El `config/bxai-settings.json`
+generado siempre apunta el ajuste de módulo `skillsDirectory` de bx-ai a `/app/skills` - nunca
 necesitas configurarlo tú, aunque el valor por defecto de bx-ai sea otra ruta
 (`/.agents/skills`).
 

@@ -15,10 +15,10 @@ connection, a web UI, a schedule, and a test suite. This last lesson ships it.
 
 ```mermaid
 flowchart LR
-    P["your project"] -->|"bxAgents build"| B[".build/app/<br/>a plain ColdBox app"]
+    P["your project"] -->|"bxAgents build"| B[".build/<br/>app/ public/ lib/ runtime/"]
     B -->|"bxAgents package"| A["dist/name-version.bxa<br/>+ .sha256 + redacted manifest.json"]
     A -->|"bxAgents deploy"| T["a target:<br/>local / ssh / ftp / sftp<br/>docker / digitalocean"]
-    T --> RUN["boxlang-miniserver runs the unzipped app"]
+    T --> RUN["boxlang-miniserver runs in the unzipped folder"]
     ENV["environment variables"] -->|"read at RUNTIME by bx-ai"| RUN
 
     style A fill:#eaf6ec,stroke:#155724
@@ -36,7 +36,8 @@ runtime.
 bxAgents package --version=1.0.0
 ```
 
-Zips `.build/app/` into `dist/{agentName}-{version}.bxa`, a `.sha256` checksum, and a
+Zips the built app (`app/`, `lib/`, `public/`, `runtime/`, `boxlang_modules/` and
+`miniserver.json` of `.build/`) into `dist/{agentName}-{version}.bxa`, a `.sha256` checksum, and a
 redacted `manifest.json`. Packaging twice over the same build produces byte-identical
 zip bytes - useful for verifying a CI-built artifact matches a locally-built one. An
 optional `.bxaignore` (one glob per line) excludes extra paths.

@@ -49,4 +49,4 @@ application.cbController.getInterceptorService().register(
 )
 ```
 
-Cada interceptor de scope `agent` se registra exactamente una vez. El `config/ColdBox.bx` generado no tiene ningún array `interceptors`: un array declarativo ahí nunca llega al servicio de interceptores de ColdBox en el stack para el que genera BxAgents, así que el registro ocurre en el arranque.
+Cada interceptor de scope `agent` se registra exactamente una vez. El `config/Coldbox.bx` generado no tiene ningún array `interceptors`: el registro ocurre al arrancar (un array declarativo se midió una vez sin llegar al servicio de interceptores de ColdBox, pero contra un archivo de configuración que ColdBox no cargaba; no se midió de nuevo) en el stack para el que genera BxAgents, así que el registro ocurre en el arranque.

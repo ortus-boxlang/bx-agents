@@ -81,9 +81,11 @@ bxAgents serve --port=8080
 ```
 
 Requiere un `build` previo y requiere `boxlang-miniserver` en el `PATH` (consulta la
-[Lección 3](03-installing-bxagents.md)). Lanza un proceso de servidor real apuntando a
-`.build/app`, acotado a su propio directorio BoxLang `.build/runtime` para que la caché de
-clases compiladas de cada proyecto quede aislada.
+[Lección 3](03-installing-bxagents.md)). Lanza un proceso de servidor real que sirve
+`.build/public` (el código de `.build/app` no es alcanzable desde la web), arrancado en
+`.build` con su propio directorio BoxLang `.build/runtime`, de modo que la caché de clases
+compiladas de cada proyecto queda aislada y los módulos BoxLang instalados en tu máquina no
+se cargan en él.
 
 ## Probar sin una clave de API real
 

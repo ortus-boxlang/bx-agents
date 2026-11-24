@@ -104,31 +104,43 @@
 			var bundle = { "name": toScalar( bundleStat.name ?: "" ), "suiteStats": [] };
 
 			for ( var suiteStat in ( bundleStat.suiteStats ?: [] ) ) {
-				var suite = { "name": toScalar( suiteStat.name ?: "" ), "specStats": [] };
-
-				for ( var specStat in ( suiteStat.specStats ?: [] ) ) {
-					var failMessage = toScalar( specStat.failMessage ?: "" );
-					// structKeyExists, not `isNull( specStat.error )` - the
-					// latter has to evaluate the key to test it, which throws
-					// when the key is simply absent.
-					if ( !len( failMessage ) && structKeyExists( specStat, "error" ) ) {
-						failMessage = toScalar( specStat.error.message ?: "" )
-							& " " & toScalar( specStat.error.detail ?: "" );
-					}
-					suite.specStats.append( {
-						"name"        : toScalar( specStat.name ?: "" ),
-						"status"      : toScalar( specStat.status ?: "" ),
-						"failMessage" : trim( failMessage )
-					} );
-				}
-
-				bundle.suiteStats.append( suite );
+				bundle.suiteStats.append( reportSuite( suiteStat ) );
 			}
 
 			report.bundleStats.append( bundle );
 		}
 
 		return report;
+	}
+
+	/**
+	 * One suite as scalars only, and the suites nested in it (a describe() inside a describe()), which the report must carry too or
+	 * a failure in one has nothing to say where it was.
+	 */
+	struct function reportSuite( required any suiteStat ) {
+		var suite = { "name": toScalar( arguments.suiteStat.name ?: "" ), "specStats": [], "suiteStats": [] };
+
+		for ( var specStat in ( arguments.suiteStat.specStats ?: [] ) ) {
+			var failMessage = toScalar( specStat.failMessage ?: "" );
+			// structKeyExists, not `isNull( specStat.error )` - the
+			// latter has to evaluate the key to test it, which throws
+			// when the key is simply absent.
+			if ( !len( failMessage ) && structKeyExists( specStat, "error" ) ) {
+				failMessage = toScalar( specStat.error.message ?: "" )
+					& " " & toScalar( specStat.error.detail ?: "" );
+			}
+			suite.specStats.append( {
+				"name"        : toScalar( specStat.name ?: "" ),
+				"status"      : toScalar( specStat.status ?: "" ),
+				"failMessage" : trim( failMessage )
+			} );
+		}
+
+		for ( var nested in ( arguments.suiteStat.suiteStats ?: [] ) ) {
+			suite.suiteStats.append( reportSuite( nested ) );
+		}
+
+		return suite;
 	}
 
 	string function runIntegrationSpecs( required string progressFile, required string attemptID ) {

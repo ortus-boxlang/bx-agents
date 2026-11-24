@@ -502,7 +502,7 @@ Ejecuta el [pipeline de build](build-pipeline.md) completo.
 bxAgents build [--environment=production] [--verbose] [--generatorVersion=1.0.0]
 ```
 
-Escribe `.build/app/` y `.build/manifest.json`. Falla con todos los errores de validación recopilados si el proyecto no es válido.
+Escribe `.build/` (`app/`, `public/`, `lib/`, `runtime/`, `boxlang_modules/` y `miniserver.json`, ver [qué hay en `.build`](build-pipeline.md#qué-hay-en-build-y-qué-se-sirve)) y `.build/manifest.json`. Falla con todos los errores de validación recopilados si el proyecto no es válido.
 
 - `--verbose` imprime una línea por fase de build en vivo mientras se ejecuta - qué se resolvió/descubrió/validó, conteos por fase (modelos, tools, gateways, advertencias, etc.), qué agentes terminaron registrados en `config/WireBox.bx` y bajo qué nombres, si se encontró un `schedules/Scheduler.bx`, y una línea final de tiempo `Build completed in Xms`. Útil para depurar un build lento o con comportamiento inesperado. Silencioso en cualquier otro caso - `--verbose` no cuesta nada cuando no se pasa.
 - `--generatorVersion` sobrescribe la cadena grabada en `generator.version` de `manifest.json` (ver [El manifest](manifest.md)) - por defecto `"dev"` cuando se omite. Existe para herramientas que construyen contra una versión publicada específica de este módulo y quieren que eso quede registrado en el manifest, en lugar del valor por defecto de desarrollo local.
@@ -521,20 +521,22 @@ bxAgents test
 
 ### `serve`
 
-Lanza un proceso real de [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) apuntado a `.build/app`.
+Lanza un proceso real de [`boxlang-miniserver`](https://boxlang.ortusbooks.com/getting-started/running-boxlang/miniserver) que sirve `.build/public`.
 
 ```bash
 bxAgents serve [--port=8080] [--host=127.0.0.1]
 ```
 
-- Requiere un `build` previo - falla claramente si `.build/app` no existe.
+- Requiere un `build` previo - falla claramente si `.build/app` no existe, o si el build no tiene `public/` (se hizo antes de la estructura app/public: construye de nuevo).
 - Falla claramente si `boxlang-miniserver` no se encuentra en `PATH`.
 - La dirección raíz también responde: `/` redirige (302) a la interfaz web cuando el proyecto tiene una, y si no devuelve un pequeño JSON que apunta a la ruta `health` de la API (en `agentApi.path`), o un 404 simple si la API está apagada. No nombra nada del agente.
 - Sirve siempre el agente en `/__bxagents` (`POST /invoke`, `POST /stream`, `POST /batch`, `GET /info`), declare lo que declare el proyecto en [`gateways/`](conventions/gateways/index.md) - consulta [La ruta de agente siempre activa](conventions/agent-bx.md#la-ruta-de-agente-siempre-activa) para exigir un token en ella, o desactivarla.
 - **Escucha en `127.0.0.1` por defecto.** Una app generada no tiene autenticación salvo que la configures (la clave de API y el inicio de sesión de la interfaz web son ambos opcionales), así que el valor por defecto mantiene un servidor de desarrollo fuera de la red. Pasa `--host=0.0.0.0` para escuchar en todas las interfaces de forma deliberada - la línea de arranque te dice cuál de las dos obtuviste.
 - `--port` debe ser un entero entre 1 y 65535; cualquier otra cosa falla de inmediato en lugar de dentro del proceso del servidor.
-- Escribe `.build/miniserver.json` (reescrituras habilitadas, `rewriteFileName: "index.bxm"`, health check activado) antes de lanzar, y `.build/runtime/config/boxlang.json`, que desactiva la compresión de espacios en blanco (colapsaría las líneas en blanco que cierran cada frame SSE) y apunta la app al módulo BxAgents instalado y a los módulos incluidos dentro de él.
-- Delimita el propio home de runtime de BoxLang del servidor a `.build/runtime` (vía `serverHome`) en lugar del `~/.boxlang` compartido por defecto, así que la caché de clases compiladas y los overrides de configuración de cada proyecto están aislados - y `clean` lo elimina gratis, ya que de todos modos borra `.build` por completo. `chat --server` e `invoke --server` también obtienen esto, ya que reutilizan `serve` internamente. `test` ejecuta su proceso hijo con su propio home en `.build/test-runtime`. Ambos se fijan en el entorno del hijo al arrancarlo, nunca escribiendo un archivo en la raíz del proyecto.
+- Escribe `.build/miniserver.json` antes de lanzar: `webRoot: public`, `configPath: runtime/boxlang.json` (la configuración de motor de la plantilla ColdBox BoxLang, con la compresión de espacios en blanco apagada), `serverHome: runtime`, reescrituras a `index.bxm`, health check y un predicado que solo deja ejecutar `index.bxm`. Todas las rutas son relativas a `.build`, y el servidor se arranca **en `.build`** con `BOXLANG_HOME=.build/runtime`.
+- Sirve **solo `.build/public`**: el código de la app, su configuración (`agent-settings.json`, `Agent.yml`, instrucciones) y las librerías no están bajo la raíz web, así que no se pueden descargar; una dirección desconocida es un `404` JSON.
+- Carga **solo el módulo `bxagents`** (con los módulos BoxLang empaquetados dentro, y los `boxlang_modules/` del propio proyecto): el módulo se copia a `.build/runtime/modules/bxagents` y `runtime/` es el home de BoxLang, así que los módulos instalados en tu máquina nunca se cargan en la app servida. `chat --server` e `invoke --server` lo reciben también. `test` ejecuta su proceso hijo con su propio home en `.build/test-runtime`, cargando también solo el módulo `bxagents`.
+- Un proyecto (o una app desempaquetada) bajo una ruta con un **espacio** no arranca: el script de `boxlang-miniserver` no entrecomilla `BOXLANG_HOME`.
 - **El `.env` generado no define `BOXLANG_HOME`.** Cada proyecto recibe su propio home de runtime cuando bxAgents lo sirve o lo ejecuta, así un proyecto sigue funcionando con `boxlang module:bxagents ...` desde su propia raíz: el launcher `boxlang` lee el `.env` del proyecto, y un `BOXLANG_HOME` relativo ahí lo apunta a una carpeta vacía. `build`, `doctor`, `inspect`, el `chat` en proceso y el `invoke` por defecto corren dentro del proceso de bxAgents que iniciaste, y un home de runtime no puede cambiar a mitad de proceso, así que usan tu propio home. Guardan el estado por proyecto solo en el `.build/` del proyecto y en el home de datos; la caché de clases compiladas de BoxLang en tu home se nombra con la ruta completa de cada archivo fuente, así que dos proyectos no se pisan. `bxAgents doctor` avisa cuando el `.env` de un proyecto antiguo aún tiene una línea `BOXLANG_HOME` relativa; bórrala.
 
 ### `chat`
@@ -761,7 +763,7 @@ bxAgents deploy --destination=/path/to/somewhere [--target=local]
 
 - `--name=<entry>` despacha a cualquier destino que declare la entrada `deploy/<entry>.bx`/`.json` nombrada (`local`, `ssh`, `ftp`, `sftp`, `docker`, o `digitalocean`).
 - La forma solo con flags (`--target=local --destination=...`, o sin `--target` en absoluto) funciona sin ninguna carpeta `deploy/` presente - solo `local` la soporta; cada otro destino requiere una entrada nombrada, ya que necesita más configuración de la que un par de flags puede transportar.
-- `local`/`ssh`/`ftp`/`sftp` requieren un `package` previo; `docker`/`digitalocean` requieren un `build` previo (construyen directamente desde `.build/app`).
+- `local`/`ssh`/`ftp`/`sftp` requieren un `package` previo; `docker`/`digitalocean` requieren un `build` previo (construyen directamente desde `.build`; la receta de Docker está [sin verificar](conventions/deploy.md#docker)).
 - `ftp`/`sftp` usan el módulo [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp), que BxAgents incluye.
 
 ### `hash-password`
