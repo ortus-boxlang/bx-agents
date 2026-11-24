@@ -70,15 +70,14 @@ Construye el cliente con argumentos con nombre. Hay un método por cada ruta: `i
 
 ## Qué acepta un turno
 
-Además de `input`, `conversationId`, `threadId` y `attachments`, una petición de turno puede llevar dos structs pequeños, y solo se usan estas claves:
+Además de `input`, `conversationId`, `threadId` y `attachments`, una petición de turno puede llevar dos structs:
 
-| Campo | Clave | Significado |
-|---|---|---|
-| `options` | `profile` | El nombre de un [perfil ofrecido](../conventions/agent-bx.md#agentapi) (`GET /profiles`). Cualquier otro nombre es un `400` `bad_profile`. |
-| `params` | `temperature` | Un número de 0 a 2. |
-| `params` | `max_tokens` | Un número entero de 1 a 1000000. |
+| Campo | Qué se usa |
+|---|---|
+| `options` | Solo `profile`: el nombre de un [perfil ofrecido](../conventions/agent-bx.md#agentapi) (`GET /profiles`). Cualquier otro nombre es un `400` `bad_profile`. |
+| `params` | Todo lo que acepta el modelo (`temperature`, `top_p`, `max_tokens`, `stop`, `seed`, `response_format`, ajustes de razonamiento, etc.), salvo `model`, `messages`, `contents`, `system` y `tools`, y cualquier clave que empiece por `_` a cualquier profundidad. |
 
-Todo lo demás se descarta sin error, y el servidor registra los nombres ignorados (nunca los valores). Las claves que empiezan por `_` son internas de la biblioteca de modelos y nunca se aceptan. Es una regla de seguridad: una clave como `options._resumeContext` haría que la biblioteca ejecutara llamadas a herramientas que aporta la petición sin pedir aprobación, y `params.model` u `options.apiKey` dejarían que quien llama elija un modelo que paga el servidor. La persona, el hilo y la conversación salen del token y de la petición, nunca de `options`.
+Todo lo demás se descarta sin error, y el servidor registra los nombres ignorados (nunca los valores). Es una regla de seguridad. Una clave como `options._resumeContext` haría que la biblioteca de modelos ejecutara llamadas a herramientas que aporta la petición sin pedir aprobación, y `options.apiKey` cambiaría la clave del servidor. En `params`, `model` elegiría un modelo que el servidor no ofreció, `messages` o `contents` reemplazarían la conversación, `system` podría fijar el prompt y `tools` añadiría herramientas que el agente no tiene. La persona, el hilo y la conversación salen del token y de la petición, nunca de `options`.
 
 Las imágenes van en `attachments`, como `[ { "name": "a.png", "mime": "image/png", "data": "<base64>" } ]`. Una petición no tiene campo `images`: contiene rutas de archivos del servidor, así que el servidor lo ignora (y registra que lo hizo) y no lee ningún archivo; solo el terminal que ejecuta el agente en su propio proceso adjunta archivos por ruta.
 
