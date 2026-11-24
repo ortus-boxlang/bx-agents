@@ -152,7 +152,7 @@ curl -s -H 'Content-Type: application/json' -d '{"input":"hello"}' http://127.0.
 echo
 curl -s -H 'Content-Type: application/json' -d '{"input":"hello"}' http://127.0.0.1:8791/__bxagents/invoke
 echo
-curl -s http://127.0.0.1:8791/__bxagents/openapi | grep -o '"title":"[^"]*"'
+curl -s http://127.0.0.1:8791/__bxagents/openapi | grep -o '"title":"acme-support[^"]*"'
 ```
 
 ```text title="You see"

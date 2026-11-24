@@ -110,8 +110,9 @@ Take the tour with what you already built:
 - **Registry** has three tabs: **Tools** lists `orderStatus` and `now`, grouped by where they come from, and marks
   the ones that ask first; **Skills** lists `refund-policy` and the six shipped ones, with a **Read** button;
   **Volumes** lists the folders the agent may use.
-- **Settings** has **Appearance** (light or dark, an accent color, text size, density, kept in your browser) and your
-  own per-person settings, the subject of [Each Person's Own Settings](layered-settings.md).
+- **Settings** has **Appearance** (light or dark, an accent color, text size, density, kept in your browser), the **Model**
+  picker, your **Account** and facts about the server. A person's own agent settings are the subject of
+  [Each Person's Own Settings](layered-settings.md).
 - **Routines**, **Memory** and **Vault** each get a lesson of their own, and the Admin group comes with
   [Who Is Allowed](users-roles-and-tokens.md) and [Logs, Usage and Backups](operating-it.md).
 

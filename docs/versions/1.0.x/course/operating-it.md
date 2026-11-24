@@ -80,12 +80,15 @@ that cannot be written never stops the work it describes.
 Set `usage: true` and each model call leaves a row of counts: the time, who asked, the provider, the model and the
 tokens in and out. You did that in [The Agent Definition](05-agent-bx.md), so there is already a record:
 
+Make one more call, so there is something to count, and read the record:
+
 ```bash title="Terminal 2"
+bxAgents invoke --message=hello > /dev/null
 bxAgents stats
 ```
 
 ```text title="You see"
-Last 30 days: <anything> calls, <anything> tokens (<anything> in, <anything> out)
+Last 30 days: <anything> call<anything>, <anything> tokens (<anything> in, <anything> out)
 
 By model<anything>calls<anything>in<anything>out<anything>total
 ...
@@ -123,13 +126,12 @@ Backed up <anything> to <anything>/backups/backup-<anything>.zip
 ```bash title="Terminal 2"
 ID=$(bxAgents notes list --scope=user | grep Loses-this-note | awk '{print $1}')
 bxAgents notes remove --id=$ID
-bxAgents notes list --scope=user
+bxAgents notes list --scope=user | grep -c Loses-this-note || true
 ```
 
 ```text title="You see"
 Removed.
-Notes about local: <anything>
-  <anything>  Prefers-short-answers
+0
 ```
 
 Now put the backup back. `restore` stops when a server or a chat looks to have the database open, and SQLite leaves a
@@ -139,15 +141,13 @@ kept for one restore as `chat.db.before-restore`:
 ```bash title="Terminal 2"
 BACKUP=$(ls -t ~/.bxagents/acme-support/backups/*.zip | head -1)
 bxAgents restore $BACKUP --force
-bxAgents notes list --scope=user
+bxAgents notes list --scope=user | grep -c Loses-this-note
 ```
 
 ```text title="You see"
-Restored chat.db into <anything>
-Kept what was there as chat.db.before-restore. The next restore replaces them.
-Notes about local: <anything>
-  <anything>  Prefers-short-answers
-  <anything>  Loses-this-note
+Restored chat.db<anything> into <anything>
+Kept what was there as chat.db.before-restore<anything>. The next restore replaces them.
+1
 ```
 
 The note is back. In the web app the **Data and backups** page (admins only) makes, downloads and schedules the
@@ -167,13 +167,17 @@ bxAgents doctor
 ```text title="You see"
 [ OK ] BoxLang <anything>
 ...
-Everything checks out.
+0 problem(s), <anything>
 ```
+
+(In this shell it warns that `ACME_ADA_PASSWORD` and `ACME_BO_PASSWORD` are not set: you exported them only for the
+server's run in [Who Is Allowed](users-roles-and-tokens.md). That is `doctor` doing its job, naming a variable the
+project needs.)
 
 ## Checkpoint
 
 Nothing in the project changed. In the data home there is a backup, and a note you lost and got back.
-`kit/resume.sh operating-it` has nothing to restore.
+Nothing to restore with `kit/resume.sh`.
 
 Full reference: [data and volumes](../conventions/data.md), [logs](../conventions/logs.md) and the
 [CLI reference](../cli-reference.md#data-backup-and-restore) for `data`, `backup`, `restore`, `logs`, `stats` and `doctor`.

@@ -80,8 +80,8 @@ bxAgents invoke --message=system | grep French
 
 ```text title="You see"
 ...
-instructions (append) from <anything>/.bxagents/acme-support/Agent.yml
-tools (remove) from <anything>/.bxagents/acme-support/Agent.yml
+<anything>instructions (append) from <anything>/.bxagents/acme-support/Agent.yml
+<anything>tools (remove) from <anything>/.bxagents/acme-support/Agent.yml
 ...
 I can use these tools: <anything>
 Always answer in French.
@@ -106,7 +106,8 @@ A person does not have to write the file by hand. In the terminal chat, `/settin
 to the agent's own file, `--global` writes it to the file for every agent, and `/settings tools+ [ now@bxai ]` adds to a
 list (`/settings tools+ reset` takes that entry out of the file again). It edits only its own lines, keeps the rest of
 the file, comments included, and puts the file back when the result would not be valid. `/info` lists each setting that
-came from a person's file. In the web app the **Settings** page does the same for the person who is signed in.
+came from a person's file. (The web app's **Settings** page is for appearance, the model picker and the account; the
+layered files are written from the chat or by hand.)
 
 ## What to remember
 

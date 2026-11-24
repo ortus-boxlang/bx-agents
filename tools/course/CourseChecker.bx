@@ -469,6 +469,11 @@ class {
 						if ( len( previous ) && directoryExists( checkpoints & "/" & previous ) ) {
 							restore( checkpoints & "/" & previous, ws & "/acme-support" )
 							directoryCopy( checkpoints & "/" & previous, work & "/snapshot-prev", true )
+							// what a learner does after resume.sh: rebuild
+							var rebuilt = shell( "cd '#ws#/acme-support' && bxAgents build", work, 300 )
+							if ( rebuilt.code != 0 ) {
+								throw( type = "Course.Rebuild", message = "The project restored from the checkpoint of [#previous#] does not build:" & char( 10 ) & indent( clean( rebuilt.output ) ) )
+							}
 						}
 						needsModel = true
 					} else {

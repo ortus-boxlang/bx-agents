@@ -48,7 +48,7 @@ check() { # name, command, text the output must contain
 }
 
 check "builds"                 "bxAgents build"                          "Build succeeded"
-check "doctor is happy"        "bxAgents doctor"                         "Everything checks out"
+check "doctor finds no problem" "bxAgents doctor | grep -E 'Everything checks out|^0 problem'" ""
 check "the order tool is there" "bxAgents invoke --message=capabilities" "orderStatus"
 check "the subagents are there" "bxAgents invoke --message=capabilities" "delegate_to_writer"
 check "the refund skill is there" "bxAgents invoke --message=system"      "refund-policy"
@@ -77,7 +77,7 @@ bash check.sh
 
 ```text title="You see"
 ok    builds
-ok    doctor is happy
+ok    doctor finds no problem
 ok    the order tool is there
 ok    the subagents are there
 ok    the refund skill is there

@@ -139,8 +139,7 @@ bxAgents inspect --section=mcp
 ```text title="You see"
 Build succeeded: <anything>/acme-support/.build/app
 ...
-tools<anything>orderStatus<anything>
-...
+  hosts tools<anything>Acme-tools
 ```
 
 Any outside MCP client can now list and call `orderStatus`, independent of your agent's own chat interface.

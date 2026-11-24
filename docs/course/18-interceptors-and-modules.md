@@ -151,9 +151,13 @@ bxAgents extensions list
 ```text title="You see"
 Build succeeded: <anything>/acme-support/.build/app
 RequestLogger.bx
+WebUiLoginGate.bx
 hello (project, loaded)
     commands:   /hello
 ```
+
+`WebUiLoginGate.bx` is the interceptor BxAgents wrote itself for the accounts you declared in
+[Who Is Allowed](users-roles-and-tokens.md): the same mechanism, generated instead of written by you.
 
 Now open the terminal chat and type `/hello Ada`: the answer is `Hello, Ada!`, written by your extension, and `/extensions`
 lists it. The same command runs in the web app's chat. It never reached the model.

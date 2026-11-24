@@ -101,10 +101,7 @@ bxAgents inspect --section=schedule
 ```text title="You see"
 Build succeeded: <anything>/acme-support/.build/app
 ...
-Digest<anything>
-...
-morning-digest<anything>
-...
+  schedules/Digest.bx  morning-digest  onWeekdays( "08:30" )  researcher
 ```
 
 The task runs while the app is served (`bxAgents serve`), at 08:30 on weekdays, and the course does not wait for a clock.
