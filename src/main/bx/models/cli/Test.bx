@@ -24,7 +24,17 @@ class {
 		]
 
 		for ( var failure in result.failures ) {
-			lines.append( "  [FAILED] #failure.bundle# > #failure.suite# > #failure.spec#: #failure.message#" )
+			lines.append( len( failure.suite ) ? "  [FAILED] #failure.bundle# > #failure.suite# > #failure.spec#: #failure.message#" : "  [FAILED] #failure.bundle# could not start: #failure.message#" )
+		}
+		if ( result.failures.len() && !runner.hasTestEnvironment( projectRoot ) ) {
+			lines.append( "" )
+			lines.append( "This project has no `environments.test`. `bxAgents test` builds the agent against it, on the mock provider, so specs need no API key or network (docs/conventions/testing.md). Add it to Agent.yml:" )
+			lines.append( "" )
+			lines.append( "  environments:" )
+			lines.append( "    test:" )
+			lines.append( "      model: mock/mock-model" )
+			lines.append( "" )
+			lines.append( "or, in an Agent.bx, a `test()` method returning { model : ""mock/mock-model"" }." )
 		}
 
 		return {
