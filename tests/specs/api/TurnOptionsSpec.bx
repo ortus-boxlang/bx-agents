@@ -1,0 +1,89 @@
+import bxModules.bxagents.models.api.TurnOptions;
+/**
+ * What a client may put in `options` and `params` of a turn: the allowlist, and that every `_` key is dropped.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.TurnOptions", function() {
+
+			describe( "options", function() {
+
+				it( "keeps profile", function() {
+					var out = TurnOptions::ofOptions( { profile : "quick" } );
+					expect( out.value ).toBe( { profile : "quick" } );
+					expect( out.dropped ).toBeEmpty();
+				} );
+
+				it( "drops _resumeContext and any other key that starts with an underscore", function() {
+					var out = TurnOptions::ofOptions( { profile : "quick", _resumeContext : { assistantMessage : {} }, _x : 1, _Mixed : "a" } );
+					expect( out.value ).toBe( { profile : "quick" } );
+					expect( out.dropped.sort( "textnocase" ) ).toBe( [ "_Mixed", "_resumeContext", "_x" ] );
+				} );
+
+				it( "drops what bx-ai would honour but a client has no business choosing", function() {
+					var out = TurnOptions::ofOptions( {
+						apiKey : "sk-attacker", returnFormat : "raw", baseURL : "http://evil", chatURL : "http://evil",
+						providerOptions : { responses : [ "SCRIPTED" ] }, userId : "admin", threadId : "t", conversationId : "c"
+					} );
+					expect( out.value ).toBe( {} );
+					expect( out.dropped ).toHaveLength( 8 );
+				} );
+
+				it( "matches a name ignoring case and gives it back in the one spelling", function() {
+					expect( TurnOptions::ofOptions( { PROFILE : "quick" } ).value.keyExists( "profile" ) ).toBeTrue();
+				} );
+
+				it( "does not take a profile that is not a plain name", function() {
+					expect( TurnOptions::ofOptions( { profile : { _resumeContext : {} } } ).value ).toBe( {} );
+					expect( TurnOptions::ofOptions( { profile : [ "a" ] } ).value ).toBe( {} );
+					expect( TurnOptions::ofOptions( { profile : "" } ).value ).toBe( {} );
+				} );
+
+				it( "does not look inside a nested value, it is dropped whole", function() {
+					var out = TurnOptions::ofOptions( { nested : { profile : "quick", _resumeContext : {} } } );
+					expect( out.value ).toBe( {} );
+					expect( out.dropped ).toBe( [ "nested" ] );
+				} );
+
+				it( "treats anything that is not a struct as nothing", function() {
+					expect( TurnOptions::ofOptions( "profile=quick" ).value ).toBe( {} );
+					expect( TurnOptions::ofOptions( [ 1 ] ).value ).toBe( {} );
+					expect( TurnOptions::ofOptions().value ).toBe( {} );
+				} );
+
+			} );
+
+			describe( "params", function() {
+
+				it( "keeps temperature and max_tokens as numbers", function() {
+					var out = TurnOptions::ofParams( { temperature : "0.5", max_tokens : 200 } );
+					expect( out.value ).toBe( { temperature : 0.5, max_tokens : 200 } );
+					expect( out.dropped ).toBeEmpty();
+				} );
+
+				it( "drops the model, the key, and every underscore key", function() {
+					var out = TurnOptions::ofParams( { model : "zz-model", apiKey : "x", _resumeContext : {}, temperature : 1 } );
+					expect( out.value ).toBe( { temperature : 1 } );
+					expect( out.dropped ).toHaveLength( 3 );
+				} );
+
+				it( "drops a value that is out of range or not a number", function() {
+					var out = TurnOptions::ofParams( { temperature : 9, max_tokens : 1.5 } );
+					expect( out.value ).toBe( {} );
+					out = TurnOptions::ofParams( { temperature : "hot", max_tokens : { a : 1 } } );
+					expect( out.value ).toBe( {} );
+					expect( TurnOptions::ofParams( { max_tokens : 0 } ).value ).toBe( {} );
+					expect( TurnOptions::ofParams( { max_tokens : 99999999 } ).value ).toBe( {} );
+				} );
+
+				it( "treats anything that is not a struct as nothing", function() {
+					expect( TurnOptions::ofParams( "x" ).value ).toBe( {} );
+				} );
+
+			} );
+
+		} );
+	}
+
+}
