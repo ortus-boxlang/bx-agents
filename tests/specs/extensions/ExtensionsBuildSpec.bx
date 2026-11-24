@@ -24,10 +24,9 @@ class extends="testbox.system.BaseSpec" {
 				application.delete( "bxagentsExtensions" );
 			} );
 
-			// the generated wiring, whichever variant of public/Application.bx the build made (the default keeps it in Wiring.bx)
+			// the generated wiring: the base class public/Application.bx extends
 			function wiring( required struct result ) {
-				var helper = result.appDir & "/bxagents/Wiring.bx";
-				return fileRead( fileExists( helper ) ? helper : result.appDir & "/bxagents/Application.bx" );
+				return fileRead( result.appDir & "/bxagents/Application.bx" );
 			}
 
 			function projectCopy() {
@@ -80,7 +79,7 @@ class extends="testbox.system.BaseSpec" {
 				var ui = jsonDeserialize( fileRead( app & "/config/bxagentsui.json" ) );
 				expect( ui.extensionScripts ).toBe( [ "/chat/ext/panel/panel.js" ] );
 				expect( ui.extensionStyles ).toBe( [ "/chat/ext/panel/panel.css" ] );
-				expect( fileRead( app & "/bxagents/Wiring.bx" ) ).toInclude( 'ExtensionGateways@bxagents"( appPath( "" ) ).register( "loopback"' );
+				expect( fileRead( app & "/bxagents/Application.bx" ) ).toInclude( 'ExtensionGateways@bxagents"( appPath( "" ) ).register( "loopback"' );
 				expect( fileRead( app & "/handlers/AgentApi.bx" ) ).toInclude( "function extensionFile(" );
 				// the web app module answers <path>/ext/... and hands it to AgentApi.extensionFile (see bxagentsui Forward)
 				expect( fileRead( app & "/modules/bxagentsui/config/Router.bx" ) ).toInclude( "/ext/:extension/:file-regex:(.+)" );

@@ -19,7 +19,6 @@ class extends="testbox.system.BaseSpec" {
 		variables.builtModule = expandPath( "/" ) & "build/modules/bxagents";
 		variables.executable = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" ).findExecutable();
 		variables.ready = fileExists( builtModule & "/ModuleConfig.bx" ) && !isNull( executable );
-		variables.savedModule = new bxagents.models.util.Env().get( "BXAGENTS_MODULE_DIR" );
 		variables.tempDirs = [];
 		variables.processes = [];
 		variables.decoyDir = "";
@@ -29,34 +28,14 @@ class extends="testbox.system.BaseSpec" {
 		tempDirs.append( fakeHome );
 		variables.childOptions = ( system.getenv( "JAVA_TOOL_OPTIONS" ) ?: "" ) & " -Duser.home=" & fakeHome;
 		if ( ready ) {
-			system.setProperty( "BXAGENTS_MODULE_DIR", builtModule );
 			// one build and one server for the matrix below (a bundle-level hook: variables set by a describe()-level beforeAll are not seen by it())
 			variables.project = newProject();
-			new bxagents.models.cli.Build().run( { projectRoot : project } );
+			new bxagents.models.cli.Build().run( { projectRoot : project, moduleDir : builtModule } );
 			variables.port = freePort();
-			variables.served = new bxagents.models.cli.Serve().run( { projectRoot : project, port : port } );
+			variables.served = new bxagents.models.cli.Serve().run( { projectRoot : project, port : port, moduleDir : builtModule } );
 			processes.append( served.process );
 			variables.base = "http://127.0.0.1:#port#";
 			waitForHealth( base );
-
-			// the same project built as the stub variant of public/Application.bx, on a server of its own
-			variables.savedVariant = new bxagents.models.util.Env().get( "BXAGENTS_APPLICATION_VARIANT" );
-			system.setProperty( "BXAGENTS_APPLICATION_VARIANT", "stub" );
-			try {
-				variables.stubProject = newProject();
-				new bxagents.models.cli.Build().run( { projectRoot : stubProject } );
-			} finally {
-				if ( len( savedVariant ) ) {
-					system.setProperty( "BXAGENTS_APPLICATION_VARIANT", savedVariant );
-				} else {
-					system.clearProperty( "BXAGENTS_APPLICATION_VARIANT" );
-				}
-			}
-			variables.stubPort = freePort();
-			variables.stubServed = new bxagents.models.cli.Serve().run( { projectRoot : stubProject, port : stubPort } );
-			processes.append( stubServed.process );
-			variables.stubBase = "http://127.0.0.1:#stubPort#";
-			waitForHealth( stubBase );
 		}
 	}
 
@@ -75,11 +54,6 @@ class extends="testbox.system.BaseSpec" {
 			if ( directoryExists( dir ) ) {
 				directoryDelete( dir, true );
 			}
-		}
-		if ( len( variables.savedModule ) ) {
-			system.setProperty( "BXAGENTS_MODULE_DIR", variables.savedModule );
-		} else {
-			system.clearProperty( "BXAGENTS_MODULE_DIR" );
 		}
 	}
 
@@ -197,29 +171,11 @@ class extends="testbox.system.BaseSpec" {
 				if ( !ready ) {
 					return;
 				}
-				// after() of the project's class ran: the hook class extends the generated wiring and wrote this file when the app started
+				// after() of the project's class ran: it extends the generated base and wrote this file when the app started
 				expect( fileExists( project & "/hook-ran.txt" ) ).toBeTrue();
 				expect( fileRead( project & "/hook-ran.txt" ) ).toBe( "after" );
-				// ...and it is the template's own Application.bx that created it
-				var source = fileRead( project & "/.build/public/Application.bx" );
-				expect( source ).toInclude( "_bx = new app.bxagents.UserApplication()" );
-				expect( source ).toInclude( "ColdBox Application" );
-			} );
-
-			it( "serves the stub variant the same way: health, the sign-in redirect, a 401, and the 404s", function() {
-				if ( !ready ) {
-					return;
-				}
-				expect( fileRead( stubProject & "/.build/public/Application.bx" ) ).toInclude( 'class extends="app.bxagents.Application"' );
-				expect( fileExists( stubProject & "/.build/app/bxagents/Wiring.bx" ) ).toBeFalse();
-				expect( get( stubBase & "/__bxagents/health" ).status ).toBe( 200 );
-				expect( get( stubBase & "/chat/" ).status ).toBe( 302 );
-				expect( post( stubBase & "/__bxagents/invoke", '{"input":"hello"}' ).status ).toBe( 401 );
-				expect( get( stubBase & "/config/agent-settings.json" ).status ).toBe( 404 );
-				expect( get( stubBase & "/app/tools/Greeter.bx" ).status ).toBe( 404 );
-				expect( get( stubBase & "/nothing-here" ).body ).toBe( '{"error":"not_found"}' );
-				// the project's own class IS the Application in this variant: its hook ran as well
-				expect( fileRead( stubProject & "/hook-ran.txt" ) ).toBe( "after" );
+				// ...and that class is the web root's Application.bx
+				expect( fileRead( project & "/.build/public/Application.bx" ) ).toInclude( 'class extends="app.bxagents.Application"' );
 			} );
 
 			it( "loads no module from the machine's own module directory: a decoy there does not load", function() {
@@ -233,7 +189,7 @@ class extends="testbox.system.BaseSpec" {
 				try {
 					// a server on the same build, started a moment later, so the decoy is there when it loads its modules
 					var otherPort = freePort();
-					var other = new bxagents.models.cli.Serve().run( { projectRoot : project, port : otherPort, _environment : { JAVA_TOOL_OPTIONS : childOptions } } );
+					var other = new bxagents.models.cli.Serve().run( { projectRoot : project, port : otherPort, moduleDir : builtModule, _environment : { JAVA_TOOL_OPTIONS : childOptions } } );
 					processes.append( other.process );
 					waitForHealth( "http://127.0.0.1:#otherPort#" );
 					expect( fileExists( marker ) ).toBeFalse( "the decoy in the machine's module directory was loaded by the served app" );

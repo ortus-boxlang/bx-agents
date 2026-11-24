@@ -1,22 +1,8 @@
 /**
- * The generated wiring, as the "stub" variant writes it: one base class, bxagents/Application.bx, that boots ColdBox from its own
- * onApplicationStart(). The "template" variant (the default) is covered by ColdBoxAppVariantsSpec, which also proves the two
- * carry the same wiring; this spec keeps the established assertions on the base class's shape.
+ * The generated wiring: one base class, bxagents/Application.bx, that boots ColdBox from its own onApplicationStart(), and the thin
+ * public/Application.bx that extends it.
  */
 class extends="testbox.system.BaseSpec" {
-
-	function beforeAll() {
-		variables.savedVariant = new bxagents.models.util.Env().get( "BXAGENTS_APPLICATION_VARIANT" );
-		createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_APPLICATION_VARIANT", "stub" );
-	}
-
-	function afterAll() {
-		if ( len( variables.savedVariant ) ) {
-			createObject( "java", "java.lang.System" ).setProperty( "BXAGENTS_APPLICATION_VARIANT", variables.savedVariant );
-		} else {
-			createObject( "java", "java.lang.System" ).clearProperty( "BXAGENTS_APPLICATION_VARIANT" );
-		}
-	}
 
 	function run() {
 		describe( "ColdBoxAppGenerator", function() {
@@ -45,9 +31,9 @@ class extends="testbox.system.BaseSpec" {
 				return root & "/app";
 			}
 
-			private function generateFor( required string projectRoot, required string buildDir ) {
+			private function generateFor( required string projectRoot, required string buildDir, array startup = [] ) {
 				var config = resolver.resolve( projectRoot = arguments.projectRoot );
-				return generator.generate( arguments.projectRoot, arguments.buildDir, config );
+				return generator.generate( projectRoot = arguments.projectRoot, buildDir = arguments.buildDir, resolvedConfig = config, extraStartupStatements = arguments.startup );
 			}
 
 			private function countOccurrences( required string haystack, required string needle ) {
@@ -78,6 +64,43 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( result.applicationBx ).toBe( getDirectoryFromPath( buildDir ) & "public/Application.bx" );
 				expect( fileExists( buildDir & "/Application.bx" ) ).toBeFalse();
+			} );
+
+			it( "derives the base from the template's Application.bx: its bootstrap settings, the bootstrap call, and loadColdbox", function() {
+				var base = fileRead( generateFor( fixtures & "/full-project", newBuildDir() ).baseApplicationBx );
+				expect( base ).toInclude( 'COLDBOX_APP_ROOT_PATH  = expandPath( "/app" )' );
+				expect( base ).toInclude( 'COLDBOX_APP_MAPPING    = "/app"' );
+				expect( base ).toInclude( 'COLDBOX_WEB_MAPPING    = "/"' );
+				expect( base ).toInclude( "COLDBOX_WEB_MAPPING   = COLDBOX_WEB_MAPPING" );
+				expect( base ).toInclude( "function onApplicationStart()" );
+				expect( base ).toInclude( "function onRequestStart(" );
+				expect( base ).toInclude( "application.cbBootstrap.loadColdbox()" );
+			} );
+
+			it( "gives the base the three hooks a project's own Application.bx can override, called at their moments", function() {
+				var base = fileRead( generateFor( fixtures & "/full-project", newBuildDir(), [ "STARTUP_MARKER()" ] ).baseApplicationBx );
+				for ( var hook in [ "function before()", "function after()", "function beforeRequest()" ] ) {
+					expect( base ).toInclude( hook );
+				}
+				expect( base.find( "function after()" ) ).toBeLT( base.find( "STARTUP_MARKER()" ) );
+				var start = base.find( "function onApplicationStart()" );
+				expect( base.find( "before()", start ) ).toBeLT( base.find( "new coldbox.system.Bootstrap" ) );
+				expect( base.find( "loadColdbox()" ) ).toBeLT( base.find( "after()", base.find( "loadColdbox()" ) ) );
+			} );
+
+			it( "writes the config ColdBox loads, with the settings in the scope ColdBox reads, and a JSON 404 handler", function() {
+				var buildDir = newBuildDir();
+				generateFor( fixtures & "/full-project", buildDir );
+				var config = fileRead( buildDir & "/config/Coldbox.bx" );
+				// `variables.`: a bare `coldbox = {` is local to configure() in BoxLang, so ColdBox never saw it
+				expect( config ).toInclude( "variables.coldbox = {" );
+				expect( config ).toInclude( "variables.moduleSettings = {" );
+				expect( config ).toInclude( 'modulesExternalLocation : [ "/modules" ]' );
+				expect( config ).toInclude( 'defaultEvent : "NotFound.index"' );
+				expect( config ).toInclude( 'invalidEventHandler : "NotFound.index"' );
+				expect( fileExists( buildDir & "/config/ColdBox.bx" ) && !fileExists( buildDir & "/config/Coldbox.bx" ) ).toBeFalse();
+				expect( fileRead( buildDir & "/config/WireBox.bx" ) ).toInclude( '.to( "app.agent.GeneratedAgentFactory" )' );
+				expect( fileRead( buildDir & "/handlers/NotFound.bx" ) ).toInclude( "statusCode = 404" );
 			} );
 
 			it( "copies every node's instructions.md into the app and resolves it relative to the factory", function() {
@@ -136,7 +159,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( fileRead( result.applicationBx ) ).notToInclude( "onApplicationStart" );
 			} );
 
-			it( "copies the project's own Application.bx, pointing its extends at the class the build generates", function() {
+			it( "makes the project's own Application.bx the web root's, pointing its extends at the class the build generates", function() {
 				var buildDir = newBuildDir();
 				var own = createTempDirectory( prefix = "bxagents-ownapp-" ) & "/Application.bx";
 				fileWrite( own, 'class extends="bxagents.Application" {' & char( 10 ) & "	// mine" & char( 10 ) & "}" & char( 10 ) );

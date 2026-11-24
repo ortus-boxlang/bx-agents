@@ -17,10 +17,9 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
-			// the generated wiring, whichever variant of public/Application.bx the build made (the default keeps it in Wiring.bx)
+			// the generated wiring: the base class public/Application.bx extends
 			private function wiring( required struct result ) {
-				var helper = result.appDir & "/bxagents/Wiring.bx";
-				return fileRead( fileExists( helper ) ? helper : result.appDir & "/bxagents/Application.bx" );
+				return fileRead( result.appDir & "/bxagents/Application.bx" );
 			}
 
 			private function newTempProject( required string fixtureName ) {
@@ -163,21 +162,17 @@ class extends="testbox.system.BaseSpec" {
 				expect( schedules[ 1 ].path ).toBe( "schedules/Nightly.bx" );
 			} );
 
-			it( "keeps the project's own root Application.bx as the class the template's public/Application.bx creates, and uses the plain wiring when there is none", function() {
+			it( "makes the project's own root Application.bx the web root's Application.bx, extending the generated base, and generates a thin one when there is none", function() {
 				var projectRoot = newTempProject( "full-project" );
 				var own = 'class extends="bxagents.Application" {' & char( 10 ) & "	// mine" & char( 10 ) & "}" & char( 10 );
 				fileWrite( projectRoot & "/Application.bx", own );
 
 				var result = pipeline.build( projectRoot );
-				// the template variant keeps the project's class beside the wiring it extends, and the template's own
-				// public/Application.bx creates it
-				expect( fileRead( result.appDir & "/bxagents/UserApplication.bx" ) ).toBe( replace( own, 'extends="bxagents.Application"', 'extends="app.bxagents.Wiring"' ) );
-				expect( fileRead( result.publicDir & "/Application.bx" ) ).toInclude( "new app.bxagents.UserApplication()" );
+				expect( fileRead( result.publicDir & "/Application.bx" ) ).toBe( replace( own, 'extends="bxagents.Application"', 'extends="app.bxagents.Application"' ) );
 
 				fileDelete( projectRoot & "/Application.bx" );
 				var rebuilt = pipeline.build( projectRoot );
-				expect( fileExists( rebuilt.appDir & "/bxagents/UserApplication.bx" ) ).toBeFalse();
-				expect( fileRead( rebuilt.publicDir & "/Application.bx" ) ).toInclude( "new app.bxagents.Wiring()" );
+				expect( fileRead( rebuilt.publicDir & "/Application.bx" ) ).toInclude( 'class extends="app.bxagents.Application"' );
 				expect( fileRead( rebuilt.publicDir & "/Application.bx" ) ).notToInclude( "mine" );
 			} );
 
@@ -271,7 +266,7 @@ class extends="testbox.system.BaseSpec" {
 			it( 'calls aiToolRegistry().scan("tools") at startup only when the project declares tools', function() {
 				var withTools = newTempProject( "full-project" );
 				var withToolsResult = pipeline.build( withTools );
-				// "app.tools": the web root `/` is public/, so a bare "tools" would look in public/tools and find nothing
+				// "app.tools": bx-ai expands the dotted path against a mapping (expandPath( "/app/tools" )), so it must be a mapping path, not one relative to the app
 				expect( wiring( withToolsResult ) ).toInclude( 'aiToolRegistry().scan( "app.tools" )' );
 
 				var withoutTools = newTempProject( "valid-minimal" );
