@@ -452,6 +452,8 @@ export function embedsPage() {
 				this.form.enabled = !this.form.enabled;
 				return;
 			}
+			// a change made here is saved at once: what is on the form is saved too, unless the person has edits that are not
+			const wasClean = !this.dirty;
 			const turningOff = this.form.enabled;
 			if ( turningOff && !await this.$confirm( { title: "Turn " + this.form.name + " off?", body: "Visitors get no chat until you turn it on again. Their saved chats are kept.", yes: "Turn off", danger: true } ) ) {
 				return;
@@ -462,9 +464,21 @@ export function embedsPage() {
 				return;
 			}
 			this.form.enabled = !turningOff;
-			this.savedJson = JSON.stringify( { ...JSON.parse( this.savedJson || "{}" ), enabled: this.form.enabled } );
+			this.markSaved( wasClean );
 			this.$toast.success( turningOff ? "Turned off." : "Turned on." );
 			await this.load();
+		},
+
+		/**
+		 * After a change that was saved on its own (turning on or off, a new key): when the form had no unsaved edits it is
+		 * saved as it is now, so the page does not say "Unsaved changes" for something already stored.
+		 *
+		 * @param {boolean} wasClean True when the form had no unsaved edits before the change
+		 */
+		markSaved( wasClean ) {
+			if ( wasClean ) {
+				this.savedJson = JSON.stringify( this.form );
+			}
 		},
 
 		/** Gives the open embed a new signing key, after asking. */
@@ -482,7 +496,9 @@ export function embedsPage() {
 				this.$toast.error( result.error || "The key was not rotated." );
 				return;
 			}
+			const wasClean = !this.dirty;
 			this.form.keyVersion = result.data.keyVersion;
+			this.markSaved( wasClean );
 			this.$toast.success( "New key, version " + result.data.keyVersion + ". Open sessions have ended." );
 			await this.load();
 		},

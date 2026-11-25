@@ -172,6 +172,9 @@ test.describe( "The Embeds page", () => {
 		await page.locator( "#confirmYes" ).click();
 		await expect( item ).toContainText( "Off" );
 		await expect( page.locator( "#toggleEmbed" ) ).toHaveText( "Enable" );
+		// what was stored on its own (a new key, turned off) is not "unsaved changes"
+		await expect( page.getByText( "Unsaved changes" ) ).toBeHidden();
+		await expect( page.locator( "#saveEmbed" ) ).toBeDisabled();
 		expect( errors ).toEqual( [] );
 	} );
 
