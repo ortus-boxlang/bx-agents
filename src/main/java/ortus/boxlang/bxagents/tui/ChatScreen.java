@@ -758,6 +758,10 @@ public final class ChatScreen implements AutoCloseable {
 		}
 	}
 
+	public void blankLine() {
+		out( Text.from( "" ) );
+	}
+
 	/**
 	 * Prints Markdown as the agent's answer, using the configured source or rendered style.
 	 *

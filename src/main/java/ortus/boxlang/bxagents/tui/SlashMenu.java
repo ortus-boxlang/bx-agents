@@ -34,7 +34,7 @@ final class SlashMenu {
 	/**
 	 * How many commands are in view at once. The list scrolls when there are more.
 	 */
-	static final int					WINDOW		= 8;
+	static final int					WINDOW		= 10;
 
 	/**
 	 * How many commands are in view in this menu: {@link #WINDOW} unless {@link #setWindow} says otherwise
