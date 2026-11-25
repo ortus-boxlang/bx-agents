@@ -297,14 +297,19 @@ class {
 				var finished = waiting.len() ? waiting.first() : name
 				if ( waiting.len() ) {
 					waiting.deleteAt( 1 )
+				} else {
+					Logger::log( "agent", "warn", "Tool completion had no matching start event", name )
 				}
-				send( "tool", { "id" : finished, "name" : name, "arguments" : shown, "status" : "ok", "ms" : data.executionTime ?: 0 } )
+				var ms = data.executionTime ?: 0
+				Logger::log( "agent", "info", "Tool completed (call #finished#, #ms# ms)", name )
+				send( "tool", { "id" : finished, "name" : name, "arguments" : shown, "status" : "ok", "ms" : ms } )
 				return
 			}
 			counter.value++
 			var started = name & "##" & counter.value
 			calls[ name ] = calls[ name ] ?: []
 			calls[ name ].append( started )
+			Logger::log( "agent", "info", "Tool started (call #started#)", name )
 			send( "tool", { "id" : started, "name" : name, "arguments" : shown, "status" : "running", "ms" : 0 } )
 		}, [ "beforeAIToolExecute", "afterAIToolExecute" ] )
 
