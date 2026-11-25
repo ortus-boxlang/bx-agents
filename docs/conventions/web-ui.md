@@ -111,7 +111,7 @@ The [connectors](connectors.md) the agent offers, as cards, with tabs for **All*
 
 ### Memory
 
-Three things the agent remembers. **About you** holds your notes. **About the agent** holds the shared notes the agent keeps about its own work, the same for everyone who uses it. **Conversation memory** shows what the memory holds for conversations and clears it, for one conversation or for all of them (all is for admins), keeping the conversations themselves. Each note list shows how full it is and about how many tokens it adds to every conversation.
+Three things the agent remembers. **About you** holds your notes. **About the agent** holds the shared notes the agent keeps about its own work, the same for everyone who uses it. **Conversation memory** shows what the memory holds for conversations and clears it, for one of yours, or (admins only) for everyone's conversations of the agent shown, with the number of conversations and people it will affect, keeping the conversations themselves. Each note list shows how full it is and about how many tokens it adds to every conversation.
 
 ![The Memory page with your notes, the agent's notes and conversation memory](../assets/webui/webui-memory.png)
 

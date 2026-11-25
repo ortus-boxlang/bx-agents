@@ -1,12 +1,24 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
-import { notesSummary } from "../../resources/assets/js/components/memory/MemoryPage.js";
+import { notesSummary, everyoneSummary } from "../../resources/assets/js/components/memory/MemoryPage.js";
 import { talkTo, CONVERSATION_KEY } from "../../resources/assets/js/utils/chat.js";
 
 describe( "memory helpers", () => {
 	it( "says how much a set of notes uses", () => {
 		expect( notesSummary( { notes: [ {} ], stats: { used: 10, limit: 2000 } } ) ).toBe( "1 note, 10 of 2000 characters (about 3 tokens in every conversation)" );
 		expect( notesSummary( { notes: [], stats: { used: 0, limit: 0 } } ) ).toBe( "0 notes, 0 of 0 characters (about 0 tokens in every conversation)" );
+	} );
+
+	it( "counts everyone's conversations and the people, or no people when the read was partial", () => {
+		const rows = [
+			{ userId: "ada" },
+			{ userId: "bob" },
+			{ userId: "bob" }
+		];
+		expect( everyoneSummary( rows, 3 ) ).toEqual( { total: 3, people: 2 } );
+		expect( everyoneSummary( rows, 500 ) ).toEqual( { total: 500, people: null } );
+		expect( everyoneSummary( [], 0 ) ).toEqual( { total: 0, people: 0 } );
+		expect( everyoneSummary( undefined, undefined ) ).toEqual( { total: 0, people: 0 } );
 	} );
 } );
 
