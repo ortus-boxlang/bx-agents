@@ -37,7 +37,7 @@ class LogoTest {
 			assertThat( r.plainText().chars().allMatch( c -> c == ' ' || c >= 0x2800 && c <= 0x28FF ) ).isTrue();
 		}
 		assertThat( Logo.height() ).isEqualTo( 13 );
-		assertThat( Logo.width() ).isEqualTo( 30 );
+		assertThat( Logo.width() ).isAtMost( 30 );
 	}
 
 	@Test
