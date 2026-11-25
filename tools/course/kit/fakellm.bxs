@@ -26,6 +26,8 @@
  * A rule with `tool` whose tool the agent does not offer answers with `noTool` when the rule has one (otherwise with
  * `answer`, with `{tool}` empty).
  *
+ * It also answers GET /v1/models with one scripted model, so a check that lists models works against it.
+ *
  * Stop it with Ctrl+C, or POST /__stop.
  */
 
@@ -180,6 +182,10 @@ httpServer.createContext( "/v1/chat/completions", ( exchange ) => {
 		println( "fakellm: " & e.message )
 		exchange.close()
 	}
+} )
+// What an OpenAI compatible server (LM Studio, Ollama) lists, so a pre-flight `curl .../v1/models` works against this too
+httpServer.createContext( "/v1/models", ( exchange ) => {
+	send( exchange, jsonSerialize( { "object" : "list", "data" : [ { "id" : "scripted-model", "object" : "model", "owned_by" : "fakellm" } ] } ) )
 } )
 httpServer.createContext( "/__stop", ( exchange ) => {
 	send( exchange, "{}" )

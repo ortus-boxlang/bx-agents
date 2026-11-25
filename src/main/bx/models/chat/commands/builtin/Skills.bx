@@ -36,8 +36,10 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 		if ( !skills.len() ) {
 			return arguments.context.reply().text( "The agent has no skills." )
 		}
+		// The name column is as wide as the longest name: a fixed 24 ran long names into the origin column
+		var nameWidth = skills.map( ( s ) => len( s.name ) ).reduce( ( widest, n ) => max( widest, n ), 24 ) + 2
 		var lines = skills.map( function( s ) {
-			return left( s.name & repeatString( " ", 24 ), 24 ) & left( s.origin & repeatString( " ", 10 ), 10 ) & s.description
+			return left( s.name & repeatString( " ", nameWidth ), nameWidth ) & left( s.origin & repeatString( " ", 10 ), 10 ) & s.description
 		} )
 		return arguments.context.reply().text( "Skills:" & char( 10 ) & lines.toList( char( 10 ) ) & char( 10 ) & "Read one with /skills <name>." )
 	}

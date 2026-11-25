@@ -34,6 +34,10 @@ Each of these connects the agent to a real chat platform via a `gateways/` entry
 
 The chat-platform examples need their platform's credentials (each README names the variables) before the app boots: a gateway refuses to start without them, and a wrong token is reported at start, not at the first message.
 
+## Show them on stage
+
+[`demo.md`](demo.md) is the presenter's script for four live demos built from these examples (`minimal-agent`, `multi-agent-team`, a web app on the team, and `api-agent` with `mcp-agent`), run against a local model in LM Studio. It covers the setup, a pre-flight, what to say and what to expect, and a scripted-model fallback (`demo-model.json`). The earlier talk kit is in [`tools/demo/talk`](../tools/demo/talk).
+
 ## Try one
 
 ```bash

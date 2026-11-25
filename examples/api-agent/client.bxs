@@ -39,7 +39,9 @@ println( "" );
 println( "Conversations: " & client.sessions( 5 ).sessions.len() );
 
 // 4. an access token for another program, made over the API and given up again
-made = client.createToken( name = "example-script", scope = "chat", expires = "1d" );
+// a token name is used once, even after it is revoked, so a second run needs a new one
+tokenName = "example-" & dateTimeFormat( now(), "yyyyMMddHHmmss" );
+made = client.createToken( name = tokenName, scope = "chat", expires = "1d" );
 println( "New token:    " & made.token.left( 8 ) & "... (shown once, keep it somewhere safe)" );
-client.revokeToken( "example-script" );
+client.revokeToken( tokenName );
 println( "Revoked it." );
