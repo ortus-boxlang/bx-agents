@@ -281,7 +281,11 @@ class {
 		if ( needsStore && chatDatabase.isEmpty() ) {
 			chatDatabase = { datasource : "bxagents", path : "./data/chat.db" }
 		}
-		var startupStatements = toolScanStatements.duplicate()
+		// A hosted MCP server looks its tools up in the registry (aiToolRegistry().get( "name" )), so the scan must run
+		// before its registration: the generator emits the MCP registrations ahead of the other startup statements.
+		var scanBeforeMcp = mcpResult.registrations.len() && toolScanStatements.len()
+		var mcpStatements = scanBeforeMcp ? toolScanStatements.duplicate().append( mcpResult.registrations, true ) : mcpResult.registrations
+		var startupStatements = scanBeforeMcp ? [] : toolScanStatements.duplicate()
 		// Extensions first: the gateway session and the web page answer commands with the registry this puts in place
 		var extensionsResult = variables.extensionsGenerator.generate( root, appDir, config )
 		if ( extensionsResult.hasExtensions ) {
@@ -310,7 +314,7 @@ class {
 			agentInterceptors     = agentInterceptorNames,
 			projectInterceptors   = projectInterceptorNames,
 			gatewayRegistrations  = gatewayResult.registrationStatements,
-			mcpRegistrations      = mcpResult.registrations,
+			mcpRegistrations      = mcpStatements,
 			extraStartupStatements = startupStatements,
 			cliEnvironment        = arguments.cliEnvironment,
 			discovery             = discovery,

@@ -274,6 +274,15 @@ class extends="testbox.system.BaseSpec" {
 				expect( wiring( withoutToolsResult ) ).notToInclude( "aiToolRegistry().scan(" );
 			} );
 
+			it( "scans the tools before it registers a hosted MCP server, which looks them up by name", function() {
+				var result = pipeline.build( newTempProject( "full-project" ) );
+				var content = wiring( result );
+
+				expect( content ).toInclude( "mcpServer(" );
+				// A served app that registered first failed with: No item found in registry for key [<tool name>]
+				expect( content.find( 'aiToolRegistry().scan( "app.tools" )' ) ).toBeLT( content.find( "mcpServer(" ) );
+			} );
+
 			it( "throws BxAgents.BuildValidationFailed and produces no .build/app for an invalid project", function() {
 				var projectRoot = newTempProject( "validation/duplicate-tool-names" );
 
