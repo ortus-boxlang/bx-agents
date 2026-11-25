@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from "vitest";
 import { groupTools, fromConnector } from "../../resources/assets/js/components/registry/RegistryPage.js";
-import { sessionsPath, sourceName, facetChips } from "../../resources/assets/js/components/conversations/ConversationsPage.js";
+import { sessionsPath, sourceName, facetChips, namesOf } from "../../resources/assets/js/components/conversations/ConversationsPage.js";
 import { listOf, keepInAddress } from "../../resources/assets/js/utils/address.js";
 import { markdownName } from "../../resources/assets/js/utils/download.js";
 import { confirm } from "../../resources/assets/js/stores/confirm.js";
@@ -39,6 +39,22 @@ describe( "conversations helpers", () => {
 		expect( sourceName( "" ) ).toBe( "Web page" );
 		expect( sourceName( "slack" ) ).toBe( "slack" );
 		expect( facetChips( { main: 2 } ) ).toEqual( [ { name: "main", count: 2 } ] );
+	} );
+
+	it( "names up to five conversations, then counts the rest", () => {
+		expect( namesOf( [
+			"A",
+			"B"
+		] ) ).toBe( "\u201cA\u201d, \u201cB\u201d." );
+		expect( namesOf( [
+			"1",
+			"2",
+			"3",
+			"4",
+			"5",
+			"6",
+			"7"
+		] ) ).toBe( "\u201c1\u201d, \u201c2\u201d, \u201c3\u201d, \u201c4\u201d, \u201c5\u201d and 2 more." );
 	} );
 } );
 
