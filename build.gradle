@@ -597,9 +597,71 @@ task downloadBoxLang( type: Download ) {
 	])
 	dest "src/test/resources/libs"
     overwrite true
-    onlyIfModified false
+    onlyIfModified true
 	// Then download the bundled modules and install the dev libs
 	finalizedBy( "downloadModules" )
+}
+
+def downloadModuleArchive = { URL url, File zipFile ->
+	File	metadataFile	= new File( zipFile.parentFile, "${zipFile.name}.http" )
+	Properties	metadata	= new Properties()
+	if ( metadataFile.exists() ) {
+		metadataFile.withInputStream { metadata.load( it ) }
+	}
+
+	HttpURLConnection	connection	= (HttpURLConnection) url.openConnection()
+	if ( zipFile.exists() ) {
+		String etag = metadata.getProperty( "etag" )
+		if ( etag ) {
+			connection.setRequestProperty( "If-None-Match", etag )
+		}
+		String lastModified = metadata.getProperty( "lastModified" )
+		if ( lastModified ) {
+			connection.setIfModifiedSince( Long.parseLong( lastModified ) )
+		}
+	}
+
+	try {
+		int status = connection.responseCode
+		if ( status == HttpURLConnection.HTTP_NOT_MODIFIED ) {
+			return false
+		}
+		if ( status != HttpURLConnection.HTTP_OK ) {
+			throw new GradleException( "Could not download module archive [${url}]: HTTP ${status}" )
+		}
+
+		File	partFile	= new File( zipFile.parentFile, "${zipFile.name}.part" )
+		try {
+			partFile.withOutputStream { out -> connection.inputStream.withCloseable { input -> out << input } }
+			java.nio.file.Files.move( partFile.toPath(), zipFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING )
+
+			Properties updatedMetadata = new Properties()
+			String etag = connection.getHeaderField( "ETag" )
+			if ( etag ) {
+				updatedMetadata.setProperty( "etag", etag )
+			}
+			long lastModified = connection.lastModified
+			if ( lastModified > 0 ) {
+				updatedMetadata.setProperty( "lastModified", String.valueOf( lastModified ) )
+			}
+			if ( updatedMetadata.isEmpty() ) {
+				metadataFile.delete()
+			} else {
+				File metadataPart = new File( zipFile.parentFile, "${metadataFile.name}.part" )
+				try {
+					metadataPart.withOutputStream { updatedMetadata.store( it, null ) }
+					java.nio.file.Files.move( metadataPart.toPath(), metadataFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING )
+				} finally {
+					metadataPart.delete()
+				}
+			}
+		} finally {
+			partFile.delete()
+		}
+		return true
+	} finally {
+		connection.disconnect()
+	}
 }
 
 /**
@@ -627,11 +689,12 @@ task downloadModules {
 	group = "boxlang"
 	description = "Downloads and unpacks the BoxLang modules bundled into BX Agents (bx-ai, etc.) declared in ext.boxlangModules"
 	def modulesDir = file( "build/bundle-modules" )
-	// Declared, so it re-runs when a version changes and is skipped otherwise; createModuleStructure
-	// copies it into the module as modules/ (it must NOT write into the module folder itself:
-	// that folder is createModuleStructure's output and it wipes what it did not copy)
+	// Recheck remote archives on each invocation; unchanged archives are returned by conditional
+	// HTTP requests. createModuleStructure copies these into the module as modules/ and owns that
+	// output directory, so this task must not write into it.
 	inputs.property( "modules", boxlangModules.collect { it.name + "@" + it.version }.join( "," ) )
 	outputs.dir modulesDir
+	outputs.upToDateWhen { false }
 	doLast {
 		modulesDir.mkdirs()
 		def cacheDir = file( "build/module-downloads" )
@@ -639,21 +702,13 @@ task downloadModules {
 		boxlangModules.each { mod ->
 			def version = resolveModuleVersion( mod.name, mod.version )
 			def zipFile = new File( cacheDir, "${mod.name}-${version}.zip" )
-			if ( !zipFile.exists() ) {
-				def url = "https://downloads.ortussolutions.com/ortussolutions/boxlang-modules/${mod.name}/${version}/${mod.name}-${version}.zip"
-				// Download to a temp file and rename, so a failed or interrupted download never
-				// leaves a truncated zip that the exists() check above would trust next time
-				def partFile = new File( cacheDir, zipFile.name + ".part" )
-				try {
-					partFile.withOutputStream { out -> new URL( url ).withInputStream { input -> out << input } }
-					if ( !partFile.renameTo( zipFile ) ) {
-						throw new GradleException( "Could not move ${partFile} to ${zipFile}" )
-					}
-				} finally {
-					partFile.delete()
-				}
-			}
+			def url = new URL( "https://downloads.ortussolutions.com/ortussolutions/boxlang-modules/${mod.name}/${version}/${mod.name}-${version}.zip" )
+			boolean changed = downloadModuleArchive( url, zipFile )
 			def destDir = new File( modulesDir, mod.moduleName )
+			if ( !changed && destDir.exists() ) {
+				println "+ Module [${mod.name}@${version}] is unchanged"
+				return
+			}
 			if ( destDir.exists() ) {
 				destDir.deleteDir()
 			}

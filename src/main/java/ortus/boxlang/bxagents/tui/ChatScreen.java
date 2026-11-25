@@ -129,6 +129,7 @@ public final class ChatScreen implements AutoCloseable {
 	// turn state, touched only by whichever thread is drawing
 	private final StringBuilder				segment			= new StringBuilder();
 	private final StringBuilder				reasoning		= new StringBuilder();
+	private boolean							toolJustCompleted;
 	private final Map<String, Map<?, ?>>	running			= new LinkedHashMap<>();
 	private long							turnStarted;
 	private int								frame;
@@ -858,8 +859,9 @@ public final class ChatScreen implements AutoCloseable {
 		segment.setLength( 0 );
 		reasoning.setLength( 0 );
 		running.clear();
-		turnStarted	= System.currentTimeMillis();
-		turnThread	= new Thread( this::turnLoop, "bxagents-chat-ui" );
+		toolJustCompleted	= false;
+		turnStarted			= System.currentTimeMillis();
+		turnThread			= new Thread( this::turnLoop, "bxagents-chat-ui" );
 		turnThread.setDaemon( true );
 		turnThread.start();
 	}
@@ -980,10 +982,11 @@ public final class ChatScreen implements AutoCloseable {
 		if ( hidden ) {
 			return;
 		}
+		toolJustCompleted = true;
 		boolean	ok		= status.equals( "ok" );
 		Object	ms		= get( e, "ms" );
 		String	took	= ms == null ? "" : String.format( "  %.1fs", Double.parseDouble( String.valueOf( ms ) ) / 1000.0 );
-		Row		r		= Row.of().add( " ⚙ ", theme.muted ).add( String.valueOf( get( e, "name" ) ), theme.bold );
+		Row		r		= Row.of().add( " ⚙ ", theme.muted ).add( String.valueOf( get( e, "name" ) ), theme.accentBold );
 		String	summary	= String.valueOf( get( e, "summary" ) );
 		if ( !summary.isEmpty() && !summary.equals( "null" ) && "detail".equals( settings.get( "tools" ) ) ) {
 			r.add( "  " + clip( summary, Math.max( 10, runner.width() - 30 ) ), theme.muted );
@@ -994,6 +997,10 @@ public final class ChatScreen implements AutoCloseable {
 
 	private void flushSegment() {
 		if ( segment.length() > 0 ) {
+			if ( toolJustCompleted ) {
+				out( Text.from( "" ) );
+				toolJustCompleted = false;
+			}
 			printMarkdown( segment.toString() );
 			segment.setLength( 0 );
 		}

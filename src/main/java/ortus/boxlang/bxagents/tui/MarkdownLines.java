@@ -25,6 +25,7 @@ import java.util.regex.Pattern;
 import dev.tamboui.buffer.Buffer;
 import dev.tamboui.buffer.Cell;
 import dev.tamboui.layout.Rect;
+import dev.tamboui.markdown.MarkdownStyles;
 import dev.tamboui.markdown.MarkdownView;
 import dev.tamboui.style.Style;
 import dev.tamboui.text.Line;
@@ -76,7 +77,7 @@ final class MarkdownLines {
 				}
 				List<Line> table = TableLines.render( java.util.Arrays.asList( lines ).subList( i, end ), w, theme );
 				if ( table != null ) {
-					flush( text, w, out );
+					flush( text, w, out, theme );
 					if ( !out.isEmpty() ) {
 						out.add( Line.from( "" ) );
 					}
@@ -89,24 +90,26 @@ final class MarkdownLines {
 			}
 			text.append( line ).append( '\n' );
 		}
-		flush( text, w, out );
+		flush( text, w, out, theme );
 		while ( !out.isEmpty() && out.get( out.size() - 1 ).rawContent().isBlank() ) {
 			out.remove( out.size() - 1 );
 		}
 		return out;
 	}
 
-	private static void flush( StringBuilder text, int w, List<Line> out ) {
+	private static void flush( StringBuilder text, int w, List<Line> out, Theme theme ) {
 		if ( !text.toString().isBlank() ) {
-			out.addAll( plain( text.toString().strip(), w ) );
+			out.addAll( plain( text.toString().strip(), w, theme ) );
 		}
 		text.setLength( 0 );
 	}
 
 	/** TamboUI's rendering of Markdown that holds no table */
-	private static List<Line> plain( String markdown, int w ) {
+	private static List<Line> plain( String markdown, int w, Theme theme ) {
 		try {
-			MarkdownView	view	= MarkdownView.builder().source( markdown ).syntaxHighlighter( Grammars.highlighter() ).build();
+			MarkdownView	view	= MarkdownView.builder().source( markdown )
+			    .styles( MarkdownStyles.builder().inlineCode( theme.accentBold ).build() )
+			    .syntaxHighlighter( Grammars.highlighter() ).build();
 			int				h		= view.computeHeight( w );
 			if ( h <= 0 ) {
 				return List.of();
