@@ -29,22 +29,26 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 		// at the terminal, what waits for the next message (!command output, #function() results) counts too
 		if ( arguments.context.hasTerminal() ) {
 			report = arguments.context.terminal().counting( report )
-		}		var words = new "models.chat.ContextLines@bxagents"()
-		var rows = report.parts.map( p => [ p.label, words.approx( p.tokens ), p.detail ] )
-		rows.append( [ "Total", words.approx( report.total ), report.contextWindow > 0 ? "of #numberFormat( report.contextWindow )# tokens" : "" ] )
-		reply.grid( [ { width : 18, align : "left" }, { width : 7, align : "right" }, { width : 0 } ], rows )
+		}
+		var words = new "models.chat.ContextLines@bxagents"()
+		reply.header( "Context" )
+		for ( var p in report.parts ) {
+			reply.styled().muted( left( p.label & repeatString( " ", 18 ), 18 ) ).accent( right( "       " & words.approx( p.tokens ), 7 ) ).text( "  " ).muted( p.detail ).print()
+		}
+		reply.styled().bold( left( "Total" & repeatString( " ", 18 ), 18 ) ).accentBold( right( "       " & words.approx( report.total ), 7 ) ).text( "  " ).muted( report.contextWindow > 0 ? "of #numberFormat( report.contextWindow )# tokens" : "" ).print()
+		reply.blank()
 		if ( report.contextWindow > 0 ) {
-			reply.text( "#words.bar( report )# #report.percent#% of the window" )
+			reply.styled().accent( words.bar( report ) ).text( " " ).muted( "#report.percent#% of the window" ).print()
 		} else {
-			reply.text( "The project does not say this model's context window. Add contextWindow to its profile, or to the top of Agent.yml, to see the share it takes." )
+			reply.indent( "The project does not say this model's context window. Add contextWindow to its profile, or to the top of Agent.yml, to see the share it takes." )
 		}
 		if ( ( report.messages ?: {} ).near ?: false ) {
 			reply.warn( "This conversation has #report.messages.count# of the #report.messages.limit# messages its memory keeps. Past that the oldest are dropped as new ones come in; /compact summarizes them instead." )
 		}
 		if ( report.tools.len() ) {
-			reply.text( "Largest tool definitions: " & report.tools.slice( 1, min( 5, report.tools.len() ) ).map( t => t.name & " " & words.approx( t.tokens ) ).toList( ", " ) )
+			reply.styled().muted( "Largest tool definitions: " ).accent( report.tools.slice( 1, min( 5, report.tools.len() ) ).map( t => t.name & " " & words.approx( t.tokens ) ).toList( ", " ) ).print()
 		}
-		reply.text( "Estimates (characters divided by four)." & ( report.mcpServers > 0 ? " The tools of #report.mcpServers# MCP server#report.mcpServers == 1 ? '' : 's'# are fetched when a run starts and are not counted." : "" ) )
+		reply.indent( "Estimates (characters divided by four)." & ( report.mcpServers > 0 ? " The tools of #report.mcpServers# MCP server#report.mcpServers == 1 ? '' : 's'# are fetched when a run starts and are not counted." : "" ) )
 		return reply
 	}
 

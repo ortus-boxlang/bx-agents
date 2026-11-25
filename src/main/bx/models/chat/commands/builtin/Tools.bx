@@ -17,8 +17,16 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 	}
 
 	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
 		var tools = arguments.context.chat().tools()
-		return arguments.context.reply().text( tools.len() ? "Tools: " & tools.toList( ", " ) : "No tool list is available in this mode." )
+		if ( !tools.len() ) {
+			return reply.text( "No tool list is available in this mode." )
+		}
+		reply.header( "Tools" )
+		for ( var t in tools ) {
+			reply.bullet( t )
+		}
+		return reply
 	}
 
 }

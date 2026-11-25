@@ -5,8 +5,10 @@ import bxModules.bxai.models.middleware.AiMiddlewareResult;
  * agent to the system message.
  *
  * The notes are read once per conversation thread and kept for the thread: the prompt does not change
- * from turn to turn, so a provider's prompt caching keeps working, and a note saved in this conversation
- * shows from the next conversation. (The agent has just said it saved it, so it still knows.)
+ * from turn to turn, so a provider's prompt caching keeps working. When a note is saved or removed
+ * mid-conversation, an afterToolCall hook captures the change and a beforeLLMCall hook injects it as
+ * an assistant message before the next model call, so the agent sees it immediately without breaking
+ * the cached system prompt. On the next conversation the full notes block picks it up as usual.
  */
 class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 
@@ -14,6 +16,7 @@ class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 		// remembered conversations before the oldest are read again
 		KEEP_THREADS = 2000
 		NO_USER = "default"
+		NOTE_TOOLS = [ "note_remember", "note_forget" ]
 	}
 
 	/**
@@ -27,6 +30,9 @@ class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 		variables.agentName = arguments.agentName
 		variables.hasTools = arguments.hasTools
 		variables.frozen = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
+		// pending note injections keyed by threadId, consumed by beforeLLMCall
+		variables.pending = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
+		variables.currentThreadId = ""
 		variables.name = "Notes"
 		variables.description = "Adds the user's and the agent's notes to the system message"
 		return this
@@ -41,7 +47,8 @@ class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 
 	AiMiddlewareResult function beforeAgentRun( required struct context ) {
 		var userId = len( arguments.context.userId ?: "" ) ? arguments.context.userId : static.NO_USER
-		var block = blockFor( arguments.context.threadId ?: "", userId )
+		variables.currentThreadId = arguments.context.threadId ?: ""
+		var block = blockFor( variables.currentThreadId, userId )
 		if ( len( block ) ) {
 			var messages = arguments.context.messages
 			if ( messages.len() && ( messages[ 1 ].role ?: "" ) == "system" ) {
@@ -50,6 +57,55 @@ class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 				messages.prepend( { role : "system", content : block } )
 			}
 		}
+		return AiMiddlewareResult.continue()
+	}
+
+	/**
+	 * After a note tool runs successfully, queue a short confirmation message so the next LLM call
+	 * sees the change immediately without invalidating the cached system prompt.
+	 */
+	AiMiddlewareResult function afterToolCall( required struct context ) {
+		var toolName = arguments.context.toolName ?: ""
+		if ( !static.NOTE_TOOLS.contains( toolName ) ) {
+			return AiMiddlewareResult.continue()
+		}
+		var result = arguments.context.result ?: {}
+		if ( !isStruct( result ) || !( result.ok ?: false ) ) {
+			return AiMiddlewareResult.continue()
+		}
+		var args = arguments.context.toolArgs ?: {}
+		var scope = lCase( trim( args.scope ?: "user" ) )
+		var text = toolName == "note_remember" ? ( args.text ?: "" ) : ( args.id ?: "" )
+		var action = toolName == "note_remember" ? "saved" : "removed"
+		var threadId = variables.currentThreadId ?: ""
+		if ( !len( threadId ) ) {
+			return AiMiddlewareResult.continue()
+		}
+		var entry = "[Note #action#: ""#text#"" (#scope#)]"
+		// accumulate if multiple note tools fire in one batch
+		var existing = variables.pending.getOrDefault( threadId, [] )
+		existing.append( entry )
+		variables.pending.put( threadId, existing )
+		return AiMiddlewareResult.continue()
+	}
+
+	/**
+	 * Before each LLM call, inject any pending note confirmations as an assistant message so the
+	 * model sees them in the current turn. The system message stays untouched for prompt caching.
+	 */
+	AiMiddlewareResult function beforeLLMCall( required struct context ) {
+		var threadId = variables.currentThreadId ?: ""
+		if ( !len( threadId ) || !variables.pending.containsKey( threadId ) ) {
+			return AiMiddlewareResult.continue()
+		}
+		var entries = variables.pending.remove( threadId )
+		if ( isNull( entries ) || !entries.len() ) {
+			return AiMiddlewareResult.continue()
+		}
+		arguments.context.messages.append( {
+			role    : "assistant",
+			content : entries.toList( char( 10 ) )
+		} )
 		return AiMiddlewareResult.continue()
 	}
 

@@ -47,13 +47,22 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 						reply.text( "No secrets yet." & ( arguments.context.transport() == "tui" ? " Type /vault to add one." : " Add one in the vault page, or with `bxAgents vault add`." ) )
 						break
 					}
+					reply.header( "Secrets" )
 					for ( var secret in rows ) {
-						reply.text( "#secret.name#  (#secret.scope#)  #secret.hosts.len() ? secret.hosts.toList( ',' ) : 'any host'#  #secret.description#" )
+						reply.styled()
+							.accentBold( secret.name )
+							.text( "  " )
+							.muted( "(" & secret.scope & ")" )
+							.text( "  " )
+							.muted( secret.hosts.len() ? secret.hosts.toList( "," ) : "any host" )
+							.text( "  " )
+							.text( secret.description )
+							.print()
 					}
 					break
 				case "status":
 					var state = kept.status()
-					reply.text( "#state.secrets ?: 0# secret(s). Key: #state.keySource ?: 'unknown'#." )
+					reply.styled().accent( state.secrets ?: 0 ).muted( " secret(s). Key: " ).accent( state.keySource ?: "unknown" ).muted( "." ).print()
 					break
 				default:
 					reply.warn( "Usage: /vault (opens the screen), /vault list, /vault status. A value is never typed in a command: use the screen." )

@@ -6,8 +6,9 @@
  * own state. Both are plain structs, so a reply crosses HTTP as JSON unchanged.
  *
  * Blocks
- *   { type : "text", style : "muted" | "ok" | "warn", text }
+ *   { type : "text", style : "muted" | "ok" | "warn" | "accent", text }
  *   { type : "line", style : "muted" | "ok" | "warn", text }     a printed line; empty text is a blank line
+ *   { type : "styled", segments : [ { text, style } ] }           mixed-style line; see StyledLine
  *   { type : "table", layout : "keyvalue" | "grid", columns : [ { width, align } ], rows : [ [ cell ] ] }
  *   { type : "choose", title, options : [ { label, hint, line } ] }   picking one runs `line`
  *   { type : "transcript", messages : [ { role : "you" | "agent", text } ] }
@@ -160,6 +161,98 @@ class {
 	function screen( required string name ) {
 		variables.blocks.append( { type : "screen", name : arguments.name } )
 		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Fluent styled lines — mixed styles within a single line
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Starts a styled line builder. Chain segment methods (.text, .muted, .accent, .ok, .warn,
+	 * .error, .bold, .accentBold, or dynamic names like .boldRedOnBlue), then call .print()
+	 * to commit the line and return to this Reply.
+	 *
+	 * @return A StyledLine builder
+	 */
+	function styled() {
+		return new "models.chat.commands.StyledLine@bxagents"( this )
+	}
+
+	/**
+	 * A command name in bold accent followed by its hint in muted gray.
+	 *
+	 * @name The command name (e.g. "/help")
+	 * @hint The description
+	 * @return This reply builder.
+	 */
+	function commandLine( required string name, required string hint ) {
+		return styled().accentBold( arguments.name ).text( "  " ).muted( arguments.hint ).print()
+	}
+
+	/**
+	 * A label in muted gray followed by its value in accent teal.
+	 *
+	 * @label The label
+	 * @value The value
+	 * @return This reply builder.
+	 */
+	function labelValue( required string label, required string value ) {
+		return styled().muted( arguments.label & ":" ).text( " " ).accent( arguments.value ).print()
+	}
+
+	/**
+	 * A label in muted gray followed by a colored status indicator.
+	 *
+	 * @label The label
+	 * @on True for green "on", false for red "off"
+	 * @return This reply builder.
+	 */
+	function statusLine( required string label, required boolean on ) {
+		var s = styled().muted( arguments.label & ":" ).text( " " )
+		if ( arguments.on ) {
+			s.ok( "on" )
+		} else {
+			s.error( "off" )
+		}
+		return s.print()
+	}
+
+	/**
+	 * An indented line of muted text, like CommandBox's indentedLine.
+	 *
+	 * @text The text to indent
+	 * @return This reply builder.
+	 */
+	function indent( required string text ) {
+		return styled().text( "  " ).muted( arguments.text ).print()
+	}
+
+	/**
+	 * A bullet point with an accent dot and muted text.
+	 *
+	 * @text The bullet text
+	 * @return This reply builder.
+	 */
+	function bullet( required string text ) {
+		return styled().accent( "· " ).muted( arguments.text ).print()
+	}
+
+	/**
+	 * A horizontal divider line.
+	 *
+	 * @return This reply builder.
+	 */
+	function divider() {
+		return styled().muted( repeatString( "─", 40 ) ).print()
+	}
+
+	/**
+	 * A blank line. Alias for line( "" ) for readability.
+	 *
+	 * @return This reply builder.
+	 */
+	function blank() {
+		return line( "" )
 	}
 
 	// ----------------------------------------------------------------------------------

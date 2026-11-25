@@ -17,7 +17,12 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 	}
 
 	any function run( required any context, required string args ) {
-		return arguments.context.reply().keyValues( arguments.context.chat().info() ).line()
+		var reply = arguments.context.reply()
+		reply.header( "Chat Info" )
+		for ( var pair in arguments.context.chat().info() ) {
+			reply.labelValue( pair[ 1 ], pair[ 2 ] )
+		}
+		return reply.blank()
 	}
 
 }

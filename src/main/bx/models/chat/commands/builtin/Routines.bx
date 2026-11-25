@@ -42,15 +42,21 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 		if ( !rows.len() ) {
 			return arguments.context.reply().text( "No routines yet. Ask the agent to schedule one, for example: check the build every weekday at 9." )
 		}
-		var cells = rows.map( function( r ) {
-			var row = [ r.name, r.scheduleText ?: r.schedule, r.statusText ?: r.status, len( r.nextRunText ?: "" ) ? r.nextRunText : "none" ]
-			if ( all ) {
-				row.prepend( r.ownerId )
-			}
-			return row
-		} )
-		var columns = all ? [ { width : 0 }, { width : 0 }, { width : 0 }, { width : 0 }, { width : 0 } ] : [ { width : 0 }, { width : 0 }, { width : 0 }, { width : 0 } ]
-		return arguments.context.reply().grid( columns, cells )
+		var reply = arguments.context.reply()
+		reply.header( "Routines" & ( all ? " (all)" : "" ) )
+		for ( var r in rows ) {
+			var statusStyle = r.status == "active" ? "ok" : r.status == "paused" ? "warn" : "muted"
+			reply.styled()
+				.accentBold( r.name )
+				.text( "  " )
+				.muted( r.scheduleText ?: r.schedule )
+				.text( "  " )
+				.segment( r.statusText ?: r.status, statusStyle )
+				.text( "  " )
+				.muted( len( r.nextRunText ?: "" ) ? "next: " & r.nextRunText : "next: none" )
+				.print()
+		}
+		return reply
 	}
 
 }

@@ -113,6 +113,99 @@ class extends="testbox.system.BaseSpec" {
 				expect( middleware.provider() ).toBe( provider );
 			} );
 
+			describe( "mid-conversation note injection", function() {
+
+				private function toolContext( toolName, toolArgs, result ) {
+					return { toolName : toolName, toolArgs : toolArgs, result : result, toolCallId : "tc1" };
+				}
+
+				private function llmContext( messages ) {
+					return { messages : messages };
+				}
+
+				it( "injects a saved note as an assistant message before the next LLM call", function() {
+					var messages = [ { role : "system", content : "x" } ];
+					middleware.beforeAgentRun( contextFor( "t1", "alice", messages ) );
+
+					middleware.afterToolCall( toolContext( "note_remember", { text : "likes tea", scope : "user" }, { ok : true } ) );
+					middleware.beforeLLMCall( llmContext( messages ) );
+
+					expect( messages ).toHaveLength( 2 );
+					expect( messages[ 2 ].role ).toBe( "assistant" );
+					expect( messages[ 2 ].content ).toInclude( "Note saved" );
+					expect( messages[ 2 ].content ).toInclude( "likes tea" );
+					expect( messages[ 2 ].content ).toInclude( "user" );
+				} );
+
+				it( "injects a removed note confirmation", function() {
+					var messages = [ { role : "system", content : "x" } ];
+					middleware.beforeAgentRun( contextFor( "t1", "alice", messages ) );
+
+					middleware.afterToolCall( toolContext( "note_forget", { id : "abc123", scope : "agent" }, { ok : true } ) );
+					middleware.beforeLLMCall( llmContext( messages ) );
+
+					expect( messages ).toHaveLength( 2 );
+					expect( messages[ 2 ].content ).toInclude( "Note removed" );
+					expect( messages[ 2 ].content ).toInclude( "abc123" );
+				} );
+
+				it( "does not inject when the tool call failed", function() {
+					var messages = [ { role : "system", content : "x" } ];
+					middleware.beforeAgentRun( contextFor( "t1", "alice", messages ) );
+
+					middleware.afterToolCall( toolContext( "note_remember", { text : "full", scope : "user" }, { ok : false, reason : "limit reached" } ) );
+					middleware.beforeLLMCall( llmContext( messages ) );
+
+					expect( messages ).toHaveLength( 1 );
+				} );
+
+				it( "does not inject for non-note tools", function() {
+					var messages = [ { role : "system", content : "x" } ];
+					middleware.beforeAgentRun( contextFor( "t1", "alice", messages ) );
+
+					middleware.afterToolCall( toolContext( "readFile", { path : "/tmp/x" }, { ok : true } ) );
+					middleware.beforeLLMCall( llmContext( messages ) );
+
+					expect( messages ).toHaveLength( 1 );
+				} );
+
+				it( "accumulates multiple note changes in one batch", function() {
+					var messages = [ { role : "system", content : "x" } ];
+					middleware.beforeAgentRun( contextFor( "t1", "alice", messages ) );
+
+					middleware.afterToolCall( toolContext( "note_remember", { text : "likes tea", scope : "user" }, { ok : true } ) );
+					middleware.afterToolCall( toolContext( "note_remember", { text : "uses Gradle", scope : "agent" }, { ok : true } ) );
+					middleware.beforeLLMCall( llmContext( messages ) );
+
+					expect( messages ).toHaveLength( 2 );
+					expect( messages[ 2 ].content ).toInclude( "likes tea" );
+					expect( messages[ 2 ].content ).toInclude( "uses Gradle" );
+				} );
+
+				it( "consumes pending entries so they are not injected twice", function() {
+					var messages = [ { role : "system", content : "x" } ];
+					middleware.beforeAgentRun( contextFor( "t1", "alice", messages ) );
+
+					middleware.afterToolCall( toolContext( "note_remember", { text : "once", scope : "user" }, { ok : true } ) );
+					middleware.beforeLLMCall( llmContext( messages ) );
+					middleware.beforeLLMCall( llmContext( messages ) );
+
+					expect( messages ).toHaveLength( 2 );
+				} );
+
+				it( "does not leave the system message changed", function() {
+					var messages = [ { role : "system", content : "Instructions" } ];
+					middleware.beforeAgentRun( contextFor( "t1", "alice", messages ) );
+					var systemBefore = messages[ 1 ].content;
+
+					middleware.afterToolCall( toolContext( "note_remember", { text : "new fact", scope : "user" }, { ok : true } ) );
+					middleware.beforeLLMCall( llmContext( messages ) );
+
+					expect( messages[ 1 ].content ).toBe( systemBefore );
+				} );
+
+			} );
+
 		} );
 	}
 

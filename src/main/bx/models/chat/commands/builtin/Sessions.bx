@@ -32,15 +32,18 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 		if ( !recent.len() ) {
 			return reply.text( structCount( filters ) && ( len( filters.q ) || len( filters.agent ?: "" ) ) ? "No conversations match." : "No conversations yet." )
 		}
-		var rows = []
+		reply.header( "Recent Conversations" )
 		var number = 0
 		for ( var row in recent ) {
 			number++
-			rows.append( [ number, left( row.title ?: "", 60 ), ( row.messageCount ?: 0 ) & " messages", dateTimeFormat( row.updatedAt, "yyyy-MM-dd HH:mm" ), left( row.id, 8 ) ] )
+			reply.styled()
+				.muted( right( "  " & number, 3 ) & "  " )
+				.accentBold( left( row.title ?: "(untitled)", 50 ) )
+				.text( "  " )
+				.muted( ( row.messageCount ?: 0 ) & " msgs  " & dateTimeFormat( row.updatedAt, "MM-dd HH:mm" ) & "  " & left( row.id, 8 ) )
+				.print()
 		}
-		return reply
-			.grid( [ { width : 3, align : "right" }, { width : 60, align : "left" }, { width : 0 }, { width : 0 }, { width : 0 } ], rows )
-			.text( "Type /resume <number> to go back to one." )
+		return reply.indent( "Type /resume <number> to go back to one." )
 	}
 
 }

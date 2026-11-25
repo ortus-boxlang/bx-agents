@@ -82,10 +82,11 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 			if ( !( found.logs ?: [] ).len() ) {
 				return reply.text( "No logs yet. They appear when the agent runs." )
 			}
-			reply.text( "Logs (/logs <name> to read one):" )
+			reply.header( "Logs" )
 			for ( var log in found.logs ) {
-				reply.text( "  " & left( log.area & repeatString( " ", 11 ), 11 ) & log.bytes & " bytes" )
+				reply.styled().accentBold( log.area ).text( repeatString( " ", max( 2, 13 - len( log.area ) ) ) ).muted( log.bytes & " bytes" ).print()
 			}
+			reply.indent( "/logs <name> to read one" )
 			return reply
 		}
 		var lines = found.lines ?: []
