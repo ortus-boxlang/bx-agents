@@ -30,13 +30,23 @@ class extends="testbox.system.BaseSpec" {
 				expect( directoryList( runtime & "/modules", false, "name" ) ).toBe( [ "bx-agents" ] );
 			} );
 
-			it( "skips the copy while the stamp (box.json version and the hash of the jars) is unchanged", function() {
+			it( "skips the copy while every module file is unchanged", function() {
 				copier.copy( module, runtime );
 				fileWrite( runtime & "/modules/bx-agents/marker.txt", "still here" );
 				var again = copier.copy( module, runtime );
 				expect( again.copied ).toBeFalse();
 				expect( again.reason ).toBe( "unchanged" );
 				expect( fileExists( runtime & "/modules/bx-agents/marker.txt" ) ).toBeTrue();
+			} );
+
+			it( "copies again when BoxLang source changes without a version or jar change", function() {
+				copier.copy( module, runtime );
+				fileWrite( module & "/models/Thing.bx", "class { function changed() {} }" );
+
+				var again = copier.copy( module, runtime );
+
+				expect( again.copied ).toBeTrue();
+				expect( fileRead( runtime & "/modules/bx-agents/models/Thing.bx" ) ).toBe( "class { function changed() {} }" );
 			} );
 
 			it( "copies again when a jar changes, even with the same version", function() {
