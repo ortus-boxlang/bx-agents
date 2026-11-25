@@ -14,8 +14,8 @@ import bxModules.bxagents.models.util.TreeDelete;
  *
  * The copy is a plain recursive copy of the installed folder: 70 MB in about a tenth of a second here, but it
  * is skipped when nothing changed, which matters more for not touching a module a running server has open
- * than for the time. "Nothing changed" is a stamp: the module's `box.json` (version, bundled module
- * versions) and the SHA-256 of its jars. The copy goes into a work folder next to `runtime/` and is renamed
+ * than for the time. The stamp hashes every module file: source-only edits do not change the version or jar hashes.
+ * The copy goes into a work folder next to `runtime/` and is renamed
  * into place once it is complete and stamped, so a copy that is interrupted can never carry a stamp, and
  * its leftovers are removed by the next build.
  */
@@ -124,25 +124,17 @@ class {
 	/**
 	 * @source The module folder
 	 *
-	 * @return What identifies this build of the module: its version, the hash of every jar and the box.json of every nested module
+	 * @return A sorted content stamp for every file except `.copied-stamp`
 	 */
 	string function stampOf( required string source ) {
 		var parts = []
-		if ( fileExists( arguments.source & "/box.json" ) ) {
-			parts.append( "box.json " & hash( fileReadBinary( arguments.source & "/box.json" ), "SHA-256" ) )
-		}
-		if ( directoryExists( arguments.source & "/libs" ) ) {
-			for ( var jar in directoryList( path = arguments.source & "/libs", recurse = false, type = "file", listInfo = "name", filter = "*.jar", sort = "name" ) ) {
-				parts.append( "libs/" & jar & " " & hash( fileReadBinary( arguments.source & "/libs/" & jar ), "SHA-256" ) )
+		var root = arguments.source.replace( "\", "/", "all" ).reReplace( "[\\/]+$", "" )
+		for ( var file in directoryList( path = root, recurse = true, listInfo = "path", type = "file", sort = "asc" ) ) {
+			var path = file.replace( "\", "/", "all" )
+			if ( path == root & "/" & variables.STAMP_FILE ) {
+				continue
 			}
-		}
-		if ( directoryExists( arguments.source & "/modules" ) ) {
-			for ( var nested in directoryList( path = arguments.source & "/modules", recurse = false, type = "dir", listInfo = "name", sort = "name" ) ) {
-				var file = arguments.source & "/modules/" & nested & "/box.json"
-				if ( fileExists( file ) ) {
-					parts.append( "modules/" & nested & " " & hash( fileReadBinary( file ), "SHA-256" ) )
-				}
-			}
+			parts.append( path & " " & hash( fileReadBinary( file ), "SHA-256" ) )
 		}
 		return parts.toList( char( 10 ) )
 	}

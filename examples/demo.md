@@ -4,10 +4,10 @@ The presenter's script for showing BxAgents on stage with a model running on you
 
 | # | Demo | Example | Model | Shows | Plan for |
 |---|---|---|---|---|---|
-| 1 | The smallest agent | [`minimal-agent`](minimal-agent) | `lfm3-1.7b` | One folder is an agent: a tool and a skill, in the terminal chat | 5 min |
-| 2 | A team and two models | [`multi-agent-team`](multi-agent-team) | `qwen/qwen3.6-35b-a3b` and `lfm3-1.7b` | Subagents, a model per agent, profiles switched in the middle of a conversation | 6 min |
-| 3 | The web app | the team of demo 2 | `qwen/qwen3.6-35b-a3b` | Thirteen pages, notes, an approval before the agent saves a skill, one memory for every door | 8 min |
-| 4 | A platform | [`api-agent`](api-agent), optionally [`mcp-agent`](mcp-agent) | `qwen/qwen3.6-35b-a3b` | Access tokens, the HTTP API, the OpenAPI document, a BoxLang client, a hosted MCP server | 7 min |
+| 1 | The smallest agent | [`minimal-agent`](minimal-agent/README.md) | `lfm3-1.7b` | One folder is an agent: a tool and a skill, in the terminal chat | 5 min |
+| 2 | A team and two models | [`multi-agent-team`](multi-agent-team/README.md) | `qwen/qwen3.6-35b-a3b` and `lfm3-1.7b` | Subagents, a model per agent, profiles switched in the middle of a conversation | 6 min |
+| 3 | The web app | [`multi-agent-team`](multi-agent-team/README.md) | `qwen/qwen3.6-35b-a3b` | Thirteen pages, notes, an approval before the agent saves a skill, one memory for every door | 8 min |
+| 4 | A platform | [`api-agent`](api-agent/README.md), optionally [`mcp-agent`](mcp-agent/README.md) | `qwen/qwen3.6-35b-a3b` | Access tokens, the HTTP API, the OpenAPI document, a BoxLang client, a hosted MCP server | 7 min |
 
 Why these four, in this order: demo 1 is the whole idea in one screen and works with the smallest model; demo 2 adds composition, which is where a bigger model earns its keep; demo 3 shows the same agent as a product people can use; demo 4 shows it is a service other programs call. Each one builds on the one before without needing it to have worked (every folder is made in the setup below).
 
@@ -181,6 +181,8 @@ A rehearsal leaves data behind. The conversations and notes of an agent live in 
 
 4. (1:00) Type: `My name is Ada, please greet me.` The model decides to call the tool: a row appears, `sayHello name=Ada`, then the answer streams. Say: "The model chose to call my function, with the argument it pulled out of the sentence."
 
+   To diagnose repeated calls, rebuild the minimal agent and repeat the prompt, then run `tail -f ~/.bxagents/minimal-agent/logs/agent.log` in another terminal. `Tool started` and `Tool completed` lines show the call lifecycle; each `sayHello function entered` line confirms the function body actually ran. If the project uses a custom data home, `bxAgents data` shows its path.
+
 5. (0:45) Type `/tools`, then `/skills`. The tools line lists `sayHello` and the two the framework adds (`loadSkill`, `skill_save`). The skills list shows `greeting` as `project` and the six as `bxagents`, with the names lined up in a column.
 
 6. (0:30) Type `/model`, then `/ping`. Say "that is the local model, and this is a one-token health check". Leave with `/exit`.
@@ -249,7 +251,7 @@ A rehearsal leaves data behind. The conversations and notes of an agent live in 
    bxAgents serve --port=8080
    ```
 
-   `add gateway` writes `gateways/web.bx` (`exposes: "webui"`, `path: "/chat"`). The first line `serve` prints names the address and says it is bound to `127.0.0.1` only. **The command returns to the prompt after a second or two and the server keeps running**, and its start-up lines then print over the prompt. Wait 10 to 20 seconds for it to be ready (`curl -s http://127.0.0.1:8080/__bxagents/health` answers `{"success":true,"status":"ok"}`), and open the browser before anything else, because the first request is the slow one.
+   `add gateway` writes `gateways/web.bx` (`exposes: "webui"`, `path: "/chat"`). `serve` prints the address and says it is bound to `127.0.0.1` only, then stays in the foreground. Leave this terminal tab running; use another for the health check and browser. Press Ctrl+C in the server tab to stop it. Wait 10 to 20 seconds for it to be ready (`curl -s http://127.0.0.1:8080/__bxagents/health` answers `{"success":true,"status":"ok"}`), and open the browser before anything else, because the first request is the slow one.
 
 2. (1:30) Open `http://127.0.0.1:8080/chat` (the root address redirects there). Ask: `Ask the researcher for three facts about BoxLang.` Point at the left menu (Main: Chat, Conversations, Routines, Registry, Connectors, Memory, Vault, Settings; Admin: Agent, Gateways, Logs, Access, Data) and at the tool call under the message. Use the **Talk to** menu to pick the researcher and talk to it directly.
 
@@ -259,13 +261,13 @@ A rehearsal leaves data behind. The conversations and notes of an agent live in 
 
 5. (1:00) Open **Conversations**. The conversation from demo 2 is there too, with its source `terminal`: the terminal and the web share one store. Then open **Agent** (an admin page) to show the agent, its model and its subagents.
 
-6. (1:00) Stop here, or take a question. To stop the server: `pkill -f "$DEMO/team/.build"`.
+6. (1:00) Stop here, or take a question. Press Ctrl+C in the terminal tab running the server.
 
 **Expect.** Every menu entry opens (all thirteen pages were requested over HTTP and answered, but the page contents were not looked at in a browser). Replies stream as they are written. The approval card shows the action and Approve and Reject.
 
 **Be straight with the room.** Open access (`--auth=open`) is for your own machine: anyone who can reach the port shares one workspace. For a team you declare `users` on the gateway, or a shared key (`apiKeyEnvVar`), see [`webui-agent`](webui-agent).
 
-**If something goes wrong.** `Address already in use` (a stack trace after the prompt came back): something holds 8080, so `bxAgents serve --port=8083` and use that port in the browser. The page loads but the chat shows an error: the model is not answering, run `bxAgents models test` in the other tab. The model never calls `note_remember` or `skill_save`: say "this one needs a sturdier model", type `/remember I prefer short answers` in the terminal chat (the notes screen), or move on to the next step. `serve` printed `Press Ctrl+C to stop the server` but Ctrl+C does nothing, because the server runs on its own after the command returned: use the `pkill` line above.
+**If something goes wrong.** If `Address already in use` appears and the server exits, something holds 8080; run `bxAgents serve --port=8083` and use that port in the browser. The page loads but the chat shows an error: the model is not answering, run `bxAgents models test` in the other tab. The model never calls `note_remember` or `skill_save`: say "this one needs a sturdier model", type `/remember I prefer short answers` in the terminal chat (the notes screen), or move on to the next step.
 
 ## Demo 4: a platform (7 minutes)
 
@@ -348,7 +350,7 @@ curl -s -H "Content-Type: application/json" -H "Accept: application/json, text/e
 
 Expect an `event: message` whose data lists the tool `search`. Say: "Any MCP client can use the agent's tools." Wait for the server as before: the `curl` fails while it is still starting, so run it again after a few seconds.
 
-**If something goes wrong.** A `401` where you expected an answer: `TOKEN_FOR_ADMIN` is not set in the tab that started the server, so stop it (`pkill -f "$DEMO/api/.build"`), export the variable and serve again. `Address already in use`: change `--port` in the serve line and in every address after it. `HTTP 409` from `client.bxs`: you are on an old copy of the script that used a fixed token name, use the one from this repository. The API answers slowly the first time: the model is loading, say so.
+**If something goes wrong.** A `401` where you expected an answer: `TOKEN_FOR_ADMIN` is not set in the tab that started the server, so stop it with Ctrl+C in that tab, export the variable and serve again. `Address already in use`: change `--port` in the serve line and in every address after it. `HTTP 409` from `client.bxs`: you are on an old copy of the script that used a fixed token name, use the one from this repository. The API answers slowly the first time: the model is loading, say so.
 
 ## If everything breaks
 
@@ -378,12 +380,11 @@ If BoxLang itself will not start, there are recordings of the terminal chat and 
 ## Clean up
 
 ```bash
-pkill -f "$DEMO/team/.build"; pkill -f "$DEMO/api/.build"; pkill -f "$DEMO/mcp/.build"
 rm -rf ~/.bxagents/minimal-agent ~/.bxagents/multi-agent-team ~/.bxagents/api-agent ~/.bxagents/mcp-agent
 rm -rf "$DEMO"
 ```
 
-The first line stops the servers (there is no stop verb: `serve` leaves the server running on its own). The second removes what the demos stored, which is named after each agent: conversations, notes, issued tokens and the skill saved in demo 3. It deletes only those four folders, not the rest of `~/.bxagents`. The third removes the projects. If you used the stand-in, stop it too. LM Studio is not touched by any of this.
+Before cleanup, press Ctrl+C in each terminal tab running a `serve` command. The first command removes what the demos stored, which is named after each agent: conversations, notes, issued tokens and the skill saved in demo 3. It deletes only those four folders, not the rest of `~/.bxagents`. The second removes the projects. If you used the stand-in, stop it too. LM Studio is not touched by any of this.
 
 ## How this relates to the talk kit
 

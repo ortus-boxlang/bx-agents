@@ -51,7 +51,7 @@ public final class KeyMap {
 	public enum Action {
 
 		SUBMIT( "submit", Place.BOX, "Send the message", "enter" ),
-		NEWLINE( "newline", Place.BOX, "New line in the message", "alt+enter", "shift+enter", "ctrl+j" ),
+		NEWLINE( "newline", Place.BOX, "New line in the message", "shift+enter", "ctrl+j" ),
 		HISTORY_PREVIOUS( "historyPrevious", Place.BOX, "Earlier message (from the first line of the box)", "up" ),
 		HISTORY_NEXT( "historyNext", Place.BOX, "Later message (from the last line of the box)", "down" ),
 		CLEAR( "clear", Place.BOX, "Clear the box; on an empty box, leave", "ctrl+c" ),
@@ -61,7 +61,7 @@ public final class KeyMap {
 		LINE_START( "lineStart", Place.BOX, "Cursor to the start of the line", "ctrl+a", "home" ),
 		LINE_END( "lineEnd", Place.BOX, "Cursor to the end of the line", "ctrl+e", "end" ),
 		COMPLETE( "complete", Place.BOX, "Complete the command or file name", "tab" ),
-		PASTE_IMAGE( "pasteImage", Place.BOX, "Add the picture on the clipboard", "ctrl+v" ),
+		PASTE_IMAGE( "pasteImage", Place.BOX, "Add the picture on the clipboard", "ctrl+shift+v" ),
 		CLEAR_SCREEN( "clearScreen", Place.BOX, "Clear the screen above the box; the conversation and what you typed stay", "ctrl+l" ),
 		STOP( "stop", Place.RUN, "Stop the agent at its next step", "esc", "ctrl+c" );
 
@@ -329,7 +329,7 @@ public final class KeyMap {
 		return false;
 	}
 
-	/** @return the keys of the action as people read them, such as {@code Alt+Enter, Shift+Enter, Ctrl+J} */
+	/** @return the keys of the action as people read them, such as {@code Shift+Enter, Ctrl+J} */
 	public String describe( Action action ) {
 		List<String> labels = new ArrayList<>();
 		for ( Chord c : bound.get( action ) ) {

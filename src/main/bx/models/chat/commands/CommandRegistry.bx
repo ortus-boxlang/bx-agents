@@ -132,11 +132,12 @@ class {
 		var allowed = arguments.admin
 		return forTransport( arguments.transport )
 			.filter( c => allowed || c.permission() != "admin" )
+			.sort( ( a, b ) => compareNoCase( a.name(), b.name() ) )
 			.map( c => {
 				name : "/" & c.name(),
 				hint : c.hint(),
-				usage : structKeyExists( c, "usage" ) ? c.usage() : "",
-				group : len( extensionOf( c ) ) ? extensionOf( c ) : ( structKeyExists( c, "group" ) ? c.group() : "Other" ),
+				usage : c?.usage() ?: "",
+				group : len( extensionOf( c ) ) ? extensionOf( c ) : ( c?.group() ?: "Other" ),
 				extension : extensionOf( c )
 			} )
 	}
@@ -147,7 +148,7 @@ class {
 	 * @return The name of the extension that added it, or blank for a built-in
 	 */
 	string function extensionOf( required any command ) {
-		return structKeyExists( arguments.command, "extension" ) ? arguments.command.extension() : ""
+		return arguments.command?.extension() ?: ""
 	}
 
 	/**

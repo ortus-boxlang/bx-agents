@@ -150,7 +150,7 @@ class KeysPanelTest {
 		KeyMap		map		= KeyMap.of( Map.of( "newline", List.of( "ctrl+n" ) ) );
 		KeysPanel	panel	= new KeysPanel( map.table() );
 		assertThat( String.join( "\n", text( panel, 80 ) ) ).contains( "Ctrl+N" );
-		assertThat( String.join( "\n", text( panel, 80 ) ) ).contains( "(was Alt+Enter, Shift+Enter, Ctrl+J)" );
+		assertThat( String.join( "\n", text( panel, 80 ) ) ).contains( "(was Shift+Enter, Ctrl+J)" );
 		assertThat( String.join( "\n", text( panel(), 80 ) ) ).doesNotContain( "(was " );
 	}
 

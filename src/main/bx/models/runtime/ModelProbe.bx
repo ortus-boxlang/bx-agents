@@ -32,7 +32,7 @@ class {
 		var result = {}
 		var context = {}
 		var thread = threadCurrent().threadId()
-		var listener = BoxRegisterInterceptor( ( data ) => {
+		var listener = bxModules.bxagents.models.runtime.InterceptorRegistration::register( ( data ) => {
 			if ( threadCurrent().threadId() == thread ) {
 				context.append( bxModules.bxagents.models.runtime.ErrorReport::forService( data.provider ), true )
 			}
@@ -54,7 +54,7 @@ class {
 			bxModules.bxagents.models.logs.Logger::log( "agent", "error", "Model probe failed: " & diagnostic )
 			result = { ok : false, ms : getTickCount() - started, reason : arguments.diagnostics ? diagnostic : reasonOf( bxModules.bxagents.models.logs.Logger::oneLine( e.message ) ), cached : false }
 		} finally {
-			BoxUnregisterInterceptor( listener )
+			bxModules.bxagents.models.runtime.InterceptorRegistration::unregister( listener )
 		}
 		static.recent[ key ] = { at : now(), result : result }
 		return result

@@ -81,7 +81,7 @@ bxAgents build
 bxAgents chat
 ```
 
-`build` assembles everything above into a plain ColdBox application in `.build` (`app/` and `public/`) (see [The Build Pipeline](../build-pipeline.md)); `chat` loads the generated agent in-process and opens the [terminal chat](terminal-ui.md). Type `/` to see the commands, and `/tools` to see that `sayHello` is there. Try:
+`build` assembles everything above into a plain ColdBox application in `.build` (`app/` and `public/`) (see [The Build Pipeline](../build-pipeline.md)); `chat` starts an isolated BoxLang process with `.build/runtime/boxlang.json` and `.build/runtime` as its home, then loads the generated agent and opens the [terminal chat](terminal-ui.md). Type `/` to see the commands, and `/tools` to see that `sayHello` is there. Try:
 
 ```text
 My name is Ada.

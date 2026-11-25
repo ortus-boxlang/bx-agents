@@ -20,7 +20,7 @@ load the same generated agent and build the same agent tree, so they never diver
 ## `chat`: the terminal chat
 
 ```bash
-bxAgents chat                                  # fast, in-process
+bxAgents chat                                  # local chat in an isolated runtime
 bxAgents chat --server [--port=<port>]         # the full app, on its own throwaway server
 bxAgents chat --connect=http://127.0.0.1:8791  # the full app, on a server you already run
 bxAgents chat --no-tui                         # a plain line-by-line prompt
@@ -35,7 +35,7 @@ took, and a run that needs approval asks in place.
 
 What you can do in it:
 
-- **Keys.** Enter sends, Alt+Enter adds a line, Up and Down walk your history, Esc stops the agent, and a message
+- **Keys.** Enter sends, Shift+Enter adds a line, Up and Down walk your history, Esc stops the agent, and a message
   typed while it works steers it. `?` or `/keys` lists every key.
 - **Slash commands.** Type `/` for a menu: `/help`, `/tools`, `/model`, `/info` and more. Every command is listed in
   [Slash commands](../guides/slash-commands.md). Later lessons use `/skills`, `/profile`, `/remember`, `/notes`,
@@ -49,10 +49,11 @@ What you can do in it:
 - **Files and pictures.** `@` lists files, and `@notes.md` puts a text file's content in your message.
 - **Recording.** `bxAgents chat --record=demo.cast` saves the screen as an asciicast file.
 
-The default mode loads the generated factory in this process: fastest, but without what ColdBox brings (no
-scheduler, no interceptors, no gateway registry). When that matters, `--server` boots a real miniserver and drives
-the chat over HTTP against your project's agent API, and `--connect` does the same against a server you already
-have running; both stream the reply and carry the conversation across turns. If the server wants a token
+The default mode starts a separate BoxLang process using the project's `.build/runtime/boxlang.json` and
+`.build/runtime` home, then loads the generated factory directly: no server, but also no ColdBox (no scheduler,
+no interceptors, no gateway registry). When those matter, `--server` boots a real miniserver and drives the chat
+over HTTP against your project's agent API, and `--connect` does the same against a server you already have
+running; both stream the reply and carry the conversation across turns. If the server wants a token
 ([Who Is Allowed](users-roles-and-tokens.md)), pass `--token=<token>` or set `BXAGENTS_TOKEN`.
 
 Try it. Open the chat on the project and say hello, then ask for a command menu with `/` and look at `/model`.
@@ -97,7 +98,8 @@ Hello from the practice model. I am scripted: I only say what the course told me
 ```
 
 `invoke` exists for scripting and CI, where `chat`'s terminal requirement is a hard blocker. By default it loads
-the generated factory in-process, the same path `chat` uses, so there is no `serve` prerequisite. `--json` prints
+the generated factory in the already-started BoxLang process, so there is no `serve` prerequisite. Unlike `chat`,
+it does not start a separate process with the project's runtime config and home. `--json` prints
 `{"response": "..."}`. Add `--server` to launch a real, throwaway `boxlang-miniserver` and send the message as a
 genuine HTTP request to your project's agent API: it exercises the path a browser takes.
 

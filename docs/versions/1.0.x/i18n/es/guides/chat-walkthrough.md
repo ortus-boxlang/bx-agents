@@ -26,7 +26,7 @@ bxAgents chat
 ```
 
 1. Escribe una pregunta y pulsa **Enter**. La respuesta llega en streaming; cualquier tool que llame el agente se muestra con sus argumentos y lo que tardó.
-2. Pulsa **Alt+Enter** para una segunda línea antes de enviar.
+2. Pulsa **Shift+Enter** para una segunda línea antes de enviar.
 3. Escribe `/` y mira el menú, o `?` para ver las teclas. Escribe `/tools` para ver qué puede llamar el agente.
 4. Pulsa **Esc** mientras el agente trabaja para detenerlo en su siguiente paso. Escribe mientras trabaja para **dirigirlo**: tu mensaje se añade a la ejecución.
 5. `/copy` pone la última respuesta en el portapapeles.
@@ -74,7 +74,7 @@ Necesita un bloque [`notes`](../conventions/agent-yaml.md#notas) en `Agent.yml`.
 
 1. Escribe `@` y se abre una lista de archivos bajo tu carpeta. Sigue escribiendo para acotarla; **Tab** toma uno. El contenido del archivo va con tu mensaje.
 2. `@diagram.png` envía una imagen. Un perfil con `vision: false` hace que el chat la rechace con un mensaje en lugar de un error del proveedor.
-3. **Ctrl+V** pega una imagen del portapapeles.
+3. **Ctrl+Shift+V** pega una imagen del portapapeles.
 4. `!git diff --stat` ejecuta un comando en tu máquina y envía lo que imprimió junto con tu siguiente mensaje. `!!` lo muestra sin enviarlo.
 5. `/context` muestra qué tamaño tiene el contexto y de qué se compone: prompt del sistema, definiciones de tools, notas y mensajes. La salida de un `!command` que espera tu siguiente mensaje también cuenta.
 

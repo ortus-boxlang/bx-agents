@@ -63,39 +63,55 @@ class {
 	this.dependencies = [];
 
 	static {
-		subcommandVerbs = [ "token", "embed", "users", "notes", "vault", "sessions", "models", "add", "skills", "extensions", "restore", "routines", "connectors" ]
+		subcommandVerbs = [
+			"add",
+			"connect",
+			"connectors",
+			"embed",
+			"extensions",
+			"logs",
+			"models",
+			"notes",
+			"restore",
+			"routines",
+			"sessions",
+			"skills",
+			"token",
+			"users",
+			"vault"
+		]
 
 		verbs = {
-			"new"     : "models.cli.New",
+			"add"     : "models.cli.Add",
+			"backup"  : "models.cli.Backup",
 			"build"   : "models.cli.Build",
-			"test"    : "models.cli.Test",
-			"serve"   : "models.cli.Serve",
-			"package" : "models.cli.Package",
-			"deploy"  : "models.cli.Deploy",
-			"inspect" : "models.cli.Inspect",
 			"chat"    : "models.cli.Chat",
-			"invoke"  : "models.cli.Invoke",
 			"clean"   : "models.cli.Clean",
-			"hash-password" : "models.cli.HashPassword",
-			"token"   : "models.cli.Token",
-			"embed"   : "models.cli.Embed",
-			"users"   : "models.cli.Users",
-			"notes"   : "models.cli.Notes",
-			"vault"   : "models.cli.Vault",
 			"connect" : "models.cli.Connect",
 			"connectors" : "models.cli.Connectors",
-			"sessions": "models.cli.Sessions",
-			"routines": "models.cli.Routines",
-			"stats"   : "models.cli.Stats",
-			"models"  : "models.cli.Models",
-			"doctor"  : "models.cli.Doctor",
-			"add"     : "models.cli.Add",
-			"skills"  : "models.cli.Skills",
-			"extensions" : "models.cli.Extensions",
 			"data"    : "models.cli.Data",
+			"deploy"  : "models.cli.Deploy",
+			"doctor"  : "models.cli.Doctor",
+			"embed"   : "models.cli.Embed",
+			"extensions" : "models.cli.Extensions",
+			"hash-password" : "models.cli.HashPassword",
+			"inspect" : "models.cli.Inspect",
+			"invoke"  : "models.cli.Invoke",
 			"logs"    : "models.cli.Logs",
-			"backup"  : "models.cli.Backup",
-			"restore" : "models.cli.Restore"
+			"models"  : "models.cli.Models",
+			"new"     : "models.cli.New",
+			"notes"   : "models.cli.Notes",
+			"package" : "models.cli.Package",
+			"restore" : "models.cli.Restore",
+			"routines": "models.cli.Routines",
+			"serve"   : "models.cli.Serve",
+			"sessions": "models.cli.Sessions",
+			"skills"  : "models.cli.Skills",
+			"stats"   : "models.cli.Stats",
+			"test"    : "models.cli.Test",
+			"token"   : "models.cli.Token",
+			"users"   : "models.cli.Users",
+			"vault"   : "models.cli.Vault"
 		}
 
 		verbDescriptions = {
@@ -346,17 +362,11 @@ class {
 	 * @return The exit code `main()` passes to CLIExit() (0 success, 1 failure) - never exits the process itself, so it stays directly callable from tests
 	 */
 	function dispatch( args = [] ) {
-		// Relative to this file's OWN location (the module root) - confirmed
-		// empirically this session that BoxLang resolves a bare dotted path
-		// like "models.cli.New" relative to the module root ONLY from the
-		// file BoxRunner directly invokes as the module's main() (this one);
-		// nested classes (see e.g. New.bx's own reference to
-		// ProjectScaffolder) do NOT get the same relative treatment and must
-		// use the "Class@bxagents" suffix form instead - see BuildPipeline.bx.
-		var firstToken = arrayLen( arguments.args ) >= 1 ? arguments.args[ 1 ] : ""
+		var firstToken = arrayLen( arguments.args ) >= 1 ? arguments.args.first() : ""
 
+		// Handle special flags like --version and -v early, before any verb processing.
 		if ( firstToken == "--version" || firstToken == "-v" ) {
-			println( "bxAgents v#this.version#" )
+			println( "🤖 bxAgents v#this.version#" )
 			return 0
 		}
 
@@ -371,13 +381,16 @@ class {
 			return 0
 		}
 
+		// If no verb is provided, print usage and return an error.
 		if ( !len( firstToken ) ) {
 			printUsage()
 			return 1
 		}
 
+		// If we get here the first token is a verb that is not a special flag or help command.
 		var verbName = firstToken
 
+		// Check if the verb exists in the module's known verbs. If not, attempt to run it as an extension verb.
 		if ( !static.verbs.keyExists( verbName ) ) {
 			// a verb an extension adds: the extensions are loaded only now, for a verb the module does not have
 			var fromExtension = runExtensionVerb( verbName, arguments.args )
@@ -390,16 +403,18 @@ class {
 			return 1
 		}
 
+		// Collect the raw arguments for the verb, excluding the module name and dispatch token.
 		var rawVerbArgs = []
 		for ( var i = 2; i <= arrayLen( arguments.args ); i++ ) {
 			rawVerbArgs.append( arguments.args[ i ] )
 		}
 
+		// Parse the raw verb arguments into structured CLI options.
 		var options = parseCliOptions( rawVerbArgs )
-
+		// Determine which flags require values for this verb.
 		var requiredValueFlags = [ "projectRoot" ]
 		requiredValueFlags.append( static.valueOptions[ verbName ] ?: [], true )
-
+		// Check if any required flags are missing their values.
 		for ( var flag in requiredValueFlags ) {
 			if ( options._valuelessFlags.keyExists( flag ) ) {
 				println( "Error: --#flag# requires a value - write it as `--#flag#=<value>`." )
@@ -408,12 +423,18 @@ class {
 			}
 		}
 
+		// Remove the internal _valuelessFlags key from the options before passing them to the verb.
 		options.delete( "_valuelessFlags" )
-		// `token create`, `notes list` and `add tool`: the first word is the action, not a project path
+		// These verbs use their first positional as an action, area or name, not a project path.
 		if ( static.subcommandVerbs.contains( verbName ) ) {
 			options.projectRoot = resolveProjectRoot( options, false )
 		} else {
 			options.projectRoot = resolveProjectRoot( options )
+		}
+
+		// Preserve the raw arguments for the `chat` verb when not using a server and no connect option is provided.
+		if ( verbName == "chat" && !( options.server ?: false ) && !len( trim( options.connect ?: "" ) ) ) {
+			options._rawArgs = rawVerbArgs
 		}
 
 		try {
@@ -421,6 +442,11 @@ class {
 			var result = verbClass.run( options )
 			if ( len( result.message ?: "" ) ) {
 				println( result.message )
+			}
+			// A user-issued `serve` owns its process for the life of this CLI.
+			// Internal callers invoke Serve.run() directly and manage the process themselves.
+			if ( verbName == "serve" && structKeyExists( result, "process" ) ) {
+				return result.process.waitFor()
 			}
 			return result.exitCode ?: 0
 		} catch ( any e ) {
@@ -649,7 +675,7 @@ class {
 	 * CWD, never against this module's own file location.
 	 *
 	 * @options The parsed options struct from parseCliOptions()
-	 * @usePositional False for a verb whose first positional is an action (`token create`), not a path
+	 * @usePositional False for a verb whose first positional is an action or item (`token create`, `logs agent`), not a path
 	 *
 	 * @return An absolute, trailing-slash-free path to the target project root
 	 */

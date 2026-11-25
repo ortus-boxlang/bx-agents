@@ -26,7 +26,7 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Reads a picture off the operating system's clipboard, for Ctrl+V in the message box. A terminal has no
+ * Reads a picture off the operating system's clipboard, for Ctrl+Shift+V in the message box. A terminal has no
  * clipboard API, so this asks the tool each system has: {@code wl-paste} (Wayland) or {@code xclip} (X11) on Linux,
  * {@code pngpaste} or AppleScript on macOS, PowerShell on Windows. The first that hands back a PNG wins; a system
  * with none of them, or a clipboard with no picture, gives nothing.

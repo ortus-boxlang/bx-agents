@@ -564,11 +564,12 @@ bxAgents serve [--port=8080] [--host=127.0.0.1]
 - Always serves the agent at `/__bxagents` (`POST /invoke`, `POST /stream`, `POST /batch`, `GET /info`), whatever the project declares in [`gateways/`](conventions/gateways/index.md) - see [the always-on agent route](conventions/agent-bx.md#the-always-on-agent-route) for how to require a token on it, or turn it off.
 - **Binds to `127.0.0.1` by default.** A generated app is not authenticated unless you configured it to be (the web UI's API-key gate and sign-in are both opt-in), so the default keeps a development server off the network. Pass `--host=0.0.0.0` to bind all interfaces deliberately - the startup line tells you which of the two you got.
 - `--port` must be an integer in 1-65535; anything else fails immediately rather than inside the server process.
+- Runs in the foreground and stays attached to the terminal. Press **Ctrl+C** there to stop the server.
 - Writes `.build/miniserver.json` before launching: `webRoot: public`, `configPath: runtime/boxlang.json` (the ColdBox BoxLang template's engine config, whitespace compression off), `serverHome: runtime`, rewrites to `index.bxm`, health check on, and a pass predicate that lets only `index.bxm` run. Every path is relative to `.build`, and the server is started **in `.build`** with `BOXLANG_HOME=.build/runtime` - which is what the template's `${user-dir}` means.
 - Serves **only `.build/public`**: the app's code, its config (`agent-settings.json`, `Agent.yml`, instructions) and the libraries are not under the web root, so they cannot be downloaded; an unknown address is a JSON `404`.
 - Loads **only the `bxagents` module** (with the BoxLang modules bundled inside it, and the project's own `boxlang_modules/`): the module is copied into `.build/runtime/modules` under its installed folder name (`bx-agents` from `bx-module install`), and `runtime/` is the BoxLang home, so the modules installed on the machine are never loaded into the served app. `chat --server` and `invoke --server` get this too, since they reuse `serve` internally. `test` runs its child process with its own home in `.build/test-runtime`, loading the `bxagents` module alone as well. Both are set through the child's environment when it starts, never by writing a file into the project root.
 - A project (or an unpacked app) under a path with a **space** does not start: the `boxlang-miniserver` launcher script does not quote `BOXLANG_HOME`.
-- **The scaffolded `.env` does not set `BOXLANG_HOME`.** Each project gets its own runtime home when bxAgents serves or runs it, so a project that runs under `boxlang module:bxagents ...` from its own root keeps working: the `boxlang` launcher reads the project `.env`, and a relative `BOXLANG_HOME` there points the launcher at an empty folder. `build`, `doctor`, `inspect`, the in-process `chat` and the default `invoke` run inside the bxAgents process you started, and a runtime home cannot change mid-process, so they use your own home. They keep per-project state in the project's `.build/` and the data home only; BoxLang's compiled-class cache in your home is named after each source file's full path, so two projects do not overwrite each other. `bxAgents doctor` warns when an older project's `.env` still has a relative `BOXLANG_HOME` line; delete it.
+- **The scaffolded `.env` does not set `BOXLANG_HOME`.** Each project gets its own runtime home when bxAgents serves or runs it, so a project that runs under `boxlang module:bxagents ...` from its own root keeps working: the `boxlang` launcher reads the project `.env`, and a relative `BOXLANG_HOME` there points the launcher at an empty folder. `build`, `doctor`, `inspect` and the default `invoke` run inside the bxAgents process you started, and a runtime home cannot change mid-process, so they use your own home. Default `chat` starts an isolated BoxLang process with `.build/runtime/boxlang.json` and `.build/runtime` as its home. Per-project runtime state is kept in `.build/`; BoxLang's compiled-class cache in your home is named after each source file's full path, so two projects do not overwrite each other. `bxAgents doctor` warns when an older project's `.env` still has a relative `BOXLANG_HOME` line; delete it.
 
 ### `chat`
 
@@ -579,7 +580,7 @@ New to it? Start with [the terminal UI](guides/terminal-ui.md), the [walkthrough
 A chat with the built agent, in a terminal screen that keeps your scrollback: finished turns are printed as ordinary terminal text (select, search and scroll them as usual) and only the message box and the answer being written are redrawn. `--no-tui` (and any terminal that is not interactive) uses a plain line-by-line REPL instead, built on BoxLang's own `MiniConsole`.
 
 ```bash
-bxAgents chat                                  # fast, in-process
+bxAgents chat                                  # local chat in an isolated runtime
 bxAgents chat --no-tui                         # plain line-by-line REPL
 bxAgents chat --inline                         # the box under the last line, not pinned to the bottom of a cleared screen
 bxAgents chat --server [--port=<port>]         # full app, own throwaway server
@@ -596,7 +597,7 @@ In the screen:
 | Key | Does |
 |---|---|
 | Enter | Send the message |
-| Alt+Enter, Shift+Enter, Ctrl+J, or `\` then Enter | New line in the message |
+| Shift+Enter, Ctrl+J, or `\` then Enter | New line in the message |
 | Up / Down | Earlier messages (from the first or last line of the box) |
 | Esc | Stop the agent. It stops at its next step, not mid-word |
 | Enter while the agent works | Steer it: your message is added to the run |
@@ -728,7 +729,7 @@ chat:
   shell: true        # false switches ! off; or the shell to use: "bash -c", "pwsh -Command"
   bifs: true         # false switches # off; or the functions allowed: [ dateFormat, listLen ]
   keys:              # change the keys of an action; one key or a list. /keys shows the action names
-    newline: [ ctrl+n, alt+enter ]
+    newline: [ ctrl+n, shift+enter ]
     stop: ctrl+x
   prefixes: { desk:explain: "?%" }   # the prefix of an extension's prefix, by id (extension:method)
   sources: { desk:ticket: issue }    # the name of an extension's @name:query source, by id
@@ -747,7 +748,7 @@ Keys are written as people say them: `enter`, `alt+enter`, `shift+enter`, `ctrl+
 | `@` | Opens a list of the files under the folder you started in (up to five levels deep; hidden folders, `node_modules`, `build`, `dist`, `target`, `out`, `__pycache__`, `venv` are skipped). Keep typing to narrow it, Up and Down to move, Tab or Enter to take one |
 | `@path/to/file` | A text file in the message: its content goes with the message, in its own block, cut at 100,000 characters. A name that is not a file is reported and stays as plain text; the message is still sent |
 | `@picture.png` | A picture (png, jpg, gif, webp), sent as an image part of the message |
-| Ctrl+V | Pastes a picture from the clipboard (needs `wl-paste` or `xclip` on Linux, `pngpaste` on macOS; Windows uses PowerShell). A chip in the hint row shows how many are waiting |
+| Ctrl+Shift+V | Pastes a picture from the clipboard (needs `wl-paste` or `xclip` on Linux, `pngpaste` on macOS; Windows uses PowerShell). A chip in the hint row shows how many are waiting |
 
 At most 4 pictures go with one message, each up to 5 MB. Before anything is sent the chat checks the model: set `vision: false` on a [profile](conventions/models.md#what-the-project-knows-about-a-model) that cannot see, and a picture sent to it is refused with a message instead of an obscure provider error. When `vision` is not set the picture goes through. `/context` counts what is attached. The picture is passed to the model as bx-ai's `AiMessage` image parts, in the shape that provider expects; only OpenAI-style providers have been tried so far.
 
@@ -772,12 +773,12 @@ Three modes, one chat:
 
 | Mode | What it talks to | Use it when |
 |---|---|---|
-| default | The generated agent factory, loaded directly in this process | You just want to talk to the agent. Fastest, no server. |
+| default | The generated agent factory, loaded in an isolated BoxLang process using `.build/runtime/boxlang.json` and `.build/runtime` as its home | You just want to talk to the agent, without a server. |
 | `--server` | A throwaway `boxlang-miniserver` it boots and tears down | You need real application semantics - interceptors, the scheduler, gateways. |
 | `--connect=<url>` | A server that is already running | You have a `serve` open in another terminal, or want to talk to a deployment. |
 
 - Requires a prior `build` - except with `--connect`, which talks to a server someone else is running and so needs nothing built locally.
-- **Default**: loads `GeneratedAgentFactory.bx` directly (no ColdBox/WireBox container involved) and calls `buildAgent()` once per session - the exact same factory `serve`'s HTTP routes use, so the agent itself never diverges. What *does* differ is everything ColdBox brings: no `models/`, no scheduler, no interceptors, no gateway registry. When that matters, use `--server`.
+- **Default**: starts a BoxLang CLI child process in `.build`, using `.build/runtime/boxlang.json` as its config and `.build/runtime` as `BOXLANG_HOME`, then loads `GeneratedAgentFactory.bx` directly (no ColdBox/WireBox container involved) and calls `buildAgent()` once per session. It uses the same factory `serve`'s HTTP routes use, so the agent itself never diverges. What *does* differ is everything ColdBox brings: no `models/`, no scheduler, no interceptors, no gateway registry. When that matters, use `--server`.
 - **`--server`**: boots a real miniserver (needs `boxlang-miniserver` on `PATH`, like `serve`) on an ephemeral loopback port and drives the REPL over HTTP against the project's [always-on `/__bxagents` route](conventions/agent-bx.md#the-always-on-agent-route), shutting it down on exit. `--port` pins the port instead of taking a free one.
 - **`--connect`**: drives the same REPL against a running server, starting and stopping nothing. The URL is the server root (`http://host:port`), not the agent path - `chat` appends that itself.
 - `--server` and `--connect` are mutually exclusive: one says "start a server for me", the other "don't". Passing both fails immediately rather than silently honoring one.
@@ -798,7 +799,7 @@ bxAgents invoke --message="..." --server [--port=<port>]
 ```
 
 - Requires a prior `build`.
-- **Default (no `--server`)**: loads `GeneratedAgentFactory.bx` directly (no ColdBox container, no HTTP) and calls the agent once - the same in-process path `chat` uses internally, just without the REPL loop. No `serve`/gateway prerequisite at all.
+- **Default (no `--server`)**: loads `GeneratedAgentFactory.bx` directly in the already-started BoxLang process (no ColdBox container, no HTTP) and calls the agent once. No `serve`/gateway prerequisite at all. Unlike `chat`, it does not start a separate BoxLang process with the project's runtime config and home.
 - **`--server`**: launches a real, throwaway `boxlang-miniserver` process (same as `serve`, so it needs the binary on `PATH`), sends the message as a real HTTP request to the project's [always-on `/__bxagents` route](conventions/agent-bx.md#the-always-on-agent-route), then shuts the server back down. Exercises the actual served path (ColdBox routing, interceptors, gateways) rather than the in-process shortcut. Needs no `gateways/*` entry of any kind - the reserved route is emitted on every build, so a freshly scaffolded project that exposes nothing publicly still works. `--port` defaults to a free ephemeral port so it never collides with an already-running `serve`.
 - `--json` prints `{"response": "..."}` instead of the plain-text response.
 

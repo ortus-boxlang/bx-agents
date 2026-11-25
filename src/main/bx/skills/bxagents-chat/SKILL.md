@@ -26,7 +26,7 @@ bxAgents chat --record=demo.cast
 | Key | Does |
 |---|---|
 | Enter | Send. While the agent works, it steers the run |
-| Alt+Enter, Shift+Enter, Ctrl+J, or `\` then Enter | New line |
+| Shift+Enter, Ctrl+J, or `\` then Enter | New line |
 | Up / Down | Earlier and later messages (from the first or last line of the box) |
 | Tab | Complete a `/command` or `@file` |
 | Ctrl+A / Home, Ctrl+E / End | Start and end of the line |
@@ -38,7 +38,7 @@ bxAgents chat --record=demo.cast
 | Esc | Stop the agent at its next step |
 | `?` alone, F1, Ctrl+/ , or `/keys` | Shortcuts panel with every key as bound now |
 
-Change keys in `~/.bxagents/Agent.yml` under `chat.keys` (for example `newline: [ ctrl+n, alt+enter ]`). Actions: `submit`, `newline`, `historyPrevious`, `historyNext`, `clear`, `exit`, `deleteToStart`, `deleteWord`, `lineStart`, `lineEnd`, `complete`, `pasteImage`, `clearScreen`, `stop`. A bad entry is reported at start and the default is kept.
+Change keys in `~/.bxagents/Agent.yml` under `chat.keys` (for example `newline: [ ctrl+n, shift+enter ]`). Actions: `submit`, `newline`, `historyPrevious`, `historyNext`, `clear`, `exit`, `deleteToStart`, `deleteWord`, `lineStart`, `lineEnd`, `complete`, `pasteImage`, `clearScreen`, `stop`. A bad entry is reported at start and the default is kept.
 
 ## Slash commands
 

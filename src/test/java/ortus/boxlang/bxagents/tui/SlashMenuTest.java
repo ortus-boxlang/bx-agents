@@ -126,7 +126,8 @@ class SlashMenuTest {
 		for ( int i = 0; i < SlashMenu.WINDOW; i++ ) {
 			menu.move( 1 );
 		}
-		assertThat( menu.picked().name() ).isEqualTo( "/c09" );
+		// one more move than the window holds: the pick is the command after the last one in view, so it follows the window size
+		assertThat( menu.picked().name() ).isEqualTo( String.format( "/c%02d", SlashMenu.WINDOW + 1 ) );
 		assertThat( menu.window().get( 0 ).name() ).isEqualTo( "/c02" );
 		assertThat( menu.pickInWindow() ).isEqualTo( SlashMenu.WINDOW - 1 );
 		menu.move( -1 );

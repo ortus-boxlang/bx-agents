@@ -7,6 +7,7 @@
  *
  * Blocks
  *   { type : "text", style : "muted" | "ok" | "warn", text }
+ *   { type : "line", style : "muted" | "ok" | "warn", text }     a printed line; empty text is a blank line
  *   { type : "table", layout : "keyvalue" | "grid", columns : [ { width, align } ], rows : [ [ cell ] ] }
  *   { type : "choose", title, options : [ { label, hint, line } ] }   picking one runs `line`
  *   { type : "transcript", messages : [ { role : "you" | "agent", text } ] }
@@ -20,6 +21,11 @@
  */
 class {
 
+	/**
+	 * Creates an empty reply builder.
+	 *
+	 * @return This reply builder.
+	 */
 	function init() {
 		variables.blocks = []
 		variables.effects = []
@@ -30,21 +36,67 @@ class {
 	// Blocks
 	// ----------------------------------------------------------------------------------
 
+	/**
+	 * Add a header block like demarcating a section, use a color for the header, or use a custom style.
+	 *
+	 * @title The header text.
+	 * @style The display style for the header: "muted", "ok", "warn", or "accent". Defaults to "accent".
+	 * @return This reply builder.
+	 */
+	function header( required string title, string style = "accent" ) {
+		variables.blocks.append( { type : "text", style : arguments.style, text : arguments.title } )
+		return this
+	}
+
+	/**
+	 * Adds a styled text block to the reply.
+	 *
+	 * @text The text to display.
+	 * @style The display style: "muted", "ok", or "warn". Defaults to "muted".
+	 * @return This reply builder.
+	 */
 	function text( required string text, string style = "muted" ) {
 		variables.blocks.append( { type : "text", style : arguments.style, text : arguments.text } )
 		return this
 	}
 
+	/**
+	 * Adds an "ok"-styled text block to the reply.
+	 *
+	 * @text The text to display.
+	 * @return This reply builder.
+	 */r
 	function ok( required string text ) {
 		return this.text( arguments.text, "ok" )
 	}
 
+	/**
+	 * Adds a "warn"-styled text block to the reply.
+	 *
+	 * @text The text to display.
+	 * @return This reply builder.
+	 */
 	function warn( required string text ) {
 		return this.text( arguments.text, "warn" )
 	}
 
 	/**
-	 * @rows [ [ label, value ] ]
+	 * Adds a line to the reply. An empty string adds a blank line.
+	 *
+	 * @text The line to display; defaults to an empty line.
+	 * @style The display style for a non-empty line: "muted", "ok", or "warn". Defaults to "muted".
+	 * @return This reply builder.
+	 */
+	function line( string text = "", string style = "muted" ) {
+		variables.blocks.append( { type : "line", style : arguments.style, text : arguments.text } )
+		return this
+	}
+
+	/**
+	 * Adds a key-value table to the reply.
+	 *
+	 * @rows Rows of [ label, value ] pairs.
+	 * @return This reply builder.
 	 */
 	function keyValues( required array rows ) {
 		variables.blocks.append( { type : "table", layout : "keyvalue", columns : [], rows : arguments.rows } )
@@ -52,8 +104,11 @@ class {
 	}
 
 	/**
-	 * @columns [ { width, align : "left" | "right" } ]; a width of 0 is as wide as it needs to be
-	 * @rows [ [ cell ] ]
+	 * Adds a grid table to the reply.
+	 *
+	 * @columns Column settings with optional width and "left" or "right" alignment. A width of 0 sizes to the content.
+	 * @rows Table rows, each containing one cell per column.
+	 * @return This reply builder.
 	 */
 	function grid( required array columns, required array rows ) {
 		variables.blocks.append( { type : "table", layout : "grid", columns : arguments.columns, rows : arguments.rows } )
@@ -61,28 +116,47 @@ class {
 	}
 
 	/**
-	 * @options [ { label, hint, line } ]; line is the command line to run when the option is picked
+	 * Adds a set of selectable options to the reply.
+	 *
+	 * @title The prompt shown above the options.
+	 * @options Options with a label, optional hint, and command line to run when selected.
+	 * @return This reply builder.
 	 */
 	function choose( required string title, required array options ) {
 		variables.blocks.append( { type : "choose", title : arguments.title, options : arguments.options } )
 		return this
 	}
 
+	/**
+	 * Adds a conversation transcript to the reply.
+	 *
+	 * @messages Messages with a "you" or "agent" role and their text.
+	 * @return This reply builder.
+	 */
 	function transcript( required array messages ) {
 		variables.blocks.append( { type : "transcript", messages : arguments.messages } )
 		return this
 	}
 
 	/**
-	 * @name The file name, no path
-	 * @mime Its media type
-	 * @text Its content
+	 * Adds a file for the client to save or download.
+	 *
+	 * @name The file name without a path.
+	 * @mime The file's media type.
+	 * @text The file content.
+	 * @return This reply builder.
 	 */
 	function file( required string name, required string mime, required string text ) {
 		variables.blocks.append( { type : "file", name : arguments.name, mime : arguments.mime, text : arguments.text } )
 		return this
 	}
 
+	/**
+	 * Requests that the terminal client open a named screen.
+	 *
+	 * @name The screen to open.
+	 * @return This reply builder.
+	 */
 	function screen( required string name ) {
 		variables.blocks.append( { type : "screen", name : arguments.name } )
 		return this
@@ -92,16 +166,33 @@ class {
 	// Effects
 	// ----------------------------------------------------------------------------------
 
+	/**
+	 * Adds an effect that clears the current conversation transcript from the screen.
+	 *
+	 * @return This reply builder.
+	 */
 	function reset() {
 		variables.effects.append( { type : "reset" } )
 		return this
 	}
 
+	/**
+	 * Adds an effect that switches the client to another conversation.
+	 *
+	 * @id The conversation identifier to open.
+	 * @title The conversation title, if available.
+	 * @return This reply builder.
+	 */
 	function conversation( required string id, string title = "" ) {
 		variables.effects.append( { type : "conversation", id : arguments.id, title : arguments.title } )
 		return this
 	}
 
+	/**
+	 * Adds an effect that asks the client to leave the chat.
+	 *
+	 * @return This reply builder.
+	 */
 	function quit() {
 		variables.effects.append( { type : "quit" } )
 		return this
@@ -111,20 +202,38 @@ class {
 	// Reading it back
 	// ----------------------------------------------------------------------------------
 
+	/**
+	 * Returns the reply's ordered display blocks.
+	 *
+	 * @return The reply blocks.
+	 */
 	array function blocks() {
 		return variables.blocks
 	}
 
+	/**
+	 * Returns the effects requested by the reply.
+	 *
+	 * @return The reply effects.
+	 */
 	array function effects() {
 		return variables.effects
 	}
 
+	/**
+	 * Checks whether the reply contains an effect of the given type.
+	 *
+	 * @type The effect type to look for.
+	 * @return True when the reply contains the effect; otherwise false.
+	 */
 	boolean function hasEffect( required string type ) {
 		return variables.effects.some( e => e.type == type )
 	}
 
 	/**
-	 * @return The plain data of the reply, for JSON: { blocks, effects }
+	 * Returns the reply as plain data suitable for JSON serialization.
+	 *
+	 * @return A struct containing the reply's blocks and effects.
 	 */
 	struct function toStruct() {
 		return { "blocks" : variables.blocks, "effects" : variables.effects }

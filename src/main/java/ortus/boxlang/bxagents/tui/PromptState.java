@@ -30,7 +30,7 @@ import java.util.List;
  * @param label     the word in the top bar: "you" at rest, "working 12s" during a turn
  * @param top       the widgets for the top bar, already worked out and never blank
  * @param bottom    the widgets for the bottom bar or hint row, likewise
- * @param hint      the keys line, such as "enter send · alt+enter new line · ? keys"
+ * @param hint      the keys line, such as "enter send · shift+enter new line · ? keys"
  * @param recording true while the screen is being recorded
  * @param width     the columns a row may use
  */

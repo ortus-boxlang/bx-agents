@@ -26,7 +26,7 @@ bxAgents chat
 ```
 
 1. Type a question and press **Enter**. The answer streams in; any tool the agent calls is shown with its arguments and how long it took.
-2. Press **Alt+Enter** for a second line before sending.
+2. Press **Shift+Enter** for a second line before sending.
 3. Type `/` and look at the menu, or `?` for the keys. Type `/tools` to see what the agent can call.
 4. Press **Esc** while the agent is working to stop it at its next step. Type while it works to **steer** it: your message is added to the run.
 5. `/copy` puts the last answer on the clipboard.
@@ -74,7 +74,7 @@ Needs a [`notes`](../conventions/agent-yaml.md#notes) block in `Agent.yml`.
 
 1. Type `@` and a list of files under your folder opens. Keep typing to narrow it; **Tab** takes one. The file's content goes with your message.
 2. `@diagram.png` sends a picture. A profile that sets `vision: false` makes the chat refuse it with a message instead of a provider error.
-3. **Ctrl+V** pastes a picture from the clipboard.
+3. **Ctrl+Shift+V** pastes a picture from the clipboard.
 4. `!git diff --stat` runs a command on your machine and sends what it printed along with your next message. `!!` shows it without sending.
 5. `/context` shows how big the context is and what it is made of: system prompt, tool definitions, notes and messages. The output of a `!command` waiting for your next message counts too.
 

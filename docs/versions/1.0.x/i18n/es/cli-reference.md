@@ -575,7 +575,7 @@ En la pantalla:
 | Tecla | Hace |
 |---|---|
 | Enter | Envía el mensaje |
-| Alt+Enter, Ctrl+J, o `\` y luego Enter | Nueva línea en el mensaje |
+| Shift+Enter, Ctrl+J, o `\` y luego Enter | Nueva línea en el mensaje |
 | Arriba / Abajo | Mensajes anteriores (desde la primera o última línea del cuadro) |
 | Esc | Detiene al agente. Se detiene en su siguiente paso, no a mitad de palabra |
 | Enter mientras el agente trabaja | Lo dirige: tu mensaje se añade a la ejecución |
@@ -680,7 +680,7 @@ chat:
   shell: true        # false apaga !; o el shell a usar: "bash -c", "pwsh -Command"
   bifs: true         # false apaga #; o las funciones permitidas: [ dateFormat, listLen ]
   keys:              # cambia las teclas de una acción; una tecla o una lista. /keys muestra los nombres de acción
-    newline: [ ctrl+n, alt+enter ]
+    newline: [ ctrl+n, shift+enter ]
     stop: ctrl+x
   prefixes: { desk:explain: "?%" }   # el prefijo de un prefix de una extensión, por id (extensión:método)
   sources: { desk:ticket: issue }    # el nombre del source @nombre:consulta de una extensión, por id
@@ -699,7 +699,7 @@ Las teclas se escriben como se dicen: `enter`, `alt+enter`, `shift+enter`, `ctrl
 | `@` | Abre una lista de los archivos bajo la carpeta donde empezaste (hasta cinco niveles; se omiten las carpetas ocultas, `node_modules`, `build`, `dist`, `target`, `out`, `venv`). Sigue escribiendo para filtrar, Arriba y Abajo para moverte, Tab o Enter para elegir uno |
 | `@ruta/al/archivo` | Un archivo de texto en el mensaje: su contenido va con el mensaje, en su propio bloque, cortado a 100.000 caracteres. Un nombre que no es un archivo se avisa y queda como texto; el mensaje se envía igualmente |
 | `@imagen.png` | Una imagen (png, jpg, gif, webp), enviada como parte de imagen del mensaje |
-| Ctrl+V | Pega una imagen del portapapeles (necesita `wl-paste` o `xclip` en Linux, `pngpaste` en macOS; Windows usa PowerShell). Una ficha en la fila de ayuda muestra cuántas esperan |
+| Ctrl+Shift+V | Pega una imagen del portapapeles (necesita `wl-paste` o `xclip` en Linux, `pngpaste` en macOS; Windows usa PowerShell). Una ficha en la fila de ayuda muestra cuántas esperan |
 
 Con un mensaje van como máximo 4 imágenes, de hasta 5 MB cada una. Antes de enviar nada, el chat comprueba que el perfil puede ver: pon `vision: true` en un [perfil](conventions/models.md#lo-que-el-proyecto-sabe-de-un-modelo) que pueda, y una imagen enviada a uno que no puede se rechaza con un mensaje en lugar de un error oscuro del proveedor. `/context` cuenta lo adjunto. La imagen llega al modelo como partes de imagen de `AiMessage` de bx-ai, con la forma que ese proveedor espera; por ahora solo se han probado proveedores de estilo OpenAI.
 

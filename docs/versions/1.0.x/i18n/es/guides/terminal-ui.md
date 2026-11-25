@@ -52,12 +52,12 @@ Los turnos terminados se imprimen como texto de terminal normal, así que **tu s
 | Tecla | Hace |
 |---|---|
 | Enter | Envía el mensaje |
-| Alt+Enter, Shift+Enter, Ctrl+J, o `\` y luego Enter | Línea nueva |
+| Shift+Enter, Ctrl+J, o `\` y luego Enter | Línea nueva |
 | Up / Down | Mensajes anteriores y posteriores, desde la primera o la última línea del cuadro |
 | Tab | Completa un `/command` o un `@file` |
 | Ctrl+A / Home, Ctrl+E / End | Inicio y fin de la línea |
 | Ctrl+U, Ctrl+W | Borra hasta el inicio de la línea, borra la palabra antes del cursor |
-| Ctrl+V | Añade la imagen del portapapeles |
+| Ctrl+Shift+V | Añade la imagen del portapapeles |
 | Ctrl+C | Vacía el cuadro. En un cuadro vacío, sale. Mientras el agente trabaja, lo detiene |
 | Ctrl+D | Sale, en un cuadro vacío (si no, borra el carácter bajo el cursor) |
 | Esc | Mientras el agente trabaja, lo detiene en su siguiente paso (no a mitad de palabra) |
@@ -75,11 +75,11 @@ Las teclas viven en un archivo que es tuyo, no de ningún proyecto: `~/.bxagents
 ```yaml
 chat:
   keys:
-    newline: [ ctrl+n, alt+enter ]
+    newline: [ ctrl+n, shift+enter ]
     stop: ctrl+x
 ```
 
-Acciones que puedes cambiar: `submit`, `newline`, `historyPrevious`, `historyNext`, `clear`, `exit`, `deleteToStart`, `deleteWord`, `lineStart`, `lineEnd`, `complete`, `pasteImage` y `stop`. Las teclas se escriben como las dice la gente: `enter`, `alt+enter`, `shift+enter`, `ctrl+j`, `esc`, `tab`, `up`, `down`, `home`, `end`, o una letra con `ctrl` o `alt`.
+Acciones que puedes cambiar: `submit`, `newline`, `historyPrevious`, `historyNext`, `clear`, `exit`, `deleteToStart`, `deleteWord`, `lineStart`, `lineEnd`, `complete`, `pasteImage` y `stop`. Las teclas se escriben como las dice la gente: `enter`, `shift+enter`, `ctrl+j`, `esc`, `tab`, `up`, `down`, `home`, `end`, o una letra con `ctrl` o `alt`.
 
 Un error de escritura nunca te deja atascado. Una acción desconocida, una tecla ilegible, o una tecla que otra acción del mismo lugar ya usa se avisa al arrancar el chat, y esa acción conserva sus teclas por defecto.
 

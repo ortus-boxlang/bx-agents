@@ -12,7 +12,7 @@
  *
  * The files are written with BoxLang's own `writeLog()` and an absolute path, so BoxLang makes the folder and the
  * file, and rolls them by its own rules (100 MB a file, 90 days, 5 GB in all by default; the `logging` settings of
- * the runtime change that). This class adds no settings of its own.
+ * the runtime change that). This class only keeps its file loggers from propagating into the console.
  *
  * Nothing here ever throws: a log that cannot be written must not stop the work it describes. And nothing secret is
  * written: callers do not pass message text or tokens, and `redact()` removes the usual shapes of a secret from
@@ -33,12 +33,18 @@ class {
 	}
 
 	/**
-	 * Says where the logs go. The folder is made by BoxLang when the first line is written.
+	 * Says where the logs go and keeps the area loggers from propagating their file entries to the console.
+	 * The folder is made by BoxLang when the first line is written.
 	 *
 	 * @folder The absolute path of the logs folder, normally `<data home>/logs`
 	 */
 	static void function use( required string folder ) {
 		static.logsFolder = replace( arguments.folder, "\", "/", "all" ).reReplace( "/+$", "" )
+		// Absolute-path writeLog() loggers also propagate to the root console logger unless they are non-additive.
+		var loggingService = createObject( "java", "ortus.boxlang.runtime.logging.LoggingService" ).getInstance()
+		for ( var area in static.AREA_NAMES ) {
+			loggingService.getLogger( static.logsFolder & "/" & area & ".log" ).setAdditive( false )
+		}
 	}
 
 	/**
@@ -103,6 +109,10 @@ class {
 			if ( len( static.logsFolder ) ) {
 				writeLog( text = text, type = type, log = static.logsFolder & "/" & where & ".log" )
 			} else {
+				createObject( "java", "ortus.boxlang.runtime.logging.LoggingService" )
+					.getInstance()
+					.getLogger( "BXAGENTS-" & uCase( where ) )
+					.setAdditive( false )
 				writeLog( text = text, type = type, file = "bxagents-" & where )
 			}
 		} catch ( any e ) {

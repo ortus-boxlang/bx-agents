@@ -7,7 +7,7 @@ bxAgents build
 bxAgents serve --port=8080
 ```
 
-Open **http://localhost:8080/chat** in a browser and start chatting. Replies stream in token by token via the agent API's `/__bxagents/stream` SSE route. `serve` hands the prompt back after a second or two and the server keeps running; stop it by killing the `boxlang-miniserver` process of this project.
+Open **http://localhost:8080/chat** in a browser and start chatting. Replies stream in token by token via the agent API's `/__bxagents/stream` SSE route. `serve` stays in the foreground; press Ctrl+C in its terminal to stop the server.
 
 `gateways/chat.bx` can also set `suggestions` (up to four buttons on an empty conversation) and an `icon`, as an emoji, an image or `phosphor:<name>`.
 

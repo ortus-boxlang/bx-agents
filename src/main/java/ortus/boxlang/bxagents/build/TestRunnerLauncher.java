@@ -14,7 +14,9 @@
  */
 package ortus.boxlang.bxagents.build;
 
-import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Launches a fresh BoxLang child process to run a project's own
@@ -33,7 +35,7 @@ import java.io.IOException;
  * {@link MiniServerLauncher}'s "shell out to a fresh process" pattern rather
  * than fighting the runtime's own mapping caching.
  */
-public class TestRunnerLauncher {
+public class TestRunnerLauncher extends BaseLauncher {
 
 	/**
 	 * Starts {@code java -Dbxagents.testing.projectRoot=<projectRoot> -jar <boxlangJarPath> --bx-config <configPath> <scriptPath>}
@@ -69,25 +71,24 @@ public class TestRunnerLauncher {
 	 */
 	public static Process launch( String javaBin, String boxlangJarPath, String configPath, String scriptPath, String projectRoot,
 	    String runtimeHome ) {
-		try {
-			java.util.List<String> command = new java.util.ArrayList<>( java.util.List.of(
-			    javaBin,
-			    "-Dbxagents.testing.projectRoot=" + projectRoot,
-			    "-jar", boxlangJarPath,
-			    "--bx-config", configPath ) );
-			command.add( scriptPath );
-			ProcessBuilder builder = new ProcessBuilder( command );
-			// The BOXLANG_HOME environment variable, not --bx-home: measured on 1.19.0, when both are given the
-			// variable wins, and this process's own variable would otherwise be inherited by the child.
-			if ( runtimeHome != null && !runtimeHome.isBlank() ) {
-				builder.environment().put( "BOXLANG_HOME", runtimeHome );
-			}
-			builder.redirectErrorStream( true );
-			builder.redirectOutput( ProcessBuilder.Redirect.INHERIT );
-			return builder.start();
-		} catch ( IOException e ) {
-			throw new RuntimeException( "Failed to launch the test runner process", e );
-		}
+		List<String> command = new ArrayList<>( List.of(
+		    javaBin,
+		    "-Dbxagents.testing.projectRoot=" + projectRoot,
+		    "-jar", boxlangJarPath,
+		    "--bx-config", configPath ) );
+		command.add( scriptPath );
+		// The BOXLANG_HOME environment variable, not --bx-home: measured on 1.19.0, when both are given the
+		// variable wins, and this process's own variable would otherwise be inherited by the child.
+		Map<String, String> environment = runtimeHome != null && !runtimeHome.isBlank()
+		    ? Map.of( "BOXLANG_HOME", runtimeHome )
+		    : Map.of();
+		return startProcess(
+		    command,
+		    environment,
+		    null,
+		    ProcessIO.MERGED_OUTPUT,
+		    "Failed to launch the test runner process"
+		);
 	}
 
 }
