@@ -28,3 +28,7 @@ Gemini groups them under `functionDeclarations` (see `ConnectorToolMiddleware.ke
 
 Do both, as `ConnectorToolMiddleware` does: hide so the model does not waste a turn, and reject so a model that names a
 hidden tool anyway (training, an earlier turn) still cannot run it. Hiding alone is not a guard.
+
+## Measured end to end (task 5)
+
+On a served app with a scripted model and the filter built in (`EmbedFilterMiddleware`): a visitor of an embed that lists only `docs_search` was offered `docs_search` and nothing else, the admin on the same agent was offered `delete_all, docs_search, loadSkill, skill_save`, and a request to wipe everything ran `delete_all` for the admin (a marker file appeared) and did not for the visitor (no file). The request carries the embed as `usageMetadata.embedId`, which every bx-ai request has as a property.

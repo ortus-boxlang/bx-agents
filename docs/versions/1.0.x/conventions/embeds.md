@@ -11,7 +11,7 @@ tags: [conventions, embeds, web-ui, security]
 !!! info "Status"
     This page is the **spec** for increment 1. Built so far: the record and its store, the admin routes, the `bxAgents embed`
     verb, and the public routes (config, session, events, cancel, history, frame) with the origin check, the signed session and
-    the limits. The embed filter, the real widget and the Embeds page are still to come. Anything marked *proposed* is open to change.
+    the limits. The embed filter is built too. The real widget and the Embeds page are still to come. Anything marked *proposed* is open to change.
 
 An **embed** lets a visitor of another website chat with your agent. An admin defines it in the web app (Admin, Embeds), copies
 a snippet, and pastes it into the other site. Increment 1 supports one case: an **anonymous docs agent**. The visitor is not
@@ -162,7 +162,11 @@ only the tools on the embed's list may run. Proven by a spike (`plans/embed-filt
 - `beforeLLMCall` removes the unlisted tools from `dataPacket.tools`, so the model is never offered them.
 - `beforeToolCall` rejects a call to an unlisted tool, so a model that names one anyway (from training or an earlier turn) gets a refusal and the tool body never runs.
 
-Hiding alone is not a guard. How the filter knows it is an embed call is decided with task 5.
+Hiding alone is not a guard.
+
+**How it knows.** `TurnRunner` sets `options.usageMetadata.embedId` on a turn whose caller has the `embed` scope, after it has dropped everything a client sent (a client cannot send it). `usageMetadata` is a property of every bx-ai request, so the filter reads `chatRequest.getUsageMetadata().embedId` in both hooks. A request with none is not an embed turn: the filter returns at once and reads no database. It reads the embed's list for each call, so an admin's change takes effect at once, and it fails closed: an embed that is off, expired, gone or unreadable allows no tool. A tool is compared without its `@module` suffix (`now@bxai` on the list is `now` to the model). It is attached to every agent the build makes, the main one and each sub-agent.
+
+**Measured on a served app** (scripted model, an agent with `docs_search` and a `delete_all` that writes a file): asked which tools it had, the model said `docs_search` to a visitor of an embed that lists only that, and `delete_all, docs_search, loadSkill, skill_save` to the admin on the same agent. Asked to wipe, the visitor's turn left no file; the admin's turn created it.
 
 ## Threat model
 

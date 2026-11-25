@@ -1,0 +1,102 @@
+/**
+ * The embed filter: a visitor's turn may only use the tools its embed lists, and any other turn is left alone.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "embed.EmbedFilterMiddleware", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-embed-filter-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.embeds = new bxagents.models.store.EmbedService( store );
+				variables.embed = embeds.create( { name : "Docs", tools : [ "docs_search", "now@bxai" ], limits : { allowedOrigins : [ "https://docs.example.com" ] } } );
+				variables.filter = new bxagents.models.embed.EmbedFilterMiddleware( embeds );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function requestOf( embedId = "" ) {
+				var meta = len( arguments.embedId ) ? { embedId : arguments.embedId } : {};
+				return { getUsageMetadata : () => meta };
+			}
+
+			function openAiTools() {
+				return [ "docs_search", "now", "delete_all", "note_remember" ].map( n => { type : "function", function : { name : n } } );
+			}
+
+			function namesOf( tools ) {
+				return arguments.tools.map( t => t.function.name ?: t.name ?: "" );
+			}
+
+			it( "leaves a turn that is not an embed's alone, and never reads the database for it", function() {
+				var broken = new bxagents.models.embed.EmbedFilterMiddleware( { isLive : () => throw( type = "Test.Touched", message = "the filter read the embeds" ), get : () => throw( type = "Test.Touched", message = "the filter read the embeds" ) } );
+				var packet = { tools : openAiTools() };
+
+				broken.beforeLLMCall( { chatRequest : requestOf(), dataPacket : packet } );
+				expect( namesOf( packet.tools ) ).toBe( [ "docs_search", "now", "delete_all", "note_remember" ] );
+				expect( broken.beforeToolCall( { chatRequest : requestOf(), toolName : "delete_all" } ).isTerminal() ).toBeFalse();
+				// a request that has no usage metadata at all is not an embed turn either
+				expect( broken.beforeToolCall( { chatRequest : {}, toolName : "delete_all" } ).isTerminal() ).toBeFalse();
+			} );
+
+			it( "takes the tools that are not listed out of what the model is offered", function() {
+				var packet = { tools : openAiTools() };
+
+				filter.beforeLLMCall( { chatRequest : requestOf( embed.id ), dataPacket : packet } );
+
+				// `now@bxai` on the list is `now` to the model
+				expect( namesOf( packet.tools ) ).toBe( [ "docs_search", "now" ] );
+			} );
+
+			it( "does the same for Claude's shape and Gemini's groups", function() {
+				var claude = { tools : [ { name : "docs_search" }, { name : "delete_all" } ] };
+				filter.beforeLLMCall( { chatRequest : requestOf( embed.id ), dataPacket : claude } );
+				expect( namesOf( claude.tools ) ).toBe( [ "docs_search" ] );
+
+				var gemini = { tools : [ { functionDeclarations : [ { name : "docs_search" }, { name : "delete_all" } ] }, { functionDeclarations : [ { name : "delete_all" } ] } ] };
+				filter.beforeLLMCall( { chatRequest : requestOf( embed.id ), dataPacket : gemini } );
+				expect( gemini.tools ).toHaveLength( 1 );
+				expect( gemini.tools[ 1 ].functionDeclarations.map( d => d.name ) ).toBe( [ "docs_search" ] );
+			} );
+
+			it( "refuses a call to a tool that is not listed, even one the model was never offered", function() {
+				var refused = filter.beforeToolCall( { chatRequest : requestOf( embed.id ), toolName : "delete_all" } );
+
+				expect( refused.isTerminal() ).toBeTrue();
+				expect( filter.beforeToolCall( { chatRequest : requestOf( embed.id ), toolName : "docs_search" } ).isTerminal() ).toBeFalse();
+				expect( filter.beforeToolCall( { chatRequest : requestOf( embed.id ), toolName : "now" } ).isTerminal() ).toBeFalse();
+				expect( filter.beforeToolCall( { chatRequest : requestOf( embed.id ), toolName : "" } ).isTerminal() ).toBeTrue();
+			} );
+
+			it( "follows the embed's list as the admin changes it, with no restart", function() {
+				embeds.update( embed.id, { tools : [ "docs_search" ] } );
+				expect( filter.beforeToolCall( { chatRequest : requestOf( embed.id ), toolName : "now" } ).isTerminal() ).toBeTrue();
+
+				embeds.update( embed.id, { tools : [] } );
+				expect( filter.beforeToolCall( { chatRequest : requestOf( embed.id ), toolName : "docs_search" } ).isTerminal() ).toBeTrue();
+			} );
+
+			it( "allows no tool at all when the embed is off, expired, gone or cannot be read", function() {
+				embeds.update( embed.id, { enabled : false } );
+				expect( filter.beforeToolCall( { chatRequest : requestOf( embed.id ), toolName : "docs_search" } ).isTerminal() ).toBeTrue();
+				var packet = { tools : openAiTools() };
+				filter.beforeLLMCall( { chatRequest : requestOf( embed.id ), dataPacket : packet } );
+				expect( packet.tools ).toBeEmpty();
+
+				embeds.update( embed.id, { enabled : true, expires : dateAdd( "h", -1, now() ) } );
+				expect( filter.beforeToolCall( { chatRequest : requestOf( embed.id ), toolName : "docs_search" } ).isTerminal() ).toBeTrue();
+				expect( filter.beforeToolCall( { chatRequest : requestOf( "emb_0000000000" ), toolName : "docs_search" } ).isTerminal() ).toBeTrue();
+
+				var unreadable = new bxagents.models.embed.EmbedFilterMiddleware( { isLive : () => throw( type = "Test.Down", message = "database is down" ), get : () => throw( type = "Test.Down", message = "database is down" ) } );
+				expect( unreadable.beforeToolCall( { chatRequest : requestOf( embed.id ), toolName : "docs_search" } ).isTerminal() ).toBeTrue();
+			} );
+
+		} );
+	}
+
+}

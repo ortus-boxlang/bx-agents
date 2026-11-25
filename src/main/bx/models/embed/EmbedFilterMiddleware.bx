@@ -1,0 +1,117 @@
+import bxModules.bxai.models.middleware.AiMiddlewareResult;
+
+/**
+ * The embed filter: for a turn of an embed's visitor, only the tools on that embed's list may run. Always on, on every agent.
+ *
+ * A turn that is not an embed turn is left alone: the request names no embed, so the filter returns at once and reads no
+ * database. A turn of an embed has `usageMetadata.embedId`, which only EmbedPublic and TurnRunner set from a verified session
+ * (a client cannot send it).
+ *
+ * It does both of what the spike proved (plans/embed-filter-findings.md):
+ *  - `beforeLLMCall` takes the tools that are not on the list out of the request, so the model is never offered them and does
+ *    not spend a turn on one;
+ *  - `beforeToolCall` refuses a call to a tool that is not on the list, so a model that names one anyway (from its training or
+ *    an earlier turn) gets a refusal and the tool does not run. Hiding alone is not a guard.
+ *
+ * It fails closed: an embed that cannot be read, is off, expired or gone allows no tool at all.
+ *
+ * A tool is compared by its name without a `@module` suffix, since the model is told `now` for a tool the agent lists as
+ * `now@bxai`.
+ */
+class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
+
+	/**
+	 * @embeds An EmbedService; when omitted it is made on first use from the app's shared chat database
+	 */
+	function init( any embeds ) {
+		super.init()
+		variables.embeds = arguments.embeds ?: nullValue()
+		variables.name = "EmbedFilter"
+		variables.description = "Lets a visitor of an embed use only the tools the embed lists"
+		return this
+	}
+
+	AiMiddlewareResult function beforeLLMCall( required struct context ) {
+		var embedId = embedIdOf( arguments.context.chatRequest ?: "" )
+		if ( !len( embedId ) ) {
+			return AiMiddlewareResult.continue()
+		}
+		var packet = arguments.context.dataPacket ?: {}
+		if ( !isArray( packet.tools ?: "" ) || !packet.tools.len() ) {
+			return AiMiddlewareResult.continue()
+		}
+		var allowed = allowedTools( embedId )
+		packet.tools = packet.tools.map( schema => keep( schema, allowed ) ).filter( schema => !isNull( schema ) )
+		return AiMiddlewareResult.continue()
+	}
+
+	AiMiddlewareResult function beforeToolCall( required struct context ) {
+		var embedId = embedIdOf( arguments.context.chatRequest ?: "" )
+		if ( !len( embedId ) ) {
+			return AiMiddlewareResult.continue()
+		}
+		if ( !isListed( toString( arguments.context.toolName ?: "" ), allowedTools( embedId ) ) ) {
+			return AiMiddlewareResult.reject( "That tool is not available here." )
+		}
+		return AiMiddlewareResult.continue()
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return The embed this request is a turn of, or blank for any other request
+	 */
+	private string function embedIdOf( required any chatRequest ) {
+		try {
+			var meta = arguments.chatRequest.getUsageMetadata()
+			return isStruct( meta ) ? toString( meta.embedId ?: "" ) : ""
+		} catch ( any e ) {
+			// a request type that carries no usage metadata is not an embed turn
+			return ""
+		}
+	}
+
+	/**
+	 * @return The names of the tools the embed lists now, without a module suffix; empty (so nothing runs) when the embed is
+	 *         not live or cannot be read. Read for every call, so an admin's change takes effect at once.
+	 */
+	private array function allowedTools( required string embedId ) {
+		try {
+			var service = embedService()
+			if ( !service.isLive( arguments.embedId ) ) {
+				return []
+			}
+			return service.get( arguments.embedId ).tools.map( t => lCase( listFirst( t, "@" ) ) )
+		} catch ( any e ) {
+			return []
+		}
+	}
+
+	private any function embedService() {
+		if ( isNull( variables.embeds ) ) {
+			variables.embeds = new "models.store.EmbedService@bxagents"( new "models.store.ChatStore@bxagents"( "" ) )
+		}
+		return variables.embeds
+	}
+
+	private boolean function isListed( required string name, required array allowed ) {
+		return arguments.allowed.contains( lCase( listFirst( arguments.name, "@" ) ) )
+	}
+
+	/**
+	 * @schema One tool in the provider's format: OpenAI `{ function : { name } }`, Claude `{ name }`, or Gemini's group `{ functionDeclarations : [ { name } ] }`
+	 *
+	 * @return The tool when it is listed, null when it is not, and a Gemini group cut down to its listed tools (null when none is left)
+	 */
+	private any function keep( required any schema, required array allowed ) {
+		var schema = arguments.schema
+		var allowed = arguments.allowed
+		if ( isStruct( schema ) && isArray( schema.functionDeclarations ?: "" ) ) {
+			schema.functionDeclarations = schema.functionDeclarations.filter( d => isListed( d.name ?: "", allowed ) )
+			return schema.functionDeclarations.len() ? schema : nullValue()
+		}
+		var name = isStruct( schema ) ? ( schema.function.name ?: schema.name ?: "" ) : ""
+		return isListed( toString( name ), allowed ) ? schema : nullValue()
+	}
+
+}
