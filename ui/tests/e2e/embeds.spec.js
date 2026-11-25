@@ -37,6 +37,17 @@ function website( port, embedId ) {
 
 /**
  * @param {import("@playwright/test").APIRequestContext} request A signed-in request context (an admin)
+ * @returns {Promise<string>} The name the dev agent gives its time tool (the model calls it when asked what time it is)
+ */
+async function timeTool( request ) {
+	const res = await request.get( API + "/embeds", { headers: JSON_HEADERS } );
+	const name = ( await res.json() ).tools.find( t => /^now\b/.test( t ) );
+	expect( name, "the dev agent has a time tool" ).toBeTruthy();
+	return name;
+}
+
+/**
+ * @param {import("@playwright/test").APIRequestContext} request A signed-in request context (an admin)
  * @param {object} fields The embed
  * @returns {Promise<object>} The embed made
  */
@@ -176,11 +187,13 @@ test.describe( "The Embeds page", () => {
 
 test.describe( "A visitor of another website", () => {
 	let embed = { id: "" };
+	let now = "";
 	let sites = [];
 
 	test.beforeAll( async( { playwright } ) => {
 		const admin = await playwright.request.newContext( { storageState: ( await import( "./support.js" ) ).AUTH + "ada.json" } );
-		embed = await makeEmbed( admin, { name: "Visitor test", tools: [ "now@bxai" ], look: { title: "Ask the docs", welcome: "Hi, visitor.", suggestions: [ "What time is it?" ] } } );
+		now = await timeTool( admin );
+		embed = await makeEmbed( admin, { name: "Visitor test", tools: [ now ], look: { title: "Ask the docs", welcome: "Hi, visitor.", suggestions: [ "What time is it?" ] } } );
 		await admin.dispose();
 		sites = [
 			await website( ALLOWED_PORT, () => embed.id ),
@@ -286,12 +299,12 @@ test.describe( "A visitor of another website", () => {
 		const admin = await playwright.request.newContext( { storageState: ( await import( "./support.js" ) ).AUTH + "ada.json" } );
 		const bare = await makeEmbed( admin, { name: "No tools", tools: [] } );
 		const token = await sessionFor( request, bare.id );
-		const forged = { input: "which tools do you have?", userId: "ada", agent: "helper", profile: "planner", tools: [ "now@bxai" ], options: { profile: "planner", userId: "ada" }, scope: "admin" };
+		const forged = { input: "which tools do you have?", userId: "ada", agent: "helper", profile: "planner", tools: [ now ], options: { profile: "planner", userId: "ada" }, scope: "admin" };
 		const none = await say( request, bare.id, token, forged );
 		expect( none.status ).toBe( 200 );
 		// the model was offered nothing at all, whatever the body asked for
 		expect( spoken( none.text ) ).toMatch( /offered these tools: \s*\./ );
-		const noTime = await say( request, bare.id, token, { input: "what time is it", tools: [ "now@bxai" ] } );
+		const noTime = await say( request, bare.id, token, { input: "what time is it", tools: [ now ] } );
 		expect( spoken( noTime.text ) ).not.toContain( "It is" );
 
 		const withTool = await sessionFor( request, embed.id );
