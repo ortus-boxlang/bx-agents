@@ -22,26 +22,39 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 
 	any function run( required any context, required string args ) {
 		var chat = arguments.context.chat()
+		var reply = arguments.context.reply()
 		var wanted = trim( arguments.args )
 		if ( len( wanted ) ) {
 			var skill = chat.skillText( wanted )
 			if ( skill.isEmpty() ) {
-				return arguments.context.reply().warn( "There is no skill called [#wanted#]. Type /skills to see them." )
+				return reply.warn( "There is no skill called [#wanted#]. Type /skills to see them." )
 			}
-			var head = skill.name & " (" & skill.origin & ")" & ( len( skill.savedAt ?: "" ) ? ", saved " & skill.savedAt : "" )
-			var cut = skill.truncated ? char( 10 ) & "(cut: the skill is #skill.size# characters long)" : ""
-			return arguments.context.reply().text( head & char( 10 ) & char( 10 ) & skill.body & cut )
+			reply.styled().accentBold( skill.name ).muted( " (" & skill.origin & ")" ).print()
+			if ( len( skill.savedAt ?: "" ) ) {
+				reply.indent( "saved " & skill.savedAt )
+			}
+			reply.blank()
+			reply.text( skill.body )
+			if ( skill.truncated ) {
+				reply.warn( "(cut: the skill is #skill.size# characters long)" )
+			}
+			return reply
 		}
 		var skills = chat.skills()
 		if ( !skills.len() ) {
-			return arguments.context.reply().text( "The agent has no skills." )
+			return reply.text( "The agent has no skills." )
 		}
-		// The name column is as wide as the longest name: a fixed 24 ran long names into the origin column
-		var nameWidth = skills.map( ( s ) => len( s.name ) ).reduce( ( widest, n ) => max( widest, n ), 24 ) + 2
-		var lines = skills.map( function( s ) {
-			return left( s.name & repeatString( " ", nameWidth ), nameWidth ) & left( s.origin & repeatString( " ", 10 ), 10 ) & s.description
-		} )
-		return arguments.context.reply().text( "Skills:" & char( 10 ) & lines.toList( char( 10 ) ) & char( 10 ) & "Read one with /skills <name>." )
+		reply.header( "Skills" )
+		for ( var s in skills ) {
+			reply.styled()
+				.accentBold( s.name )
+				.text( repeatString( " ", max( 2, 26 - len( s.name ) ) ) )
+				.muted( s.origin )
+				.text( "  " )
+				.text( s.description )
+				.print()
+		}
+		return reply.indent( "Read one with /skills <name>." )
 	}
 
 }

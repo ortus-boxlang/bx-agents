@@ -58,15 +58,24 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 
 	private any function show( required any reply, required any terminal ) {
 		var look = arguments.terminal.promptLook()
-		arguments.reply.keyValues( [
-			[ "prompt", look.prompt ],
-			[ "top", names( look.top ) ],
-			[ "bottom", names( look.bottom ) ]
-		] )
-		arguments.reply.grid( [ { width : 14, align : "left" }, { width : 0 } ], look.styles.map( s => [ s.name & ( s.name == look.prompt ? " *" : "" ), s.description ] ) )
-		arguments.reply.grid( [ { width : 10, align : "left" }, { width : 20, align : "left" }, { width : 0 } ], look.widgets.map( w => [ w.name, w.example, w.description ] ) )
-		arguments.reply.text( "/prompt box · /prompt top agent clock · /prompt top +git -clock · /prompt bottom none. Changes last for this chat; Agent.yml's tui: block sets the start." )
-		return arguments.reply
+		var reply = arguments.reply
+		reply.header( "Prompt" )
+		reply.labelValue( "Style", look.prompt )
+		reply.labelValue( "Top bar", names( look.top ) )
+		reply.labelValue( "Bottom bar", names( look.bottom ) )
+		reply.blank()
+		reply.styled().accentBold( "Styles" ).print()
+		for ( var s in look.styles ) {
+			reply.styled().segment( s.name & ( s.name == look.prompt ? " *" : "" ), s.name == look.prompt ? "accentBold" : "muted" ).text( "  " ).muted( s.description ).print()
+		}
+		reply.blank()
+		reply.styled().accentBold( "Widgets" ).print()
+		for ( var w in look.widgets ) {
+			reply.styled().accent( w.name ).text( "  " ).muted( w.example ).text( "  " ).text( w.description ).print()
+		}
+		reply.blank()
+		reply.indent( "/prompt box · /prompt top agent clock · /prompt top +git -clock · /prompt bottom none. Changes last for this chat; Agent.yml's tui: block sets the start." )
+		return reply
 	}
 
 	private any function widgets( required any reply, required any terminal, required string place, required array rest ) {

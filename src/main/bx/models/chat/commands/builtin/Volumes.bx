@@ -21,14 +21,23 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 	}
 
 	any function run( required any context, required string args ) {
+		var reply = arguments.context.reply()
 		var volumes = arguments.context.chat().volumes()
 		if ( !volumes.len() ) {
-			return arguments.context.reply().text( "No volume list is available in this mode." )
+			return reply.text( "No volume list is available in this mode." )
 		}
-		var lines = volumes.map( function( v ) {
-			return left( v.name & repeatString( " ", 14 ), 14 ) & left( ( v.mode == "rw" ? "read and write" : "read only" ) & repeatString( " ", 16 ), 16 ) & v.description
-		} )
-		return arguments.context.reply().text( "Volumes:" & char( 10 ) & lines.toList( char( 10 ) ) )
+		reply.header( "Volumes" )
+		for ( var v in volumes ) {
+			var modeLabel = v.mode == "rw" ? "read and write" : "read only"
+			reply.styled()
+				.accentBold( v.name )
+				.text( repeatString( " ", max( 2, 14 - len( v.name ) ) ) )
+				.segment( modeLabel, v.mode == "rw" ? "ok" : "warn" )
+				.text( repeatString( " ", max( 2, 16 - len( modeLabel ) ) ) )
+				.muted( v.description )
+				.print()
+		}
+		return reply
 	}
 
 }

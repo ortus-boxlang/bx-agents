@@ -20,15 +20,17 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 		var chat = arguments.context.chat()
 		var reply = arguments.context.reply()
 		var info = chat.modelInfo()
-		reply.text( "Model:   " & ( len( info.model ?: "" ) ? info.model : "not known" ) )
+		reply.header( "Model" )
+		reply.labelValue( "Model", len( info.model ?: "" ) ? info.model : "not known" )
 		if ( len( info.profile ?: "" ) ) {
-			reply.text( "Profile: " & info.profile )
+			reply.labelValue( "Profile", info.profile )
 		}
 		for ( var line in new "models.chat.ModelFactsLines@bxagents"().of( chat.modelFacts() ) ) {
-			reply.text( left( line[ 1 ] & ":" & repeatString( " ", 9 ), 9 ) & line[ 2 ] )
+			reply.labelValue( line[ 1 ], line[ 2 ] )
 		}
 		if ( arguments.context.transport() == "tui" && chat.switchable().ok ) {
-			reply.text( "Type /profile to pick another, or /default to go back to the app's default." )
+			reply.blank()
+			reply.indent( "Type /profile to pick another, or /default to go back to the app's default." )
 		}
 		return reply
 	}

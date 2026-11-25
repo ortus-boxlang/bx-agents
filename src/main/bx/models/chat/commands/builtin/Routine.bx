@@ -69,7 +69,11 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 				if ( !files.len() ) {
 					return reply.text( "No reports saved yet." )
 				}
-				return reply.grid( [ { width : 0 }, { width : 0, align : "right" }, { width : 0 } ], files.map( f => [ f.file, f.bytes & " bytes", dateTimeFormat( f.savedAt, "yyyy-MM-dd HH:mm" ) ] ) )
+				reply.header( "Reports for #ref#" )
+				for ( var f in files ) {
+					reply.styled().accent( f.file ).text( "  " ).muted( f.bytes & " bytes  " & dateTimeFormat( f.savedAt, "yyyy-MM-dd HH:mm" ) ).print()
+				}
+				return reply
 			case "report":
 				if ( words.len() < 3 ) {
 					return reply.warn( "Which file? Try /routine #ref# reports to see them." )
@@ -89,18 +93,22 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 	}
 
 	private any function show( required any reply, required struct r ) {
-		var rows = [
-			[ "Name", r.name ],
-			[ "Schedule", ( r.scheduleText ?: r.schedule ) & " (" & r.schedule & ")" ],
-			[ "Status", r.statusText ?: r.status ],
-			[ "Next run", len( r.nextRunText ?: "" ) ? r.nextRunText : "none" ],
-			[ "Last run", len( r.lastRunText ?: "" ) ? r.lastRunText & ", " & r.lastStatus : "never" ],
-			[ "Answers go to", r.destination == "routine" ? "its own conversation" : r.destination & " " & r.destinationChat ]
-		]
+		var reply = arguments.reply
+		reply.header( r.name )
+		reply.labelValue( "Schedule", ( r.scheduleText ?: r.schedule ) & " (" & r.schedule & ")" )
+		var statusStyle = r.status == "active" ? "ok" : r.status == "paused" ? "warn" : "muted"
+		reply.styled().muted( "Status:" ).text( " " ).segment( r.statusText ?: r.status, statusStyle ).print()
+		reply.labelValue( "Next run", len( r.nextRunText ?: "" ) ? r.nextRunText : "none" )
+		reply.labelValue( "Last run", len( r.lastRunText ?: "" ) ? r.lastRunText & ", " & r.lastStatus : "never" )
+		reply.labelValue( "Answers go to", r.destination == "routine" ? "its own conversation" : r.destination & " " & r.destinationChat )
 		if ( len( r.lastError ?: "" ) ) {
-			rows.append( [ "Last error", r.lastError ] )
+			reply.styled().muted( "Last error:" ).text( " " ).error( r.lastError ).print()
 		}
-		return arguments.reply.keyValues( rows ).text( r.prompt ?: "", "plain" )
+		if ( len( r.prompt ?: "" ) ) {
+			reply.blank()
+			reply.text( r.prompt, "plain" )
+		}
+		return reply
 	}
 
 }

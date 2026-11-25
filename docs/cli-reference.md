@@ -666,7 +666,7 @@ tui:
     bottom: [ folder, git, ctx, profile ]
 ```
 
-Tables in an answer are drawn with rounded borders in the accent colour, a bold header and the column alignment of the table; cells wrap on a narrow terminal. Code blocks are coloured by language.
+Tables in an answer are drawn with rounded borders in the accent colour, a bold header and the column alignment of the table; cells wrap on a narrow terminal. Code blocks are coloured by language. Commands can mix styles within a line: `/help` shows each command name in bold teal with its description in gray, `/info` shows labels in gray with values in teal, and `/volumes` marks read-write volumes in green and read-only in amber. See [the Reply API](conventions/extensions.md#the-reply-api) for how extension commands produce styled output.
 
 #### Models in the chat
 

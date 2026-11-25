@@ -24,9 +24,11 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 		var reply = arguments.context.reply()
 		var outcome = arguments.context.chat().ping( arguments.args )
 		if ( !outcome.ok ) {
-			return reply.warn( "#outcome.model#: #outcome.reason#" )
+			reply.styled().error( outcome.model ).muted( ": " & outcome.reason ).print()
+			return reply
 		}
-		return reply.ok( "#outcome.model# answered in #outcome.ms# ms." & ( outcome.cached ?: false ? " (a recent test, not repeated)" : "" ) )
+		reply.styled().accentBold( outcome.model ).text( " " ).ok( "answered in #outcome.ms# ms" ).muted( outcome.cached ?: false ? " (cached)" : "" ).print()
+		return reply
 	}
 
 }

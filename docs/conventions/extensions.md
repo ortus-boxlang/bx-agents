@@ -46,7 +46,86 @@ class {
 
 Run `bxAgents chat` and type `/hello Ada`. `/extensions` lists what is loaded.
 
-A command method is called with the `agentContext` (the conversation and nothing else; the same object the built-in commands get) and the text after the command name. It returns a `Reply` (`agentContext.reply().ok( "..." )`, `.warn()`, `.keyValues()`, `.grid()`, `.choose()`) or just a string. If it throws, the person sees a warning that names the extension and the chat carries on.
+A command method is called with the `agentContext` (the conversation and nothing else; the same object the built-in commands get) and the text after the command name. It returns a `Reply` or just a string. If it throws, the person sees a warning that names the extension and the chat carries on.
+
+### The Reply API
+
+Build a reply by chaining methods on `agentContext.reply()`. Every method returns the reply, so they chain. The terminal, the web page and the gateways each draw the blocks their own way.
+
+**Single-style blocks** — the whole block is one color:
+
+| Method | What it draws |
+|---|---|
+| `.text( s )` | Muted gray text (the default) |
+| `.text( s, "accent" )` | Teal accent text |
+| `.ok( s )` | Green text (success) |
+| `.warn( s )` | Amber text (warning) |
+| `.header( s )` | Accent header for a section |
+| `.line( s )` | A printed line; `.line()` with no argument is a blank line |
+| `.blank()` | A blank line (alias for `.line()`) |
+
+**Mixed-style lines** — different colors within one line. Start with `.styled()`, chain segment methods, then `.print()` to commit the line:
+
+```js
+agentContext.reply()
+    .styled()
+        .accentBold( "/deploy" )
+        .text( "  " )
+        .muted( "ship it to production" )
+        .print()
+```
+
+Segment methods: `.text( s )` (plain), `.muted( s )` (gray), `.accent( s )` (teal), `.accentBold( s )` (bold teal), `.ok( s )` (green), `.warn( s )` (amber), `.error( s )` (red), `.bold( s )` (bold). For a style chosen at runtime: `.segment( s, styleName )`.
+
+Dynamic compound styles work too, like CommandBox's print helper — combine foreground, background and modifiers in the method name:
+
+```js
+.styled().boldRedOnBlue( "CRITICAL" ).text( "  " ).muted( "disk full" ).print()
+```
+
+Recognized tokens: foreground (`accent`, `ok`, `muted`, `warn`, `error`, `plain`, `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `gray`), background (`onBlack` through `onWhite`), modifiers (`bold`, `dim`, `italic`, `underlined`, `blink`, `reversed`, `hidden`, `crossedout`).
+
+**Convenience methods** — shortcuts for common patterns, each produces a mixed-style line:
+
+| Method | What it draws |
+|---|---|
+| `.commandLine( name, hint )` | Bold teal name + gray hint (for `/help`-style lists) |
+| `.labelValue( label, value )` | Gray label + teal value (for `/info`-style facts) |
+| `.statusLine( label, boolean )` | Gray label + green "on" or red "off" |
+| `.indent( text )` | Indented gray text (like CommandBox's `indentedLine`) |
+| `.bullet( text )` | Teal dot + gray text |
+| `.divider()` | A horizontal rule |
+
+**Structured blocks:**
+
+| Method | What it draws |
+|---|---|
+| `.keyValues( rows )` | Label-value pairs; `rows` is `[ [ label, value ], ... ]` |
+| `.grid( columns, rows )` | A table; `columns` is `[ { width, align }, ... ]` |
+| `.choose( title, options )` | Buttons to pick from; `options` is `[ { label, hint, line }, ... ]` |
+| `.transcript( messages )` | Conversation messages; `messages` is `[ { role, text }, ... ]` |
+| `.file( name, mime, text )` | A file for the client to save or download |
+| `.screen( name )` | Opens a terminal-only screen (e.g. `"notes"`, `"vault"`) |
+
+**Effects** — things the caller does to its own state:
+
+| Method | What it does |
+|---|---|
+| `.reset()` | Clears the conversation from the screen |
+| `.conversation( id, title )` | Switches to another conversation |
+| `.quit()` | Leaves the chat |
+
+All methods return the reply, so they chain:
+
+```js
+return agentContext.reply()
+    .header( "Deploy status" )
+    .statusLine( "Connected", true )
+    .labelValue( "Target", "production" )
+    .styled().ok( "3 services" ).muted( " running" ).print()
+    .blank()
+    .indent( "Type /deploy run to start." )
+```
 
 ## Annotations
 

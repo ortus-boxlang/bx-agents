@@ -1,0 +1,127 @@
+/**
+ * Builds one line of mixed-style text for a Reply. Chain segment methods, then call print()
+ * to commit the line and return to the Reply.
+ *
+ * Named methods for the common cases:
+ *   .text( s )        plain text
+ *   .muted( s )       gray hint text
+ *   .accent( s )      teal accent
+ *   .accentBold( s )  bold teal
+ *   .ok( s )          green
+ *   .warn( s )        amber
+ *   .error( s )       red
+ *   .bold( s )        bold default
+ *   .segment( s, styleName )  runtime-chosen style
+ *
+ * Dynamic methods via onMissingMethod() — parse the method name into a Style combination.
+ * Any combination of foreground color, background color, and modifiers works:
+ *   .red( s )              red foreground
+ *   .onBlue( s )           blue background
+ *   .boldRed( s )          bold + red foreground
+ *   .redOnBlue( s )        red foreground + blue background
+ *   .boldRedOnBlue( s )    bold + red foreground + blue background
+ *   .italicUnderlined( s ) italic + underlined
+ *   .accentOnBlack( s )    accent foreground + black background
+ *   .dimGray( s )          dim + gray foreground
+ *
+ * Recognized tokens in the method name (case-insensitive):
+ *   Foreground: accent, ok, muted, warn, error, plain,
+ *               black, red, green, yellow, blue, magenta, cyan, white, gray
+ *   Background: onBlack, onRed, onGreen, onYellow, onBlue, onMagenta, onCyan, onWhite
+ *   Modifiers:  bold, dim, italic, underlined, blink, reversed, hidden, crossedout
+ *   Filler:     text, line, segment (ignored, for readability)
+ */
+class {
+
+	/**
+	 * @reply The parent Reply to commit lines into
+	 */
+	function init( required any reply ) {
+		variables.reply = arguments.reply
+		variables.segments = []
+		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Named convenience methods
+	// ----------------------------------------------------------------------------------
+
+	function text( required string s ) {
+		return addSegment( s, "plain" )
+	}
+
+	function muted( required string s ) {
+		return addSegment( s, "muted" )
+	}
+
+	function accent( required string s ) {
+		return addSegment( s, "accent" )
+	}
+
+	function accentBold( required string s ) {
+		return addSegment( s, "accentBold" )
+	}
+
+	function ok( required string s ) {
+		return addSegment( s, "ok" )
+	}
+
+	function warn( required string s ) {
+		return addSegment( s, "warn" )
+	}
+
+	function error( required string s ) {
+		return addSegment( s, "error" )
+	}
+
+	function bold( required string s ) {
+		return addSegment( s, "bold" )
+	}
+
+	/**
+	 * Runtime-chosen style: .segment( msg, status == "ok" ? "green" : "red" )
+	 */
+	function segment( required string s, required string styleName ) {
+		return addSegment( s, styleName )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Dynamic method dispatch — CommandBox-style combinatorial names
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Handles dynamic style methods like .boldRedOnBlue( "ERROR" ).
+	 * The method name is parsed into foreground + background + modifier tokens.
+	 */
+	function onMissingMethod( required string missingMethodName, required struct missingMethodArguments ) {
+		var s = missingMethodArguments[ 1 ] ?: ""
+		if ( !len( s ) ) {
+			return this
+		}
+		return addSegment( s, missingMethodName )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Commit
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Commits this styled line into the parent Reply and returns the Reply for continued chaining.
+	 */
+	function print() {
+		if ( variables.segments.len() ) {
+			variables.reply.blocks().append( { type : "styled", segments : variables.segments } )
+		}
+		return variables.reply
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Internal
+	// ----------------------------------------------------------------------------------
+
+	private function addSegment( required string text, required string styleName ) {
+		variables.segments.append( { text : arguments.text, style : lCase( arguments.styleName ) } )
+		return this
+	}
+
+}

@@ -787,9 +787,28 @@ public final class ChatScreen implements AutoCloseable {
 	}
 
 	/**
-	 * Resolves a named style to the corresponding theme style.
+	 * Prints a styled line: a list of segments, each with its own style. Used by the Reply's
+	 * "styled" block type, where a command mixes colors within one line (bold command name +
+	 * muted description, for example).
 	 *
-	 * @param name style name such as {@code accent}, {@code ok}, {@code warn}, or {@code error}
+	 * @param segments list of maps with "text" and "style" keys
+	 */
+	public void printStyled( List<Map<String, Object>> segments ) {
+		Row r = Row.of().add( " · ", theme.muted );
+		for ( Map<String, Object> seg : segments ) {
+			String	text	= String.valueOf( seg.getOrDefault( "text", "" ) );
+			String	style	= String.valueOf( seg.getOrDefault( "style", "plain" ) );
+			r.add( text, styleOf( style ) );
+		}
+		out( r.toLine() );
+	}
+
+	/**
+	 * Resolves a named style to the corresponding theme style. Handles both single-token names
+	 * (accent, ok, muted, warn, error, bold, plain) and compound names parsed from dynamic
+	 * StyledLine methods (boldRedOnBlue, italicUnderlined, etc.).
+	 *
+	 * @param name style name, lowercased
 	 *
 	 * @return matching theme style, or the muted style for an unknown name
 	 */
@@ -797,15 +816,277 @@ public final class ChatScreen implements AutoCloseable {
 		switch ( name ) {
 			case "accent" :
 				return theme.accent;
+			case "accentbold" :
+				return theme.accentBold;
 			case "ok" :
 				return theme.ok;
+			case "muted" :
+				return theme.muted;
 			case "warn" :
 				return theme.warn;
 			case "error" :
 				return theme.error;
-			default :
-				return theme.muted;
+			case "bold" :
+				return theme.bold;
+			case "plain" :
+				return theme.plain;
 		}
+		return parseCompoundStyle( name );
+	}
+
+	/**
+	 * Parses a compound style name like "boldredonblue" into a TamboUI Style by tokenizing
+	 * foreground colors, background colors, and modifiers. Tokens are matched greedily from
+	 * the start of the remaining string, case-insensitive. Unrecognized tokens are skipped.
+	 *
+	 * @param name the compound style name, already lowercased
+	 *
+	 * @return the composed Style, or theme.muted if nothing was recognized
+	 */
+	private dev.tamboui.style.Style parseCompoundStyle( String name ) {
+		dev.tamboui.style.Style	style	= dev.tamboui.style.Style.EMPTY;
+		boolean					found	= false;
+		int						pos		= 0;
+
+		while ( pos < name.length() ) {
+			String rest = name.substring( pos );
+
+			// Background colors: onBlack, onRed, onGreen, onYellow, onBlue, onMagenta, onCyan, onWhite
+			if ( rest.startsWith( "onblack" ) ) {
+				style	= style.onBlack();
+				found	= true;
+				pos		+= 7;
+				continue;
+			}
+			if ( rest.startsWith( "onred" ) ) {
+				style	= style.onRed();
+				found	= true;
+				pos		+= 5;
+				continue;
+			}
+			if ( rest.startsWith( "ongreen" ) ) {
+				style	= style.onGreen();
+				found	= true;
+				pos		+= 7;
+				continue;
+			}
+			if ( rest.startsWith( "onyellow" ) ) {
+				style	= style.onYellow();
+				found	= true;
+				pos		+= 8;
+				continue;
+			}
+			if ( rest.startsWith( "onblue" ) ) {
+				style	= style.onBlue();
+				found	= true;
+				pos		+= 6;
+				continue;
+			}
+			if ( rest.startsWith( "onmagenta" ) ) {
+				style	= style.onMagenta();
+				found	= true;
+				pos		+= 9;
+				continue;
+			}
+			if ( rest.startsWith( "oncyan" ) ) {
+				style	= style.onCyan();
+				found	= true;
+				pos		+= 6;
+				continue;
+			}
+			if ( rest.startsWith( "onwhite" ) ) {
+				style	= style.onWhite();
+				found	= true;
+				pos		+= 7;
+				continue;
+			}
+
+			// Modifiers (check longer ones first to avoid partial matches)
+			if ( rest.startsWith( "crossedout" ) ) {
+				style	= style.crossedOut();
+				found	= true;
+				pos		+= 10;
+				continue;
+			}
+			if ( rest.startsWith( "underlined" ) ) {
+				style	= style.underlined();
+				found	= true;
+				pos		+= 10;
+				continue;
+			}
+			if ( rest.startsWith( "reversed" ) ) {
+				style	= style.reversed();
+				found	= true;
+				pos		+= 8;
+				continue;
+			}
+			if ( rest.startsWith( "italic" ) ) {
+				style	= style.italic();
+				found	= true;
+				pos		+= 6;
+				continue;
+			}
+			if ( rest.startsWith( "hidden" ) ) {
+				style	= style.hidden();
+				found	= true;
+				pos		+= 6;
+				continue;
+			}
+			if ( rest.startsWith( "blink" ) ) {
+				style	= style.slowBlink();
+				found	= true;
+				pos		+= 5;
+				continue;
+			}
+			if ( rest.startsWith( "bold" ) ) {
+				style	= style.bold();
+				found	= true;
+				pos		+= 4;
+				continue;
+			}
+			if ( rest.startsWith( "dim" ) ) {
+				style	= style.dim();
+				found	= true;
+				pos		+= 3;
+				continue;
+			}
+
+			// Theme foreground colors
+			if ( rest.startsWith( "accentbold" ) ) {
+				style	= style.fg( theme.accentBold.fg().orElse( dev.tamboui.style.Color.CYAN ) );
+				style	= style.bold();
+				found	= true;
+				pos		+= 10;
+				continue;
+			}
+			if ( rest.startsWith( "accent" ) ) {
+				style	= applyThemeFg( style, "accent" );
+				found	= true;
+				pos		+= 6;
+				continue;
+			}
+			if ( rest.startsWith( "muted" ) ) {
+				style	= applyThemeFg( style, "muted" );
+				found	= true;
+				pos		+= 5;
+				continue;
+			}
+			if ( rest.startsWith( "warn" ) ) {
+				style	= applyThemeFg( style, "warn" );
+				found	= true;
+				pos		+= 4;
+				continue;
+			}
+			if ( rest.startsWith( "error" ) ) {
+				style	= applyThemeFg( style, "error" );
+				found	= true;
+				pos		+= 5;
+				continue;
+			}
+			if ( rest.startsWith( "ok" ) ) {
+				style	= applyThemeFg( style, "ok" );
+				found	= true;
+				pos		+= 2;
+				continue;
+			}
+			if ( rest.startsWith( "plain" ) ) {
+				found	= true;
+				pos		+= 5;
+				continue;
+			}
+
+			// ANSI foreground colors
+			if ( rest.startsWith( "magenta" ) ) {
+				style	= style.magenta();
+				found	= true;
+				pos		+= 7;
+				continue;
+			}
+			if ( rest.startsWith( "yellow" ) ) {
+				style	= style.yellow();
+				found	= true;
+				pos		+= 6;
+				continue;
+			}
+			if ( rest.startsWith( "green" ) ) {
+				style	= style.green();
+				found	= true;
+				pos		+= 5;
+				continue;
+			}
+			if ( rest.startsWith( "white" ) ) {
+				style	= style.white();
+				found	= true;
+				pos		+= 5;
+				continue;
+			}
+			if ( rest.startsWith( "black" ) ) {
+				style	= style.black();
+				found	= true;
+				pos		+= 5;
+				continue;
+			}
+			if ( rest.startsWith( "gray" ) ) {
+				style	= style.gray();
+				found	= true;
+				pos		+= 4;
+				continue;
+			}
+			if ( rest.startsWith( "cyan" ) ) {
+				style	= style.cyan();
+				found	= true;
+				pos		+= 4;
+				continue;
+			}
+			if ( rest.startsWith( "blue" ) ) {
+				style	= style.blue();
+				found	= true;
+				pos		+= 4;
+				continue;
+			}
+			if ( rest.startsWith( "red" ) ) {
+				style	= style.red();
+				found	= true;
+				pos		+= 3;
+				continue;
+			}
+
+			// Filler words — skip
+			if ( rest.startsWith( "text" ) ) {
+				pos += 4;
+				continue;
+			}
+			if ( rest.startsWith( "line" ) ) {
+				pos += 4;
+				continue;
+			}
+			if ( rest.startsWith( "segment" ) ) {
+				pos += 7;
+				continue;
+			}
+
+			// Unrecognized character — skip it
+			pos++;
+		}
+
+		return found ? style : theme.muted;
+	}
+
+	/**
+	 * Applies a theme foreground color to a style. Since Theme stores pre-built Styles,
+	 * we extract the fg color and apply it.
+	 */
+	private dev.tamboui.style.Style applyThemeFg( dev.tamboui.style.Style style, String name ) {
+		dev.tamboui.style.Style themeStyle = switch ( name ) {
+			case "accent" -> theme.accent;
+			case "ok" -> theme.ok;
+			case "muted" -> theme.muted;
+			case "warn" -> theme.warn;
+			case "error" -> theme.error;
+			default -> theme.muted;
+		};
+		// Theme styles carry their fg color; merge it into the compound style
+		return themeStyle.fg().map( c -> style.fg( c ) ).orElse( style );
 	}
 
 	/**

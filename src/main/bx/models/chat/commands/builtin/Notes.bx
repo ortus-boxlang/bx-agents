@@ -38,17 +38,33 @@ class extends="models.chat.commands.BaseCommand@bxagents" {
 					break
 				case "list":
 					var stats = kept.stats()
-					for ( var line in report.listLines( "Your notes", kept.list( "user" ), stats.user ) ) {
-						reply.text( line )
+					var userNotes = kept.list( "user" )
+					reply.styled().accentBold( "Your notes" ).muted( ": #stats.user.used# of #stats.user.limit# characters, #userNotes.len()# note#userNotes.len() == 1 ? '' : 's'#" ).print()
+					if ( userNotes.len() ) {
+						for ( var note in userNotes ) {
+							reply.styled().text( "  " ).accent( note.id ).text( "  " ).muted( note.text ).print()
+						}
+					} else {
+						reply.indent( "(none yet)" )
 					}
-					for ( var line in report.listLines( "Agent notes", kept.list( "agent" ), stats.agent ) ) {
-						reply.text( line )
+					reply.blank()
+					var agentNotes = kept.list( "agent" )
+					reply.styled().accentBold( "Agent notes" ).muted( ": #stats.agent.used# of #stats.agent.limit# characters, #agentNotes.len()# note#agentNotes.len() == 1 ? '' : 's'#" ).print()
+					if ( agentNotes.len() ) {
+						for ( var note in agentNotes ) {
+							reply.styled().text( "  " ).accent( note.id ).text( "  " ).muted( note.text ).print()
+						}
+					} else {
+						reply.indent( "(none yet)" )
 					}
 					break
 				case "stats":
-					for ( var line in report.statsLines( kept.stats() ) ) {
-						reply.text( line )
-					}
+					var nstats = kept.stats()
+					reply.header( "Notes (#nstats.provider ?: 'sqlite'#)" )
+					reply.labelValue( "User (#nstats.user.owner#)", "#nstats.user.used# / #nstats.user.limit# chars, #nstats.user.count# notes, ~#report.tokens( nstats.user.used )# tokens" )
+					reply.labelValue( "Agent (shared)", "#nstats.agent.used# / #nstats.agent.limit# chars, #nstats.agent.count# notes, ~#report.tokens( nstats.agent.used )# tokens" )
+					var totalChars = nstats.user.used + nstats.agent.used
+					reply.indent( "In the system prompt: #totalChars# characters, ~#report.tokens( totalChars )# tokens" )
 					break
 				case "add":
 					var scope = "user"
