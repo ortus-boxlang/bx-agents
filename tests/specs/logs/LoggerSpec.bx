@@ -29,6 +29,23 @@ class extends="testbox.system.BaseSpec" {
 
 			describe( "writing", function() {
 
+				it( "keeps area logs in their files without propagating them to the console", function() {
+					var logback = createObject( "java", "ortus.boxlang.runtime.logging.LoggingService" ).getInstance().getLoggerContext()
+
+					expect( logback.getLogger( "AGENT" ).isAdditive() ).toBeFalse();
+
+					Logger::log( "agent", "info", "Tool started", "sayHello" );
+					expect( linesOf( "agent" ) ).toHaveLength( 1 );
+				} );
+
+				it( "keeps fallback logs from propagating to the console", function() {
+					Logger::reset();
+					Logger::log( "agent", "info", "Tool started", "sayHello" );
+
+					var logback = createObject( "java", "ortus.boxlang.runtime.logging.LoggingService" ).getInstance().getLoggerContext()
+					expect( logback.getLogger( "BXAGENTS-AGENT" ).isAdditive() ).toBeFalse();
+				} );
+
 				it( "makes the logs folder and writes a line in the file of its area", function() {
 					Logger::log( "gateways", "info", "Connected", "telegram" );
 
