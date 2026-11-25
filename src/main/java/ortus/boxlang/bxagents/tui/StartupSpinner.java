@@ -12,7 +12,7 @@ package ortus.boxlang.bxagents.tui;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Shows the chat's working spinner while its agent and TUI are being prepared.
+ * Shows a terminal spinner while a CLI operation prepares or waits on the agent.
  */
 public final class StartupSpinner implements AutoCloseable {
 
@@ -27,7 +27,7 @@ public final class StartupSpinner implements AutoCloseable {
 	 */
 	private StartupSpinner( String message ) {
 		this.message	= message;
-		this.thread		= new Thread( this::animate, "bxagents-chat-startup-spinner" );
+		this.thread		= new Thread( this::animate, "bxagents-startup-spinner" );
 		this.thread.setDaemon( true );
 		this.thread.start();
 	}

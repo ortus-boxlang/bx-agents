@@ -60,9 +60,19 @@ class {
 		var root = projectRoot.reReplace( "[\/]+$", "" )
 		var useServer = arguments.options.server ?: false
 
-		var response = useServer
-			? invokeViaServer( root, message, arguments.options )
-			: invokeInProcess( root, message )
+		var spinner = createObject( "java", "ortus.boxlang.bxagents.tui.TuiScreen" ).isInteractive()
+			? createObject( "java", "ortus.boxlang.bxagents.tui.StartupSpinner" ).start( "waiting for response" )
+			: nullValue()
+		var response = ""
+		try {
+			response = useServer
+				? invokeViaServer( root, message, arguments.options )
+				: invokeInProcess( root, message )
+		} finally {
+			if ( !isNull( spinner ) ) {
+				spinner.close()
+			}
+		}
 
 		var asJson = arguments.options.json ?: false
 
