@@ -927,7 +927,7 @@ public final class ChatScreen implements AutoCloseable {
 		return sources.isEmpty() ? files : sources.matches( query, files, menuRows() );
 	}
 
-	/** Ctrl+V: adds the picture on the clipboard to the next message, or says why it cannot. */
+	/** Ctrl+Shift+V: adds the picture on the clipboard to the next message, or says why it cannot. */
 	private void pasteImage() {
 		if ( !imagesAllowed ) {
 			print( "warn", imagesRefusal.isEmpty() ? "The model in use cannot see images." : imagesRefusal );

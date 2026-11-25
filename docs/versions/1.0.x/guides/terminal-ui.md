@@ -65,7 +65,7 @@ Finished turns are printed as ordinary terminal text, so **your scrollback, sear
 | Tab | Complete a `/command` or an `@file` |
 | Ctrl+A / Home, Ctrl+E / End | Start and end of the line |
 | Ctrl+U, Ctrl+W | Delete to the start of the line, delete the word before the cursor |
-| Ctrl+V | Add the picture on the clipboard |
+| Ctrl+Shift+V | Add the picture on the clipboard |
 | Ctrl+L, or `/cls` | Clear the screen above the box and the scrollback. The conversation and what you typed stay |
 | Ctrl+C | Clear the box. On an empty box, leave. While the agent works, stop it |
 | Ctrl+D | Leave, on an empty box (otherwise delete the character under the cursor) |

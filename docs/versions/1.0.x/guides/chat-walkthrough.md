@@ -74,7 +74,7 @@ Needs a [`notes`](../conventions/agent-yaml.md#notes) block in `Agent.yml`.
 
 1. Type `@` and a list of files under your folder opens. Keep typing to narrow it; **Tab** takes one. The file's content goes with your message.
 2. `@diagram.png` sends a picture. A profile that sets `vision: false` makes the chat refuse it with a message instead of a provider error.
-3. **Ctrl+V** pastes a picture from the clipboard.
+3. **Ctrl+Shift+V** pastes a picture from the clipboard.
 4. `!git diff --stat` runs a command on your machine and sends what it printed along with your next message. `!!` shows it without sending.
 5. `/context` shows how big the context is and what it is made of: system prompt, tool definitions, notes and messages. The output of a `!command` waiting for your next message counts too.
 

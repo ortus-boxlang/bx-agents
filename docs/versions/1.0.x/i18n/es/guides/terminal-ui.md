@@ -57,7 +57,7 @@ Los turnos terminados se imprimen como texto de terminal normal, así que **tu s
 | Tab | Completa un `/command` o un `@file` |
 | Ctrl+A / Home, Ctrl+E / End | Inicio y fin de la línea |
 | Ctrl+U, Ctrl+W | Borra hasta el inicio de la línea, borra la palabra antes del cursor |
-| Ctrl+V | Añade la imagen del portapapeles |
+| Ctrl+Shift+V | Añade la imagen del portapapeles |
 | Ctrl+C | Vacía el cuadro. En un cuadro vacío, sale. Mientras el agente trabaja, lo detiene |
 | Ctrl+D | Sale, en un cuadro vacío (si no, borra el carácter bajo el cursor) |
 | Esc | Mientras el agente trabaja, lo detiene en su siguiente paso (no a mitad de palabra) |
