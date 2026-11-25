@@ -40,6 +40,16 @@ export function facetChips( counts ) {
 }
 
 /**
+ * @param {string[]} titles Conversation titles
+ * @param {number} [max] How many to name
+ * @returns {string} "A, B and 3 more." (the first max, quoted)
+ */
+export function namesOf( titles, max = 5 ) {
+	const named = titles.slice( 0, max ).map( t => "\u201c" + t + "\u201d" ).join( ", " );
+	return named + ( titles.length > max ? " and " + ( titles.length - max ) + " more" : "" ) + ".";
+}
+
+/**
  * @returns {object} Alpine component state and actions
  */
 export function conversationsPage() {
@@ -101,15 +111,18 @@ export function conversationsPage() {
 			this.$watch( "state.since", () => this.refilter() );
 			this.$watch( "state.before", () => this.refilter() );
 			this.$watch( "state.limit", () => this.refilter() );
-			this.$watch( "state.all", () => {
-				this.selected = [];
-				this.refilter();
-			} );
+			this.$watch( "state.all", () => this.refilter() );
 			this.load();
+		},
+
+		/** Drops the selection: it only ever means rows the person can see, so it ends when the visible set changes. */
+		clearSelection() {
+			this.selected = [];
 		},
 
 		/** Back to the first page after a filter changed, and the filters in the address. */
 		refilter() {
+			this.clearSelection();
 			this.state.offset = 0;
 			keepInAddress( this.$store.session.config.basePath + "/conversations", {
 				q      : this.state.q,
@@ -162,6 +175,7 @@ export function conversationsPage() {
 		 * @param {number} step -1 for the previous page, 1 for the next
 		 */
 		page( step ) {
+			this.clearSelection();
 			this.state.offset = Math.max( 0, this.state.offset + step * this.state.limit );
 			this.load();
 		},
@@ -253,8 +267,9 @@ export function conversationsPage() {
 		async remove( ids ) {
 			const many = ids.length > 1;
 			const yes = await this.$confirm( {
-				title  : many ? "Delete " + this.$fmt.countLabel( ids.length, "conversation" ) + "?" : "Delete this conversation?",
-				body   : "Their messages go too. This cannot be undone.",
+				title : many ? "Delete " + this.$fmt.countLabel( ids.length, "conversation" ) + "?" : "Delete this conversation?",
+				body  : ( many ? namesOf( ids.map( id => this.titleOf( this.rows.find( r => r.id === id ) || {} ) ) ) + " " : "" )
+					+ "Their messages go too. This cannot be undone.",
 				danger : true
 			} );
 			if ( !yes ) {
