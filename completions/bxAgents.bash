@@ -12,7 +12,7 @@ _bxagents_complete() {
 	fi
 	local count=${#words[@]}
 	local cur="${words[count-1]}"
-	local verbs="add backup build chat clean connect connectors data deploy doctor extensions hash-password inspect invoke logs models new notes package restore routines serve sessions skills stats test token users vault help"
+	local verbs="add backup build chat clean connect connectors data deploy doctor embed extensions hash-password inspect invoke logs models new notes package restore routines serve sessions skills stats test token users vault help"
 	local globals="--help -h --version -v"
 	COMPREPLY=()
 
@@ -44,6 +44,7 @@ _bxagents_complete() {
 			"deploy --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"deploy --target") COMPREPLY=($(compgen -W "digitalocean docker ftp local sftp ssh" -- "$part")) ;;
 			"doctor --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
+			"embed --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"extensions --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"hash-password --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"inspect --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
@@ -94,6 +95,7 @@ _bxagents_complete() {
 			data) flags="--projectRoot=" ;;
 			deploy) flags="--destination= --name= --projectRoot= --target=" ;;
 			doctor) flags="--json --projectRoot=" ;;
+			embed) flags="--agent= --color= --daily= --id= --max-chars= --name= --origin= --per-minute= --placeholder= --position= --profile= --projectRoot= --theme= --title= --tools= --welcome=" ;;
 			extensions) flags="--force --installed --json --name= --projectRoot= --system --yes" ;;
 			hash-password) flags="--password= --projectRoot=" ;;
 			inspect) flags="--ascii --environment= --json --md --no-color --projectRoot= --section=" ;;
@@ -130,6 +132,7 @@ _bxagents_complete() {
 		data) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		deploy) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		doctor) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
+		embed) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		inspect) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		invoke) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;
 		logs) COMPREPLY=($(compgen -d -- "$cur")); compopt -o filenames 2>/dev/null ;;

@@ -29,6 +29,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n __bxagents_needs_verb -a 'data' -d 'Locate the data home and its volumes'
     complete -c $cmd -n __bxagents_needs_verb -a 'deploy' -d 'Deploy to a local or remote target'
     complete -c $cmd -n __bxagents_needs_verb -a 'doctor' -d 'Check your environment and project'
+    complete -c $cmd -n __bxagents_needs_verb -a 'embed' -d 'Manage the agent as an embed on other websites'
     complete -c $cmd -n __bxagents_needs_verb -a 'extensions' -d 'Install and manage CLI and chat extensions'
     complete -c $cmd -n __bxagents_needs_verb -a 'hash-password' -d 'Hash a password for web sign-in'
     complete -c $cmd -n __bxagents_needs_verb -a 'inspect' -d 'Explore the agent\'s tools and configuration'
@@ -145,6 +146,23 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb doctor' -l json
     complete -c $cmd -n '__bxagents_using_verb doctor' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb doctor' -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb embed' -l agent -x
+    complete -c $cmd -n '__bxagents_using_verb embed' -l color -x
+    complete -c $cmd -n '__bxagents_using_verb embed' -l daily -x
+    complete -c $cmd -n '__bxagents_using_verb embed' -l id -x
+    complete -c $cmd -n '__bxagents_using_verb embed' -l max-chars -x
+    complete -c $cmd -n '__bxagents_using_verb embed' -l name -x
+    complete -c $cmd -n '__bxagents_using_verb embed' -l origin -x
+    complete -c $cmd -n '__bxagents_using_verb embed' -l per-minute -x
+    complete -c $cmd -n '__bxagents_using_verb embed' -l placeholder -x
+    complete -c $cmd -n '__bxagents_using_verb embed' -l position -x
+    complete -c $cmd -n '__bxagents_using_verb embed' -l profile -x
+    complete -c $cmd -n '__bxagents_using_verb embed' -l projectRoot -x -a '(__fish_complete_directories)'
+    complete -c $cmd -n '__bxagents_using_verb embed' -l theme -x
+    complete -c $cmd -n '__bxagents_using_verb embed' -l title -x
+    complete -c $cmd -n '__bxagents_using_verb embed' -l tools -x
+    complete -c $cmd -n '__bxagents_using_verb embed' -l welcome -x
+    complete -c $cmd -n '__bxagents_using_verb embed' -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb extensions' -l force
     complete -c $cmd -n '__bxagents_using_verb extensions' -l installed
     complete -c $cmd -n '__bxagents_using_verb extensions' -l json
@@ -281,5 +299,5 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb vault' -l scope -x
     complete -c $cmd -n '__bxagents_using_verb vault' -l user -x
     complete -c $cmd -n '__bxagents_using_verb vault' -a '(__fish_complete_directories)'
-    complete -c $cmd -n '__bxagents_using_verb help' -a 'add backup build chat clean connect connectors data deploy doctor extensions hash-password inspect invoke logs models new notes package restore routines serve sessions skills stats test token users vault help'
+    complete -c $cmd -n '__bxagents_using_verb help' -a 'add backup build chat clean connect connectors data deploy doctor embed extensions hash-password inspect invoke logs models new notes package restore routines serve sessions skills stats test token users vault help'
 end
