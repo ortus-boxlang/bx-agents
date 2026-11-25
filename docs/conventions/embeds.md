@@ -20,6 +20,16 @@ signed in, may only ask questions, and the agent may only use the tools the embe
 Out of scope for now: signed-in visitors (identity tokens), approvals, the temporary history mode, host-side helpers, extension
 hooks, bot protection, variables and context.
 
+## See it
+
+<video controls preload="metadata" poster="/assets/video/embeds-tour-poster.png" style="max-width:100%">
+  <source src="/assets/video/embeds-tour.mp4" type="video/mp4">
+  <source src="/assets/video/embeds-tour.webm" type="video/webm">
+  <track kind="captions" src="/assets/video/embeds-tour.vtt" srclang="en" label="English" default>
+</video>
+
+*About a minute: an admin makes an embed, a visitor chats from another website, and the admin looks at the counters, rotates the key and disables it. The answers come from a scripted demo model, so they are canned. Narrated, with captions.*
+
 ## The record
 
 An embed lives in the agent's **database**, next to the access tokens. It is never written in `Agent.yml`: it is changed from the
@@ -215,6 +225,20 @@ Accessibility: the launcher is a real button with `aria-expanded`; the panel is 
 Measured in Chromium against real loopback servers on other ports (an allowed website on 9100, another on 9200): the allowed website got the launcher, focus moved to the input and back on Esc, the answer arrived as 35 DOM updates (not one block), and the transcript came back after a reload; the other website got no launcher, because its `config` request was refused with no CORS header; the hosted frame drew on the allowed website and Chromium blocked it on the other (`frame-ancestors`), although the app also sends `X-Frame-Options: SAMEORIGIN`.
 
 The hosted page runs on the agent's own origin, so a request from it is from that origin: a browser sends no `Origin` header on a same-origin `GET`, so the agent reads `Sec-Fetch-Site: same-origin` (which a page script cannot set) as "from my own origin". The agent's own origin is accepted whether or not the embed lists it. A visitor who opens the frame address directly is a visitor like any other.
+
+The pictures below are from that run.
+
+![The Embeds editor: the agent, the look and text on the left, and on the right the preview, which is the real widget drawn from the form](../assets/webui/webui-embeds-editor.png)
+
+![A wildcard website is refused in words before anything is saved](../assets/webui/webui-embeds-wildcard-refused.png)
+
+![The snippet panel with the HTML snippet, its note and Copy](../assets/webui/webui-embeds-snippet.png)
+
+![A visitor on another website: the chat bubble and a streamed answer](../assets/webui/webui-embeds-visitor.png)
+
+![The last seven days: real counters](../assets/webui/webui-embeds-counters.png)
+
+![Rotate key asks first](../assets/webui/webui-embeds-rotate.png)
 
 A disabled or expired embed stops showing its bubble at the next page load: `config` is sent with `Cache-Control: no-cache`, so a browser asks again every time. (A 30 second cache was tried first. A recording of the tour showed the bubble staying on the website for up to 30 seconds after Disable, so it was removed.)
 
