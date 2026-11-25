@@ -46,7 +46,86 @@ class {
 
 Ejecuta `bxAgents chat` y escribe `/hello Ada`. `/extensions` muestra lo que está cargado.
 
-Un método de comando recibe el `agentContext` (la conversación y nada más; el mismo objeto que reciben los comandos integrados) y el texto que sigue al nombre del comando. Devuelve un `Reply` (`agentContext.reply().ok( "..." )`, `.warn()`, `.keyValues()`, `.grid()`, `.choose()`) o simplemente una cadena. Si lanza una excepción, la persona ve un aviso con el nombre de la extensión y el chat continúa.
+Un método de comando recibe el `agentContext` (la conversación y nada más; el mismo objeto que reciben los comandos integrados) y el texto que sigue al nombre del comando. Devuelve un `Reply` o simplemente una cadena. Si lanza una excepción, la persona ve un aviso con el nombre de la extensión y el chat continúa.
+
+### La API de Reply
+
+Construye una respuesta encadenando métodos sobre `agentContext.reply()`. Cada método devuelve la respuesta, así que se encadenan. El terminal, la página web y las pasarelas dibujan los bloques cada uno a su manera.
+
+**Bloques de un solo estilo** — todo el bloque es de un color:
+
+| Método | Qué dibuja |
+|---|---|
+| `.text( s )` | Texto gris atenuado (el predeterminado) |
+| `.text( s, "accent" )` | Texto en teal de acento |
+| `.ok( s )` | Texto verde (éxito) |
+| `.warn( s )` | Texto ámbar (advertencia) |
+| `.header( s )` | Encabezado de acento para una sección |
+| `.line( s )` | Una línea impresa; `.line()` sin argumento es una línea en blanco |
+| `.blank()` | Una línea en blanco (alias de `.line()`) |
+
+**Líneas de estilos mixtos** — colores diferentes dentro de una línea. Empieza con `.styled()`, encadena métodos de segmento, luego `.print()` para confirmar la línea:
+
+```js
+agentContext.reply()
+    .styled()
+        .accentBold( "/deploy" )
+        .text( "  " )
+        .muted( "ship it to production" )
+        .print()
+```
+
+Métodos de segmento: `.text( s )` (plano), `.muted( s )` (gris), `.accent( s )` (teal), `.accentBold( s )` (teal negrita), `.ok( s )` (verde), `.warn( s )` (ámbar), `.error( s )` (rojo), `.bold( s )` (negrita). Para un estilo elegido en tiempo de ejecución: `.segment( s, styleName )`.
+
+Los estilos compuestos dinámicos también funcionan, como el helper print de CommandBox — combina primer plano, fondo y modificadores en el nombre del método:
+
+```js
+.styled().boldRedOnBlue( "CRITICAL" ).text( "  " ).muted( "disk full" ).print()
+```
+
+Tokens reconocidos: primer plano (`accent`, `ok`, `muted`, `warn`, `error`, `plain`, `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `gray`), fondo (`onBlack` hasta `onWhite`), modificadores (`bold`, `dim`, `italic`, `underlined`, `blink`, `reversed`, `hidden`, `crossedout`).
+
+**Métodos de conveniencia** — atajos para patrones comunes, cada uno produce una línea de estilos mixtos:
+
+| Método | Qué dibuja |
+|---|---|
+| `.commandLine( name, hint )` | Nombre en teal negrita + pista en gris (para listas estilo `/help`) |
+| `.labelValue( label, value )` | Etiqueta en gris + valor en teal (para datos estilo `/info`) |
+| `.statusLine( label, boolean )` | Etiqueta en gris + "on" verde o "off" rojo |
+| `.indent( text )` | Texto gris indentado (como `indentedLine` de CommandBox) |
+| `.bullet( text )` | Punto teal + texto gris |
+| `.divider()` | Una línea horizontal |
+
+**Bloques estructurados:**
+
+| Método | Qué dibuja |
+|---|---|
+| `.keyValues( rows )` | Pares etiqueta-valor; `rows` es `[ [ label, value ], ... ]` |
+| `.grid( columns, rows )` | Una tabla; `columns` es `[ { width, align }, ... ]` |
+| `.choose( title, options )` | Botones para elegir; `options` es `[ { label, hint, line }, ... ]` |
+| `.transcript( messages )` | Mensajes de conversación; `messages` es `[ { role, text }, ... ]` |
+| `.file( name, mime, text )` | Un archivo para que el cliente guarde o descargue |
+| `.screen( name )` | Abre una pantalla solo de terminal (p.ej. `"notes"`, `"vault"`) |
+
+**Efectos** — cosas que el llamador hace a su propio estado:
+
+| Método | Qué hace |
+|---|---|
+| `.reset()` | Borra la conversación de la pantalla |
+| `.conversation( id, title )` | Cambia a otra conversación |
+| `.quit()` | Sale del chat |
+
+Todos los métodos devuelven la respuesta, así que se encadenan:
+
+```js
+return agentContext.reply()
+    .header( "Deploy status" )
+    .statusLine( "Connected", true )
+    .labelValue( "Target", "production" )
+    .styled().ok( "3 services" ).muted( " running" ).print()
+    .blank()
+    .indent( "Type /deploy run to start." )
+```
 
 ## Anotaciones
 
