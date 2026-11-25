@@ -29,6 +29,10 @@ A line looks like this:
 
 ![The Logs page: a tab for each log, a level filter and a search box](../assets/webui/webui-logs.png)
 
+## Error diagnostics
+
+Local chat errors, `invoke`, `/ping` and `models test` include the exception type and detail, any available cause and source location, and the provider endpoint when available. Model probes capture the endpoint from bx-ai's actual request, not the configured URL, so an ignored setting is visible. Turn and probe failures also write these diagnostics to `agent.log`; remote responses keep their shorter message rather than exposing server paths and endpoints. Diagnostics are bounded and redact known credential patterns, URL userinfo and URL query values; requests and headers are not dumped.
+
 ## What is never written
 
 A log is for finding out what happened, not for keeping what was said.

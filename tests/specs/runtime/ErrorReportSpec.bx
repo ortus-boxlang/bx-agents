@@ -1,0 +1,64 @@
+import bxModules.bxagents.models.runtime.ErrorReport;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "runtime.ErrorReport", function() {
+			it( "keeps the exception type, detail, cause and source alongside the endpoint", function() {
+				var text = ErrorReport::describe( {
+					message : "Request failed",
+					type : "Provider.HttpFailure",
+					detail : "HTTP 503 Service Unavailable",
+					cause : { message : "Connection refused" },
+					tagContext : [ { template : "/app/Agent.bx", line : 42 } ]
+				}, { provider : "OpenAICompatible", model : "local-model", endpoint : "http://127.0.0.1:1234/v1/chat/completions" } );
+
+				for ( var expected in [ "Request failed", "Provider.HttpFailure", "HTTP 503", "Connection refused", "/app/Agent.bx:42", "local-model", "http://127.0.0.1:1234/v1/chat/completions" ] ) {
+					expect( text ).toInclude( expected );
+				}
+			} );
+
+			it( "redacts credentials in details, causes and URLs and bounds each field", function() {
+				var text = ErrorReport::describe( {
+					message : "Request failed with Bearer abcdef1234567890",
+					detail : "http://alice:hunter2@localhost/v1?customCredential=hiddenvalue&api_key=anotherkey",
+					cause : { message : "password=secretvalue " & repeatString( "x", 4000 ) }
+				} );
+				for ( var secret in [ "abcdef1234567890", "alice", "hunter2", "hiddenvalue", "anotherkey", "secretvalue" ] ) {
+					expect( text ).notToInclude( secret );
+				}
+				expect( len( text ) ).toBeLT( 2500 );
+			} );
+
+			it( "handles a real caught exception without replacing the original failure", function() {
+				try {
+					throw( type = "Test.ProviderFailure", message = "Connection Failure", detail = "Response: not JSON" );
+				} catch ( any e ) {
+					var text = ErrorReport::describe( e );
+					expect( text ).toInclude( "Connection Failure" );
+					expect( text ).toInclude( "Test.ProviderFailure" );
+					expect( text ).toInclude( "Response: not JSON" );
+				}
+			} );
+
+			it( "keeps the underlying cause of a caught Java exception", function() {
+				try {
+					throw( object = createObject( "java", "java.io.IOException" ).init( "Request failed", createObject( "java", "java.net.ConnectException" ).init( "Connection refused" ) ) );
+				} catch ( any e ) {
+					var text = ErrorReport::describe( e );
+					expect( text ).toInclude( "Request failed" );
+					expect( text ).toInclude( "Caused by: Connection refused" );
+				}
+			} );
+
+			it( "reads the endpoint from a real agent's service rather than inventing it from options", function() {
+				var agent = aiAgent( model = aiModel( provider = "openai-compatible", options = { baseURL : "http://127.0.0.1:1234/v1" }, params = { model : "test-model" } ) );
+				var context = ErrorReport::forAgent( agent );
+				expect( context.provider ).toBe( "OpenAICompatible" );
+				expect( context.model ).toBe( "test-model" );
+				expect( context.endpoint ).toBe( "http://127.0.0.1:1234/v1/chat/completions" );
+			} );
+		} );
+	}
+
+}

@@ -232,8 +232,9 @@ class {
 		try {
 			return Outcome::done( { output : turn.run(), threadId : turn.threadId } )
 		} catch ( any e ) {
-			Logger::log( "agent", "error", "A turn failed (from #arguments.caller.source()#): #e.message#" )
-			return Outcome::failed( "internal", e.message )
+			var diagnostic = bxModules.bxagents.models.runtime.ErrorReport::describe( e, bxModules.bxagents.models.runtime.ErrorReport::forAgent( variables.agent ) )
+			Logger::log( "agent", "error", "A turn failed (from #arguments.caller.source()#): " & diagnostic )
+			return Outcome::failed( "internal", variables.localImages ? diagnostic : e.message )
 		}
 	}
 
@@ -322,9 +323,10 @@ class {
 				send( "done", "[DONE]" )
 			}
 		} catch ( any e ) {
-			Logger::log( "agent", "error", "A streamed turn failed: #e.message#" )
+			var diagnostic = bxModules.bxagents.models.runtime.ErrorReport::describe( e, bxModules.bxagents.models.runtime.ErrorReport::forAgent( variables.agent ) )
+			Logger::log( "agent", "error", "A streamed turn failed: " & diagnostic )
 			if ( open() ) {
-				send( "error", { "message" : e.message } )
+				send( "error", { "message" : variables.localImages ? diagnostic : e.message } )
 			}
 		} finally {
 			BoxUnregisterInterceptor( interceptor )

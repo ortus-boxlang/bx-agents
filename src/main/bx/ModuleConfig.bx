@@ -98,35 +98,35 @@ class {
 		}
 
 		verbDescriptions = {
-			"new"     : "Scaffold a new agent project           (asks questions at a terminal, or --model & [--template] [--class], or --repo, or --forgebox)",
-			"build"   : "Build a project into a generated app    ([--environment])",
-			"test"    : "Run a project's own tests/specs via TestBox",
-			"serve"   : "Serve a built project via boxlang-miniserver ([--port], [--host])",
-			"chat"    : "Interactive REPL chat with a built agent ([--server] or [--connect=URL], [--agent=NAME], [--record[=FILE]], [--inline|--fullscreen])",
-			"invoke"  : "Send one message to a built agent, print the response, exit (--message, [--json])",
-			"package" : "Package a built project into a .bxa    ([--version])",
-			"deploy"  : "Deploy to a target                     (--name, or [--target], --destination)",
-			"inspect" : "Report how the agent is composed: agents, tools, skills, MCP, exposure, env ([--json], [--md[=FILE]], [--section=a,b])",
-			"clean"   : "Remove a project's .build/ and dist/ output",
-			"hash-password" : "Hash a password for a webui users entry (--password)",
-			"token"   : "Issue, list and revoke access tokens for a deployed agent (create --name, list, revoke --name)",
-			"users"   : "The sign-in accounts of the web page and who is an admin (list, admin --name, member --name)",
-			"notes"   : "Read and manage the notes of an agent (list, add, edit, remove, clear, stats, export, import)",
-			"connect" : "Connect the connectors and sign in to the MCP servers of a project: connect [id] [tools|off|options] ([--confirm], [--token-env=NAME], [--stdin], [--remove], [--port=N], [--no-open], [--user=NAME], [--timeout=SECONDS], [--json])",
-			"connectors" : "The catalog of known connectors that ships with BX Agents: connectors [list|show <id>|check] ([--dir=DIR], [--json]). It only reads files; nothing connects",
-			"vault"   : "The secrets an agent uses at run time, sealed in the chat database (list, add, edit, remove, status, audit, key). A value is typed hidden or piped with --stdin, never a flag",
-			"stats"   : "What the model calls used: tokens by model, provider, day or user, once Agent.yml says usage: true ([--days=N], [--by=model|provider|day|user], [--user=NAME], [--json], [--enable])",
-			"sessions": "List, rename, fork, delete, clear, export and import the conversations in the chat database (list, rename, fork, delete, clear, export, import)",
-			"routines": "The scheduled routines of a project (list, show, add, edit, pause, resume, run, delete, reports, report, clean). clean only shows what it would remove without --yes",
-			"models"  : "List the models a project can talk to and test that they answer (list, test [--profile=NAME | --all])",
-			"doctor"  : "Diagnose the environment and project - runtime, modules, env vars ([--json])",
-			"add"     : "Add to a project: add <kind> [name] - a tool, interceptor, schedule, mcp, gateway, subagent, skill, profile, provider, capability or extension ([--force], [--dry-run], [--yes])",
-			"skills"  : "Skills from skills.boxlang.io: skills <find|install|list|show|update|remove> ([--registry=URL], [--limit=N], [--dry-run], [--json])",
-			"data"    : "Where the agent keeps everything: the data home, the size of each part and the volumes it may use ([--json])",
-			"logs"    : "The agent's logs in the data home: logs lists them, logs <agent|gateways|routines|heartbeat|api> shows the last lines ([--tail=N], [--level=warn], [--grep=TEXT], [--json]); --follow prints new lines as they are written, --ui opens a full-screen viewer, --connect=URL [--token] reads a served agent's",
-			"backup"  : "Zip the chat database, files and skills in the data home ([--to=FILE]); the volumes are not included",
-			"restore" : "Put a backup back into the data home: restore <FILE> ([--home=DIR], [--force]); what was there is kept as .before-restore",
-			"extensions" : "The extensions the chat loads, and installing more: extensions <list|install|update|remove|link|unlink> (install takes a folder, .zip, owner/repo, URL or ForgeBox slug; link puts a folder you are working on in ~/.bxagents/extensions; [--name], [--system], [--force], [--yes], [--json])"
+			"new"     : "Create an agent project",
+			"build"   : "Build the application",
+			"test"    : "Run project tests",
+			"serve"   : "Start the HTTP server",
+			"chat"    : "Chat with an agent in your terminal",
+			"invoke"  : "Send one message and print the reply",
+			"package" : "Package the application as a .bxa",
+			"deploy"  : "Deploy to a local or remote target",
+			"inspect" : "Explore the agent's tools and configuration",
+			"clean"   : "Remove build and distribution output",
+			"hash-password" : "Hash a password for web sign-in",
+			"token"   : "Manage API access tokens",
+			"users"   : "Manage web users and admin roles",
+			"notes"   : "Manage saved notes",
+			"connect" : "Connect services and sign in to MCP servers",
+			"connectors" : "Browse and check the connector catalog",
+			"vault"   : "Manage sealed runtime secrets",
+			"stats"   : "View model calls and token usage",
+			"sessions": "Manage conversations and transcripts",
+			"routines": "Manage scheduled work and reports",
+			"models"  : "List and test models",
+			"doctor"  : "Check your environment and project",
+			"add"     : "Add a tool, skill, gateway, or other component",
+			"skills"  : "Find and install skills from the registry",
+			"data"    : "Locate the data home and its volumes",
+			"logs"    : "Read, follow, or browse agent logs",
+			"backup"  : "Back up the agent's database, files, and skills",
+			"restore" : "Restore a data-home backup",
+			"extensions" : "Install and manage CLI and chat extensions"
 		}
 
 		// Per verb, the flags that REQUIRE a value - `--projectRoot` is
@@ -360,12 +360,16 @@ class {
 		// Anywhere in argv, not just first: `bxAgents clean --help` must print
 		// usage, NOT delete the project's build directories.
 		if ( firstToken == "help" || hasHelpFlag( arguments.args ) ) {
-			printUsage( static.verbs, static.verbDescriptions )
+			var command = static.verbs.keyExists( firstToken ) ? firstToken : ""
+			if ( firstToken == "help" && arguments.args.len() > 1 && static.verbs.keyExists( arguments.args[ 2 ] ) ) {
+				command = arguments.args[ 2 ]
+			}
+			printUsage( command, parseCliOptions( arguments.args ) )
 			return 0
 		}
 
 		if ( !len( firstToken ) ) {
-			printUsage( static.verbs, static.verbDescriptions )
+			printUsage()
 			return 1
 		}
 
@@ -379,7 +383,7 @@ class {
 			}
 			println( "Unknown verb [#verbName#]." )
 			println( "" )
-			printUsage( static.verbs, static.verbDescriptions )
+			printUsage()
 			return 1
 		}
 
@@ -417,7 +421,7 @@ class {
 			}
 			return result.exitCode ?: 0
 		} catch ( any e ) {
-			println( "Error: #e.message#" )
+			println( "Error: " & models.runtime.ErrorReport::describe( e ) )
 			return 1
 		}
 	}
@@ -462,7 +466,7 @@ class {
 			}
 			return { found : true, exitCode : result.exitCode }
 		} catch ( any e ) {
-			println( "Error: #e.message#" )
+			println( "Error: " & models.runtime.ErrorReport::describe( e ) )
 			return { found : true, exitCode : 1 }
 		} finally {
 			service.unload()
@@ -473,15 +477,15 @@ class {
 	 * The lines of `bxAgents help` for the verbs extensions add. Nothing when there are no extensions, and never an error:
 	 * a broken extension must not take the help away.
 	 *
-	 * @return [ "  name  hint" ] in name order
+	 * @return [ { name, description } ] in name order
 	 */
-	private array function extensionVerbLines() {
+	private array function extensionHelp() {
 		var lines = []
 		try {
 			var service = new models.extensions.ExtensionService( projectRoot : resolveProjectRoot( {} ), transport : "tui" )
 			if ( service.mayHaveExtensions() ) {
 				var verbs = new models.extensions.ExtensionVerbs( resolveProjectRoot( {} ), static.verbs.keyArray(), service )
-				lines = verbs.verbs().map( v => "  #v.name().lJustify( 9 )# #v.hint()# (extension #v.extensionName()#)" )
+				lines = verbs.verbs().map( v => { name : v.name(), description : "#v.hint()# (extension #v.extensionName()#)" } )
 				service.unload()
 			}
 		} catch ( any e ) {
@@ -491,52 +495,25 @@ class {
 	}
 
 	/**
-	 * Prints the `--help`/no-verb/unknown-verb usage text: module identity,
-	 * one line per verb (sorted alphabetically) with its description, and the
-	 * two global flags handled before verb dispatch. Prints line-by-line
-	 * rather than building and returning one joined string.
+	 * Prints the grouped overview or focused help without dispatching a verb.
 	 *
-	 * This note used to say BoxLang "has no `chr()` BIF available in this
-	 * module-CLI execution context", which was the wrong conclusion from a
-	 * real symptom: `chr()` does not exist in BoxLang in ANY context - the
-	 * BIF is spelled `char()`. Verified directly against the runtime, and
-	 * separately re-confirmed the expensive way when `chr( 10 )` in the
-	 * ColdBox integration runner page 500'd every request. Use `char()`.
-	 *
-	 * @verbs Struct mapping verb name -> dispatch class path
-	 * @verbDescriptions Struct mapping verb name -> one-line help text
+	 * @command A built-in command, or empty for the overview
+	 * @options Help presentation flags, parsed before verb dispatch
 	 */
-	private void function printUsage( required struct verbs, required struct verbDescriptions ) {
-		var banner = new models.cli.support.Banner@bxagents()
-		if ( banner.show( {}, "v#this.version#" ) ) {
-			println( this.description )
+	private void function printUsage( string command = "", struct options = {} ) {
+		var help = new models.cli.support.Help@bxagents( options = arguments.options )
+		if ( len( arguments.command ) ) {
+			println( help.command( arguments.command, static.verbDescriptions[ arguments.command ] ) )
 		} else {
-			println( "bxAgents v#this.version# - #this.description#" )
-		}
-		println( "" )
-		println( "Usage: boxlang module:bxAgents <verb> [options]" )
-		println( "" )
-
-		for ( var verbName in arguments.verbs.keyArray().sort( "textnocase" ) ) {
-			println( "  #verbName.lJustify( 9 )# #arguments.verbDescriptions[ verbName ] ?: ''#" )
-		}
-
-		var fromExtensions = extensionVerbLines()
-		if ( fromExtensions.len() ) {
-			println( "" )
-			println( "Verbs from extensions:" )
-			for ( var line in fromExtensions ) {
-				println( line )
+			var banner = new models.cli.support.Banner@bxagents()
+			if ( banner.show( arguments.options, "v#this.version#" ) ) {
+				println( this.description )
+			} else {
+				println( "bxAgents v#this.version#" )
 			}
+			println( "" )
+			println( help.overview( static.verbDescriptions, extensionHelp() ) )
 		}
-
-		println( "" )
-		println( "Global options:" )
-		println( "  -h, --help     Show this help message and exit (accepted in any position)" )
-		println( "  -v, --version  Show the module version and exit" )
-		println( "" )
-		println( "Every verb also accepts --projectRoot=<path> (or a bare positional path) to" )
-		println( "target a project other than the current directory." )
 	}
 
 	/**

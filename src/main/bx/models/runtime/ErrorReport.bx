@@ -1,0 +1,55 @@
+import bxModules.bxagents.models.logs.Logger;
+
+/**
+ * Bounded, redacted diagnostics for local errors and the agent log. Never serializes a request or its headers.
+ */
+class {
+
+	static string function describe( required any error, struct context = {} ) {
+		var lines = [ ErrorReport::clean( arguments.error.message ?: "Unknown error" ) ]
+		for ( var key in [ "type", "detail", "errorCode" ] ) {
+			var value = arguments.error[ key ] ?: ""
+			if ( isSimpleValue( value ) && len( trim( value ) ) ) {
+				lines.append( key & ": " & ErrorReport::clean( toString( value ) ) )
+			}
+		}
+		for ( var key in [ "provider", "model", "endpoint", "timeout" ] ) {
+			if ( len( arguments.context[ key ] ?: "" ) ) {
+				lines.append( key & ": " & ErrorReport::clean( toString( arguments.context[ key ] ) ) )
+			}
+		}
+		var cause = arguments.error.cause ?: nullValue()
+		for ( var depth = 1; depth <= 5 && !isNull( cause ); depth++ ) {
+			lines.append( "Caused by: " & ErrorReport::clean( cause.message ?: toString( cause ) ) )
+			cause = cause.cause ?: nullValue()
+		}
+		var frames = arguments.error.tagContext ?: []
+		if ( isArray( frames ) && frames.len() ) {
+			lines.append( "at " & ErrorReport::clean( frames[ 1 ].template ?: "" ) & ":" & ( frames[ 1 ].line ?: "" ) )
+		}
+		return lines.toList( char( 10 ) )
+	}
+
+	static struct function forAgent( required any agent ) {
+		if ( !isInstanceOf( arguments.agent, "AiAgent" ) ) {
+			return {}
+		}
+		var model = arguments.agent.getAiModel()
+		return ErrorReport::forService( model.getService() ).append( { model : model.getConfig().params.model ?: "" } )
+	}
+
+	static struct function forService( required any service ) {
+		if ( !isInstanceOf( arguments.service, "BaseService" ) ) {
+			return {}
+		}
+		return { provider : arguments.service.getName(), endpoint : arguments.service.getChatURL() }
+	}
+
+	private static string function clean( required string text ) {
+		// Exception messages can contain URLs too: hide userinfo and all query values, not just known key names.
+		var out = reReplaceNoCase( arguments.text, "(https?://)[^\s/@]+@", "\1***@", "all" )
+		out = reReplace( out, "([?&][^\s=&##]+)=([^\s&##]*)", "\1=***", "all" )
+		return Logger::oneLine( out )
+	}
+
+}

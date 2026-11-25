@@ -92,7 +92,13 @@ class {
 		// same file the terminal chat and `bxAgents stats` read
 		var agent = new "models.cli.support.BuiltAgent@bxagents"().load( arguments.root )
 
-		return agent.run( arguments.message )
+		try {
+			return agent.run( arguments.message )
+		} catch ( any e ) {
+			var diagnostic = bxModules.bxagents.models.runtime.ErrorReport::describe( e, bxModules.bxagents.models.runtime.ErrorReport::forAgent( agent ) )
+			bxModules.bxagents.models.logs.Logger::log( "agent", "error", "An invocation failed: " & diagnostic )
+			throw( type = e.type, message = e.message, detail = diagnostic )
+		}
 	}
 
 	/**

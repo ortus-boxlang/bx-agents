@@ -9,10 +9,10 @@ tags: [reference, cli]
 # CLI Reference
 
 ```text
-Usage: boxlang module:bxAgents <verb> [options]
+Usage: bxAgents <command> [options]
 ```
 
-(or the shorter `bxAgents <verb> [options]` form - see [Installation](getting-started/installation.md).)
+(or `boxlang module:bxAgents <command> [options]` - see [Installation](getting-started/installation.md).)
 
 ## Global flags
 
@@ -20,8 +20,12 @@ These are handled before verb dispatch and never reach a verb.
 
 | Flag | Effect |
 |---|---|
-| `-h`, `--help`, `help` | Print usage (every verb + description) and exit 0. Accepted in **any** position, so `bxAgents clean --help` prints usage rather than running `clean`. Also printed (exit 1) if no verb is given at all. |
+| `-h`, `--help`, `help` | Show the task-grouped command overview and exit 0. Use `bxAgents serve --help` or `bxAgents help serve` for focused usage, options, defaults, and examples. Help is accepted in **any** position and never runs the command, including `clean --help`. The overview is also printed (exit 1) if no command is given. |
 | `-v`, `--version` | Print `bxAgents v{version}` and exit 0. Only meaningful as the very first token, so it never collides with `package --version=1.0.0`. |
+| `--no-color` | Disable help's color and bold styling. |
+| `--no-banner` | Hide the overview's logo. Focused command help never shows the logo. |
+
+Help groups commands by task instead of presenting one alphabetical wall of text. At an interactive terminal, headings use bold brand cyan, commands and flags use bold, and supporting text is muted. Descriptions wrap with hanging indents to fit `COLUMNS` (80 columns when unset). Pipes, `NO_COLOR`, and `TERM=dumb` receive plain text without ANSI escapes.
 
 ## Quoting flag values
 

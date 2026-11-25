@@ -779,10 +779,14 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "shows an error from the agent and carries on with the next message", function() {
 				var screen = fakeScreen( [ "boom", "fine" ] )
-				var session = fakeSession( [ ( text, hooks ) => { throw( type = "Test", message = "model unreachable" ) } ] )
+				var session = fakeSession( [ ( text, hooks ) => { throw( type = "Test", message = "model unreachable", detail = "HTTP 502 api_key=privatevalue" ) } ] )
 				controllerFor( screen, session ).run( screen )
 
-				expect( screen.pushed[ 1 ] ).toBe( { type : "error", text : "model unreachable" } );
+				expect( screen.pushed[ 1 ].type ).toBe( "error" );
+				expect( screen.pushed[ 1 ].text ).toInclude( "model unreachable" );
+				expect( screen.pushed[ 1 ].text ).toInclude( "type: Test" );
+				expect( screen.pushed[ 1 ].text ).toInclude( "HTTP 502" );
+				expect( screen.pushed[ 1 ].text ).notToInclude( "privatevalue" );
 				expect( session.sent ).toBe( [ "boom", "fine" ] );
 				// the turn was always closed
 				expect( screen.log.filter( e => e[ 1 ] == "begin" ) ).toHaveLength( 2 );

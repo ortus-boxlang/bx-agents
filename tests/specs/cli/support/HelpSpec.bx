@@ -1,0 +1,77 @@
+/**
+ * Readable help: complete command discovery, focused details, wrapping, and styling.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * Registers the renderer and help-dispatch regression cases.
+	 */
+	function run() {
+		describe( "CLI help", function() {
+			it( "lists every built-in once in task groups and keeps extension commands discoverable", function() {
+				var descriptions = bxagents.ModuleConfig::verbDescriptions;
+				var text = new bxagents.models.cli.support.Help().overview( descriptions, [
+					{ name : "my-extension", description : "An installed extension command" }
+				] );
+				expect( text ).toInclude( "GET STARTED" );
+				expect( text ).toInclude( "BUILD & RUN" );
+				expect( text ).toInclude( "FROM EXTENSIONS" );
+				expect( text ).toInclude( "my-extension" );
+				for ( var name in descriptions ) {
+					expect( reMatch( "(?m)^  " & name & "  +", text ) ).toHaveLength( 1 );
+				}
+				expect( text ).notToInclude( char( 27 ) );
+			} );
+
+			it( "renders meaningful focused help for every built-in", function() {
+				var renderer = new bxagents.models.cli.support.Help();
+				for ( var name in bxagents.ModuleConfig::verbs ) {
+					var text = renderer.command( name, bxagents.ModuleConfig::verbDescriptions[ name ] );
+					expect( text ).toInclude( "bxAgents " & name );
+					expect( text ).toInclude( "USAGE" );
+					expect( text ).toInclude( "EXAMPLES" );
+					expect( text ).toInclude( "--help" );
+				}
+				var serve = renderer.command( "serve", "Start the HTTP server" );
+				expect( serve ).toInclude( "--port=<number>" );
+				expect( serve ).toInclude( "Default: 8080." );
+				expect( serve ).notToInclude( "GET STARTED" );
+			} );
+
+			it( "wraps all help within narrow terminal widths before adding ANSI styling", function() {
+				var paint = ( style, text ) => style == "bold" ? char( 27 ) & "[1m" & text & char( 27 ) & "[0m" : text;
+				for ( var width in [ 24, 40, 60, 80 ] ) {
+					var renderer = new bxagents.models.cli.support.Help( width = width, paint = paint );
+					var pages = [ renderer.overview( bxagents.ModuleConfig::verbDescriptions ) ];
+					for ( var name in bxagents.ModuleConfig::verbs ) {
+						pages.append( renderer.command( name, bxagents.ModuleConfig::verbDescriptions[ name ] ) );
+					}
+					for ( var page in pages ) {
+						expect( page ).toInclude( char( 27 ) & "[1m" );
+						for ( var line in page.reReplace( char( 27 ) & "\[[0-9;]*m", "", "all" ).listToArray( char( 10 ) ) ) {
+							expect( line.len() ).toBeLTE( width );
+						}
+					}
+				}
+			} );
+
+			it( "honors help aliases without running a destructive or scaffolding command", function() {
+				var root = createTempDirectory( prefix = "bxagents-help-" );
+				try {
+					directoryCreate( root & "/.build" );
+					fileWrite( root & "/.build/keep.txt", "keep" );
+					var config = new bxagents.ModuleConfig();
+					expect( config.dispatch( [ "clean", "--projectRoot=" & root, "--force", "--help" ] ) ).toBe( 0 );
+					expect( fileRead( root & "/.build/keep.txt" ) ).toBe( "keep" );
+					expect( config.dispatch( [ "help", "clean", "--projectRoot=" & root, "--force" ] ) ).toBe( 0 );
+					expect( fileRead( root & "/.build/keep.txt" ) ).toBe( "keep" );
+					expect( config.dispatch( [ "new", root & "/never-created", "--model=mock/mock-model", "-h" ] ) ).toBe( 0 );
+					expect( directoryExists( root & "/never-created" ) ).toBeFalse();
+				} finally {
+					bxagents.models.util.TreeDelete::tree( root );
+				}
+			} );
+		} );
+	}
+
+}

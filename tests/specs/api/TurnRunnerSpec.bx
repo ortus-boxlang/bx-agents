@@ -124,6 +124,17 @@ class extends="testbox.system.BaseSpec" {
 				expect( frames[ 2 ].data.message ).toBe( "model failed" );
 			} );
 
+			it( "keeps detailed local failures out of remote error frames", function() {
+				agent.failing();
+				new bxagents.models.api.TurnRunner( agent = agent, localImages = true ).stream( caller, { input : "hi" }, collect );
+
+				expect( frames[ 2 ].data.message ).toInclude( "type: Fake.Boom" );
+				expect( frames[ 2 ].data.message ).toInclude( "at " );
+				frames.clear();
+				runner().stream( caller, { input : "hi" }, collect );
+				expect( frames[ 2 ].data.message ).toBe( "model failed" );
+			} );
+
 			it( "stops sending once the client has gone", function() {
 				var gone = { value : false };
 				var seenFrames = [];

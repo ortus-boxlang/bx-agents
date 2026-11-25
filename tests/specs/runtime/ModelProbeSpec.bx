@@ -12,9 +12,18 @@ class extends="testbox.system.BaseSpec" {
 				var outcome = new bxagents.models.runtime.ModelProbe().ping( "", {
 					provider : "OpenAICompatible",
 					params   : { model : "my-model", baseURL : "http://127.0.0.1:1/v1" }
-				} );
+				}, true );
 				expect( outcome.ok ).toBeFalse();
 				expect( outcome.reason ).notToInclude( "is not supported" );
+				expect( outcome.reason ).toInclude( "type:" );
+				expect( outcome.reason ).toInclude( "endpoint:" );
+				expect( outcome.reason ).toInclude( "/chat/completions" );
+				var remote = new bxagents.models.runtime.ModelProbe().ping( "", {
+					provider : "OpenAICompatible",
+					params   : { model : "my-model", baseURL : "http://127.0.0.1:1/v1" }
+				} );
+				expect( remote.reason ).notToInclude( "endpoint:" );
+				expect( remote.reason ).notToInclude( "BaseService.bx" );
 			} );
 
 			it( "maps every display name to the provider id aiService() takes", function() {
