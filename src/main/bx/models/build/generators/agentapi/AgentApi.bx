@@ -1653,8 +1653,32 @@ class {
 		arguments.event.setHTTPHeader( name : "Access-Control-Max-Age", value : "600" )
 	}
 
+	/**
+	 * The origin the request comes from: its Origin header. A browser sends none on a GET to the same origin, which is how the
+	 * hosted page (served by the agent itself) asks for its config; `Sec-Fetch-Site: same-origin` says so and a page script
+	 * cannot set it, so such a request counts as coming from the agent's own origin.
+	 */
 	private string function embedOrigin() {
-		return trim( getHTTPRequestData( false ).headers[ "origin" ] ?: "" )
+		var headers = getHTTPRequestData( false ).headers
+		var given = trim( headers[ "origin" ] ?: "" )
+		if ( len( given ) ) {
+			return given
+		}
+		return lCase( headers[ "sec-fetch-site" ] ?: "" ) == "same-origin" ? embedSelfOrigin() : ""
+	}
+
+	/** The scheme, host and port this request was made to, as a browser writes an origin */
+	private string function embedSelfOrigin() {
+		var headers = getHTTPRequestData( false ).headers
+		var host = trim( headers[ "host" ] ?: "" )
+		if ( !len( host ) ) {
+			return ""
+		}
+		var proto = lCase( listFirst( headers[ "x-forwarded-proto" ] ?: "", "," ) )
+		if ( proto != "https" && proto != "http" ) {
+			proto = ( cgi.server_port_secure ?: 0 ) == 1 || lCase( cgi.https ?: "" ) == "on" ? "https" : "http"
+		}
+		return lCase( proto & "://" & host )
 	}
 
 	private string function embedAuthorization() {
@@ -1674,7 +1698,7 @@ class {
 					}
 				}
 			}
-			var made = service().embedPublic( application.bxagentsEmbedLimiter, getInstance( "jwt@jwtcfml" ) )
+			var made = service().embedPublic( application.bxagentsEmbedLimiter, getInstance( "jwt@jwtcfml" ), embedSelfOrigin() )
 			request[ "bxagentsEmbedPublic" ] = isNull( made ) ? "" : made
 		}
 		return isSimpleValue( request.bxagentsEmbedPublic ) ? nullValue() : request.bxagentsEmbedPublic

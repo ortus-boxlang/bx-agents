@@ -24,12 +24,15 @@ class {
 	 * @session An EmbedSession
 	 * @limiter An EmbedLimiter, shared by every request of the server
 	 * @service The AgentService: the agent runs in this process, through the same TurnRunner as the rest of the API
+	 * @selfOrigin The origin this request was made to (scheme, host and port of the agent itself). The hosted page of an embed runs there,
+	 *             so a request from it is from this origin, which is accepted whether or not the embed lists it. Blank for none.
 	 */
-	function init( required any embeds, required any session, required any limiter, required any service ) {
+	function init( required any embeds, required any session, required any limiter, required any service, string selfOrigin = "" ) {
 		variables.embeds = arguments.embeds
 		variables.session = arguments.session
 		variables.limiter = arguments.limiter
 		variables.service = arguments.service
+		variables.selfOrigin = lCase( trim( arguments.selfOrigin ) )
 		return this
 	}
 
@@ -168,7 +171,7 @@ class {
 		if ( !len( arguments.origin ) || !variables.embeds.isLive( arguments.embedId ) ) {
 			return ""
 		}
-		return variables.embeds.get( arguments.embedId ).limits.allowedOrigins.contains( arguments.origin ) ? arguments.origin : ""
+		return isOriginAllowed( variables.embeds.get( arguments.embedId ), arguments.origin ) ? arguments.origin : ""
 	}
 
 	// ----------------------------------------------------------------------------------
@@ -181,11 +184,21 @@ class {
 			return notFound()
 		}
 		var embed = variables.embeds.get( arguments.embedId )
-		if ( !len( arguments.origin ) || !embed.limits.allowedOrigins.contains( arguments.origin ) ) {
+		if ( !isOriginAllowed( embed, arguments.origin ) ) {
 			variables.embeds.count( embed.id, "blockedOrigin" )
 			return Outcome::failed( "forbidden", "This website may not use this chat" )
 		}
 		return Outcome::done( embed )
+	}
+
+	/**
+	 * @return True when the origin is one of the embed's websites, or the agent's own (where the hosted page runs)
+	 */
+	private boolean function isOriginAllowed( required struct embed, required string origin ) {
+		if ( !len( arguments.origin ) ) {
+			return false
+		}
+		return arguments.embed.limits.allowedOrigins.contains( arguments.origin ) || ( len( variables.selfOrigin ) && arguments.origin == variables.selfOrigin )
 	}
 
 	/**

@@ -225,6 +225,27 @@ class extends="testbox.system.BaseSpec" {
 
 			} );
 
+			describe( "the agent's own origin, where the hosted page runs", function() {
+
+				it( "is accepted as well as the listed websites, and a token made for it is for it alone", function() {
+					var own = "https://agent.example.com";
+					var hosted = new bxagents.models.api.EmbedPublic( embeds, new bxagents.models.api.EmbedSession( jwt ), limiter, service, own );
+
+					expect( hosted.config( embed.id, own ).succeeded() ).toBeTrue();
+					expect( hosted.corsOrigin( embed.id, own ) ).toBe( own );
+					var token = "Bearer " & hosted.startSession( embed.id, own, "10.0.0.1" ).data().token;
+					expect( hosted.message( embed.id, own, token, { input : "hi" } ).succeeded() ).toBeTrue();
+					// the token is for the agent's own origin, not for a listed website
+					expect( hosted.message( embed.id, site, token, { input : "hi" } ).code() ).toBe( "unauthorized" );
+					// a website that is neither is still refused, and so is a request with no origin at all
+					expect( hosted.config( embed.id, "https://evil.example.com" ).code() ).toBe( "forbidden" );
+					expect( hosted.config( embed.id, "" ).code() ).toBe( "forbidden" );
+					// an agent that does not know its own origin accepts nothing extra
+					expect( pub.config( embed.id, own ).code() ).toBe( "forbidden" );
+				} );
+
+			} );
+
 			describe( "cors and the frame", function() {
 
 				it( "names an origin for CORS only when the embed is live and lists it", function() {

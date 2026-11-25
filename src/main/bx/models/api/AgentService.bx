@@ -95,12 +95,13 @@ class {
 	 *
 	 * @limiter The EmbedLimiter the whole server shares
 	 * @jwt jwtcfml's jwt object, which signs and checks the visitors' sessions
+	 * @selfOrigin The origin this request was made to, which is always an accepted origin (the hosted page runs there)
 	 */
-	any function embedPublic( required any limiter, required any jwt ) {
+	any function embedPublic( required any limiter, required any jwt, string selfOrigin = "" ) {
 		if ( !keepsEmbeds() ) {
 			return nullValue()
 		}
-		return new EmbedPublic( new "models.store.EmbedService@bxagents"( variables.store ), new EmbedSession( arguments.jwt ), arguments.limiter, this )
+		return new EmbedPublic( new "models.store.EmbedService@bxagents"( variables.store ), new EmbedSession( arguments.jwt ), arguments.limiter, this, arguments.selfOrigin )
 	}
 
 	/**
