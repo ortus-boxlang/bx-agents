@@ -603,7 +603,8 @@ task downloadBoxLang( type: Download ) {
 	dest "src/test/resources/libs"
     overwrite true
     onlyIfModified false
-	finalizedBy "downloadModules"
+	// Then download the bundled modules and install the dev libs
+	finalizedBy( "downloadModules" )
 }
 
 /**
@@ -668,6 +669,9 @@ task downloadModules {
 			println "+ Bundled module [${mod.name}@${version}] into ${destDir}"
 		}
 	}
+
+	// Finalize by calling installDevLibs
+	finalizedBy "installDevLibs"
 }
 
 /**
