@@ -79,6 +79,7 @@ await context.addInitScript( ( { key, origin } ) => {
 	// a visible pointer, so a viewer sees what is clicked
 	addEventListener( "DOMContentLoaded", () => {
 		const dot = document.createElement( "div" );
+		dot.id = "bx-pointer";
 		dot.style.cssText = "position:fixed;z-index:2147483647;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;background:rgba(124,58,237,.45);border:2px solid #7c3aed;pointer-events:none;transition:transform .08s;left:-50px;top:-50px";
 		document.documentElement.appendChild( dot );
 		addEventListener( "mousemove", e => { dot.style.left = e.clientX + "px"; dot.style.top = e.clientY + "px"; }, true );
@@ -96,7 +97,11 @@ let shots = 0;
  */
 async function shot( label ) {
 	shots++;
+	// the pointer is for the video: a still looks better without it
+	const pointer = visible => page.evaluate( v => { const d = document.getElementById( "bx-pointer" ); if ( d ) { d.style.visibility = v ? "visible" : "hidden"; } }, visible );
+	await pointer( false );
 	await page.screenshot( { path: path.join( outDir, String( shots ).padStart( 2, "0" ) + "-" + label + ".png" ) } );
+	await pointer( true );
 }
 
 /**
