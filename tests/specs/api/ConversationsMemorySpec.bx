@@ -156,6 +156,21 @@ class extends="testbox.system.BaseSpec" {
 				expect( heldBy( agent, "fresh" ) ).toBe( 0 );
 			} );
 
+			it( "says which agent a conversation belongs to, and only to its owner", function() {
+				var agent = agentWith();
+				var conversations = new bxagents.models.api.Conversations( agent, sessions );
+				var mine = conversations.create( ada, "", "helper" ).data().conversationId;
+				var main = conversations.create( ada, "", "keeper" ).data().conversationId;
+
+				expect( conversations.ownerOf( ada, mine ) ).toBe( "helper" );
+				// the main agent's conversations carry no agent of their own: they read as the main agent's name
+				expect( conversations.ownerOf( ada, main ) ).toBe( "keeper" );
+				// somebody else's and a missing one answer the same
+				expect( conversations.ownerOf( bob, mine ) ).toBe( "" );
+				expect( conversations.ownerOf( ada, "nobody" ) ).toBe( "" );
+				expect( conversations.ownerOf( ada, "" ) ).toBe( "" );
+			} );
+
 		} );
 	}
 

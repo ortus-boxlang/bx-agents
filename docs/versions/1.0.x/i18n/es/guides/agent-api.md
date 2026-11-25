@@ -189,7 +189,7 @@ Todas las rutas cuelgan de `/__bxagents` (o de tu `agentApi.path`). Hay 82 rutas
 | `POST /sessions` | Quien llama | Starts a conversation, for the main agent or one named in agent. |
 | `GET /sessions` | Quien llama | A page of the caller's conversations, newest first, with the total that match. |
 | `GET /export` | Quien llama | One conversation as a file, Markdown or a page of HTML. |
-| `GET /history` | Quien llama | The messages of one conversation. |
+| `GET /history` | Quien llama | The messages of one conversation, and `agent`, the agent it belongs to (the one it started with). |
 | `POST /clear` | Quien llama | Deletes the messages of a conversation, keeps the conversation. |
 | `POST /compact` | Quien llama | Summarizes the older messages and keeps the recent ones. |
 | `POST /memory/clear` | Quien llama | Forgets the messages of conversations and keeps the conversations: one of the caller's (conversationId), or with all (an admin) every conversation, or those of one agent. |

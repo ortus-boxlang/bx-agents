@@ -647,7 +647,8 @@ class {
 	}
 
 	/**
-	 * What was said in one of the caller's conversations, from the agent's memory.
+	 * What was said in one of the caller's conversations, from the agent's memory, and the agent it belongs to (a
+	 * conversation keeps the agent it started with, so a client reads it here rather than guessing from the list).
 	 *
 	 * Query: conversationId
 	 */
@@ -659,7 +660,11 @@ class {
 		if ( isNull( conversation ) ) {
 			return
 		}
-		answer( event, done( { "conversationId" : rc.conversationId, "messages" : conversation.history() } ) )
+		answer( event, done( {
+			"conversationId" : rc.conversationId,
+			"agent"          : service().conversations().ownerOf( callerOf( event ), rc.conversationId ),
+			"messages"       : conversation.history()
+		} ) )
 	}
 
 	/**
