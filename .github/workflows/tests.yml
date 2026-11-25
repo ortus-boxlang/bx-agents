@@ -188,18 +188,22 @@ jobs:
       - name: Verify the course (manifest, mirror, links, numbering)
         run: ./gradlew verifyCourse --stacktrace --console=plain
 
-      - name: Publish Test Reports
-        uses: mikepenz/action-junit-report@v6.5.0
+      # Publishes a "Test Report" check run with every suite, the failed tests with their
+      # stack traces, annotations on the PR diff, and a summary on the workflow run page
+      - name: Publish Test Report
+        uses: dorny/test-reporter@v2
         if: always()
         with:
-          report_paths: |
+          name: "Test Report ${{ matrix.os }}-${{ matrix.jdkVersion }}"
+          path: |
             **/build/test-results/test/*.xml
             **/surefire-reports/*.xml
             **/failsafe-reports/*.xml
-          check_name: "Tests Report ${{ matrix.os }}-${{ matrix.jdkVersion }}"
-          include_passed: false
-          fail_on_failure: true
-          detailed_summary: true
+          reporter: java-junit
+          list-suites: all
+          list-tests: failed
+          fail-on-error: true
+          fail-on-empty: false
 
       - name: Upload Test Results
         if: always()
