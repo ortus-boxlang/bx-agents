@@ -1,0 +1,158 @@
+/**
+ * `embed` CLI verb: the embeds of a deployed agent (the agent on another website, for anonymous visitors), kept in the
+ * project's shared chat database (`data/chat.db`, or the file named by BXAGENTS_DB), like the access tokens.
+ *
+ *   bxAgents embed create --name="Docs helper" --origin=https://docs.example.com[,https://other.example.com] [--tools=docs_search,...]
+ *                         [--agent=<name>] [--profile=<name>] [--title=...] [--welcome=...] [--placeholder=...] [--color=##2563eb]
+ *                         [--position=bottom-right|bottom-left] [--theme=light|dark|auto]
+ *                         [--per-minute=10] [--daily=200] [--max-chars=2000]
+ *   bxAgents embed list [--json]
+ *   bxAgents embed show --id=emb_... [--json]
+ *   bxAgents embed disable --id=emb_...
+ *   bxAgents embed rotate --id=emb_...
+ *
+ * Run it where the agent's database is. The tools are not checked against the agent here (the web app's Embeds page does that);
+ * a name the agent does not have is simply never run. The signing key is never printed.
+ */
+class {
+
+	/**
+	 * @options { projectRoot (required), _positional (create, list, show, disable or rotate), id, name, origin, tools, ... }
+	 */
+	struct function run( struct options = {} ) {
+		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+		if ( !len( projectRoot ) ) {
+			throw( type = "BxAgents.MissingProjectRoot", message = "`embed` requires a project root" )
+		}
+		var action = lCase( trim( arguments.options._positional ?: "" ) )
+		if ( !len( action ) || ![ "create", "list", "show", "disable", "rotate" ].contains( action ) ) {
+			throw( type = "BxAgents.UnknownEmbedAction", message = "`embed` needs one of: create, list, show, disable, rotate - for example `bxAgents embed list`." )
+		}
+
+		var file = new "models.store.ChatStorePath@bxagents"().forProject( projectRoot )
+		directoryCreate( getDirectoryFromPath( file ), true, true )
+		var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
+		store.migrate()
+		var embeds = new "models.store.EmbedService@bxagents"( store )
+
+		switch ( action ) {
+			case "create":
+				return create( embeds, arguments.options )
+			case "list":
+				return list( embeds, arguments.options )
+			case "show":
+				return show( embeds, arguments.options )
+			case "disable":
+				return disable( embeds, arguments.options )
+			case "rotate":
+				return rotate( embeds, arguments.options )
+		}
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private struct function create( required any embeds, required struct options ) {
+		var o = arguments.options
+		if ( !len( trim( o.name ?: "" ) ) ) {
+			throw( type = "BxAgents.MissingEmbedName", message = "`embed create` requires --name=<what to call it>, for example --name=""Docs helper""" )
+		}
+		var fields = {
+			name   : trim( o.name ),
+			target : { agent : trim( o.agent ?: "" ), profile : trim( o.profile ?: "" ) },
+			tools  : listToArray( o.tools ?: "", "," ).map( t => trim( t ) ).filter( t => len( t ) ),
+			look   : {},
+			limits : { allowedOrigins : listToArray( o.origin ?: "", "," ).map( t => trim( t ) ).filter( t => len( t ) ) }
+		}
+		for ( var key in [ "title", "welcome", "placeholder", "color", "position", "theme" ] ) {
+			if ( len( o[ key ] ?: "" ) ) {
+				fields.look[ key ] = o[ key ]
+			}
+		}
+		for ( var pair in [ { flag : "per-minute", field : "perVisitorPerMinute" }, { flag : "daily", field : "dailyMessages" }, { flag : "max-chars", field : "maxMessageChars" } ] ) {
+			if ( len( o[ pair.flag ] ?: "" ) ) {
+				fields.limits[ pair.field ] = isNumeric( o[ pair.flag ] ) ? val( o[ pair.flag ] ) : o[ pair.flag ]
+			}
+		}
+		try {
+			var made = arguments.embeds.create( fields )
+		} catch ( any e ) {
+			if ( e.type == "BxAgents.InvalidEmbed" ) {
+				return { exitCode : 1, message : e.message }
+			}
+			rethrow
+		}
+		var lines = [
+			"Embed [#made.name#] made: #made.id#",
+			"",
+			"  websites:  #made.limits.allowedOrigins.toList( ', ' )#",
+			"  tools:     #made.tools.len() ? made.tools.toList( ', ' ) : 'none (visitors can chat but the agent can use no tool)'#",
+			"  limits:    #made.limits.perVisitorPerMinute# a minute per visitor, #made.limits.dailyMessages# a day, #made.limits.maxMessageChars# characters a message",
+			"",
+			"The snippet to paste is on the web app's Embeds page. The id is not a secret; the signing key stays on the server."
+		]
+		return { exitCode : 0, message : lines.toList( char( 10 ) ), id : made.id }
+	}
+
+	private struct function list( required any embeds, required struct options ) {
+		var rows = arguments.embeds.list()
+		if ( arguments.options.json ?: false ) {
+			return { exitCode : 0, message : jsonSerialize( rows.map( e => plain( e ) ) ) }
+		}
+		if ( !rows.len() ) {
+			return { exitCode : 0, message : "No embeds yet. Make one with `bxAgents embed create --name=""Docs helper"" --origin=https://docs.example.com`." }
+		}
+		var lines = [ pad( "ID", 16 ) & pad( "NAME", 28 ) & pad( "STATE", 10 ) & "WEBSITES" ]
+		for ( var e in rows ) {
+			lines.append( pad( e.id, 16 ) & pad( e.name, 28 ) & pad( state( e ), 10 ) & e.limits.allowedOrigins.toList( ", " ) )
+		}
+		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+	}
+
+	private struct function show( required any embeds, required struct options ) {
+		var found = arguments.embeds.get( trim( arguments.options.id ?: "" ) )
+		if ( found.isEmpty() ) {
+			return { exitCode : 1, message : "There is no embed [#trim( arguments.options.id ?: '' )#]. See `bxAgents embed list`." }
+		}
+		return { exitCode : 0, message : jsonSerialize( plain( found ) ) }
+	}
+
+	private struct function disable( required any embeds, required struct options ) {
+		var id = trim( arguments.options.id ?: "" )
+		if ( arguments.embeds.get( id ).isEmpty() ) {
+			return { exitCode : 1, message : "There is no embed [#id#]. See `bxAgents embed list`." }
+		}
+		arguments.embeds.update( id, { enabled : false } )
+		return { exitCode : 0, message : "Embed #id# is off. Visitors are answered as if it did not exist." }
+	}
+
+	private struct function rotate( required any embeds, required struct options ) {
+		var id = trim( arguments.options.id ?: "" )
+		if ( arguments.embeds.get( id ).isEmpty() ) {
+			return { exitCode : 1, message : "There is no embed [#id#]. See `bxAgents embed list`." }
+		}
+		var rotated = arguments.embeds.rotate( id )
+		return { exitCode : 0, message : "Embed #id# has a new signing key (version #rotated.keyVersion#). Every open visitor session stopped working; the snippet on your website needs no change." }
+	}
+
+	private string function state( required struct embed ) {
+		if ( !arguments.embed.enabled ) {
+			return "off"
+		}
+		return isDate( arguments.embed.expires ) && arguments.embed.expires <= now() ? "expired" : "on"
+	}
+
+	/** An embed with its dates as text, so it can be written as JSON */
+	private struct function plain( required struct embed ) {
+		var out = duplicate( arguments.embed )
+		for ( var key in [ "expires", "createdAt", "updatedAt" ] ) {
+			out[ key ] = isDate( out[ key ] ?: "" ) ? dateTimeFormat( out[ key ], "yyyy-MM-dd'T'HH:mm:ss" ) : ""
+		}
+		out.state = state( arguments.embed )
+		return out
+	}
+
+	private string function pad( required string text, required numeric width ) {
+		return left( arguments.text & repeatString( " ", arguments.width ), arguments.width )
+	}
+
+}

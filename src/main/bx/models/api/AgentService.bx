@@ -72,6 +72,25 @@ class {
 	}
 
 	/**
+	 * @return True when the app has the shared database the embeds are kept in
+	 */
+	boolean function keepsEmbeds() {
+		return !isNull( variables.store )
+	}
+
+	/**
+	 * @return Embed management for an admin caller, or null when the app keeps no shared database. An embed can only list
+	 *         tools the agent has.
+	 */
+	any function embeds() {
+		if ( !keepsEmbeds() ) {
+			return nullValue()
+		}
+		var names = ( variables.agent.getConfig().tools ?: [] ).map( t => isStruct( t ) ? ( t.name ?: "" ) : toString( t ) ).filter( n => len( n ) )
+		return new Embeds( new "models.store.EmbedService@bxagents"( variables.store ), names, variables.apiPath )
+	}
+
+	/**
 	 * @return Account management for an admin caller, or null when the app keeps no shared database
 	 */
 	any function accounts() {

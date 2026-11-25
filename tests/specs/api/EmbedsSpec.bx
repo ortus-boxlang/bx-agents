@@ -1,0 +1,123 @@
+/**
+ * api.Embeds: the admin's side of embeds over the API. Admin only, never a key, every problem said at once.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.Embeds", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-embeds-api-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.service = new bxagents.models.store.EmbedService( store );
+				variables.embeds = new bxagents.models.api.Embeds( service, [ "docs_search", "now" ], "/__bxagents" );
+				variables.admin = new bxagents.models.api.Caller( id = "root", scope = "admin" );
+				variables.chat = new bxagents.models.api.Caller( id = "ada", scope = "chat" );
+				variables.good = { name : "Docs helper", tools : [ "docs_search" ], limits : { allowedOrigins : [ "https://docs.example.com" ] } };
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "refuses everyone who is not an admin, on every call", function() {
+				var made = embeds.create( admin, good ).data();
+
+				expect( embeds.list( chat ).code() ).toBe( "forbidden" );
+				expect( embeds.get( chat, made.id ).code() ).toBe( "forbidden" );
+				expect( embeds.create( chat, good ).code() ).toBe( "forbidden" );
+				expect( embeds.update( chat, made.id, { name : "x" } ).code() ).toBe( "forbidden" );
+				expect( embeds.rotate( chat, made.id ).code() ).toBe( "forbidden" );
+				expect( embeds.snippets( chat, made.id, "https://agent.example.com" ).code() ).toBe( "forbidden" );
+				expect( embeds.usage( chat, made.id ).code() ).toBe( "forbidden" );
+				// and nothing changed
+				expect( service.get( made.id ).name ).toBe( "Docs helper" );
+				expect( service.get( made.id ).keyVersion ).toBe( 1 );
+			} );
+
+			it( "lists embeds with the tools an embed may list, and never answers a key", function() {
+				var made = embeds.create( admin, good ).data();
+				var key = service.signingKey( made.id ).key;
+
+				var listed = embeds.list( admin ).data();
+				expect( listed.embeds ).toHaveLength( 1 );
+				expect( listed.tools ).toBe( [ "docs_search", "now" ] );
+				expect( jsonSerialize( listed ) ).notToInclude( key );
+				expect( jsonSerialize( embeds.get( admin, made.id ).data() ) ).notToInclude( key );
+				expect( jsonSerialize( embeds.rotate( admin, made.id ).data() ) ).notToInclude( service.signingKey( made.id ).key );
+				expect( embeds.get( admin, made.id ).data().createdAt ).toMatch( "^\d{4}-\d{2}-\d{2}T" );
+			} );
+
+			it( "says what is wrong, as bad_request, and refuses a tool the agent does not have", function() {
+				var none = embeds.create( admin, { name : "x", limits : { allowedOrigins : [] } } );
+				expect( none.code() ).toBe( "bad_request" );
+				expect( none.reason() ).toInclude( "allowedOrigins" );
+
+				var wild = embeds.create( admin, { name : "x", limits : { allowedOrigins : [ "https://*.example.com" ] } } );
+				expect( wild.code() ).toBe( "bad_request" );
+
+				var tool = duplicate( good );
+				tool.tools = [ "delete_all" ];
+				expect( embeds.create( admin, tool ).reason() ).toInclude( "[delete_all]" );
+				expect( service.list() ).toHaveLength( 0 );
+			} );
+
+			it( "changes an embed, turns it off with enabled false, and answers not_found for an unknown one", function() {
+				var made = embeds.create( admin, good ).data();
+
+				var off = embeds.update( admin, made.id, { enabled : false } );
+				expect( off.data().enabled ).toBeFalse();
+				expect( off.data().name ).toBe( "Docs helper" );
+				expect( service.isLive( made.id ) ).toBeFalse();
+
+				expect( embeds.update( admin, "emb_0000000000", { name : "x" } ).code() ).toBe( "not_found" );
+				expect( embeds.get( admin, "nope" ).code() ).toBe( "not_found" );
+				expect( embeds.rotate( admin, "emb_0000000000" ).code() ).toBe( "not_found" );
+				expect( embeds.update( admin, made.id, { limits : { allowedOrigins : [ "ftp://x" ] } } ).code() ).toBe( "bad_request" );
+			} );
+
+			it( "writes the four snippets for the embed, on the agent's own address, and refuses a base that is not an origin", function() {
+				var made = embeds.create( admin, good ).data();
+				var out = embeds.snippets( admin, made.id, "https://agent.example.com" ).data().snippets;
+
+				expect( out.map( s => s.id ) ).toBe( [ "html", "iframe", "component", "curl" ] );
+				expect( out[ 1 ].code ).toBe( '<script src="https://agent.example.com/__bxagents/embed/widget.js" data-embed="#made.id#" defer></script>' );
+				expect( out[ 2 ].code ).toInclude( "https://agent.example.com/__bxagents/embed/#made.id#/frame" );
+				expect( out[ 3 ].code ).toInclude( 'embed="#made.id#"' );
+				expect( out[ 4 ].code ).toInclude( "Origin: https://docs.example.com" );
+				for ( var s in out ) {
+					expect( s.note ).notToBe( "" );
+				}
+				expect( embeds.snippets( admin, made.id, "javascript:alert(1)" ).code() ).toBe( "bad_request" );
+				expect( embeds.snippets( admin, made.id, "https://a.example.com/x" ).code() ).toBe( "bad_request" );
+				expect( embeds.snippets( admin, "emb_0000000000", "https://agent.example.com" ).code() ).toBe( "not_found" );
+			} );
+
+			it( "does not let a title break out of the iframe snippet", function() {
+				var evil = duplicate( good );
+				evil.look = { title : '"><script>alert(1)</script>' };
+				var made = embeds.create( admin, evil ).data();
+				var frame = embeds.snippets( admin, made.id, "https://agent.example.com" ).data().snippets[ 2 ].code;
+
+				expect( frame ).notToInclude( "<script>" );
+				expect( frame ).toInclude( 'title="&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;"' );
+			} );
+
+			it( "reports real counters, zeros for a quiet embed", function() {
+				var made = embeds.create( admin, good ).data();
+				expect( embeds.usage( admin, made.id ).data() ).toBe( { days : 7, messages : 0, blockedOrigin : 0, limited : 0 } );
+
+				service.count( made.id, "messages" );
+				service.count( made.id, "blockedOrigin", 2 );
+				var seen = embeds.usage( admin, made.id ).data();
+				expect( seen.messages ).toBe( 1 );
+				expect( seen.blockedOrigin ).toBe( 2 );
+				expect( embeds.usage( admin, "nope" ).code() ).toBe( "not_found" );
+			} );
+
+		} );
+	}
+
+}

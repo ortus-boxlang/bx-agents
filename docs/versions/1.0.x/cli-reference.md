@@ -127,6 +127,9 @@ Hash a plaintext password for a webui users entry.
 ::: card title="token" icon="phosphor-duotone:identification-card" href="#token"
 Issue, list and revoke access tokens for a deployed agent.
 :::
+::: card title="embed" icon="phosphor-duotone:chat-teardrop-dots" href="#embed"
+Put the agent on another website, for anonymous visitors.
+:::
 ::: card title="users" icon="phosphor-duotone:users" href="#users"
 List the web page's accounts and choose who is an admin.
 :::
@@ -852,6 +855,23 @@ bxAgents token revoke --name=laptop
 - `list` shows each token's name, scope, status (`active`, `expired` or `revoked`), when it was made, last used and expires. Never the token itself.
 - `revoke` stops a token working at once. The name stays taken, so it cannot be reused by accident.
 - Run it where the database is: on the server, or in the project before you pack it. On a deployed server, point `BXAGENTS_DB` at the file the app uses.
+
+### `embed`
+
+The embeds of a deployed agent (the agent on another website, for anonymous visitors), kept in the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) like the access tokens. See [Embeds](conventions/embeds.md).
+
+```bash
+bxAgents embed create --name="Docs helper" --origin=https://docs.example.com[,https://other.example.com] [--tools=docs_search,...]
+bxAgents embed list [--json]
+bxAgents embed show --id=emb_...
+bxAgents embed disable --id=emb_...
+bxAgents embed rotate --id=emb_...
+```
+
+- `create` needs `--name` and at least one `--origin` (comma separated; each exactly scheme, host and optional port, no path, no wildcard). Optional: `--agent`, `--profile`, `--title`, `--welcome`, `--placeholder`, `--color`, `--position` (`bottom-right` or `bottom-left`), `--theme` (`light`, `dark` or `auto`), `--per-minute` (default 10), `--daily` (default 200) and `--max-chars` (default 2000). It prints the id, which is not a secret.
+- The tools are not checked against the agent here; the web app's Embeds page does that. A name the agent does not have is never run.
+- `disable` turns the embed off: visitors are answered as if it did not exist. `rotate` gives it a new signing key and every open visitor session stops working. The signing key is never printed.
+- Run it where the database is, like [`token`](#token).
 
 ### `users`
 

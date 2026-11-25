@@ -1460,6 +1460,58 @@ class {
 	}
 
 	/**
+	 * The embeds, for an admin: GET lists them (never a key) with the names of the tools an embed may list, POST makes one.
+	 * Body of POST: { name, enabled?, expires?, target?, look?, tools?, limits : { allowedOrigins, ... } }
+	 */
+	function embeds( event, rc, prc ) {
+		embedAction( event, ( kept, who ) => event.getHTTPMethod() == "POST" ? kept.create( who, bodyOf( event ) ) : kept.list( who ) )
+	}
+
+	/** One embed. Query: id */
+	function embed( event, rc, prc ) {
+		embedAction( event, ( kept, who ) => kept.get( who, toString( rc.id ?: "" ) ) )
+	}
+
+	/** Body: { id, ...the fields to change } */
+	function updateEmbed( event, rc, prc ) {
+		var body = bodyOf( event )
+		embedAction( event, ( kept, who ) => kept.update( who, toString( body.id ?: "" ), body ) )
+	}
+
+	/** A new signing key for an embed. Body: { id } */
+	function rotateEmbed( event, rc, prc ) {
+		var body = bodyOf( event )
+		embedAction( event, ( kept, who ) => kept.rotate( who, toString( body.id ?: "" ) ) )
+	}
+
+	/** What to paste on the other website. Query: id, base (the address the agent is reached at, an origin) */
+	function embedSnippets( event, rc, prc ) {
+		embedAction( event, ( kept, who ) => kept.snippets( who, toString( rc.id ?: "" ), toString( rc.base ?: "" ) ) )
+	}
+
+	/** What an embed did in the last 7 days. Query: id */
+	function embedUsage( event, rc, prc ) {
+		embedAction( event, ( kept, who ) => kept.usage( who, toString( rc.id ?: "" ) ) )
+	}
+
+	/**
+	 * Runs one embeds call for the caller, or answers that this app keeps no database for them.
+	 *
+	 * @run ( embeds, caller ) => an Outcome
+	 */
+	private void function embedAction( required any event, required function run ) {
+		if ( refused( arguments.event ) ) {
+			return
+		}
+		var kept = service().embeds()
+		if ( isNull( kept ) ) {
+			answer( arguments.event, failed( "not_found", "This server keeps no database, so it has no embeds" ) )
+			return
+		}
+		answer( arguments.event, arguments.run( kept, callerOf( arguments.event ) ) )
+	}
+
+	/**
 	 * Body: { scope, id, text }
 	 */
 	function updateNote( event, rc, prc ) {

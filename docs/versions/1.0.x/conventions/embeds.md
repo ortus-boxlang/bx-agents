@@ -9,8 +9,8 @@ tags: [conventions, embeds, web-ui, security]
 # Embeds
 
 !!! info "Status"
-    This page is the **spec** for increment 1, written before the code. Anything marked *proposed* is open to change. What is
-    built is listed in the [changelog](https://github.com/ortus-boxlang/bx-agents/blob/development/changelog.md).
+    This page is the **spec** for increment 1. Built so far: the record and its store, the admin routes and the `bxAgents embed`
+    verb. The public routes, the widget and the Embeds page are still to come. Anything marked *proposed* is open to change.
 
 An **embed** lets a visitor of another website chat with your agent. An admin defines it in the web app (Admin, Embeds), copies
 a snippet, and pastes it into the other site. Increment 1 supports one case: an **anonymous docs agent**. The visitor is not
@@ -89,15 +89,20 @@ An embed route never reaches an admin route, because it is a different set of ha
 
 ### Admin (admin scope only)
 
+Like every other route of the agent API, the id goes in the query or the body, not in the path.
+
 ```text
-GET    <api>/embeds                   list
-POST   <api>/embeds                   create; the answer carries the new id
-GET    <api>/embeds/<id>              one embed, without the key
-PUT    <api>/embeds/<id>              replace the editable fields (validated); enable and disable are the field `enabled`
-POST   <api>/embeds/<id>/rotate       new signing key; every open session stops working
-GET    <api>/embeds/<id>/snippets     the HTML script tag, iframe, web component and curl, with the id filled in
-GET    <api>/embeds/<id>/usage        counters: messages in the last 7 days, blocked for a wrong origin, visitors who hit a limit
+GET  <api>/embeds               list, with the names of the tools an embed may list
+POST <api>/embeds               create; the answer carries the new id
+GET  <api>/embeds/get?id=       one embed, without the key
+POST <api>/embeds/update        body { id, ...fields }; fields not sent keep their value; { enabled: false } turns it off
+POST <api>/embeds/rotate        body { id }; new signing key; every open session stops working
+GET  <api>/embeds/snippets?id=&base=   the HTML script tag, iframe, web component and curl, with the id filled in
+GET  <api>/embeds/usage?id=     counters for the last 7 days: messages, refused for a wrong origin, refused for a limit
 ```
+
+They are in `ApiContract`, so the OpenAPI document and the route specs have them. Embed management needs the app's shared database;
+without one the routes answer `not_found`. There is no opt-in flag like `manageTokens`: admin scope is the only gate.
 
 CLI: `bxAgents embed create|list|show|disable|rotate`. They are added to `ApiContract`, so the OpenAPI document and the route
 specs pick them up.
@@ -214,5 +219,7 @@ The counters are real numbers read from stored usage, or an honest empty state (
 
 ## Open points (proposed, tell me if you disagree)
 
-1. Admin routes need no opt-in flag (unlike `agentApi.manageTokens`), only the admin scope. They need a flag on the **public** side: `agentApi.enabled` must be true for embeds to work, and `agentApi.embeds: false` turns the public routes off. *Proposed.*
-2. Daily and counter numbers are kept in the database (so a restart does not reset the cap); the per-minute window is in memory. *Proposed, to verify against the database layer in task 3.*
+1. `agentApi.embeds: false` to turn the public routes off. *Proposed, optional, not built.*
+2. The daily cap and the counters are kept in the database (`embed_usage`, one row per embed per day), so a restart does not reset the cap. The per-minute window is in memory. *Built: the table and the counters. The window comes with the public routes.*
+3. The signing key is stored as it is in the `embeds` table, not sealed like a vault secret: a stolen database file would let someone mint sessions, which an anonymous visitor can already get. It is never returned by any route.
+4. "Visitors who hit the limit" is shown as **requests refused for a limit**, a count of refusals, because counting distinct visitors would need to store visitor ids.
