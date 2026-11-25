@@ -98,10 +98,11 @@ test.describe( "Memory: clearing everyone's conversations", () => {
 		await page.goto( APP + "/memory" );
 		await expect( page.getByText( "No conversations with this agent yet." ) ).toBeVisible();
 		await page.getByRole( "button", { name: "Clear everyone's conversation memory" } ).click();
-		await expect( page.locator( "#confirmTitle" ) ).toHaveText( "Clear everyone's conversation memory?" );
+		// the dev agent has a sub-agent, so the page names the agent it clears: the title says "of ui-dev" and the request carries it
+		await expect( page.locator( "#confirmTitle" ) ).toHaveText( "Clear everyone's conversation memory of ui-dev?" );
 		await expect( page.locator( "#confirmBody" ) ).toContainText( "all 3 conversations of all 2 people, not only yours" );
 		await page.locator( "#confirmDialog" ).getByRole( "button", { name: "Clear everyone's" } ).click();
-		await expect.poll( () => cleared ).toEqual( { all: true } );
+		await expect.poll( () => cleared ).toEqual( { all: true, agent: "ui-dev" } );
 	} );
 
 	test( "a member does not get the button", async( { member } ) => {
