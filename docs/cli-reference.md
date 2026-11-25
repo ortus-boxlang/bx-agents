@@ -40,14 +40,14 @@ Two ways round it:
 
 ## The banner
 
-At an interactive terminal, `bxAgents --help` and the end of the `new` wizard greet you with the BxAgents name in block letters, painted in a gradient picked at random from eight themes (Ocean, Fire, Sunset, Purple, Mint, Gray, Forest, Gold), the same idea as the ColdBox CLI's banner. It is never written to a pipe or a file.
+At an interactive terminal, `bxAgents --help` and the end of the `new` wizard greet you with the BxAgents name in block letters, painted left to right in the Ortus brand gradient, cyan (`#00DBFF`) to green (`#00FF78`), matching BxRig. It is never written to a pipe or a file. Alternative themes remain available: Ocean, Fire, Sunset, Purple, Mint, Gray, Forest and Gold.
 
 | Setting | Effect |
 |---|---|
 | `NO_COLOR`, `--no-color` | Same shape, no color |
 | `TERM=dumb`, output that is not UTF-8, or a terminal narrower than the art (75 columns) | One plain line instead |
 | `--no-banner`, or `BXAGENTS_BANNER=off` | No banner |
-| `BXAGENTS_BANNER_THEME=Ocean` | Pin a theme instead of a random one, for a recording that comes out the same every time |
+| `BXAGENTS_BANNER_THEME=Ocean` | Select an alternative theme; unset or `Brand` uses the brand gradient |
 
 ## Every verb accepts
 

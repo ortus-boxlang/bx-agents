@@ -1,20 +1,19 @@
 /**
- * The BxAgents banner: the name in big block letters, painted top to bottom in a gradient that is
- * picked at random each time (the same idea as the ColdBox CLI's banner), with an optional line
- * under it.
+ * The BxAgents banner: the name in big block letters, painted left to right with the Ortus
+ * cyan-to-green brand gradient, with an optional line under it.
  *
  * It is a greeting for a person at a terminal, so it is never written to a pipe or a file, and
  * `BXAGENTS_BANNER=off` turns it off. `NO_COLOR` and `--no-color` keep the shape and drop the
  * color; `TERM=dumb`, or output that is not UTF-8, gets one plain line, since block characters
  * would not draw there.
- * `BXAGENTS_BANNER_THEME=Ocean` pins a theme, which is how a recording stays the same every time.
+ * `BXAGENTS_BANNER_THEME=Ocean` selects an alternative theme.
  */
 import bxModules.bxagents.models.util.Terminal;
 
 class {
 
 	static {
-		// 256 color codes, light to dark down the six rows
+		// Alternative themes use 256 color codes, light to dark down the six rows.
 		THEMES = {
 			Ocean  : [ 81, 75, 69, 63, 57, 21 ],
 			Fire   : [ 196, 160, 124, 88, 52, 88 ],
@@ -42,7 +41,7 @@ class {
 	 * @return The theme names, in the order they are listed
 	 */
 	array function themes() {
-		return static.THEMES.keyArray().sort( "textnocase" )
+		return static.THEMES.keyArray().append( "Brand" ).sort( "textnocase" )
 	}
 
 	/**
@@ -70,7 +69,7 @@ class {
 	 * Builds the banner as lines.
 	 *
 	 * @subTitle A line under the art, such as the version; empty for none
-	 * @theme A theme name, or empty to pick one at random
+	 * @theme A theme name; empty uses the brand gradient
 	 * @color False for no color codes
 	 * @columns The terminal width. Narrower than the art gets one plain line
 	 *
@@ -80,13 +79,14 @@ class {
 		if ( arguments.columns < width() ) {
 			return [ "bxAgents" & ( len( arguments.subTitle ) ? "  " & arguments.subTitle : "" ) ]
 		}
-		var name = len( arguments.theme ) ? chosen( arguments.theme ) : pick()
-		var gradient = static.THEMES[ name ]
+		var name = chosen( arguments.theme )
+		var brand = name == "Brand"
+		var gradient = brand ? [] : static.THEMES[ name ]
 		var esc = char( 27 )
 		var out = [ "" ]
 		var rows = art()
 		for ( var r = 1; r <= rows.len(); r++ ) {
-			out.append( arguments.color ? esc & "[38;5;" & gradient[ r ] & "m" & rows[ r ] & esc & "[0m" : rows[ r ] )
+			out.append( !arguments.color ? rows[ r ] : ( brand ? paintBrand( rows[ r ] ) : esc & "[38;5;" & gradient[ r ] & "m" & rows[ r ] & esc & "[0m" ) )
 		}
 		if ( len( arguments.subTitle ) ) {
 			var block = 48
@@ -96,7 +96,7 @@ class {
 			var left = int( space / 2 )
 			var indent = repeatString( " ", max( 0, int( ( width() - block ) / 2 ) ) )
 			var colored = arguments.color
-			var edge = ( line ) => colored ? esc & "[38;5;" & gradient.last() & "m" & line & esc & "[0m" : line
+			var edge = ( line ) => !colored ? line : ( brand ? paintBrand( line ) : esc & "[38;5;" & gradient.last() & "m" & line & esc & "[0m" )
 			out.append( edge( indent & repeatString( "▄", block ) ) )
 			out.append( indent & "██" & repeatString( " ", left ) & text & repeatString( " ", space - left ) & "██" )
 			out.append( edge( indent & repeatString( "▀", block ) ) )
@@ -150,14 +150,25 @@ class {
 		return encoding.lCase().replace( "-", "" ) == "utf8"
 	}
 
-	private string function pick() {
-		var names = themes()
-		return names[ randRange( 1, names.len() ) ]
+	private string function paintBrand( required string line ) {
+		var out = ""
+		var esc = char( 27 )
+		var size = arguments.line.len()
+		for ( var x = 1; x <= size; x++ ) {
+			var ch = arguments.line.mid( x, 1 )
+			if ( ch == " " ) {
+				out &= ch
+				continue
+			}
+			var t = ( x - 1 ) / max( 1, size - 1 )
+			out &= esc & "[38;2;0;" & round( 219 + 36 * t ) & ";" & round( 255 - 135 * t ) & "m" & ch
+		}
+		return out & esc & "[0m"
 	}
 
 	private string function chosen( required string theme ) {
 		var match = themes().filter( n => n.lCase() == theme.lCase() )
-		return match.len() ? match[ 1 ] : pick()
+		return match.len() ? match[ 1 ] : "Brand"
 	}
 
 	private numeric function columns() {

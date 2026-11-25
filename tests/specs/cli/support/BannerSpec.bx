@@ -30,22 +30,28 @@ class extends="testbox.system.BaseSpec" {
 				expect( painted.every( l => l.endsWith( esc & "[0m" ) ) ).toBeTrue();
 			} );
 
-			it( "knows the same eight themes the ColdBox CLI has, and ignores the case of a name", function() {
-				expect( banner.themes() ).toBe( [ "Fire", "Forest", "Gold", "Gray", "Mint", "Ocean", "Purple", "Sunset" ] );
+			it( "keeps the alternative themes and ignores the case of a name", function() {
+				expect( banner.themes() ).toBe( [ "Brand", "Fire", "Forest", "Gold", "Gray", "Mint", "Ocean", "Purple", "Sunset" ] );
 				expect( banner.render( theme = "oCeAn" )[ 2 ] ).toInclude( "[38;5;81m" );
 			} );
 
-			it( "picks a theme at random when none is given, and falls back to a random one for a name it does not know", function() {
-				var seen = {};
-				for ( var i = 1; i <= 60; i++ ) {
-					seen[ banner.render()[ 2 ] ] = true;
+			it( "defaults to the BxRig cyan-to-green gradient and preserves the art", function() {
+				var lines = banner.render();
+				var rows = banner.art();
+				for ( var r = 1; r <= rows.len(); r++ ) {
+					var line = lines[ r + 1 ];
+					expect( line ).toInclude( esc & "[38;2;0;219;255m" );
+					expect( line ).toInclude( esc & "[38;2;0;255;120m" );
+					expect( line ).toEndWith( esc & "[0m" );
+					expect( line.reReplace( esc & "\[[0-9;]*m", "", "all" ) ).toBe( rows[ r ] );
 				}
-				expect( seen.count() ).toBeGT( 1 );
-				expect( banner.render( theme = "Nope" )[ 2 ] ).toInclude( "[38;5;" );
+				expect( banner.render() ).toBe( lines );
+				expect( banner.render( theme = "Nope" ) ).toBe( lines );
+				expect( banner.render( theme = "bRaNd" ) ).toBe( lines );
 			} );
 
 			it( "leaves out the color codes when asked, and keeps the shape", function() {
-				var lines = banner.render( "v1", "Ocean", false );
+				var lines = banner.render( subTitle = "v1", color = false );
 
 				expect( lines.some( l => l.find( esc ) ) ).toBeFalse();
 				expect( lines ).toInclude( banner.art()[ 1 ] );
