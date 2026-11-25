@@ -1007,6 +1007,39 @@ try {
 	}
 	println( "+ Confirmed: two callers can use one thread id and each is told its own; cancel and steer by another caller answer false and resume is 403 not_your_run" )
 
+	// routines: `all=1` is the documented way to list everyone's, as it is for /sessions; a member who asks for it is refused on both
+	issuedMade = issuedCall( "POST", "/routines", goodToken, '{"name":"daily","schedule":"every 30m","prompt":"say hi"}' )
+	if ( issuedMade.status != 200 || !issuedMade.body.find( "daily" ) ) {
+		throw( type = "BxAgents.RoutineNotMade", message = "POST /routines by a member should make one (HTTP #issuedMade.status#): #left( issuedMade.body, 300 )#" )
+	}
+	issuedOwn = issuedCall( "GET", "/routines", adminToken )
+	if ( issuedOwn.status != 200 || issuedOwn.body.find( "daily" ) ) {
+		throw( type = "BxAgents.RoutinesListedWithoutAll", message = "The admin's own list should not hold the member's routine (HTTP #issuedOwn.status#): #left( issuedOwn.body, 300 )#" )
+	}
+	for ( issuedAll in [ "1", "true", "TRUE", "yes" ] ) {
+		issuedEveryones = issuedCall( "GET", "/routines?all=#issuedAll#", adminToken )
+		if ( issuedEveryones.status != 200 || !issuedEveryones.body.find( "daily" ) ) {
+			throw( type = "BxAgents.RoutinesAllIgnored", message = "GET /routines?all=#issuedAll# by an admin should list everyone's (HTTP #issuedEveryones.status#): #left( issuedEveryones.body, 300 )#" )
+		}
+	}
+	for ( issuedNo in [ "0", "false", "" ] ) {
+		issuedNotAll = issuedCall( "GET", "/routines?all=#issuedNo#", adminToken )
+		if ( issuedNotAll.status != 200 || issuedNotAll.body.find( "daily" ) ) {
+			throw( type = "BxAgents.RoutinesAllTooWide", message = "GET /routines?all=#issuedNo# should list only the admin's own (HTTP #issuedNotAll.status#): #left( issuedNotAll.body, 300 )#" )
+		}
+	}
+	for ( issuedPath in [ "/routines?all=1", "/routines?all=true", "/sessions?all=1", "/sessions?all=true" ] ) {
+		issuedMember = issuedCall( "GET", issuedPath, goodToken )
+		if ( issuedMember.status != 403 || !issuedMember.body.find( "forbidden" ) ) {
+			throw( type = "BxAgents.AllNotRefusedForAMember", message = "GET #issuedPath# by a member should be 403 forbidden (HTTP #issuedMember.status#): #left( issuedMember.body, 300 )#" )
+		}
+	}
+	issuedMine = issuedCall( "GET", "/routines?all=0", goodToken )
+	if ( issuedMine.status != 200 || !issuedMine.body.find( "daily" ) ) {
+		throw( type = "BxAgents.MemberRoutinesLost", message = "A member's own list (all=0) should hold their routine (HTTP #issuedMine.status#): #left( issuedMine.body, 300 )#" )
+	}
+	println( "+ Confirmed: GET /routines?all=1 lists everyone's for an admin (as ?all=true does), all=0 does not, and a member asking for all is 403 on /routines and /sessions" )
+
 	// revoking takes effect on the next request, without a restart
 	issuedTokens.revoke( "laptop" )
 	bx:http url="#issuedBase#/tools" method="GET" result="issuedAfterRevoke" timeout=30 {
