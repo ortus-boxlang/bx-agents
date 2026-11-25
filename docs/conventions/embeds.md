@@ -11,7 +11,7 @@ tags: [conventions, embeds, web-ui, security]
 !!! info "Status"
     This page is the **spec** for increment 1. Built so far: the record and its store, the admin routes, the `bxAgents embed`
     verb, and the public routes (config, session, events, cancel, history, frame) with the origin check, the signed session and
-    the limits. The embed filter is built too. The real widget and the Embeds page are still to come. Anything marked *proposed* is open to change.
+    the limits. The embed filter and the widget (with the hosted page) are built too. The Embeds admin page is still to come. Anything marked *proposed* is open to change.
 
 An **embed** lets a visitor of another website chat with your agent. An admin defines it in the web app (Admin, Embeds), copies
 a snippet, and pastes it into the other site. Increment 1 supports one case: an **anonymous docs agent**. The visitor is not
@@ -205,6 +205,18 @@ Run against a built app with a scripted model (a throwaway demo, not a real mode
 - **An open API (no `agentApi` token) lets anyone call the admin routes, as it always has.** Before an embed goes on the public internet, give the API a token. Visitors are not affected by it: they do not use it.
 
 `chunk` frames carry the model's own tool-call arguments (`delta.tool_calls`), as they do for every client of the stream; the `tool` frames a visitor gets carry the tool's name, its status and the time it took, not its arguments.
+
+## The widget
+
+`widget.js` is one file of plain JavaScript with no dependencies: a `<bx-agent>` element with a shadow root, a launcher and a panel (or, with `mode="page"`, the chat filling the page). Attributes: `embed`, `base` (taken from the script's own address when left out), `mode`, `storage` (`local` or `none`), `storage-key` and `credentials`. They are read **once, when the element connects**, because the saved transcript is restored then; a page script that sets them later changes nothing. `headers` (an async function) and `onUnauthorized` are properties read at each request. It sends `bx-done` and `bx-error` events.
+
+Accessibility: the launcher is a real button with `aria-expanded`; the panel is a labelled dialog; opening moves focus to the input and Esc closes and gives it back to the launcher; the conversation is a `role="log"` that is not read piece by piece while streaming, and the finished answer is announced once from a status region; colours come from tokens with the text colour chosen for contrast on the embed's colour; `prefers-reduced-motion` and `prefers-color-scheme` are respected; answers are shown as text, never as HTML.
+
+Measured in Chromium against real loopback servers on other ports (an allowed website on 9100, another on 9200): the allowed website got the launcher, focus moved to the input and back on Esc, the answer arrived as 35 DOM updates (not one block), and the transcript came back after a reload; the other website got no launcher, because its `config` request was refused with no CORS header; the hosted frame drew on the allowed website and Chromium blocked it on the other (`frame-ancestors`), although the app also sends `X-Frame-Options: SAMEORIGIN`.
+
+The hosted page runs on the agent's own origin, so a request from it is from that origin: a browser sends no `Origin` header on a same-origin `GET`, so the agent reads `Sec-Fetch-Site: same-origin` (which a page script cannot set) as "from my own origin". The agent's own origin is accepted whether or not the embed lists it. A visitor who opens the frame address directly is a visitor like any other.
+
+Known limit: a visitor's conversation belongs to its session (one hour, kept in `localStorage` so a reload keeps it). After it expires the widget still shows the saved transcript, but the agent starts without the earlier messages.
 
 ## The hosted frame
 
