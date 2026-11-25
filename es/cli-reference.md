@@ -575,7 +575,7 @@ En la pantalla:
 | Tecla | Hace |
 |---|---|
 | Enter | Envía el mensaje |
-| Alt+Enter, Ctrl+J, o `\` y luego Enter | Nueva línea en el mensaje |
+| Shift+Enter, Ctrl+J, o `\` y luego Enter | Nueva línea en el mensaje |
 | Arriba / Abajo | Mensajes anteriores (desde la primera o última línea del cuadro) |
 | Esc | Detiene al agente. Se detiene en su siguiente paso, no a mitad de palabra |
 | Enter mientras el agente trabaja | Lo dirige: tu mensaje se añade a la ejecución |
@@ -680,7 +680,7 @@ chat:
   shell: true        # false apaga !; o el shell a usar: "bash -c", "pwsh -Command"
   bifs: true         # false apaga #; o las funciones permitidas: [ dateFormat, listLen ]
   keys:              # cambia las teclas de una acción; una tecla o una lista. /keys muestra los nombres de acción
-    newline: [ ctrl+n, alt+enter ]
+    newline: [ ctrl+n, shift+enter ]
     stop: ctrl+x
   prefixes: { desk:explain: "?%" }   # el prefijo de un prefix de una extensión, por id (extensión:método)
   sources: { desk:ticket: issue }    # el nombre del source @nombre:consulta de una extensión, por id

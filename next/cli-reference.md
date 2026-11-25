@@ -594,7 +594,7 @@ In the screen:
 | Key | Does |
 |---|---|
 | Enter | Send the message |
-| Alt+Enter, Shift+Enter, Ctrl+J, or `\` then Enter | New line in the message |
+| Shift+Enter, Ctrl+J, or `\` then Enter | New line in the message |
 | Up / Down | Earlier messages (from the first or last line of the box) |
 | Esc | Stop the agent. It stops at its next step, not mid-word |
 | Enter while the agent works | Steer it: your message is added to the run |
@@ -726,7 +726,7 @@ chat:
   shell: true        # false switches ! off; or the shell to use: "bash -c", "pwsh -Command"
   bifs: true         # false switches # off; or the functions allowed: [ dateFormat, listLen ]
   keys:              # change the keys of an action; one key or a list. /keys shows the action names
-    newline: [ ctrl+n, alt+enter ]
+    newline: [ ctrl+n, shift+enter ]
     stop: ctrl+x
   prefixes: { desk:explain: "?%" }   # the prefix of an extension's prefix, by id (extension:method)
   sources: { desk:ticket: issue }    # the name of an extension's @name:query source, by id

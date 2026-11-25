@@ -26,7 +26,7 @@ bxAgents chat
 ```
 
 1. Type a question and press **Enter**. The answer streams in; any tool the agent calls is shown with its arguments and how long it took.
-2. Press **Alt+Enter** for a second line before sending.
+2. Press **Shift+Enter** for a second line before sending.
 3. Type `/` and look at the menu, or `?` for the keys. Type `/tools` to see what the agent can call.
 4. Press **Esc** while the agent is working to stop it at its next step. Type while it works to **steer** it: your message is added to the run.
 5. `/copy` puts the last answer on the clipboard.

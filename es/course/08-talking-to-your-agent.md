@@ -30,7 +30,7 @@ para el prompt de línea a línea.
 
 Qué puedes hacer en él:
 
-- **Teclas.** Enter envía, Alt+Enter añade una línea, Arriba y Abajo recorren tu historial, Esc
+- **Teclas.** Enter envía, Shift+Enter añade una línea, Arriba y Abajo recorren tu historial, Esc
   detiene al agente, y un mensaje escrito mientras trabaja lo reconduce. `?` o `/keys` lista
   todas las teclas, y puedes reasignarlas en `~/.bxagents/Agent.yml`.
 - **Comandos de barra.** Escribe `/` para ver un menú: `/help`, `/tools`, `/model`, `/info` y más.
