@@ -343,17 +343,11 @@ class {
 	 * @return The exit code `main()` passes to CLIExit() (0 success, 1 failure) - never exits the process itself, so it stays directly callable from tests
 	 */
 	function dispatch( args = [] ) {
-		// Relative to this file's OWN location (the module root) - confirmed
-		// empirically this session that BoxLang resolves a bare dotted path
-		// like "models.cli.New" relative to the module root ONLY from the
-		// file BoxRunner directly invokes as the module's main() (this one);
-		// nested classes (see e.g. New.bx's own reference to
-		// ProjectScaffolder) do NOT get the same relative treatment and must
-		// use the "Class@bxagents" suffix form instead - see BuildPipeline.bx.
-		var firstToken = arrayLen( arguments.args ) >= 1 ? arguments.args[ 1 ] : ""
+		var firstToken = arrayLen( arguments.args ) >= 1 ? arguments.args.first() : ""
 
+		// Handle special flags like --version and -v early, before any verb processing.
 		if ( firstToken == "--version" || firstToken == "-v" ) {
-			println( "bxAgents v#this.version#" )
+			println( "🤖 bxAgents v#this.version#" )
 			return 0
 		}
 
@@ -368,13 +362,16 @@ class {
 			return 0
 		}
 
+		// If no verb is provided, print usage and return an error.
 		if ( !len( firstToken ) ) {
 			printUsage()
 			return 1
 		}
 
+		// If we get here the first token is a verb that is not a special flag or help command.
 		var verbName = firstToken
 
+		// Check if the verb exists in the module's known verbs. If not, attempt to run it as an extension verb.
 		if ( !static.verbs.keyExists( verbName ) ) {
 			// a verb an extension adds: the extensions are loaded only now, for a verb the module does not have
 			var fromExtension = runExtensionVerb( verbName, arguments.args )
@@ -387,16 +384,18 @@ class {
 			return 1
 		}
 
+		// Collect the raw arguments for the verb, excluding the module name and dispatch token.
 		var rawVerbArgs = []
 		for ( var i = 2; i <= arrayLen( arguments.args ); i++ ) {
 			rawVerbArgs.append( arguments.args[ i ] )
 		}
 
+		// Parse the raw verb arguments into structured CLI options.
 		var options = parseCliOptions( rawVerbArgs )
-
+		// Determine which flags require values for this verb.
 		var requiredValueFlags = [ "projectRoot" ]
 		requiredValueFlags.append( static.valueOptions[ verbName ] ?: [], true )
-
+		// Check if any required flags are missing their values.
 		for ( var flag in requiredValueFlags ) {
 			if ( options._valuelessFlags.keyExists( flag ) ) {
 				println( "Error: --#flag# requires a value - write it as `--#flag#=<value>`." )
@@ -405,6 +404,7 @@ class {
 			}
 		}
 
+		// Remove the internal _valuelessFlags key from the options before passing them to the verb.
 		options.delete( "_valuelessFlags" )
 		// `token create`, `notes list` and `add tool`: the first word is the action, not a project path
 		if ( static.subcommandVerbs.contains( verbName ) ) {
@@ -418,6 +418,11 @@ class {
 			var result = verbClass.run( options )
 			if ( len( result.message ?: "" ) ) {
 				println( result.message )
+			}
+			// A user-issued `serve` owns its process for the life of this CLI.
+			// Internal callers invoke Serve.run() directly and manage the process themselves.
+			if ( verbName == "serve" && structKeyExists( result, "process" ) ) {
+				return result.process.waitFor()
 			}
 			return result.exitCode ?: 0
 		} catch ( any e ) {
