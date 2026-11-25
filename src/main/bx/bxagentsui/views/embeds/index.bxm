@@ -1,0 +1,31 @@
+<!--- Embeds (admin): the agent on other websites, for anonymous visitors. State and actions: embedsPage
+      (resources/assets/js/components/admin/EmbedsPage.js). --->
+<bx:output>
+<div class="pg embeds" x-data="embedsPage">
+	#view( view = "_components/ui/page-head", module = "bxagentsui", args = {
+		title   : "Embeds",
+		note    : "Put the agent on another website. Define it here, paste the snippet there. Visitors do not sign in: they can only ask questions, with the tools you tick.",
+		actions : '<button type="button" class="btn primary" id="newEmbed" @click="newEmbed()">' & view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "plus" } ) & ' New embed</button>'
+	} )#
+	<p class="pg-note" x-show="loading">Loading...</p>
+	<p class="pg-error" role="alert" x-show="failed" x-text="failed" x-cloak></p>
+	<div x-show="!loading && !failed && !embeds.length && !form" x-cloak>
+		#view( view = "_components/ui/empty", module = "bxagentsui", args = { icon : "chat-teardrop-text", title : "No embeds yet", text : "Make one, then paste its snippet on your documentation site." } )#
+	</div>
+	<ul class="plain-list embeds-list" aria-label="Embeds" x-show="embeds.length" x-cloak>
+		<template x-for="embed in embeds" :key="embed.id">
+			<li class="card embeds-item" :class="{ 'is-open': form && form.id === embed.id }">
+				<button type="button" class="embeds-pick" @click="select( embed )" :aria-current="form && form.id === embed.id ? 'true' : null"
+					:aria-label="'Edit ' + embed.name">
+					<strong x-text="embed.name"></strong>
+					<span class="chip" :class="stateOf( embed ).kind" x-text="stateOf( embed ).label"></span>
+					<span class="pg-note" x-text="embed.limits.allowedOrigins.join( ', ' )"></span>
+				</button>
+			</li>
+		</template>
+	</ul>
+	<template x-if="form">
+		<div>#view( view = "embeds/_editor", module = "bxagentsui" )#</div>
+	</template>
+</div>
+</bx:output>

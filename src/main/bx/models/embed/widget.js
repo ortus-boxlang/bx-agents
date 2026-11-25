@@ -7,12 +7,14 @@
  * saved transcript is restored at connect time):
  *   embed        the embed's id (required)
  *   base         the agent API's address; taken from this script's own URL when left out
- *   mode         "widget" (a launcher and a panel, the default) or "page" (the chat fills the page, for the hosted frame)
+ *   mode         "widget" (a launcher and a panel, the default), "page" (the chat fills the page, for the hosted frame) or
+ *                "preview" (the Embeds admin page: always open, no network, drawn from the `look` property)
  *   storage      "local" (the default) keeps the transcript and the session in localStorage; "none" keeps nothing
  *   storage-key  the localStorage key; default "bx-agent:<embed id>"
  *   credentials  the fetch credentials mode, "omit" by default (the embed routes use no cookies)
  *
- * Properties, read at each request, so they may be set at any time:
+ * Properties, read when they are used, so they may be set at any time:
+ *   look            the look and text ({ title, welcome, placeholder, suggestions, color, position, theme }); set it in "preview" mode
  *   headers         async () => ({ name: value }), merged into every request
  *   onUnauthorized  () => void, called when the agent refuses a new session
  *
@@ -55,6 +57,8 @@
 		".panel{position:fixed;bottom:88px;width:380px;max-width:calc(100vw - 32px);height:min(620px,calc(100vh - 110px));display:flex;flex-direction:column;",
 		"background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;z-index:2147483000}",
 		".panel[hidden],.launcher[hidden]{display:none}",
+		":host([data-mode=preview]){display:block;position:relative;height:100%;min-height:420px}",
+		":host([data-mode=preview]) .panel{position:absolute;inset:0;width:auto;max-width:none;height:auto}",
 		":host([data-mode=page]) .panel{position:fixed;inset:0;width:auto;max-width:none;height:auto;border:0;border-radius:0;box-shadow:none}",
 		"header{display:flex;align-items:center;gap:8px;padding:12px 14px;background:var(--accent);color:var(--accent-fg)}",
 		"header h2{margin:0;font-size:16px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
@@ -141,16 +145,25 @@
 			base = SCRIPT.src.replace( /\/embed\/widget\.js.*$/, "" );
 		}
 		this._base = ( base || "" ).replace( /\/+$/, "" );
-		this._mode = this.getAttribute( "mode" ) === "page" ? "page" : "widget";
+		var mode = this.getAttribute( "mode" );
+		this._mode = mode === "page" || mode === "preview" ? mode : "widget";
 		this._credentials = this.getAttribute( "credentials" ) || "omit";
-		this._store = storageOf( this.getAttribute( "storage" ) || "local" );
+		this._store = this._mode === "preview" ? null : storageOf( this.getAttribute( "storage" ) || "local" );
 		this._key = this.getAttribute( "storage-key" ) || ( "bx-agent:" + this._embed );
 		this._messages = [];
 		this._busy = false;
 		this._token = null;
 		this._label = "main";
-		this._look = null;
+		this._look = this._look || null;
 		this.setAttribute( "data-mode", this._mode );
+		if ( this._mode === "preview" ) {
+			// the admin page draws the chat from the form it is editing: no network, nothing kept
+			this._build();
+			this._look = this._look || {};
+			this._applyLook();
+			this._render();
+			return;
+		}
 		if ( !this._embed || !this._base ) {
 			this._fail( "The chat is not set up: it needs an embed id and the agent's address." );
 			return;
@@ -320,6 +333,11 @@
 		if ( !text || self._busy || !self._look ) {
 			return;
 		}
+		if ( self._mode === "preview" ) {
+			self._messages.push( { role: "user", text: text }, { role: "bot", text: "This is a preview. Nothing is sent." } );
+			self._render();
+			return;
+		}
 		self._busy = true;
 		self._messages.push( { role: "user", text: text } );
 		var answer = { role: "bot", text: "", pending: true };
@@ -432,8 +450,20 @@
 	};
 
 	BxAgent.prototype._isOpen = function () {
-		return this._mode === "page" || !this._panel.hidden;
+		return this._mode !== "widget" || !this._panel.hidden;
 	};
+
+	// the look can be set from the page (the preview) at any time; the widget redraws
+	Object.defineProperty( BxAgent.prototype, "look", {
+		get: function () { return this._look; },
+		set: function ( value ) {
+			this._look = value || {};
+			if ( this._log ) {
+				this._applyLook();
+				this._render();
+			}
+		}
+	} );
 
 	BxAgent.prototype._build = function () {
 		var self = this;
@@ -449,13 +479,13 @@
 		var close = el( "button", { type: "button", "aria-label": "Close chat", text: "✕" } );
 		var form = el( "form", {}, [ self._input, self._sendButton ] );
 		self._panel = el( "section", { class: "panel", role: "dialog", "aria-label": "Chat", id: "panel" }, [
-			el( "header", {}, self._mode === "page" ? [ self._title, newChat ] : [ self._title, newChat, close ] ),
+			el( "header", {}, self._mode !== "widget" ? [ self._title, newChat ] : [ self._title, newChat, close ] ),
 			self._log, form
 		] );
 		self._launcher = el( "button", { class: "launcher", type: "button", "aria-label": "Open chat", "aria-expanded": "false", "aria-controls": "panel" } );
 		self._launcher.innerHTML = ICON;
 
-		if ( self._mode === "page" ) {
+		if ( self._mode !== "widget" ) {
 			root.appendChild( self._panel );
 		} else {
 			self._panel.hidden = true;
@@ -485,7 +515,7 @@
 			}
 		} );
 		root.addEventListener( "keydown", function ( e ) {
-			if ( e.key === "Escape" && self._mode !== "page" && !self._panel.hidden ) {
+			if ( e.key === "Escape" && self._mode === "widget" && !self._panel.hidden ) {
 				e.stopPropagation();
 				self._toggle( false );
 			}
