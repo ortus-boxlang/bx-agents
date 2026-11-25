@@ -23,6 +23,7 @@
 import bxModules.bxagents.models.api.Outcome;
 import bxModules.bxagents.models.api.TurnOptions;
 import bxModules.bxagents.models.logs.Logger;
+import bxModules.bxagents.models.runtime.InterceptorRegistration;
 
 
 class {
@@ -286,7 +287,7 @@ class {
 		send( "thread", { "threadId" : threadId } )
 
 		// bx-ai announces every tool call in the process. Only this thread's are sent on.
-		var interceptor = BoxRegisterInterceptor( ( data ) => {
+		var interceptor = InterceptorRegistration::register( ( data ) => {
 			if ( !open() || !belongsToThread( data, agentThread ) ) {
 				return
 			}
@@ -334,7 +335,7 @@ class {
 				send( "error", { "message" : variables.localImages ? diagnostic : e.message } )
 			}
 		} finally {
-			BoxUnregisterInterceptor( interceptor )
+			InterceptorRegistration::unregister( interceptor )
 		}
 	}
 

@@ -107,6 +107,19 @@ class extends="testbox.system.BaseSpec" {
 				);
 			} );
 
+			it( "unregisters tool listeners between turns on the same thread", function() {
+				agent.withToolCalls( [ { name : "now" } ] );
+				var r = runner();
+				r.stream( caller, { input : "first", threadId : "same-thread" }, collect );
+				frames.clear();
+
+				r.stream( caller, { input : "second", threadId : "same-thread" }, collect );
+
+				var tools = frames.filter( ( f ) => f.name == "tool" );
+				expect( tools ).toHaveLength( 2 );
+				expect( tools.map( ( f ) => f.data.status ) ).toBe( [ "running", "ok" ] );
+			} );
+
 			it( "says suspended, with what is waiting, when a run stops for a human", function() {
 				agent.suspending();
 				runner().stream( caller, { input : "hi" }, collect );

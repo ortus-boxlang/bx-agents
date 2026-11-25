@@ -1,0 +1,30 @@
+/**
+ * Registers closure listeners with a reference that can be removed afterwards.
+ *
+ * BoxLang wraps closures in an IInterceptorLambda but BoxRegisterInterceptor returns a boolean, not that wrapper.
+ * Passing the original closure to BoxUnregisterInterceptor therefore leaves the registered listener behind.
+ */
+class {
+
+	/**
+	 * @listener The event callback
+	 * @states The interception points
+	 *
+	 * @return The registered observer reference; pass it to unregister()
+	 */
+	static any function register( required function listener, required array states ) {
+		var wrapped = createObject( "java", "ortus.boxlang.runtime.interop.proxies.IInterceptorLambda" )
+			.init( arguments.listener, getBoxContext(), nullValue() )
+		var reference = createObject( "java", "ortus.boxlang.runtime.interop.DynamicObject" ).of( wrapped )
+		BoxRegisterInterceptor( reference, arguments.states )
+		return reference
+	}
+
+	/**
+	 * @reference The value returned by register()
+	 */
+	static void function unregister( required any reference ) {
+		BoxUnregisterInterceptor( arguments.reference )
+	}
+
+}
