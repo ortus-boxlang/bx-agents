@@ -15,9 +15,6 @@
 package ortus.boxlang.bxagents.build;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -33,7 +30,7 @@ import java.util.Map;
  * it to exit or manage its lifecycle beyond that - the caller decides
  * whether to block, detach, or track the returned {@link Process}.
  */
-public class MiniServerLauncher {
+public class MiniServerLauncher extends BaseLauncher {
 
 	/**
 	 * Searches {@code PATH} for a `boxlang-miniserver` executable.
@@ -53,24 +50,7 @@ public class MiniServerLauncher {
 	 * @return The absolute path to the executable, or {@code null} if not found
 	 */
 	public static String findExecutable( String pathEnv ) {
-		if ( pathEnv == null || pathEnv.isBlank() ) {
-			return null;
-		}
-
-		boolean	isWindows	= System.getProperty( "os.name", "" ).toLowerCase().contains( "win" );
-		String	exeName		= isWindows ? "boxlang-miniserver.exe" : "boxlang-miniserver";
-
-		for ( String dir : pathEnv.split( File.pathSeparator ) ) {
-			if ( dir.isBlank() ) {
-				continue;
-			}
-			Path candidate = Path.of( dir, exeName );
-			if ( Files.isExecutable( candidate ) && !Files.isDirectory( candidate ) ) {
-				return candidate.toAbsolutePath().toString();
-			}
-		}
-
-		return null;
+		return findExecutableOnPath( pathEnv, "boxlang-miniserver" );
 	}
 
 	/**
@@ -123,27 +103,21 @@ public class MiniServerLauncher {
 	 * @return The started {@link Process}
 	 */
 	public static Process launch( String executablePath, String configPath, boolean inheritIO, Map<String, String> environment, String workingDirectory ) {
-		try {
-			List<String> command = new ArrayList<>();
-			if ( executablePath.endsWith( ".jar" ) ) {
-				command.add( System.getProperty( "java.home" ) + File.separator + "bin" + File.separator + "java" );
-				command.add( "-jar" );
-			}
-			command.add( executablePath );
-			command.add( configPath );
-
-			ProcessBuilder builder = new ProcessBuilder( command );
-			builder.environment().putAll( environment );
-			if ( workingDirectory != null && !workingDirectory.isBlank() ) {
-				builder.directory( new File( workingDirectory ) );
-			}
-			if ( inheritIO ) {
-				builder.inheritIO();
-			}
-			return builder.start();
-		} catch ( IOException e ) {
-			throw new RuntimeException( "Failed to launch boxlang-miniserver at [" + executablePath + "] with config [" + configPath + "]", e );
+		List<String> command = new ArrayList<>();
+		if ( executablePath.endsWith( ".jar" ) ) {
+			command.add( System.getProperty( "java.home" ) + File.separator + "bin" + File.separator + "java" );
+			command.add( "-jar" );
 		}
+		command.add( executablePath );
+		command.add( configPath );
+
+		return startProcess(
+		    command,
+		    environment,
+		    workingDirectory,
+		    inheritIO ? ProcessIO.INHERIT : ProcessIO.PIPE,
+		    "Failed to launch boxlang-miniserver at [" + executablePath + "] with config [" + configPath + "]"
+		);
 	}
 
 }

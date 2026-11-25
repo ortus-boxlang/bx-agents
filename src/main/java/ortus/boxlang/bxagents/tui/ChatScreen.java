@@ -20,14 +20,17 @@ package ortus.boxlang.bxagents.tui;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Optional;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+
+import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
 
 import dev.tamboui.backend.jline3.JLineBackend;
 import dev.tamboui.terminal.Frame;
@@ -40,8 +43,6 @@ import dev.tamboui.tui.event.Event;
 import dev.tamboui.tui.event.KeyCode;
 import dev.tamboui.tui.event.KeyEvent;
 import dev.tamboui.tui.event.PasteEvent;
-import org.jline.terminal.Terminal;
-import org.jline.terminal.TerminalBuilder;
 
 /**
  * The chat screen, in the style of Pi: no alternate screen. Everything that is finished
@@ -67,74 +68,242 @@ import org.jline.terminal.TerminalBuilder;
  */
 public final class ChatScreen implements AutoCloseable {
 
-	private static final String[]			SPINNER			= { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
+	/**
+	 * The spinner frames used for indicating ongoing operations.
+	 */
+	static final String[]					SPINNER			= { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
+
+	/**
+	 * The maximum number of tail lines to display in the chat screen.
+	 */
 	private static final int				MAX_TAIL		= 8;
 
 	/**
-	 * How long a turn must take, in milliseconds, before the {@code notify} setting tells the person it is over
+	 * Minimum turn duration, in milliseconds, before the {@code notify} setting alerts the person that it finished.
 	 */
 	private static final long				NOTIFY_AFTER_MS	= 10_000;
+
+	/**
+	 * The maximum number of lines allowed in the composer input area.
+	 */
 	private static final int				MAX_COMPOSER	= 6;
 
+	/**
+	 * Maximum number of clipboard images that may be attached to one message.
+	 */
+	private static final int				MAX_IMAGES		= 4;
+
+	/**
+	 * Runner responsible for managing the inline TUI and drawing its live area.
+	 */
 	private final InlineTuiRunner			runner;
+
+	/**
+	 * Terminal used for low-level operations such as reading input, querying dimensions, and sending notifications.
+	 */
 	private final Terminal					terminal;
+
+	/**
+	 * Recording wrapper around the terminal, used to capture output and manage terminal recordings.
+	 */
 	private final RecordingTerminal			tap;
+
+	/**
+	 * The theme used for styling the chat screen.
+	 */
 	private Theme							theme;
+
+	/**
+	 * The previous class loader before initializing the chat screen.
+	 */
 	private final ClassLoader				previousLoader;
+
+	/**
+	 * The slash menu used for handling slash commands within the chat screen.
+	 */
 	private final SlashMenu					slash;
 
 	/**
 	 * What the chat runs with, decided from the layers, and where the files are that hold the person's own choices
 	 */
 	private TuiSettings.Resolved			settings		= TuiSettings.defaults();
+
+	/**
+	 * The file path to the agent configuration file.
+	 */
 	private String							agentFile		= "";
+	/**
+	 * The file path to the user's configuration file.
+	 */
 	private String							userFile		= "";
+	/**
+	 * The version of the chat screen or agent.
+	 */
 	private String							version			= "";
+	/**
+	 * The name of the agent.
+	 */
 	private String							agentName		= "";
 
 	/**
 	 * What the heading lists as loaded, a line for each label in the order the lines were set
 	 */
 	private final Map<String, Header.Group>	loaded			= new java.util.LinkedHashMap<>();
-	/** the files the person agreed to write to in this chat: false for the agent\'s file, true for the file for every agent */
+	/**
+	 * Settings files approved for writing in this chat: {@code false} represents the agent file and {@code true} the global user file.
+	 */
 	private final java.util.Set<Boolean>	savedTo			= new java.util.HashSet<>();
+
+	/**
+	 * Whether this screen has set the terminal title and must restore it when closed.
+	 */
 	private boolean							titleSet;
+
+	/**
+	 * Message composer that holds the user's current draft and caret position.
+	 */
 	private final Composer					composer		= new Composer();
+
+	/**
+	 * Key bindings for built-in and extension actions.
+	 */
 	private KeyMap							keys			= KeyMap.defaults();
+
+	/**
+	 * Extension action id queued by {@link #readInput()}, returned by {@link #takeKey()}.
+	 */
 	private String							pendingKey;
+
+	/**
+	 * Sources offered by the {@code @} file-mention menu.
+	 */
 	private AtSources						sources			= new AtSources( List.of(), ( name, query ) -> List.of() );
 
+	/**
+	 * Agent events waiting to be applied to the live turn display.
+	 */
 	private final Queue<Map<?, ?>>			events			= new ConcurrentLinkedQueue<>();
+
+	/**
+	 * Messages submitted by the user to steer the active agent turn.
+	 */
 	private final Queue<String>				steer			= new ConcurrentLinkedQueue<>();
+
+	/**
+	 * Whether the user requested that the active turn stop.
+	 */
 	private volatile boolean				cancel;
-	/** a short note at the front of the hint row, such as the size of the context; empty for none */
+
+	/**
+	 * Short note at the front of the hint row, such as context size; empty when there is no status.
+	 */
 	private volatile String					status			= "";
+
+	/**
+	 * Whether the active turn's drawing loop should finish.
+	 */
 	private volatile boolean				turnOver;
-	/** the look of the message box: its style and widgets; /prompt and Agent.yml's tui: block change it */
+
+	/**
+	 * Style and widgets used to render the message box; changed by {@code /prompt} or the agent's {@code tui:} configuration.
+	 */
 	private volatile PromptLook				look			= PromptLook.defaults();
+
+	/**
+	 * Dynamic facts supplied to prompt widgets, such as agent, profile, and session.
+	 */
 	private final WidgetContext				facts			= new WidgetContext();
+
+	/**
+	 * Background thread that draws and reads input while an agent turn is active.
+	 */
 	private Thread							turnThread;
 
-	// pictures and file mentions in the message box
-	private static final int				MAX_IMAGES		= 4;
+	/**
+	 * Index of project files offered by the message box's {@code @} mention menu.
+	 */
 	private final FileIndex					fileIndex		= new FileIndex( Path.of( System.getProperty( "user.dir" ) ) );
+
+	/**
+	 * Clipboard reader used when the user pastes an image.
+	 */
 	private final ClipboardImage			clipboard		= ClipboardImage.ofThisMachine();
+
+	/**
+	 * Paths of clipboard images attached to the next message.
+	 */
 	private final List<String>				images			= new ArrayList<>();
+
+	/**
+	 * Temporary directory holding image files copied from the clipboard.
+	 */
 	private Path							pasteFolder;
+
+	/**
+	 * Whether the current model supports image attachments.
+	 */
 	private boolean							imagesAllowed	= true;
+
+	/**
+	 * Explanation shown when image attachments are unavailable.
+	 */
 	private String							imagesRefusal	= "";
+
+	/**
+	 * Selected index in the current file-mention menu.
+	 */
 	private int								atPick;
+
+	/**
+	 * Whether the file index has been refreshed for the current mention query.
+	 */
 	private boolean							indexed;
 
-	// turn state, touched only by whichever thread is drawing
+	/**
+	 * Buffered answer text not yet committed to terminal scrollback.
+	 */
 	private final StringBuilder				segment			= new StringBuilder();
+
+	/**
+	 * Buffered model reasoning shown only when the thinking setting is enabled.
+	 */
 	private final StringBuilder				reasoning		= new StringBuilder();
+
+	/**
+	 * Whether a tool completed since the answer segment was last printed.
+	 */
 	private boolean							toolJustCompleted;
+
+	/**
+	 * Tool events currently shown as running, keyed by their event id.
+	 */
 	private final Map<String, Map<?, ?>>	running			= new LinkedHashMap<>();
+
+	/**
+	 * Start time of the active turn, used for elapsed-time labels and notifications.
+	 */
 	private long							turnStarted;
+
+	/**
+	 * Current animation frame for the live spinner.
+	 */
 	private int								frame;
+
+	/**
+	 * Height of the live area on the previous draw, used to clear rows when it shrinks.
+	 */
 	private int								drawnHeight;
 
+	/**
+	 * Creates a chat screen around an initialized TUI runner and terminal.
+	 *
+	 * @param runner         inline TUI runner used to draw and poll input
+	 * @param terminal       terminal used for low-level operations
+	 * @param tap            recording wrapper around the terminal
+	 * @param theme          active terminal theme
+	 * @param previousLoader thread context class loader to restore when the screen closes
+	 * @param commands       slash commands offered by the screen
+	 */
 	private ChatScreen( InlineTuiRunner runner, Terminal terminal, RecordingTerminal tap, Theme theme, ClassLoader previousLoader,
 	    List<Map<?, ?>> commands ) {
 		this.runner			= runner;
@@ -216,6 +385,8 @@ public final class ChatScreen implements AutoCloseable {
 	 *
 	 * @param extras each a map with {@code id}, {@code does} and {@code keys} (a list of keys, such as {@code ctrl+g}). Pressing one of
 	 *               its keys in the message box makes {@link #readInput()} return an empty message and {@link #takeKey()} return its id.
+	 *
+	 * @return problems found in the overrides or extension actions
 	 */
 	public List<String> bindKeys( Map<?, ?> overrides, List<? extends Map<?, ?>> extras ) {
 		List<KeyMap.Extra> actions = new java.util.ArrayList<>();
@@ -259,6 +430,13 @@ public final class ChatScreen implements AutoCloseable {
 		return keys.table();
 	}
 
+	/**
+	 * Normalizes a label for case-insensitive comparisons.
+	 *
+	 * @param label label to convert
+	 *
+	 * @return the label in lowercase using a locale-independent mapping
+	 */
 	private static String lower( String label ) {
 		return label.toLowerCase( java.util.Locale.ROOT );
 	}
@@ -351,7 +529,7 @@ public final class ChatScreen implements AutoCloseable {
 	}
 
 	/**
-	 * A blank line between two turns, unless the spacing setting is {@code compact}
+	 * Prints a blank line between turns unless the spacing setting is {@code compact}.
 	 */
 	private void gap() {
 		if ( !"compact".equals( settings.get( "spacing" ) ) ) {
@@ -373,10 +551,20 @@ public final class ChatScreen implements AutoCloseable {
 		return settings.bool( "animations" ) ? SPINNER[ frame % SPINNER.length ] : "●";
 	}
 
+	/**
+	 * Writes a styled line into the TUI's scrollback.
+	 *
+	 * @param line line to print
+	 */
 	private void out( Line line ) {
 		runner.println( Text.from( line ) );
 	}
 
+	/**
+	 * Writes text into the TUI's scrollback.
+	 *
+	 * @param text text to print
+	 */
 	private void out( Text text ) {
 		runner.println( text );
 	}
@@ -384,6 +572,8 @@ public final class ChatScreen implements AutoCloseable {
 	/**
 	 * Sets the status segment of the hint row under the message box, for example {@code ctx ~12.4k / 128k 9%}.
 	 * It shows from the next time the box is drawn; an empty text removes it.
+	 *
+	 * @param text status to display, or empty to clear it
 	 */
 	public void setStatus( String text ) {
 		this.status	= text == null ? "" : text;
@@ -420,6 +610,8 @@ public final class ChatScreen implements AutoCloseable {
 	 * Sets the look from the {@code tui:} block, as the layers of Agent.yml and the settings files decided: a map with {@code prompt} and
 	 * {@code widgets}
 	 * ({@code top} and {@code bottom} lists). What is missing keeps its default; a name that is not known is left out.
+	 *
+	 * @param tui resolved TUI look configuration
 	 */
 	public void useLook( Map<?, ?> tui ) {
 		look = PromptLook.of( tui );
@@ -450,6 +642,8 @@ public final class ChatScreen implements AutoCloseable {
 
 	/**
 	 * Switches the style, for this chat.
+	 *
+	 * @param name prompt style name
 	 *
 	 * @return an empty string, or what was wrong with the name
 	 */
@@ -492,6 +686,8 @@ public final class ChatScreen implements AutoCloseable {
 
 	/**
 	 * Tells the widgets what the chat knows: {@code agent}, {@code profile} and {@code session}. A missing entry is left as it was.
+	 *
+	 * @param values fact names and values to update
 	 */
 	public void setFacts( Map<?, ?> values ) {
 		Object v = values.get( "agent" );
@@ -509,7 +705,10 @@ public final class ChatScreen implements AutoCloseable {
 	}
 
 	/**
-	 * Says whether a picture may be pasted: false, with the reason to show, for a model known not to see images.
+	 * Sets whether a picture may be pasted, with the reason to show when the model cannot see images.
+	 *
+	 * @param allowed whether image attachments are supported
+	 * @param reason  explanation shown when attachments are not allowed
 	 */
 	public void setImagesAllowed( boolean allowed, String reason ) {
 		this.imagesAllowed	= allowed;
@@ -518,6 +717,8 @@ public final class ChatScreen implements AutoCloseable {
 
 	/**
 	 * Hands over the pictures pasted since the last message, as file paths, and forgets them.
+	 *
+	 * @return paths to the images attached to the next message
 	 */
 	public List<String> takeImages() {
 		List<String> taken = new ArrayList<>( images );
@@ -525,7 +726,11 @@ public final class ChatScreen implements AutoCloseable {
 		return taken;
 	}
 
-	/** Prints what the user sent. */
+	/**
+	 * Prints what the user sent, wrapped to fit the terminal.
+	 *
+	 * @param text user's message
+	 */
 	public void printUser( String text ) {
 		List<String> lines = Wrap.wrap( text, Math.max( 20, runner.width() - 8 ) );
 		for ( int i = 0; i < lines.size(); i++ ) {
@@ -553,7 +758,11 @@ public final class ChatScreen implements AutoCloseable {
 		}
 	}
 
-	/** Prints Markdown as the agent's answer. */
+	/**
+	 * Prints Markdown as the agent's answer, using the configured source or rendered style.
+	 *
+	 * @param markdown answer text to print
+	 */
 	public void printMarkdown( String markdown ) {
 		if ( markdown == null || markdown.isBlank() ) {
 			return;
@@ -571,6 +780,13 @@ public final class ChatScreen implements AutoCloseable {
 		gap();
 	}
 
+	/**
+	 * Resolves a named style to the corresponding theme style.
+	 *
+	 * @param name style name such as {@code accent}, {@code ok}, {@code warn}, or {@code error}
+	 *
+	 * @return matching theme style, or the muted style for an unknown name
+	 */
 	private dev.tamboui.style.Style styleOf( String name ) {
 		switch ( name ) {
 			case "accent" :
@@ -589,6 +805,8 @@ public final class ChatScreen implements AutoCloseable {
 	/**
 	 * Puts text on the clipboard with the OSC 52 escape, which most terminals honor, including
 	 * over SSH. A terminal that ignores it simply does nothing.
+	 *
+	 * @param text text to copy
 	 */
 	public void copy( String text ) {
 		String encoded = java.util.Base64.getEncoder().encodeToString( text.getBytes( java.nio.charset.StandardCharsets.UTF_8 ) );
@@ -603,7 +821,7 @@ public final class ChatScreen implements AutoCloseable {
 	/**
 	 * Waits for the user to send a message.
 	 *
-	 * @return the message, or null when the user asked to leave (Ctrl+C or Ctrl+D on an empty box)
+	 * @return the submitted message, an empty string when an extension action was triggered, or {@code null} when the user exits
 	 */
 	public String readInput() {
 		while ( true ) {
@@ -686,6 +904,8 @@ public final class ChatScreen implements AutoCloseable {
 	/**
 	 * The files the {@code @} mention under the caret could mean: those whose path contains what was typed after it.
 	 * The folder is looked at once each time the box is read, when the first at sign is typed.
+	 *
+	 * @return matching project files and any matching extension-provided sources
 	 */
 	private List<String> atMatches() {
 		String query = composer.atQuery();
@@ -823,6 +1043,16 @@ public final class ChatScreen implements AutoCloseable {
 		return ask( title, help, "", true );
 	}
 
+	/**
+	 * Displays a text prompt and returns its result.
+	 *
+	 * @param title   prompt title
+	 * @param help    help text displayed below the title
+	 * @param initial initial value for a non-secret prompt
+	 * @param secret  whether the prompt should mask entered text
+	 *
+	 * @return entered text, or {@code null} when the user cancels
+	 */
 	private String ask( String title, String help, String initial, boolean secret ) {
 		TextPrompt prompt = new TextPrompt( theme, title, help, "", secret, secret ? "A secret needs a value, or press esc." : "Type something, or press esc.",
 		    initial );
@@ -866,7 +1096,11 @@ public final class ChatScreen implements AutoCloseable {
 		turnThread.start();
 	}
 
-	/** Hands the screen something the agent did. Safe to call from any thread. */
+	/**
+	 * Queues an agent event for the live turn display. Safe to call from any thread.
+	 *
+	 * @param event event map; its {@code type} selects how the event is rendered
+	 */
 	public void push( Map<?, ?> event ) {
 		events.add( event );
 	}
@@ -913,6 +1147,9 @@ public final class ChatScreen implements AutoCloseable {
 		terminal.writer().flush();
 	}
 
+	/**
+	 * Draws the active turn and handles stop, steering, and pasted-input events until the turn ends.
+	 */
 	private void turnLoop() {
 		while ( !turnOver ) {
 			drain();
@@ -939,6 +1176,9 @@ public final class ChatScreen implements AutoCloseable {
 		}
 	}
 
+	/**
+	 * Applies queued agent events to the buffered answer, reasoning, tool, notice, and error state.
+	 */
 	private void drain() {
 		Map<?, ?> e;
 		while ( ( e = events.poll() ) != null ) {
@@ -967,6 +1207,11 @@ public final class ChatScreen implements AutoCloseable {
 		}
 	}
 
+	/**
+	 * Adds, updates, or removes a tool from the visible running-tool list and prints its completion.
+	 *
+	 * @param e tool event map containing its id, status, name, summary, and optional duration
+	 */
 	private void tool( Map<?, ?> e ) {
 		String	id		= String.valueOf( get( e, "id" ) );
 		String	status	= String.valueOf( get( e, "status" ) );
@@ -995,6 +1240,9 @@ public final class ChatScreen implements AutoCloseable {
 		out( r.toLine() );
 	}
 
+	/**
+	 * Prints buffered answer text to scrollback and clears the answer and reasoning buffers.
+	 */
 	private void flushSegment() {
 		if ( segment.length() > 0 ) {
 			if ( toolJustCompleted ) {
@@ -1011,6 +1259,11 @@ public final class ChatScreen implements AutoCloseable {
 	// The live area
 	// ----------------------------------------------------------------------------------
 
+	/**
+	 * Builds the live-area rows shown while waiting for the user to type or choose a command.
+	 *
+	 * @return rows for slash suggestions, file mentions, and the message composer
+	 */
 	private List<Row> idleRows() {
 		List<Row> rows = new ArrayList<>();
 		slash.sync( composer.text(), composer.rowCount() );
@@ -1258,6 +1511,11 @@ public final class ChatScreen implements AutoCloseable {
 		return rows;
 	}
 
+	/**
+	 * Builds the live-area rows shown while the agent is working.
+	 *
+	 * @return rows for streamed output, active tools, and the working composer
+	 */
 	private List<Row> turnRows() {
 		List<Row>	rows	= new ArrayList<>();
 		int			width	= Math.max( 20, runner.width() - 4 );
@@ -1325,6 +1583,11 @@ public final class ChatScreen implements AutoCloseable {
 		return out;
 	}
 
+	/**
+	 * Limits the live area to the terminal height and paints the visible rows.
+	 *
+	 * @param rows complete live-area content to draw
+	 */
 	private void draw( List<Row> rows ) {
 		// The most the area may take is what the terminal has, not what the area has now (runner.height() is the area), or it could never
 		// grow past its first rows and the slash menu and the @ menu would be cut off above the box
@@ -1341,6 +1604,11 @@ public final class ChatScreen implements AutoCloseable {
 		drawnHeight = height;
 	}
 
+	/**
+	 * Draws the visible live-area rows into the TUI frame.
+	 *
+	 * @param shown rows that fit in the live area
+	 */
 	private void paint( List<Row> shown ) {
 		runner.draw( ( Frame f ) -> {
 			int w = f.area().width();
@@ -1350,11 +1618,27 @@ public final class ChatScreen implements AutoCloseable {
 		} );
 	}
 
+	/**
+	 * Replaces newlines with spaces and truncates text to a maximum character count.
+	 *
+	 * @param s   text to clip
+	 * @param max maximum number of characters to return
+	 *
+	 * @return flattened text, clipped with an ellipsis when needed
+	 */
 	private static String clip( String s, int max ) {
 		String one = s.replace( '\n', ' ' );
 		return one.length() <= max ? one : one.substring( 0, Math.max( 0, max - 1 ) ) + "…";
 	}
 
+	/**
+	 * Reads a map entry by exact key or by a case-insensitive key match.
+	 *
+	 * @param m    map to search
+	 * @param name requested key
+	 *
+	 * @return matching value, or {@code null} if the key is absent
+	 */
 	private static Object get( Map<?, ?> m, String name ) {
 		Object v = m.get( name );
 		if ( v != null ) {
@@ -1417,6 +1701,9 @@ public final class ChatScreen implements AutoCloseable {
 		return error == null ? "" : error;
 	}
 
+	/**
+	 * Stops turn drawing, removes temporary pasted images, closes the TUI and recording terminal, and restores the previous context class loader.
+	 */
 	@Override
 	public void close() {
 		turnOver = true;

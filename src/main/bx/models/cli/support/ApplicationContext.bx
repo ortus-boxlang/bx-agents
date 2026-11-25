@@ -1,12 +1,13 @@
 /**
  * Gives a CLI script an application scope.
  *
- * A served app runs inside the generated Application.bx, so `application` exists. The in-process `chat` runs as a
- * plain CLI script, which has none: measured on BoxLang 1.19.0 and the 1.18.0 snapshot, reading `application` there
- * throws "The requested key [application] was not located in any scope or it's undefined". The terminal chat shares
- * the turn code with the server (TurnRunner and what it reads from `application`), so it starts a named application
- * of its own here rather than booting the generated one: that Application.bx also starts ColdBox, the scheduler and
- * the gateways, none of which a one-person terminal chat should bring up.
+ * A served app runs inside the generated Application.bx, so `application` exists. Local chat runs as a plain CLI
+ * script in its isolated BoxLang process, which has none: measured on BoxLang 1.19.0 and the 1.18.0 snapshot,
+ * reading `application` there throws "The requested key [application] was not located in any scope or it's
+ * undefined". The terminal chat shares the turn code with the server (TurnRunner and what it reads from
+ * `application`), so it starts a named application of its own here rather than booting the generated one: that
+ * Application.bx also starts ColdBox, the scheduler and the gateways, none of which a one-person terminal chat
+ * should bring up.
  *
  * Deliberately small: a name, no sessions. Anything a served app keeps in `application` that the chat needs is made
  * on first use by the code that reads it.

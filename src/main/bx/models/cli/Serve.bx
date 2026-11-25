@@ -58,10 +58,11 @@
  * always states which interface it bound to.
  *
  * This reaches `serve` and anything that reuses it (`invoke --server`, `chat --server`) - they spawn a brand-new JVM
- * whose launch config this verb writes. It does NOT reach the in-process verbs (`chat`, `build`, `test`, default
- * `invoke`): those run inside the ALREADY-STARTED `bxAgents` process, whose own BoxLang runtime (and therefore its
- * home) was resolved before any of our BoxLang code ever got a chance to run. `BoxRuntime` is a JVM-wide singleton;
- * its home is fixed at first initialization.
+ * whose launch config this verb writes. `chat` without `--server` also starts a child BoxLang CLI process, but
+ * supplies the project's `runtime/boxlang.json` and `runtime/` home directly. The remaining in-process verbs
+ * (`build`, `test`, default `invoke`) use the ALREADY-STARTED `bxAgents` process, whose own BoxLang runtime (and
+ * therefore its home) was resolved before any of our BoxLang code ever got a chance to run. `BoxRuntime` is a
+ * JVM-wide singleton; its home is fixed at first initialization.
  */
 class {
 

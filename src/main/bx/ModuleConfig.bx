@@ -413,6 +413,11 @@ class {
 			options.projectRoot = resolveProjectRoot( options )
 		}
 
+		// Preserve the raw arguments for the `chat` verb when not using a server and no connect option is provided.
+		if ( verbName == "chat" && !( options.server ?: false ) && !len( trim( options.connect ?: "" ) ) ) {
+			options._rawArgs = rawVerbArgs
+		}
+
 		try {
 			var verbClass = new "#static.verbs[ verbName ]#"()
 			var result = verbClass.run( options )
