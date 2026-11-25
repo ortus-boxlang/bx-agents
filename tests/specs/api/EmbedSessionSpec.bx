@@ -1,0 +1,124 @@
+/**
+ * The session token of an embed visitor and the in-memory limiter, on a clock the spec controls.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.EmbedSession", function() {
+
+			beforeEach( function() {
+				variables.now = { value : 1900000000 };
+				variables.jwt = new cbsecurity.modules.jwtcfml.models.jwt();
+				variables.session = new bxagents.models.api.EmbedSession( jwt, () => now.value );
+				variables.key = { key : "key-one-key-one-key-one-key-one-1", version : 1 };
+				variables.origin = "https://docs.example.com";
+			} );
+
+			it( "issues a token for one embed, one visitor and one origin, that verifies", function() {
+				var made = session.issue( "emb_AAAAAAAAAA", key, "abcdef0123456789", origin );
+
+				expect( made.token ).toMatch( "^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$" );
+				expect( made.expiresIn ).toBe( 3600 );
+				var ok = session.verify( made.token, "emb_AAAAAAAAAA", key, origin );
+				expect( ok.ok ).toBeTrue();
+				expect( ok.visitor ).toBe( "abcdef0123456789" );
+			} );
+
+			it( "refuses a forged signature, another origin, another embed, a rotated key and a missing token", function() {
+				var made = session.issue( "emb_AAAAAAAAAA", key, "abcdef0123456789", origin );
+				var parts = made.token.listToArray( "." );
+
+				expect( session.verify( parts[ 1 ] & "." & parts[ 2 ] & ".AAAA", "emb_AAAAAAAAAA", key, origin ).ok ).toBeFalse();
+				// a token signed with another key
+				var forged = jwt.encode( { emb : "emb_AAAAAAAAAA", v : "abcdef0123456789", o : origin, kv : 1, exp : now.value + 3600 }, "another-key-another-key-another-1", "HS256" );
+				expect( session.verify( forged, "emb_AAAAAAAAAA", key, origin ).ok ).toBeFalse();
+				// a token with alg none
+				expect( session.verify( "eyJhbGciOiJub25lIn0.e30.", "emb_AAAAAAAAAA", key, origin ).ok ).toBeFalse();
+
+				var other = session.verify( made.token, "emb_AAAAAAAAAA", key, "https://evil.example.com" );
+				expect( other.ok ).toBeFalse();
+				expect( other.reason ).toInclude( "another origin" );
+				expect( session.verify( made.token, "emb_BBBBBBBBBB", key, origin ).reason ).toInclude( "another embed" );
+				expect( session.verify( made.token, "emb_AAAAAAAAAA", { key : key.key, version : 2 }, origin ).reason ).toInclude( "rotated" );
+				expect( session.verify( "", "emb_AAAAAAAAAA", key, origin ).ok ).toBeFalse();
+				expect( session.verify( "not a token", "emb_AAAAAAAAAA", key, origin ).ok ).toBeFalse();
+				expect( session.verify( made.token, "emb_AAAAAAAAAA", {}, origin ).ok ).toBeFalse();
+			} );
+
+			it( "expires after an hour on the server's clock", function() {
+				var made = session.issue( "emb_AAAAAAAAAA", key, "abcdef0123456789", origin );
+				// jwtcfml checks exp against the real clock too: a token for a time in the past of the real clock is refused there,
+				// so this spec moves its own clock back by making the token from the future
+				now.value += 3601;
+				expect( session.verify( made.token, "emb_AAAAAAAAAA", key, origin ).ok ).toBeFalse();
+			} );
+
+		} );
+
+		describe( "api.EmbedLimiter", function() {
+
+			beforeEach( function() {
+				variables.ms = { value : 1000000 };
+				variables.limiter = new bxagents.models.api.EmbedLimiter( () => ms.value );
+			} );
+
+			it( "allows the limit and then says no, until the window has passed", function() {
+				for ( var i = 1; i <= 3; i++ ) {
+					expect( limiter.allow( "msg:a", 3 ) ).toBeTrue();
+				}
+				expect( limiter.allow( "msg:a", 3 ) ).toBeFalse();
+				expect( limiter.used( "msg:a" ) ).toBe( 3 );
+
+				ms.value += 59999;
+				expect( limiter.allow( "msg:a", 3 ) ).toBeFalse();
+				ms.value += 2;
+				expect( limiter.allow( "msg:a", 3 ) ).toBeTrue();
+			} );
+
+			it( "counts each key on its own, and a refused hit is not counted", function() {
+				expect( limiter.allow( "msg:a", 1 ) ).toBeTrue();
+				expect( limiter.allow( "msg:a", 1 ) ).toBeFalse();
+				expect( limiter.allow( "msg:a", 1 ) ).toBeFalse();
+				expect( limiter.allow( "msg:b", 1 ) ).toBeTrue();
+				expect( limiter.used( "msg:a" ) ).toBe( 1 );
+			} );
+
+			it( "does not let two threads take the last place together", function() {
+				var results = createObject( "java", "java.util.concurrent.ConcurrentLinkedQueue" ).init();
+				var lim = limiter;
+				// eight threads of ten hits each against a limit of 20
+				[ 1, 2, 3, 4, 5, 6, 7, 8 ].each( function( n ) {
+					for ( var i = 1; i <= 10; i++ ) {
+						results.add( lim.allow( "race", 20 ) );
+					}
+				}, true, 8 );
+				expect( results.size() ).toBe( 80 );
+				var allowed = 0;
+				for ( var r in results ) {
+					if ( r ) { allowed++; }
+				}
+				expect( allowed ).toBe( 20 );
+			} );
+
+		} );
+
+		describe( "api.Caller embed scope", function() {
+
+			it( "makes a visitor with the least scope, and only with an embed", function() {
+				var visitor = bxagents.models.api.Caller::fromEmbed( "emb_AAAAAAAAAA", "abcdef0123456789" );
+
+				expect( visitor.id() ).toBe( "v:abcdef0123456789" );
+				expect( visitor.scope() ).toBe( "embed" );
+				expect( visitor.isAdmin() ).toBeFalse();
+				expect( visitor.isEmbed() ).toBeTrue();
+				expect( visitor.embedId() ).toBe( "emb_AAAAAAAAAA" );
+				expect( visitor.via( "web" ).embedId() ).toBe( "emb_AAAAAAAAAA" );
+				expect( function() { new bxagents.models.api.Caller( id = "x", scope = "embed" ); } ).toThrow( "BxAgents.InvalidCaller" );
+				expect( function() { new bxagents.models.api.Caller( id = "x", scope = "admin", embedId = "emb_AAAAAAAAAA" ); } ).toThrow( "BxAgents.InvalidCaller" );
+				expect( function() { bxagents.models.api.Caller::fromEmbed( "emb_AAAAAAAAAA", "Bad Id!" ); } ).toThrow( "BxAgents.InvalidCaller" );
+			} );
+
+		} );
+	}
+
+}

@@ -9,8 +9,9 @@ tags: [conventions, embeds, web-ui, security]
 # Embeds
 
 !!! info "Status"
-    This page is the **spec** for increment 1. Built so far: the record and its store, the admin routes and the `bxAgents embed`
-    verb. The public routes, the widget and the Embeds page are still to come. Anything marked *proposed* is open to change.
+    This page is the **spec** for increment 1. Built so far: the record and its store, the admin routes, the `bxAgents embed`
+    verb, and the public routes (config, session, events, cancel, history, frame) with the origin check, the signed session and
+    the limits. The embed filter, the real widget and the Embeds page are still to come. Anything marked *proposed* is open to change.
 
 An **embed** lets a visitor of another website chat with your agent. An admin defines it in the web app (Admin, Embeds), copies
 a snippet, and pastes it into the other site. Increment 1 supports one case: an **anonymous docs agent**. The visitor is not
@@ -188,6 +189,18 @@ takes text: keep the tool list to read-only tools.
 
 `SSE( cors : origin )` also sends `Access-Control-Allow-Credentials: true`. The embed routes use **no cookies**, so credentials
 are not needed and the embed routes send the CORS headers by hand without it.
+
+## Measured on a served app
+
+Run against a built app with a scripted model (a throwaway demo, not a real model):
+
+- A visitor's message streamed as 35 content deltas in 44 frames (`thread`, `chunk`, two `tool`, `done`), with `Access-Control-Allow-Origin` set to the visitor's own website and no `Access-Control-Allow-Credentials`. The CORS headers set before `SSE()` survive.
+- With the API behind a token, a visitor's session token on `GET /embeds`, `/notes`, `/vault`, `/sessions`, `/logs`, `/info`, `/tools` and `POST /invoke` gives `401`, also when sent as `x-bxagents-token`. The public routes work with no `x-bxagents-token` at all.
+- A forged signature, no token, a token from another listed website and a garbage token give `401`; an unlisted website gives `403`; 2001 characters give `400`; the sixth message in a minute (limit 5) gives `429`.
+- Every response of the app carries `X-Frame-Options: SAMEORIGIN` from the app's own security headers. The frame route also sends `frame-ancestors`; whether a browser lets another website frame it is tested in a real browser, not assumed.
+- **An open API (no `agentApi` token) lets anyone call the admin routes, as it always has.** Before an embed goes on the public internet, give the API a token. Visitors are not affected by it: they do not use it.
+
+`chunk` frames carry the model's own tool-call arguments (`delta.tool_calls`), as they do for every client of the stream; the `tool` frames a visitor gets carry the tool's name, its status and the time it took, not its arguments.
 
 ## The hosted frame
 

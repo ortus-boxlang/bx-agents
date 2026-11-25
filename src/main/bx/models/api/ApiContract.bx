@@ -257,6 +257,28 @@ class {
 	}
 
 	/**
+	 * The public routes of the embeds: what a visitor of another website calls. They are not in operations(): they need no
+	 * token (a visitor has none), have their own checks (EmbedPublic) and are not part of the API a token holder uses, so the
+	 * OpenAPI document does not list them. The router writes them from this list, outside the gate, and a spec checks the handler
+	 * answers to each.
+	 *
+	 * `widget.js` is first: the routes after it have an `:id`, which would take it for an embed.
+	 *
+	 * @return An array of { path, action }, the path under the API's own
+	 */
+	static array function embedPublic() {
+		return [
+			{ path : "/embed/widget.js", action : "embedWidget" },
+			{ path : "/embed/:id/config", action : "embedConfig" },
+			{ path : "/embed/:id/session", action : "embedSession" },
+			{ path : "/embed/:id/events", action : "embedEvents" },
+			{ path : "/embed/:id/cancel", action : "embedCancel" },
+			{ path : "/embed/:id/history", action : "embedHistory" },
+			{ path : "/embed/:id/frame", action : "embedFrame" }
+		]
+	}
+
+	/**
 	 * The frames of a stream, in the order a client sees them. Each is `event: <name>` then `data: <json>`.
 	 *
 	 * @return An array of { name, summary, fields : { name : "type" } }; a frame with no fields carries its text as it is

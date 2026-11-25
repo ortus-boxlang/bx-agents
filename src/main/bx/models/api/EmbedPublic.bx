@@ -1,0 +1,234 @@
+/**
+ * What the public routes of an embed do, as Outcomes, so the handler only turns them into HTTP and a spec needs no server.
+ *
+ * The visitor is anonymous. Every call is checked, in this order: the embed is live (it exists, is on and has not expired:
+ * all three answer `not_found`, the same), the request's Origin is one of the embed's websites (`forbidden`), and for
+ * everything after the session, the session token is good (`unauthorized`). The agent, the profile, the tools and the limits
+ * come from the stored record, never from the request: a body is read for `input` and a conversation label and nothing else.
+ *
+ * The Origin header is set by a browser, so a script can send any value. It keeps other websites' pages out; the tool
+ * list, the `embed` scope and the limits are what protect the agent (docs/conventions/embeds.md).
+ */
+import bxModules.bxagents.models.api.Outcome;
+import bxModules.bxagents.models.api.Caller;
+
+class {
+
+	static {
+		// how often one address may ask for a session, per embed: a visitor needs one per hour
+		SESSIONS_PER_MINUTE = 20
+	}
+
+	/**
+	 * @embeds An EmbedService
+	 * @session An EmbedSession
+	 * @limiter An EmbedLimiter, shared by every request of the server
+	 * @service The AgentService: the agent runs in this process, through the same TurnRunner as the rest of the API
+	 */
+	function init( required any embeds, required any session, required any limiter, required any service ) {
+		variables.embeds = arguments.embeds
+		variables.session = arguments.session
+		variables.limiter = arguments.limiter
+		variables.service = arguments.service
+		return this
+	}
+
+	/**
+	 * What a page needs to draw the widget: the look and the text, nothing else. Never the tools, the limits or the key.
+	 *
+	 * @return An Outcome: { id, look }, not_found or forbidden
+	 */
+	any function config( required string embedId, required string origin ) {
+		var gate = checkEmbed( arguments.embedId, arguments.origin )
+		if ( !gate.succeeded() ) {
+			return gate
+		}
+		var embed = gate.data()
+		return Outcome::done( { "id" : embed.id, "look" : embed.look } )
+	}
+
+	/**
+	 * Starts a visitor's session.
+	 *
+	 * @address The visitor's network address, only to limit how often sessions are asked for
+	 *
+	 * @return An Outcome: { token, expiresAt, expiresIn }, not_found, forbidden or rate_limited
+	 */
+	any function startSession( required string embedId, required string origin, string address = "" ) {
+		var gate = checkEmbed( arguments.embedId, arguments.origin )
+		if ( !gate.succeeded() ) {
+			return gate
+		}
+		if ( !variables.limiter.allow( "session:#arguments.embedId#:#arguments.address#", static.SESSIONS_PER_MINUTE ) ) {
+			variables.embeds.count( arguments.embedId, "limited" )
+			return Outcome::failed( "rate_limited", "Too many sessions were asked for. Try again in a minute." )
+		}
+		var made = variables.session.issue( arguments.embedId, variables.embeds.signingKey( arguments.embedId ), newVisitor(), arguments.origin )
+		return Outcome::done( { "token" : made.token, "expiresAt" : made.expiresAt, "expiresIn" : made.expiresIn } )
+	}
+
+	/**
+	 * Checks one message and prepares its turn, ready to be run and streamed.
+	 *
+	 * @authorization The Authorization header
+	 * @body The request body: `input` and `conversationId` (a label of the visitor's own) are read, nothing else
+	 *
+	 * @return An Outcome: the prepared turn (see TurnRunner.prepareTurn), or unauthorized, forbidden, not_found, bad_request or rate_limited
+	 */
+	any function message( required string embedId, required string origin, required string authorization, required struct body ) {
+		var who = authorize( arguments.embedId, arguments.origin, arguments.authorization )
+		if ( !who.succeeded() ) {
+			return who
+		}
+		var embed = who.data().embed
+		var visitor = who.data().visitor
+		var input = arguments.body.input ?: ""
+		if ( !isSimpleValue( input ) || !len( trim( input ) ) ) {
+			return Outcome::failed( "bad_request", "input is required" )
+		}
+		if ( len( input ) > embed.limits.maxMessageChars ) {
+			return Outcome::failed( "bad_request", "A message is at most #embed.limits.maxMessageChars# characters" )
+		}
+		if ( !variables.limiter.allow( "msg:#embed.id#:#visitor.id()#", embed.limits.perVisitorPerMinute ) ) {
+			variables.embeds.count( embed.id, "limited" )
+			return Outcome::failed( "rate_limited", "You are sending messages too fast. Wait a moment." )
+		}
+		if ( variables.embeds.messagesToday( embed.id ) >= embed.limits.dailyMessages ) {
+			variables.embeds.count( embed.id, "limited" )
+			return Outcome::failed( "rate_limited", "This chat has reached its limit for today." )
+		}
+		var checked = variables.service.checkAgent( embed.target.agent )
+		if ( !checked.succeeded() ) {
+			return checked
+		}
+		variables.embeds.count( embed.id, "messages" )
+		var turnRequest = { "input" : trim( input ), "conversationId" : conversationFor( visitor, arguments.body.conversationId ?: "" ) }
+		if ( len( embed.target.profile ) ) {
+			turnRequest[ "options" ] = { "profile" : embed.target.profile }
+		}
+		return variables.service.turns( embed.target.agent ).prepareTurn( visitor, turnRequest )
+	}
+
+	/**
+	 * Stops the visitor's own run.
+	 *
+	 * @threadId The run, from the first frame of its stream
+	 */
+	any function cancel( required string embedId, required string origin, required string authorization, required string threadId ) {
+		var who = authorize( arguments.embedId, arguments.origin, arguments.authorization )
+		if ( !who.succeeded() ) {
+			return who
+		}
+		var embed = who.data().embed
+		return variables.service.turns( embed.target.agent ).cancel( who.data().visitor, arguments.threadId, "Stopped by the visitor." )
+	}
+
+	/**
+	 * The visitor's own saved conversation.
+	 *
+	 * @label The label the visitor used for it, not the stored id
+	 *
+	 * @return An Outcome: { conversationId, messages }, not_found when the visitor has no such conversation
+	 */
+	any function history( required string embedId, required string origin, required string authorization, required string label ) {
+		var who = authorize( arguments.embedId, arguments.origin, arguments.authorization )
+		if ( !who.succeeded() ) {
+			return who
+		}
+		var visitor = who.data().visitor
+		var id = conversationFor( visitor, arguments.label )
+		var all = variables.service.conversations()
+		if ( isNull( all ) ) {
+			return Outcome::failed( "not_found", "This agent keeps no conversations" )
+		}
+		var opened = all.open( visitor, id )
+		if ( !opened.succeeded() ) {
+			return opened
+		}
+		return Outcome::done( { "conversationId" : id, "messages" : variables.service.conversation( visitor, id ).history() } )
+	}
+
+	/**
+	 * The websites that may show the hosted page of an embed, for its Content-Security-Policy.
+	 *
+	 * @return An Outcome: { origins : [] }, or not_found
+	 */
+	any function frameOrigins( required string embedId ) {
+		if ( !variables.embeds.isLive( arguments.embedId ) ) {
+			return notFound()
+		}
+		return Outcome::done( { "origins" : variables.embeds.get( arguments.embedId ).limits.allowedOrigins } )
+	}
+
+	/**
+	 * Which origin a CORS header may name for this request: the request's own origin when the embed is live and lists it,
+	 * else blank. A page of any other website gets no header, so its browser refuses to read the answer.
+	 */
+	string function corsOrigin( required string embedId, required string origin ) {
+		if ( !len( arguments.origin ) || !variables.embeds.isLive( arguments.embedId ) ) {
+			return ""
+		}
+		return variables.embeds.get( arguments.embedId ).limits.allowedOrigins.contains( arguments.origin ) ? arguments.origin : ""
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return An Outcome with the embed: not_found when it is not live, forbidden when the origin is not on its list (counted)
+	 */
+	private any function checkEmbed( required string embedId, required string origin ) {
+		if ( !variables.embeds.isLive( arguments.embedId ) ) {
+			return notFound()
+		}
+		var embed = variables.embeds.get( arguments.embedId )
+		if ( !len( arguments.origin ) || !embed.limits.allowedOrigins.contains( arguments.origin ) ) {
+			variables.embeds.count( embed.id, "blockedOrigin" )
+			return Outcome::failed( "forbidden", "This website may not use this chat" )
+		}
+		return Outcome::done( embed )
+	}
+
+	/**
+	 * @return An Outcome: { embed, visitor : Caller } for a good session, else what checkEmbed says, or unauthorized
+	 */
+	private any function authorize( required string embedId, required string origin, required string authorization ) {
+		var gate = checkEmbed( arguments.embedId, arguments.origin )
+		if ( !gate.succeeded() ) {
+			return gate
+		}
+		var found = reFindNoCase( "^Bearer\s+(\S+)$", trim( arguments.authorization ), 1, true )
+		var token = found.pos[ 1 ] > 0 ? trim( arguments.authorization ).mid( found.pos[ 2 ], found.len[ 2 ] ) : ""
+		var checked = variables.session.verify( token, arguments.embedId, variables.embeds.signingKey( arguments.embedId ), arguments.origin )
+		if ( !checked.ok ) {
+			// the reason is for the log; the visitor is only told it has no valid session
+			new "models.logs.Logger@bxagents"().write( "api", "warn", "Refused a visitor of embed #arguments.embedId#: #checked.reason#" )
+			return Outcome::failed( "unauthorized", "Start a new session" )
+		}
+		return Outcome::done( { "embed" : gate.data(), "visitor" : Caller::fromEmbed( arguments.embedId, checked.visitor ) } )
+	}
+
+	/**
+	 * The id of a conversation, made here from the visitor and a label of the visitor's own, so one visitor can never name
+	 * another's: `c-<first 12 of the visitor>-<label cut to a-z0-9- and 24 characters>`.
+	 */
+	string function conversationFor( required any visitor, string label = "" ) {
+		var clean = lCase( reReplace( toString( arguments.label ), "[^A-Za-z0-9-]", "", "all" ) )
+		clean = left( clean, 24 )
+		return "c-" & left( replace( arguments.visitor.id(), "v:", "" ), 12 ) & "-" & ( len( clean ) ? clean : "chat" )
+	}
+
+	private string function newVisitor() {
+		var random = createObject( "java", "java.security.SecureRandom" ).init()
+		var alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+		var text = ""
+		for ( var i = 1; i <= 20; i++ ) {
+			text &= mid( alphabet, random.nextInt( len( alphabet ) ) + 1, 1 )
+		}
+		return text
+	}
+
+	private any function notFound() {
+		return Outcome::failed( "not_found", "There is no such chat" )
+	}
+
+}

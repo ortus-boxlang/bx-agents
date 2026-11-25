@@ -91,6 +91,19 @@ class {
 	}
 
 	/**
+	 * The public side of the embeds (what a visitor of another website calls), or null when the app keeps no shared database.
+	 *
+	 * @limiter The EmbedLimiter the whole server shares
+	 * @jwt jwtcfml's jwt object, which signs and checks the visitors' sessions
+	 */
+	any function embedPublic( required any limiter, required any jwt ) {
+		if ( !keepsEmbeds() ) {
+			return nullValue()
+		}
+		return new EmbedPublic( new "models.store.EmbedService@bxagents"( variables.store ), new EmbedSession( arguments.jwt ), arguments.limiter, this )
+	}
+
+	/**
 	 * @return Account management for an admin caller, or null when the app keeps no shared database
 	 */
 	any function accounts() {

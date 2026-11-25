@@ -20,7 +20,13 @@ class extends="testbox.system.BaseSpec" {
 				var routed = ApiContract::actions( { manageTokens : true } );
 				var found = handlerSource.reMatch( "\n\tfunction (\w+)\( event, rc, prc \)" ).map( ( line ) => line.reReplace( "^\s*function (\w+).*", "\1" ) );
 
-				expect( found.filter( ( name ) => name != "extensionFile" && !routed.contains( name ) ) ).toBeEmpty();
+				// the embed routes a visitor calls are public, outside the token-gated contract; their own list (embedPublic) is checked below
+				var publicEmbed = ApiContract::embedPublic().map( ( r ) => r.action );
+				expect( found.filter( ( name ) => name != "extensionFile" && !routed.contains( name ) && !publicEmbed.contains( name ) ) ).toBeEmpty();
+				for ( var name in publicEmbed ) {
+					expect( found ).toInclude( name );
+					expect( routed ).notToInclude( name );
+				}
 			} );
 
 			it( "gives each route its own action and path, so a route is never written twice", function() {

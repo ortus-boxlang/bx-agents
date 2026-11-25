@@ -152,6 +152,25 @@ class extends="testbox.system.BaseSpec" {
 				expect( withThem ).toInclude( 'route( "/__bxagents/tokens" ).middleware( gate ).meta( gateMeta ).toHandler( "AgentApi.tokens" )' );
 			} );
 
+			it( "puts the public embed routes outside the gate, and every embed admin route behind it", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var guarded = fileRead( generator.generate( discovery, newAppDir(), false, false, false, false, false, { tokenEnvVar : "T", allowedIPs : [ "10.0.0.0/8" ], rateLimit : { requests : 5, perSeconds : 60 } } ).router );
+
+				// a visitor has no token, comes from anywhere and must not spend the address guards' counter
+				for ( var action in [ "embedWidget", "embedConfig", "embedSession", "embedEvents", "embedCancel", "embedHistory", "embedFrame" ] ) {
+					var line = guarded.listToArray( char( 10 ) ).filter( l => l.find( '"AgentApi.#action#"' ) )[ 1 ];
+					expect( line ).notToInclude( "middleware" );
+				}
+				expect( guarded ).toInclude( 'route( "/__bxagents/embed/widget.js" ).toHandler( "AgentApi.embedWidget" )' );
+				// widget.js is written before the :id routes, so :id cannot take it for an embed
+				expect( guarded.find( "embed/widget.js" ) ).toBeLT( guarded.find( "embed/:id/config" ) );
+				// the admin side is behind the gate like the rest of the API
+				for ( var action in [ "embeds", "embed", "updateEmbed", "rotateEmbed", "embedSnippets", "embedUsage" ] ) {
+					var line = guarded.listToArray( char( 10 ) ).filter( l => l.find( '"AgentApi.#action#"' ) )[ 1 ];
+					expect( line ).toInclude( ".middleware( gate )" );
+				}
+			} );
+
 			it( "emits the WhatsApp Cloud GET/POST webhook routes when hasWhatsAppCloudGateway is true", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
 				var result = generator.generate( discovery, newAppDir(), false, true );
@@ -357,8 +376,19 @@ class extends="testbox.system.BaseSpec" {
 				// every route of the API has it, none is left out
 				var routes = content.listToArray( char( 10 ) ).filter( ( line ) => line.find( '( "/__bxagents' ) );
 				expect( routes.len() ).toBeGT( 20 );
-				// health and the sign in callback are the routes open to anyone: health says only that the server is up, and the callback is the provider's redirect, which a single use state vouches for
-				expect( routes.filter( ( r ) => !r.find( ".middleware( gate ).meta( gateMeta )" ) ).map( ( r ) => reReplace( r, "^[[:space:]]+", "" ) ) ).toBe( [ 'get( "/__bxagents/health" ).toHandler( "AgentApi.health" )', 'get( "/__bxagents/connect/callback" ).toHandler( "AgentApi.connectCallback" )' ] );
+				// health and the sign in callback are the routes open to anyone: health says only that the server is up, and the callback is the provider's redirect, which a single use state vouches for.
+				// The seven public embed routes are open too, on purpose: a visitor of another website has no token. Each has its own checks (models.api.EmbedPublic).
+				expect( routes.filter( ( r ) => !r.find( ".middleware( gate ).meta( gateMeta )" ) ).map( ( r ) => reReplace( r, "^[[:space:]]+", "" ) ) ).toBe( [
+					'route( "/__bxagents/embed/widget.js" ).toHandler( "AgentApi.embedWidget" )',
+					'route( "/__bxagents/embed/:id/config" ).toHandler( "AgentApi.embedConfig" )',
+					'route( "/__bxagents/embed/:id/session" ).toHandler( "AgentApi.embedSession" )',
+					'route( "/__bxagents/embed/:id/events" ).toHandler( "AgentApi.embedEvents" )',
+					'route( "/__bxagents/embed/:id/cancel" ).toHandler( "AgentApi.embedCancel" )',
+					'route( "/__bxagents/embed/:id/history" ).toHandler( "AgentApi.embedHistory" )',
+					'route( "/__bxagents/embed/:id/frame" ).toHandler( "AgentApi.embedFrame" )',
+					'get( "/__bxagents/health" ).toHandler( "AgentApi.health" )',
+					'get( "/__bxagents/connect/callback" ).toHandler( "AgentApi.connectCallback" )'
+				] );
 				// the old gate and its catch-all are gone: the middleware answers 401 itself
 				expect( content ).notToInclude( "withCondition" );
 				expect( content ).notToInclude( ":subroute?" );
