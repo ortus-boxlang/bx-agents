@@ -1,0 +1,21 @@
+class {
+
+	/**
+	 * A stand-in for a real docs search: it looks for the words in the markdown files of this project's docs/ folder and
+	 * returns the matching lines. It is the only tool the demo embed lists, so it is the only one a visitor's turn can run.
+	 */
+	@AITool( "Search the product docs for a word or phrase and return the matching lines." )
+	function docs_search( required string query ) {
+		var dir = expandPath( "/app/../../docs" )
+		var found = []
+		for ( var file in directoryList( dir, false, "path", "*.md" ) ) {
+			for ( var line in fileRead( file ).listToArray( char( 10 ) ) ) {
+				if ( findNoCase( arguments.query, line ) ) {
+					found.append( getFileFromPath( file ) & ": " & trim( line ) )
+				}
+			}
+		}
+		return found.len() ? found.toList( char( 10 ) ) : "No match for [" & arguments.query & "]"
+	}
+
+}

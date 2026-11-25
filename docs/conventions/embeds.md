@@ -11,7 +11,7 @@ tags: [conventions, embeds, web-ui, security]
 !!! info "Status"
     This page is the **spec** for increment 1. Built so far: the record and its store, the admin routes, the `bxAgents embed`
     verb, and the public routes (config, session, events, cancel, history, frame) with the origin check, the signed session and
-    the limits. The embed filter and the widget (with the hosted page) are built too. The Embeds admin page is still to come. Anything marked *proposed* is open to change.
+    the limits. Everything in this increment is built: the embed filter, the widget, the hosted page and the Embeds admin page. Anything marked *proposed* is open to change.
 
 An **embed** lets a visitor of another website chat with your agent. An admin defines it in the web app (Admin, Embeds), copies
 a snippet, and pastes it into the other site. Increment 1 supports one case: an **anonymous docs agent**. The visitor is not
@@ -224,6 +224,8 @@ Known limit: a visitor's conversation belongs to its session (one hour, kept in 
 origins>`. A site that is not listed cannot frame it. The page loads the same widget.
 
 ## The Embeds admin page
+
+Built as described below; see also [The web app](web-ui.md#embeds). It is checked with axe (light, dark, desktop and phone) and with browser tests that make an embed, refuse bad websites, watch the preview follow the form, copy a snippet, rotate the key and turn it off.
 
 A page in the web app (`bxagentsui`), under **Admin**, next to Gateways, admin scope only, themed like the other pages (system,
 light, dark) and usable by keyboard.
