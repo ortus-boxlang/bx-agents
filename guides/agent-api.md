@@ -123,7 +123,7 @@ Conversations belong to the caller too: `sessions()` lists them, newest first (a
 
 ## Routines
 
-When the app has [routines](../conventions/routines.md) on, `capabilities.routines` is `true` in `GET /agent`, and the client has `routines()`, `routine( name )`, `createRoutine()`, `updateRoutine()`, `pauseRoutine()`, `resumeRoutine()`, `runRoutine()`, `deleteRoutine()`, `routineReports()`, `routineReport()`, `deleteRoutineReport()` and `cleanRoutineReports()`. The routes are `/routines`, `/routines/get`, `/routines/update`, `/routines/pause`, `/routines/resume`, `/routines/run`, `/routines/delete`, `/routines/reports`, `/routines/report`, `/routines/reports/delete` and `/routines/reports/clean`, all in the [OpenAPI document](#the-openapi-document) under **Routines**. People see their own routines; an admin adds `all=1` to list everyone's. A clean-up removes nothing unless the request says `"apply": true`. `capabilities.admin` says whether the caller is an admin.
+When the app has [routines](../conventions/routines.md) on, `capabilities.routines` is `true` in `GET /agent`, and the client has `routines()`, `routine( name )`, `createRoutine()`, `updateRoutine()`, `pauseRoutine()`, `resumeRoutine()`, `runRoutine()`, `deleteRoutine()`, `routineReports()`, `routineReport()`, `deleteRoutineReport()` and `cleanRoutineReports()`. The routes are `/routines`, `/routines/get`, `/routines/update`, `/routines/pause`, `/routines/resume`, `/routines/run`, `/routines/delete`, `/routines/reports`, `/routines/report`, `/routines/reports/delete` and `/routines/reports/clean`, all in the [OpenAPI document](#the-openapi-document) under **Routines**. People see their own routines; an admin adds `all=1` (or `all=true`) to list everyone's, and anyone else who asks for it gets `403 forbidden`, as on `/sessions`. A clean-up removes nothing unless the request says `"apply": true`. `capabilities.admin` says whether the caller is an admin.
 
 ![The Access page of the web app, which is a client of this API: the token list and the form that makes a token](../assets/webui/webui-access.png)
 
@@ -207,7 +207,7 @@ There are 82 routes (90 verb and path pairs); the token routes are there only wi
 | `POST /sessions` | Caller | Starts a conversation, for the main agent or one named in agent. |
 | `GET /sessions` | Caller | A page of the caller's conversations, newest first, with the total that match. |
 | `GET /export` | Caller | One conversation as a file, Markdown or a page of HTML. |
-| `GET /history` | Caller | The messages of one conversation. |
+| `GET /history` | Caller | The messages of one conversation, and `agent`, the agent it belongs to (the one it started with). |
 | `POST /clear` | Caller | Deletes the messages of a conversation, keeps the conversation. |
 | `POST /compact` | Caller | Summarizes the older messages and keeps the recent ones. |
 | `POST /memory/clear` | Caller | Forgets the messages of conversations and keeps the conversations: one of the caller's (conversationId), or with all (an admin) every conversation, or those of one agent. |
