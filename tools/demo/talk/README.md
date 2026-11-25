@@ -18,7 +18,7 @@ Tested here, end to end, with the scripted model in place of a local one: `prepa
 ## Once, before the day
 
 1. BoxLang with the MiniServer on the PATH (`bxAgents serve` starts `boxlang-miniserver`), and the module: `install-bx-module bx-agents`. Check with `bxAgents --help`.
-2. A local model server with two models you have pulled. `MODEL_A` should support tool calling; `MODEL_B` is the one you switch to in demo 1. With Ollama, `ollama list` shows them. Other servers: set `PROVIDER=openai-compatible` (any OpenAI-compatible server, such as LM Studio) or `PROVIDER=docker-model-runner`. Check that `bxAgents models` lists your models and tests that they answer.
+2. A local model server with two models you have pulled. `MODEL_A` should support tool calling; `MODEL_B` is the one you switch to in demo 1. With Ollama, `ollama list` shows them. Other servers: set `PROVIDER=openai-compatible` (any OpenAI-compatible server, such as LM Studio) or `PROVIDER=docker-model-runner`. Check with `bxAgents models list`, then `bxAgents models test --all`, that your models are known and answer. For LM Studio (or any `openai-compatible` server that is not on port 8080) the agent also needs the server's address: see [How BxAgents is pointed at LM Studio](../../../examples/demo.md#how-bxagents-is-pointed-at-lm-studio), and add those `providers:` lines to the `Agent.yml` that `prepare.sh` makes.
 3. Make the demo project:
 
    ```bash
