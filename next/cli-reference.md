@@ -745,7 +745,7 @@ Keys are written as people say them: `enter`, `alt+enter`, `shift+enter`, `ctrl+
 | `@` | Opens a list of the files under the folder you started in (up to five levels deep; hidden folders, `node_modules`, `build`, `dist`, `target`, `out`, `__pycache__`, `venv` are skipped). Keep typing to narrow it, Up and Down to move, Tab or Enter to take one |
 | `@path/to/file` | A text file in the message: its content goes with the message, in its own block, cut at 100,000 characters. A name that is not a file is reported and stays as plain text; the message is still sent |
 | `@picture.png` | A picture (png, jpg, gif, webp), sent as an image part of the message |
-| Ctrl+V | Pastes a picture from the clipboard (needs `wl-paste` or `xclip` on Linux, `pngpaste` on macOS; Windows uses PowerShell). A chip in the hint row shows how many are waiting |
+| Ctrl+Shift+V | Pastes a picture from the clipboard (needs `wl-paste` or `xclip` on Linux, `pngpaste` on macOS; Windows uses PowerShell). A chip in the hint row shows how many are waiting |
 
 At most 4 pictures go with one message, each up to 5 MB. Before anything is sent the chat checks the model: set `vision: false` on a [profile](conventions/models.md#what-the-project-knows-about-a-model) that cannot see, and a picture sent to it is refused with a message instead of an obscure provider error. When `vision` is not set the picture goes through. `/context` counts what is attached. The picture is passed to the model as bx-ai's `AiMessage` image parts, in the shape that provider expects; only OpenAI-style providers have been tried so far.
 

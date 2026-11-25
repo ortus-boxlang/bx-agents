@@ -45,7 +45,7 @@ Qué puedes hacer en él:
 - **Contexto.** La fila de ayuda bajo la caja muestra cuánto de la ventana del modelo está en uso,
   como `ctx ~12.4k / 128k 9%`. `/context` muestra de qué se compone.
 - **Archivos e imágenes.** `@` lista archivos, y `@notes.md` pone el contenido de un archivo de texto
-  en tu mensaje. `@picture.png` o Ctrl+V envía una imagen (se rechaza cuando el perfil dice `vision: false`).
+  en tu mensaje. `@picture.png` o Ctrl+Shift+V envía una imagen (se rechaza cuando el perfil dice `vision: false`).
 - **Grabación.** `bxAgents chat --record=demo.cast`, o `/record` dentro del chat, guarda la pantalla
   como un archivo asciicast para demos.
 
