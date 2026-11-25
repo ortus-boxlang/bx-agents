@@ -63,38 +63,52 @@ class {
 	this.dependencies = [];
 
 	static {
-		subcommandVerbs = [ "token", "users", "notes", "vault", "sessions", "models", "add", "skills", "extensions", "restore", "routines", "connectors" ]
+		subcommandVerbs = [
+			"add",
+			"connectors",
+			"extensions",
+			"logs",
+			"models",
+			"notes",
+			"restore",
+			"routines",
+			"sessions",
+			"skills",
+			"token",
+			"users",
+			"vault"
+		]
 
 		verbs = {
-			"new"     : "models.cli.New",
+			"add"     : "models.cli.Add",
+			"backup"  : "models.cli.Backup",
 			"build"   : "models.cli.Build",
-			"test"    : "models.cli.Test",
-			"serve"   : "models.cli.Serve",
-			"package" : "models.cli.Package",
-			"deploy"  : "models.cli.Deploy",
-			"inspect" : "models.cli.Inspect",
 			"chat"    : "models.cli.Chat",
-			"invoke"  : "models.cli.Invoke",
 			"clean"   : "models.cli.Clean",
-			"hash-password" : "models.cli.HashPassword",
-			"token"   : "models.cli.Token",
-			"users"   : "models.cli.Users",
-			"notes"   : "models.cli.Notes",
-			"vault"   : "models.cli.Vault",
 			"connect" : "models.cli.Connect",
 			"connectors" : "models.cli.Connectors",
-			"sessions": "models.cli.Sessions",
-			"routines": "models.cli.Routines",
-			"stats"   : "models.cli.Stats",
-			"models"  : "models.cli.Models",
-			"doctor"  : "models.cli.Doctor",
-			"add"     : "models.cli.Add",
-			"skills"  : "models.cli.Skills",
-			"extensions" : "models.cli.Extensions",
 			"data"    : "models.cli.Data",
+			"deploy"  : "models.cli.Deploy",
+			"doctor"  : "models.cli.Doctor",
+			"extensions" : "models.cli.Extensions",
+			"hash-password" : "models.cli.HashPassword",
+			"inspect" : "models.cli.Inspect",
+			"invoke"  : "models.cli.Invoke",
 			"logs"    : "models.cli.Logs",
-			"backup"  : "models.cli.Backup",
-			"restore" : "models.cli.Restore"
+			"models"  : "models.cli.Models",
+			"new"     : "models.cli.New",
+			"notes"   : "models.cli.Notes",
+			"package" : "models.cli.Package",
+			"restore" : "models.cli.Restore",
+			"routines": "models.cli.Routines",
+			"serve"   : "models.cli.Serve",
+			"sessions": "models.cli.Sessions",
+			"skills"  : "models.cli.Skills",
+			"stats"   : "models.cli.Stats",
+			"test"    : "models.cli.Test",
+			"token"   : "models.cli.Token",
+			"users"   : "models.cli.Users",
+			"vault"   : "models.cli.Vault"
 		}
 
 		verbDescriptions = {
@@ -406,7 +420,7 @@ class {
 
 		// Remove the internal _valuelessFlags key from the options before passing them to the verb.
 		options.delete( "_valuelessFlags" )
-		// `token create`, `notes list` and `add tool`: the first word is the action, not a project path
+		// These verbs use their first positional as an action, area or name, not a project path.
 		if ( static.subcommandVerbs.contains( verbName ) ) {
 			options.projectRoot = resolveProjectRoot( options, false )
 		} else {
@@ -656,7 +670,7 @@ class {
 	 * CWD, never against this module's own file location.
 	 *
 	 * @options The parsed options struct from parseCliOptions()
-	 * @usePositional False for a verb whose first positional is an action (`token create`), not a path
+	 * @usePositional False for a verb whose first positional is an action or item (`token create`, `logs agent`), not a path
 	 *
 	 * @return An absolute, trailing-slash-free path to the target project root
 	 */
