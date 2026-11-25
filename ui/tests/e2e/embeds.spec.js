@@ -359,6 +359,25 @@ test.describe( "A visitor of another website", () => {
 		await admin.dispose();
 	} );
 
+	visitorTest( "stops showing the bubble on the next page load after the embed is turned off (no cached config)", async( { browser, playwright } ) => {
+		const admin = await playwright.request.newContext( { storageState: ( await import( "./support.js" ) ).AUTH + "ada.json" } );
+		const mine = await makeEmbed( admin, { name: "To turn off" } );
+		const own = await website( OTHER_PORT + 1, () => mine.id );
+		const context = await browser.newContext( { storageState: { cookies: [], origins: [] } } );
+		const page = await context.newPage();
+		// this website is the embed's own, so list it
+		await admin.post( API + "/embeds/update", { headers: JSON_HEADERS, data: { id: mine.id, limits: { allowedOrigins: [ "http://127.0.0.1:" + ( OTHER_PORT + 1 ) ] } } } );
+		await page.goto( "http://127.0.0.1:" + ( OTHER_PORT + 1 ) + "/" );
+		await expect( page.locator( "bx-agent .launcher" ) ).toBeVisible();
+		await admin.post( API + "/embeds/update", { headers: JSON_HEADERS, data: { id: mine.id, enabled: false } } );
+		await page.reload();
+		await page.waitForTimeout( 1000 );
+		expect( await page.evaluate( () => !!document.querySelector( "bx-agent" )?.shadowRoot?.querySelector( ".launcher" ) ) ).toBe( false );
+		await context.close();
+		own.close();
+		await admin.dispose();
+	} );
+
 	visitorTest( "loads the hosted page in a frame on an allowed website, and Chromium blocks it on any other", async( { browser } ) => {
 		const context = await browser.newContext( { storageState: { cookies: [], origins: [] } } );
 		const allowed = await context.newPage();

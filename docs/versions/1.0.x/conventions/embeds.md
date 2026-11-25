@@ -64,7 +64,7 @@ All sit under the agent API path (`/__bxagents` unless moved), so `<api>` below.
 
 ```text
 GET  <api>/embed/widget.js        the script and the <bx-agent> element
-GET  <api>/embed/<id>/config      look and text only; origin checked; cached briefly
+GET  <api>/embed/<id>/config      look and text only; origin checked; always revalidated
 POST <api>/embed/<id>/session     origin checked, rate limited; answers { token, expiresAt }
 POST <api>/embed/<id>/events      Authorization: Bearer <token>; body { input, conversationId? }; answers an SSE stream
 POST <api>/embed/<id>/cancel      Bearer; body { threadId }; stops the visitor's own run          (proposed)
@@ -215,6 +215,8 @@ Accessibility: the launcher is a real button with `aria-expanded`; the panel is 
 Measured in Chromium against real loopback servers on other ports (an allowed website on 9100, another on 9200): the allowed website got the launcher, focus moved to the input and back on Esc, the answer arrived as 35 DOM updates (not one block), and the transcript came back after a reload; the other website got no launcher, because its `config` request was refused with no CORS header; the hosted frame drew on the allowed website and Chromium blocked it on the other (`frame-ancestors`), although the app also sends `X-Frame-Options: SAMEORIGIN`.
 
 The hosted page runs on the agent's own origin, so a request from it is from that origin: a browser sends no `Origin` header on a same-origin `GET`, so the agent reads `Sec-Fetch-Site: same-origin` (which a page script cannot set) as "from my own origin". The agent's own origin is accepted whether or not the embed lists it. A visitor who opens the frame address directly is a visitor like any other.
+
+A disabled or expired embed stops showing its bubble at the next page load: `config` is sent with `Cache-Control: no-cache`, so a browser asks again every time. (A 30 second cache was tried first. A recording of the tour showed the bubble staying on the website for up to 30 seconds after Disable, so it was removed.)
 
 Known limit: a visitor's conversation belongs to its session (one hour, kept in `localStorage` so a reload keeps it). After it expires the widget still shows the saved transcript, but the agent starts without the earlier messages.
 
