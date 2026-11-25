@@ -185,6 +185,15 @@ test.describe( "The Embeds page", () => {
 	} );
 } );
 
+// a visitor is anonymous: the default `request` of these tests carries ada's session cookie, which a visitor never has
+const visitorTest = test.extend( {
+	visitor : async( { playwright }, use ) => {
+		const context = await playwright.request.newContext( { storageState: { cookies: [], origins: [] } } );
+		await use( context );
+		await context.dispose();
+	}
+} );
+
 test.describe( "A visitor of another website", () => {
 	let embed = { id: "" };
 	let now = "";
@@ -193,7 +202,7 @@ test.describe( "A visitor of another website", () => {
 	test.beforeAll( async( { playwright } ) => {
 		const admin = await playwright.request.newContext( { storageState: ( await import( "./support.js" ) ).AUTH + "ada.json" } );
 		now = await timeTool( admin );
-		embed = await makeEmbed( admin, { name: "Visitor test", tools: [ now ], look: { title: "Ask the docs", welcome: "Hi, visitor.", suggestions: [ "What time is it?" ] } } );
+		embed = await makeEmbed( admin, { name: "Visitor test", tools: [ now ], look: { title: "Ask the docs", welcome: "Hi, visitor.", suggestions: [ "When are you open?" ] } } );
 		await admin.dispose();
 		sites = [
 			await website( ALLOWED_PORT, () => embed.id ),
@@ -205,7 +214,7 @@ test.describe( "A visitor of another website", () => {
 		sites.forEach( s => s.close() );
 	} );
 
-	test( "chats from an allowed website, in pieces rather than one block, and the transcript survives a reload", async( { browser } ) => {
+	visitorTest( "chats from an allowed website, in pieces rather than one block, and the transcript survives a reload", async( { browser } ) => {
 		const context = await browser.newContext( { storageState: { cookies: [], origins: [] } } );
 		const page = await context.newPage();
 		const consoleErrors = [];
@@ -233,21 +242,21 @@ test.describe( "A visitor of another website", () => {
 			} ).observe( document.querySelector( "bx-agent" ).shadowRoot, { subtree: true, characterData: true, childList: true } );
 		} );
 		await page.locator( "bx-agent .suggestions button" ).click();
-		await expect( page.locator( "bx-agent .msg.bot" ).last() ).toContainText( "It is", { timeout: 30_000 } );
+		await expect( page.locator( "bx-agent .msg.bot" ).last() ).toContainText( "Our warehouse is open", { timeout: 30_000 } );
 		await expect( page.locator( "bx-agent .send" ) ).toHaveText( "Send" );
 		expect( await page.evaluate( () => window.__updates ) ).toBeGreaterThanOrEqual( 4 );
 		// the finished answer is announced once, from the status region, not piece by piece
-		await expect( page.locator( "bx-agent [aria-live=polite]" ) ).toContainText( "Answer: It is" );
+		await expect( page.locator( "bx-agent [aria-live=polite]" ) ).toContainText( "Answer: Our warehouse is open" );
 
 		await page.reload();
 		await page.locator( "bx-agent .launcher" ).click();
 		await expect( page.locator( "bx-agent .msg" ) ).toHaveCount( 2 );
-		await expect( page.locator( "bx-agent .msg.user" ) ).toHaveText( "What time is it?" );
+		await expect( page.locator( "bx-agent .msg.user" ) ).toHaveText( "When are you open?" );
 		expect( consoleErrors ).toEqual( [] );
 		await context.close();
 	} );
 
-	test( "gets nothing on a website that is not listed: no launcher, no config, no session, no CORS header", async( { browser, request } ) => {
+	visitorTest( "gets nothing on a website that is not listed: no launcher, no config, no session, no CORS header", async( { browser, visitor } ) => {
 		const context = await browser.newContext( { storageState: { cookies: [], origins: [] } } );
 		const page = await context.newPage();
 		await page.goto( OTHER + "/" );
@@ -259,21 +268,21 @@ test.describe( "A visitor of another website", () => {
 			"/config",
 			"/session"
 		] ) {
-			const res = await request.fetch( API + "/embed/" + embed.id + path, { method: path === "/session" ? "POST" : "GET", headers: { Origin: OTHER } } );
+			const res = await visitor.fetch( API + "/embed/" + embed.id + path, { method: path === "/session" ? "POST" : "GET", headers: { Origin: OTHER } } );
 			expect( res.status(), path ).toBe( 403 );
 			expect( res.headers()[ "access-control-allow-origin" ], path ).toBeUndefined();
 		}
 		// what the browser asks before a cross-origin POST: answered for the listed website only
-		const yes = await request.fetch( API + "/embed/" + embed.id + "/events", { method: "OPTIONS", headers: { Origin: ALLOWED, "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "authorization,content-type" } } );
+		const yes = await visitor.fetch( API + "/embed/" + embed.id + "/events", { method: "OPTIONS", headers: { Origin: ALLOWED, "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "authorization,content-type" } } );
 		expect( yes.headers()[ "access-control-allow-origin" ] ).toBe( ALLOWED );
 		expect( yes.headers()[ "access-control-allow-credentials" ] ).toBeUndefined();
-		const no = await request.fetch( API + "/embed/" + embed.id + "/events", { method: "OPTIONS", headers: { Origin: OTHER, "Access-Control-Request-Method": "POST" } } );
+		const no = await visitor.fetch( API + "/embed/" + embed.id + "/events", { method: "OPTIONS", headers: { Origin: OTHER, "Access-Control-Request-Method": "POST" } } );
 		expect( no.headers()[ "access-control-allow-origin" ] ).toBeUndefined();
 	} );
 
-	test( "refuses a forged, other-origin or missing token with 401, and a website that is not listed with 403", async( { request } ) => {
-		const good = await sessionFor( request, embed.id );
-		const stream = headers => request.post( API + "/embed/" + embed.id + "/events", { headers: { "Content-Type": "application/json", ...headers }, data: { input: "hi" } } );
+	visitorTest( "refuses a forged, other-origin or missing token with 401, and a website that is not listed with 403", async( { visitor } ) => {
+		const good = await sessionFor( visitor, embed.id );
+		const stream = headers => visitor.post( API + "/embed/" + embed.id + "/events", { headers: { "Content-Type": "application/json", ...headers }, data: { input: "hi" } } );
 		expect( ( await stream( { Origin: ALLOWED } ) ).status() ).toBe( 401 );
 		expect( ( await stream( { Origin: ALLOWED, Authorization: "Bearer not.a.token" } ) ).status() ).toBe( 401 );
 		expect( ( await stream( { Origin: ALLOWED, Authorization: "Bearer " + good.slice( 0, -2 ) + "xx" } ) ).status() ).toBe( 401 );
@@ -287,7 +296,7 @@ test.describe( "A visitor of another website", () => {
 			"/sessions",
 			"/vault"
 		] ) {
-			const res = await request.get( API + path, { headers: { Authorization: "Bearer " + good, Origin: ALLOWED } } );
+			const res = await visitor.get( API + path, { headers: { Authorization: "Bearer " + good, Origin: ALLOWED } } );
 			expect( [
 				401,
 				403
@@ -295,51 +304,52 @@ test.describe( "A visitor of another website", () => {
 		}
 	} );
 
-	test( "ignores a user id, an agent, a profile and tools sent in the body, and runs only the embed's own tools", async( { request, playwright } ) => {
+	visitorTest( "ignores a user id, an agent, a profile and tools sent in the body, and runs only the embed's own tools", async( { visitor, playwright } ) => {
 		const admin = await playwright.request.newContext( { storageState: ( await import( "./support.js" ) ).AUTH + "ada.json" } );
 		const bare = await makeEmbed( admin, { name: "No tools", tools: [] } );
-		const token = await sessionFor( request, bare.id );
+		const token = await sessionFor( visitor, bare.id );
 		const forged = { input: "which tools do you have?", userId: "ada", agent: "helper", profile: "planner", tools: [ now ], options: { profile: "planner", userId: "ada" }, scope: "admin" };
-		const none = await say( request, bare.id, token, forged );
+		const none = await say( visitor, bare.id, token, forged );
 		expect( none.status ).toBe( 200 );
 		// the model was offered nothing at all, whatever the body asked for
 		expect( spoken( none.text ) ).toMatch( /offered these tools: \s*\./ );
-		const noTime = await say( request, bare.id, token, { input: "what time is it", tools: [ now ] } );
-		expect( spoken( noTime.text ) ).not.toContain( "It is" );
+		const noTime = await say( visitor, bare.id, token, { input: "what time is it", tools: [ now ] } );
+		// the scripted model answers "It is **<what the tool said>**": with no tool offered there is nothing between the stars
+		expect( spoken( noTime.text ) ).toMatch( /^It is \*{4}\.$/ );
 
-		const withTool = await sessionFor( request, embed.id );
-		const time = await say( request, embed.id, withTool, { input: "what time is it" } );
-		expect( spoken( time.text ) ).toContain( "It is" );
-		const offered = await say( request, embed.id, withTool, { input: "which tools do you have?" } );
+		const withTool = await sessionFor( visitor, embed.id );
+		const time = await say( visitor, embed.id, withTool, { input: "what time is it" } );
+		expect( spoken( time.text ) ).toMatch( /^It is \*\*[^*]+\*\*\.$/ );
+		const offered = await say( visitor, embed.id, withTool, { input: "which tools do you have?" } );
 		expect( spoken( offered.text ) ).toMatch( /now/ );
 		expect( spoken( offered.text ) ).not.toMatch( /vault|note|skill|delete/ );
 		await admin.dispose();
 	} );
 
-	test( "limits a visitor per minute (429) and refuses a message of 2001 characters (400)", async( { request, playwright } ) => {
+	visitorTest( "limits a visitor per minute (429) and refuses a message of 2001 characters (400)", async( { visitor, playwright } ) => {
 		const admin = await playwright.request.newContext( { storageState: ( await import( "./support.js" ) ).AUTH + "ada.json" } );
 		const small = await makeEmbed( admin, { name: "Small limits", limits: { allowedOrigins: [ ALLOWED ], perVisitorPerMinute: 2, dailyMessages: 500, maxMessageChars: 2000 } } );
-		const token = await sessionFor( request, small.id );
-		expect( ( await say( request, small.id, token, { input: "x".repeat( 2001 ) } ) ).status ).toBe( 400 );
-		expect( ( await say( request, small.id, token, { input: "one" } ) ).status ).toBe( 200 );
-		expect( ( await say( request, small.id, token, { input: "two" } ) ).status ).toBe( 200 );
-		expect( ( await say( request, small.id, token, { input: "three" } ) ).status ).toBe( 429 );
+		const token = await sessionFor( visitor, small.id );
+		expect( ( await say( visitor, small.id, token, { input: "x".repeat( 2001 ) } ) ).status ).toBe( 400 );
+		expect( ( await say( visitor, small.id, token, { input: "one" } ) ).status ).toBe( 200 );
+		expect( ( await say( visitor, small.id, token, { input: "two" } ) ).status ).toBe( 200 );
+		expect( ( await say( visitor, small.id, token, { input: "three" } ) ).status ).toBe( 429 );
 		// another visitor is counted on its own
-		expect( ( await say( request, small.id, await sessionFor( request, small.id ), { input: "hello" } ) ).status ).toBe( 200 );
+		expect( ( await say( visitor, small.id, await sessionFor( visitor, small.id ), { input: "hello" } ) ).status ).toBe( 200 );
 		const usage = await ( await admin.get( API + "/embeds/usage?id=" + small.id, { headers: JSON_HEADERS } ) ).json();
 		expect( usage.messages ).toBe( 3 );
 		expect( usage.limited ).toBe( 1 );
 		await admin.dispose();
 	} );
 
-	test( "answers a disabled, an expired and an unknown embed the same way", async( { request, playwright } ) => {
+	visitorTest( "answers a disabled, an expired and an unknown embed the same way", async( { visitor, playwright } ) => {
 		const admin = await playwright.request.newContext( { storageState: ( await import( "./support.js" ) ).AUTH + "ada.json" } );
 		const off = await makeEmbed( admin, { name: "To disable" } );
 		const old = await makeEmbed( admin, { name: "To expire" } );
 		await admin.post( API + "/embeds/update", { headers: JSON_HEADERS, data: { id: off.id, enabled: false } } );
 		await admin.post( API + "/embeds/update", { headers: JSON_HEADERS, data: { id: old.id, expires: new Date( Date.now() - 3600_000 ).toISOString() } } );
 		const asked = async id => {
-			const res = await request.get( API + "/embed/" + id + "/config", { headers: { Origin: ALLOWED } } );
+			const res = await visitor.get( API + "/embed/" + id + "/config", { headers: { Origin: ALLOWED } } );
 			return { status: res.status(), body: await res.text() };
 		};
 		const unknown = await asked( "emb_0000000000" );
@@ -349,7 +359,7 @@ test.describe( "A visitor of another website", () => {
 		await admin.dispose();
 	} );
 
-	test( "loads the hosted page in a frame on an allowed website, and Chromium blocks it on any other", async( { browser } ) => {
+	visitorTest( "loads the hosted page in a frame on an allowed website, and Chromium blocks it on any other", async( { browser } ) => {
 		const context = await browser.newContext( { storageState: { cookies: [], origins: [] } } );
 		const allowed = await context.newPage();
 		await allowed.goto( ALLOWED + "/frame" );
