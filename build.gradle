@@ -318,25 +318,20 @@ task uiBuild( type: Exec ) {
 }
 
 /**
- * Custom task that creates a build/modules/bxagents folder - a real,
+ * Custom task that creates a build/modules/bx-agents folder - a real,
  * installable module structure.
- * - Copies the build/libs/bx-agents-{version}.jar to build/modules/bxagents/libs/
- * - Copies the src/main/bx/** to build/modules/bxagents/ folder.
+ * - Copies the build/libs/bx-agents-{version}.jar to build/modules/bx-agents/libs/
+ * - Copies the src/main/bx/** to build/modules/bx-agents/ folder.
  *
- * Lives at build/modules/bxagents (NOT build/module) so its own folder name
- * matches the module's registered name ("bxagents", per box.json's
- * boxlang.moduleName / ModuleConfig.bx's this.mapping) - required for
- * BoxLang's ModuleService to discover it via a `modulesDirectory` setting
- * (confirmed empirically: ModuleService keys a module's identity off the
- * folder name under modulesDirectory, not off any value inside box.json).
- * boxlang.json's own modulesDirectory points at build/modules for exactly
- * this reason - see the ModuleConfig.bx / BuildPipeline.bx module-path fix
- * this same session, which found every CLI verb failed under a genuinely
- * installed module because internal references only worked against the
- * OLD build/module folder's ad hoc (non-discoverable) shape.
+ * The distributable folder uses the public module slug, bx-agents. The
+ * module's internal BoxLang name remains bxagents, as declared by box.json
+ * and ModuleConfig.bx.
  */
 task createModuleStructure(type: Copy) {
 	mustRunAfter shadowJar, jar
+	doFirst {
+		project.delete( file( 'build/modules/bxagents' ) )
+	}
 	// The bundled BoxLang modules and ColdBox libs must be in place BEFORE this copies
 	// and the zip is built, or a fresh build ships a zip without them
 	dependsOn "downloadModules", "installLibs", "uiBuild"
@@ -404,7 +399,7 @@ task createModuleStructure(type: Copy) {
     from( 'build/lib-prod/lib' ) {
 		into 'lib'
 	}
-    destinationDir = file( 'build/modules/bxagents' )
+    destinationDir = file( 'build/modules/bx-agents' )
 }
 task zipModuleStructure( type: Zip ) {
     group = "distribution"
@@ -499,7 +494,7 @@ task testColdBoxIntegration( type: JavaExec ) {
 	description = "Runs the ColdBox-dependent integration specs (tests/specs/integration/coldbox) over real HTTP via boxlang-miniserver"
 	// shadowJar, not just compileJava, for the same reason verifyExamples
 	// needs it: boxlang.json resolves bxModules.bxagents.* against
-	// build/modules/bxagents, a Copy of src/main/bx that ONLY refreshes when
+	// build/modules/bx-agents, a Copy of src/main/bx that ONLY refreshes when
 	// shadowJar runs. Depending on compileJava alone silently built these
 	// fixtures with a STALE generator - confirmed the hard way this session,
 	// when a corrected route-condition closure kept generating in its old,
@@ -544,7 +539,7 @@ task verifyExamples( type: JavaExec ) {
 	group = "verification"
 	description = "Builds every project under examples/ via the real BuildPipeline"
 	// boxlang.json's modulesDirectory resolves bxModules.bxagents.* against
-	// build/modules/bxagents (a Copy of src/main/bx, only refreshed when
+	// build/modules/bx-agents (a Copy of src/main/bx, only refreshed when
 	// shadowJar runs - see shadowJar.finalizedBy(createModuleStructure)
 	// above), NOT directly against src/main/bx. Depending on compileJava
 	// alone let this task silently verify a STALE copy of the gateway

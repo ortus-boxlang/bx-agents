@@ -27,7 +27,7 @@ Every real bug found in this module was found by running code, never by reading 
 - Exercise the thing end to end against a real server (`AgentClient.startServer()` launches a throwaway miniserver on an ephemeral port).
 - When a wire format matters, **capture the bytes** and count what you claim - do not describe a payload you have not looked at.
 - Assert the property that would actually break. Streaming is asserted on the **delta count**, because reassembled output alone passes just as well when the whole body was buffered and parsed at the end - the exact failure the feature exists to avoid.
-- `./gradlew testColdBoxIntegration` must depend on `shadowJar`, not only `compileJava`. `boxlang.json` resolves the module out of `build/modules/bxagents`, which only `shadowJar` refreshes - depending on `compileJava` alone silently tests a **stale** module, and a fix you already made appears not to work.
+- `./gradlew testColdBoxIntegration` must depend on `shadowJar`, not only `compileJava`. `boxlang.json` resolves the module out of `build/modules/bx-agents`, which only `shadowJar` refreshes - depending on `compileJava` alone silently tests a **stale** module, and a fix you already made appears not to work.
 
 ## BoxLang Gotchas
 
@@ -40,7 +40,7 @@ Each of these cost real debugging time here:
 - `listFindNoCase( "true,false", "yes" )` is **1**: BoxLang reads `yes` and `no` as booleans when it compares, so a list or `==` check cannot tell `yes` from `true`. To accept only the words `true` and `false`, use `reFindNoCase( "^(true|false)$", value )`.
 - A `try/catch` at the **top level** of a `.bxs` script (outside any function) can trigger `java.lang.VerifyError: Inconsistent stackmap frames`. Wrap it in a function.
 - **`getSystemSetting()` keeps its first answer per key for the life of the process**, a miss included: after `System.setProperty( "X", "a" )` it answers `a`; after setting `b`, `""` or clearing it, still `a`, and a key asked before it existed keeps answering the default (measured on 1.19.0). Production code reads settings with `getSystemSetting()` (`BXAGENTS_MODULE_DIR`), so a test never changes a setting mid-process: it passes explicit options instead (the `moduleDir` option of `build`, `serve`, `test` and `invoke --server`, `BuildPipeline.setModuleSource()`), and `runTests.bxs` sets `BXAGENTS_MODULE_DIR` once, at the start.
-- **`directoryDelete( path, true )` follows symbolic links** and empties what they point at. Anything that can hold a link (a dev build links the web app module's source; a test run links the module) is deleted with `TreeDelete::tree()`. A test run of the `test` verb once emptied `build/modules/bxagents` this way.
+- **`directoryDelete( path, true )` follows symbolic links** and empties what they point at. Anything that can hold a link (a dev build links the web app module's source; a test run links the module) is deleted with `TreeDelete::tree()`. A test run of the `test` verb once emptied `build/modules/bx-agents` this way.
 - An **unscoped assignment inside a function is local** to it: `coldbox = {...}` in `configure()` is invisible to ColdBox, which reads `variables.coldbox`. The generated config did this for as long as it existed, hidden by the next item.
 - ColdBox's config file is **`config/Coldbox.bx`** (lower-case b). On a case-sensitive file system a file called `ColdBox.bx` is never loaded, and nothing says so.
 - `expandPath( "/" )` is the **web root**, which is `.build/public` in a served app: the app is `expandPath( "/app" )` (the template's mapping). Code that means the app asks `models/util/AppRoot.bx`, which also works outside a web boot.
@@ -86,14 +86,14 @@ So on this engine the native emitters survive compression and only a hand-writte
   app/               the generated code: Application.bx is the template's `abort;` guard
   public/            the web root: Application.bx, index.bxm, robots.txt, includes/
   lib/               coldbox/, modules/* (from the module's lib/), java/
-  runtime/           boxlang.json (the template's), modules/bxagents (the ONLY module), global/, logs/ ; also BOXLANG_HOME
+  runtime/           boxlang.json (the template's), modules/bx-agents (the ONLY module; internal mapping bxagents), global/, logs/ ; also BOXLANG_HOME
   boxlang_modules/   the project's own installed BoxLang modules
 ```
 
 - The template is **vendored**, never fetched: `src/main/bx/templates/coldbox-boxlang` (commit and version in `VERSION`), refreshed by a person with `tools/refresh-coldbox-template.sh`, which shows the diff. The files it lays out are unchanged apart from one line of `runtime/boxlang.json`; `public/Application.bx` is the one derived file.
-- The server must be started with **`.build` as its working directory** (`${user-dir}` in the engine config) and `BOXLANG_HOME=<build>/runtime`. Without a home, BoxLang loads every module in `~/.boxlang/modules` (measured with a decoy module), so no code names the machine's module directory: `Serve.bx`, the test runner and `ModuleCopier` copy or link the one `bxagents` module instead.
+- The server must be started with **`.build` as its working directory** (`${user-dir}` in the engine config) and `BOXLANG_HOME=<build>/runtime`. Without a home, BoxLang loads every module in `~/.boxlang/modules` (measured with a decoy module), so no code names the machine's module directory: `Serve.bx`, the test runner and `ModuleCopier` copy or link the one `bx-agents` module instead (internal alias `bxagents`).
 - `public/Application.bx` is derived from the template's and changed: a thin class extending the generated base `app/bxagents/Application.bx` (which carries the template's bootstrap settings and `onApplicationStart()`/`onRequestStart()`), or the project's own Application.bx pointed at it; see docs/conventions/application-bx.md for what is derived and what is changed.
-- Tests that boot a served app need the BUILT module: `./gradlew --no-daemon shadowJar createModuleStructure`, then they find `build/modules/bxagents` themselves (`BXAGENTS_MODULE_DIR`, see `ModuleCopier.sourceDir()`). The unit suite builds hundreds of projects, so `runTests.bxs` points that variable at a stand-in folder.
+- Tests that boot a served app need the BUILT module: `./gradlew --no-daemon shadowJar createModuleStructure`, then they find `build/modules/bx-agents` themselves (`BXAGENTS_MODULE_DIR`, see `ModuleCopier.sourceDir()`). The unit suite builds hundreds of projects, so `runTests.bxs` points that variable at a stand-in folder.
 
 ## Build And Packaging
 

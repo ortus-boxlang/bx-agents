@@ -5,7 +5,7 @@ class extends="testbox.system.BaseSpec" {
 
 			beforeEach( function() {
 				variables.tmp = createTempDirectory( prefix = "bxagents-modcopy-" );
-				variables.module = tmp & "/bxagents";
+				variables.module = tmp & "/bx-agents";
 				variables.runtime = tmp & "/build/runtime";
 				directoryCreate( module & "/libs", true );
 				directoryCreate( module & "/modules/bxai", true );
@@ -22,21 +22,21 @@ class extends="testbox.system.BaseSpec" {
 				directoryDelete( tmp, true );
 			} );
 
-			it( "copies only the bxagents module folder, under that name, into runtime/modules", function() {
+			it( "copies only the bx-agents module folder, under that name, into runtime/modules", function() {
 				var result = copier.copy( module, runtime );
 				expect( result.copied ).toBeTrue();
-				expect( directoryExists( runtime & "/modules/bxagents/models" ) ).toBeTrue();
-				expect( fileExists( runtime & "/modules/bxagents/modules/bxai/box.json" ) ).toBeTrue();
-				expect( directoryList( runtime & "/modules", false, "name" ) ).toBe( [ "bxagents" ] );
+				expect( directoryExists( runtime & "/modules/bx-agents/models" ) ).toBeTrue();
+				expect( fileExists( runtime & "/modules/bx-agents/modules/bxai/box.json" ) ).toBeTrue();
+				expect( directoryList( runtime & "/modules", false, "name" ) ).toBe( [ "bx-agents" ] );
 			} );
 
 			it( "skips the copy while the stamp (box.json version and the hash of the jars) is unchanged", function() {
 				copier.copy( module, runtime );
-				fileWrite( runtime & "/modules/bxagents/marker.txt", "still here" );
+				fileWrite( runtime & "/modules/bx-agents/marker.txt", "still here" );
 				var again = copier.copy( module, runtime );
 				expect( again.copied ).toBeFalse();
 				expect( again.reason ).toBe( "unchanged" );
-				expect( fileExists( runtime & "/modules/bxagents/marker.txt" ) ).toBeTrue();
+				expect( fileExists( runtime & "/modules/bx-agents/marker.txt" ) ).toBeTrue();
 			} );
 
 			it( "copies again when a jar changes, even with the same version", function() {
@@ -44,7 +44,7 @@ class extends="testbox.system.BaseSpec" {
 				fileWrite( module & "/libs/bx-agents-1.0.0.jar", "jar-bytes-2" );
 				var again = copier.copy( module, runtime );
 				expect( again.copied ).toBeTrue();
-				expect( fileRead( runtime & "/modules/bxagents/libs/bx-agents-1.0.0.jar" ) ).toBe( "jar-bytes-2" );
+				expect( fileRead( runtime & "/modules/bx-agents/libs/bx-agents-1.0.0.jar" ) ).toBe( "jar-bytes-2" );
 			} );
 
 			it( "copies again when the version changes, and when a nested module changes", function() {
@@ -57,19 +57,19 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "replaces the whole folder, so a file the new module no longer has does not survive", function() {
 				copier.copy( module, runtime );
-				fileWrite( runtime & "/modules/bxagents/old.bx", "stale" );
+				fileWrite( runtime & "/modules/bx-agents/old.bx", "stale" );
 				fileWrite( module & "/libs/bx-agents-1.0.0.jar", "jar-bytes-3" );
 				copier.copy( module, runtime );
-				expect( fileExists( runtime & "/modules/bxagents/old.bx" ) ).toBeFalse();
+				expect( fileExists( runtime & "/modules/bx-agents/old.bx" ) ).toBeFalse();
 			} );
 
 			it( "never leaves a stamp on a folder that was not completely copied", function() {
 				// a folder with the right name but no stamp is what an interrupted copy leaves in the other designs
-				directoryCreate( runtime & "/modules/bxagents", true );
-				fileWrite( runtime & "/modules/bxagents/half.bx", "half" );
+				directoryCreate( runtime & "/modules/bx-agents", true );
+				fileWrite( runtime & "/modules/bx-agents/half.bx", "half" );
 				var result = copier.copy( module, runtime );
 				expect( result.copied ).toBeTrue();
-				expect( fileExists( runtime & "/modules/bxagents/half.bx" ) ).toBeFalse();
+				expect( fileExists( runtime & "/modules/bx-agents/half.bx" ) ).toBeFalse();
 				// and the work folder is gone: nothing but the finished module is left in the build
 				expect( directoryList( tmp & "/build", false, "name" ).filter( n => n.startsWith( ".module-copy" ) ).len() ).toBe( 0 );
 			} );
@@ -86,11 +86,12 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.copied ).toBeFalse();
 				expect( result.reason ).toBe( "no-module" );
 				expect( result.target ).toBe( "" );
-				expect( directoryExists( runtime & "/modules/bxagents" ) ).toBeFalse();
+				expect( directoryExists( runtime & "/modules/bx-agents" ) ).toBeFalse();
 			} );
 
 			it( "copies a module installed as bx-agents (what `bx-module install` makes) under that name, as is", function() {
-				var installed = tmp & "/bx-agents";
+				var installed = tmp & "/installed/bx-agents";
+				directoryCreate( getDirectoryFromPath( installed ), true );
 				directoryCopy( module, installed, true );
 				var result = copier.copy( installed, runtime );
 				expect( result.copied ).toBeTrue();
@@ -102,13 +103,15 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "removes an earlier copy under the other name, so the copied module stays the only one", function() {
-				var installed = tmp & "/bx-agents";
+				var legacy = tmp & "/bxagents";
+				directoryCopy( module, legacy, true );
+				var installed = tmp & "/installed/bx-agents";
 				directoryCopy( module, installed, true );
-				copier.copy( module, runtime );
+				copier.copy( legacy, runtime );
 				expect( directoryList( runtime & "/modules", false, "name" ) ).toBe( [ "bxagents" ] );
 				copier.copy( installed, runtime );
 				expect( directoryList( runtime & "/modules", false, "name" ) ).toBe( [ "bx-agents" ] );
-				copier.copy( module, runtime );
+				copier.copy( legacy, runtime );
 				expect( directoryList( runtime & "/modules", false, "name" ) ).toBe( [ "bxagents" ] );
 			} );
 

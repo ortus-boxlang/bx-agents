@@ -18,11 +18,11 @@ Everything is BoxLang except the speech engine: Kokoro only exists for Python, s
 
 ## Steps
 
-You need BoxLang with the bxAgents module built (`./gradlew shadowJar`, the module is `build/modules/bxagents`), the BoxLang jar the build used, `ffmpeg`, `script`, and the bx-audio and bx-playwright modules (`install-bx-module bx-audio bx-playwright`, then `bxplaywright install` for the browser). Python is only for the voice: `python3 -m venv venv && venv/bin/pip install kokoro-onnx soundfile`, and the `kokoro-v1.0.onnx` and `voices-v1.0.bin` files from the [kokoro-onnx releases](https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0). Port 8080 must be free.
+You need BoxLang with the bxAgents module built (`./gradlew shadowJar`, the module is `build/modules/bx-agents`), the BoxLang jar the build used, `ffmpeg`, `script`, and the bx-audio and bx-playwright modules (`install-bx-module bx-audio bx-playwright`, then `bxplaywright install` for the browser). Python is only for the voice: `python3 -m venv venv && venv/bin/pip install kokoro-onnx soundfile`, and the `kokoro-v1.0.onnx` and `voices-v1.0.bin` files from the [kokoro-onnx releases](https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0). Port 8080 must be free.
 
 1. Record the scenes. The first run builds the demo agent. `--home` is the "user's" home: a short one such as `/home/dev` keeps the paths in `/export` and `/record` short, and the folder in the prompt reads `~/acme-support`. Clear `<home>/.bxagents` first, or the notes and the vault already hold what the scene adds.
    ```bash
-   boxlang record.bxs --boxlang-jar=<boxlang.jar> --module=<build/modules/bxagents> --out=out --home=/home/dev
+   boxlang record.bxs --boxlang-jar=<boxlang.jar> --module=<build/modules/bx-agents> --out=out --home=/home/dev
    boxlang record.bxs ... --only=memory     # one scene again
    ```
 2. The voice: `boxlang voice.bxs --out=out/voice --kokoro=<where the two Kokoro files are> --python=<venv>/bin/python`

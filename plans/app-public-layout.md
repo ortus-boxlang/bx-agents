@@ -8,7 +8,7 @@ flowchart LR
   G[Generators] --> APP[".build/app"]
   A --> PUB[".build/public<br/>.build/runtime/boxlang.json"]
   M["installed bxagents module"] --> C[ModuleCopier]
-  C --> RM[".build/runtime/modules/bxagents"]
+  C --> RM[".build/runtime/modules/bx-agents"]
   L["module lib/"] --> LIB[".build/lib"]
   S[MiniServerJson] --> J[".build/miniserver.json"]
   J --> SRV["boxlang-miniserver<br/>cwd .build, BOXLANG_HOME runtime"]
@@ -25,8 +25,8 @@ flowchart LR
 | The one patched line | `"whitespaceCompressionEnabled": false` in the vendored `runtime/boxlang.json`, a safety net (see the SSE table), kept so `.build/runtime/boxlang.json` is the vendored file byte for byte |
 | `public/Application.bx` | Derived from the template's and changed: a thin class extending the generated base `app/bxagents/Application.bx`, which carries what the template's file does (`COLDBOX_*`, the bootstrap call, `loadColdbox()`, `onRequestStart()`) plus the generated settings and the hooks `before()`, `after()` and `beforeRequest()`. The template's `onApplicationEnd`, `onSessionStart`, `onSessionEnd` and `onMissingTemplate` are not carried. **Decision (the owner, after the first cut):** the spike's variant A (the template's file byte for byte plus four fenced `// >>> BXAGENTS` blocks, wiring in `Wiring.bx`) was built, tested and then removed, together with its anchors, its refresh-script dependency, its lifecycle warning and the variant switch; the thin class was the default and the only one kept. |
 | The project's own `Application.bx` | It is `public/Application.bx`, with `extends="bxagents.Application"` (what `new` has always written, and `bxagents.Scheduler` for schedulers) rewritten to `app.bxagents.Application`. Settings, the hooks and the lifecycle methods (`super.onApplicationStart()`) all work. |
-| Module copy | Only the folder `bxagents`, into `.build/runtime/modules/bxagents`, through a work folder and a rename; skipped while the stamp (SHA-256 of `box.json`, the jars and each nested module's `box.json`) is unchanged. `lib/coldbox` and `lib/modules/*` come from the module's own `lib/`. |
-| Which module | The installed one (a folder named `bxagents` with `ModuleConfig.bx`), or `BXAGENTS_MODULE_DIR` (the built `build/modules/bxagents` for a checkout and the tests; `none` for no module) |
+| Module copy | Only the folder `bx-agents`, into `.build/runtime/modules/bx-agents`, through a work folder and a rename; skipped while the stamp (SHA-256 of `box.json`, the jars and each nested module's `box.json`) is unchanged. `lib/coldbox` and `lib/modules/*` come from the module's own `lib/`. |
+| Which module | The installed one (a folder named `bx-agents` with `ModuleConfig.bx`), or `BXAGENTS_MODULE_DIR` (the built `build/modules/bx-agents` for a checkout and the tests; `none` for no module) |
 | No OS modules | `Serve.bx` no longer names the machine's module directory or writes `runtime/config/boxlang.json`; `runtime/` is the BoxLang home. The `test` verb's child loads the module through a link in its work folder. |
 | Serving | `.build/miniserver.json`, relative paths, the server started in `.build` with `BOXLANG_HOME=.build/runtime` (`MiniServerLauncher` takes a working directory) |
 | Packaging | The template's set: `app`, `lib`, `public`, `runtime` (without logs and what a server creates in its home), `boxlang_modules`, `miniserver.json`. `.bxaignore` patterns are relative to `.build`. |
@@ -91,7 +91,7 @@ Commits are on `code/app-public-layout`, branched from `origin/development`.
 - The spike patched `expandPath( "/" )` in two places; all seven sites now share `AppRoot`. Not exercised by the spike, covered here by a source check and by the served run.
 - `bxai`'s `skillsDirectory` was `/skills`, which is `public/skills` now: it is `/app/skills`.
 - `getSystemSetting()` caches its first answer per key for the life of the process (measured). Production code reads `BXAGENTS_MODULE_DIR` with it (the project decided on no alternative), and tests never change a setting mid-process: they pass the module folder as an explicit option (`moduleDir` of `build`, `serve`, `test`, `invoke --server`; `BuildPipeline.setModuleSource()`), and `runTests.bxs` sets the variable once at the start. A first draft had a `models/util/Env.bx` that read settings fresh; it was removed.
-- `directoryDelete( path, true )` follows links (kept as a measured fact in `TreeDelete`'s comment and in AGENTS.md). The test child reaches the module through a link and its work folder was deleted with it, which emptied `build/modules/bxagents` in a full run. The work folder, and `clean`, are deleted with `TreeDelete`, which does not follow links (a spec for each).
+- `directoryDelete( path, true )` follows links (kept as a measured fact in `TreeDelete`'s comment and in AGENTS.md). The test child reaches the module through a link and its work folder was deleted with it, which emptied `build/modules/bx-agents` in a full run. The work folder, and `clean`, are deleted with `TreeDelete`, which does not follow links (a spec for each).
 - The `boxlang-miniserver` launcher script does not quote `$BOXLANG_HOME`: a path with a space does not start, for any layout. The packaged-boot spec uses a path without one. Stated in the docs.
 - Left alone, and not measured here: the generated base calls `application.cbBootstrap.processReinit()` for any request that carries `fwreinit` (it did before this change), whatever a reinit password says.  Worth a look on its own.
 - The runner page and `runTests.bxs` printed no failure detail for a spec in a `describe()` inside a `describe()`: both walk nested suites now.

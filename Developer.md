@@ -24,7 +24,7 @@ From the repository root, install **JDK 21+** and **CommandBox with bx-cli**
 ```bash
 ./gradlew downloadBoxLang   # BoxLang, MiniServer and bundled BoxLang modules
 ./gradlew installDevLibs    # ColdBox, TestBox and other development libraries
-./gradlew shadowJar         # assemble the module at build/modules/bxagents
+./gradlew shadowJar         # assemble the module at build/modules/bx-agents
 ./gradlew testBx            # fast BoxLang/TestBox suite
 ```
 

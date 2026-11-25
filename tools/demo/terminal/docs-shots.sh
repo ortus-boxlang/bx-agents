@@ -19,7 +19,7 @@ case "$home" in */dev-home) ;; *) echo "DOCSHOTS_HOME must end in /dev-home (it 
 rm -rf "$home"
 mkdir -p "$work" "$home"
 boxlang() { java -cp "$jar" ortus.boxlang.runtime.BoxRunner "$@"; }
-boxlang "$root/tools/demo/terminal/trailer/record.bxs" --boxlang-jar="$jar" --module="$root/build/modules/bxagents" \
+boxlang "$root/tools/demo/terminal/trailer/record.bxs" --boxlang-jar="$jar" --module="$root/build/modules/bx-agents" \
 	--out="$work" --home="$home" --scenes="$root/tools/demo/terminal/docs-scenes.json" --cast-only --mail=9300 $only
 boxlang "$root/tools/demo/terminal/docs-shots.bxs" --casts="$work/scenes" --out="$root/docs/assets/tui" --boxlang-jar="$jar" $only
 # the two SVGs of the quick start and doctor, from the real output of bxAgents (not for a run of some scenes)

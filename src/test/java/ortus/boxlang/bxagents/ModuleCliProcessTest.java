@@ -26,7 +26,7 @@ import org.junit.jupiter.api.TestMethodOrder;
  * A real OS-process-level CLI smoke test: spawns genuine `java -jar
  * <boxlang-jar> --bx-config <config> module:bxagents <verb> ...` child
  * processes against a copy of the ACTUAL installable module structure
- * (build/modules/bxagents, produced by the `createModuleStructure` Gradle
+ * (build/modules/bx-agents, produced by the `createModuleStructure` Gradle
  * task), pointed at a real modulesDirectory - exactly how a real user's
  * BoxLang installation discovers and loads this module. Every other CLI
  * spec (tests/specs/cli/*.bx, tests/specs/ModuleConfigCliSpec.bx) calls
@@ -63,7 +63,7 @@ public class ModuleCliProcessTest {
 	@BeforeAll
 	public static void findPrerequisites() throws IOException {
 		boxlangJar		= findJar( Path.of( "src/test/resources/libs" ), "boxlang-*.jar", "boxlang-miniserver" );
-		moduleSourceDir	= Path.of( "build/modules/bxagents" );
+		moduleSourceDir	= Path.of( "build/modules/bx-agents" );
 	}
 
 	private static Path findJar( Path dir, String glob, String excludeContains ) throws IOException {
@@ -86,12 +86,12 @@ public class ModuleCliProcessTest {
 		}
 		assumeTrue( boxlangJar != null, "BoxLang jar not found - run `./gradlew downloadBoxLang` first" );
 		assumeTrue( Files.isDirectory( moduleSourceDir ),
-		    "build/modules/bxagents not found - run `./gradlew shadowJar` first (it triggers createModuleStructure)" );
+		    "build/modules/bx-agents not found - run `./gradlew shadowJar` first (it triggers createModuleStructure)" );
 
 		tempRoot	= Files.createTempDirectory( "bxagents-cli-process-test-" );
 		modulesDir	= tempRoot.resolve( "modules" );
 		Files.createDirectories( modulesDir );
-		copyRecursively( moduleSourceDir, modulesDir.resolve( "bxagents" ) );
+		copyRecursively( moduleSourceDir, modulesDir.resolve( "bx-agents" ) );
 
 		// bx-ai, bx-sqlite, etc. need no separate modules dir: they are bundled
 		// as nested modules inside the module copied above, exactly as in the
@@ -209,16 +209,16 @@ public class ModuleCliProcessTest {
 	private void printInstallDiagnostics() throws Exception {
 		System.out.println( "---- install diagnostics ----" );
 		for ( String rel : List.of( "", "modules", "lib" ) ) {
-			Path dir = modulesDir.resolve( "bxagents" ).resolve( rel );
+			Path dir = modulesDir.resolve( "bx-agents" ).resolve( rel );
 			if ( Files.isDirectory( dir ) ) {
 				try ( var names = Files.list( dir ) ) {
-					System.out.println( "bxagents/" + rel + ": " + names.map( p -> p.getFileName().toString() ).sorted().toList() );
+					System.out.println( "bx-agents/" + rel + ": " + names.map( p -> p.getFileName().toString() ).sorted().toList() );
 				}
 			} else {
-				System.out.println( "bxagents/" + rel + ": (missing)" );
+				System.out.println( "bx-agents/" + rel + ": (missing)" );
 			}
 		}
-		System.out.println( "bxai ModuleConfig.bx present: " + Files.exists( modulesDir.resolve( "bxagents/modules/bxai/ModuleConfig.bx" ) ) );
+		System.out.println( "bxai ModuleConfig.bx present: " + Files.exists( modulesDir.resolve( "bx-agents/modules/bxai/ModuleConfig.bx" ) ) );
 		runVerb( "doctor", projectDir.toString() );
 		System.out.println( "---- end diagnostics ----" );
 	}
@@ -239,8 +239,8 @@ public class ModuleCliProcessTest {
 		assertTrue( Files.exists( projectDir.resolve( ".build/public/Application.bx" ) ), "a real Application.bx should have been generated in the web root" );
 		assertTrue( Files.exists( projectDir.resolve( ".build/app/Application.bx" ) ), "the template's guard should be in the app folder" );
 		assertTrue( Files.exists( projectDir.resolve( ".build/runtime/boxlang.json" ) ), "the template's engine config should have been laid out" );
-		assertTrue( Files.exists( projectDir.resolve( ".build/runtime/modules/bxagents/ModuleConfig.bx" ) ),
-		    "the bxagents module should have been copied into the app's runtime" );
+		assertTrue( Files.exists( projectDir.resolve( ".build/runtime/modules/bx-agents/ModuleConfig.bx" ) ),
+		    "the bx-agents module should have been copied into the app's runtime" );
 		assertTrue( Files.exists( projectDir.resolve( ".build/miniserver.json" ) ), "the server config should have been written" );
 		assertTrue( Files.exists( projectDir.resolve( ".build/manifest.json" ) ), "a real manifest.json should have been written" );
 	}
