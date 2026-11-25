@@ -60,12 +60,14 @@ class ChatPiecesTest {
 	}
 
 	@Test
-	@DisplayName( "Composer: Alt+Enter, Ctrl+J and a trailing backslash add a line" )
+	@DisplayName( "Composer: Shift+Enter, Ctrl+J and a trailing backslash add a line" )
 	void composerNewLines() {
 		Composer c = new Composer();
 		type( c, "one" );
-		c.key( KeyEvent.ofKey( KeyCode.ENTER, KeyModifiers.ALT ) );
+		c.key( KeyEvent.ofKey( KeyCode.ENTER, KeyModifiers.SHIFT ) );
 		type( c, "two" );
+		c.key( KeyEvent.ofKey( KeyCode.ENTER, KeyModifiers.ALT ) );
+		assertThat( c.rowCount() ).isEqualTo( 2 );
 		c.key( KeyEvent.ofChar( 'j', KeyModifiers.CTRL ) );
 		type( c, "three\\" );
 		assertThat( enter( c ) ).isEqualTo( Composer.Outcome.NONE );

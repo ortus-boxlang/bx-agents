@@ -35,7 +35,7 @@ took, and a run that needs approval asks in place.
 
 What you can do in it:
 
-- **Keys.** Enter sends, Alt+Enter adds a line, Up and Down walk your history, Esc stops the agent, and a message
+- **Keys.** Enter sends, Shift+Enter adds a line, Up and Down walk your history, Esc stops the agent, and a message
   typed while it works steers it. `?` or `/keys` lists every key.
 - **Slash commands.** Type `/` for a menu: `/help`, `/tools`, `/model`, `/info` and more. Every command is listed in
   [Slash commands](../guides/slash-commands.md). Later lessons use `/skills`, `/profile`, `/remember`, `/notes`,

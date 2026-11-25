@@ -27,7 +27,7 @@ import dev.tamboui.tui.event.KeyEvent;
  * The message box at the bottom of the chat: a small multi-line editor with history.
  * It holds text and a caret and nothing else, so it tests without a terminal.
  *
- * Enter sends. Alt+Enter, Ctrl+J, or a trailing backslash before Enter adds a line.
+ * Enter sends. Shift+Enter, Ctrl+J, or a trailing backslash before Enter adds a line.
  * Up and Down move between lines, and past the first or last line walk the history.
  * Ctrl+C clears what is typed, or asks to leave when the box is empty; Ctrl+D asks to
  * leave from an empty box.

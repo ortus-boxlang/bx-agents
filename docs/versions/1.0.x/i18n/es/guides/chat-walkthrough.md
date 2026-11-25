@@ -26,7 +26,7 @@ bxAgents chat
 ```
 
 1. Escribe una pregunta y pulsa **Enter**. La respuesta llega en streaming; cualquier tool que llame el agente se muestra con sus argumentos y lo que tardó.
-2. Pulsa **Alt+Enter** para una segunda línea antes de enviar.
+2. Pulsa **Shift+Enter** para una segunda línea antes de enviar.
 3. Escribe `/` y mira el menú, o `?` para ver las teclas. Escribe `/tools` para ver qué puede llamar el agente.
 4. Pulsa **Esc** mientras el agente trabaja para detenerlo en su siguiente paso. Escribe mientras trabaja para **dirigirlo**: tu mensaje se añade a la ejecución.
 5. `/copy` pone la última respuesta en el portapapeles.

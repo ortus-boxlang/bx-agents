@@ -34,6 +34,7 @@ import org.jline.terminal.TerminalBuilder;
 
 import dev.tamboui.backend.jline3.JLineBackend;
 import dev.tamboui.terminal.Frame;
+import dev.tamboui.terminal.KeyboardProtocol;
 import dev.tamboui.text.Line;
 import dev.tamboui.text.Span;
 import dev.tamboui.text.Text;
@@ -349,7 +350,8 @@ public final class ChatScreen implements AutoCloseable {
 					cmds.add( m );
 				}
 			}
-			InlineTuiConfig		cfg			= InlineTuiConfig.builder( 3 ).clearOnClose( true ).bracketedPaste( true ).build();
+			InlineTuiConfig		cfg			= InlineTuiConfig.builder( 3 ).clearOnClose( true ).bracketedPaste( true )
+			    .keyboardProtocol( KeyboardProtocol.AUTO ).build();
 			// the terminal is made here, the way the backend would make it, so a recording can be started on it
 			Terminal			terminal	= TerminalBuilder.builder().system( true ).jansi( true ).build();
 			RecordingTerminal	tap			= RecordingTerminal.wrap( terminal );

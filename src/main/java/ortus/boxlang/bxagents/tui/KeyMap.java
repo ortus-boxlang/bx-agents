@@ -51,7 +51,7 @@ public final class KeyMap {
 	public enum Action {
 
 		SUBMIT( "submit", Place.BOX, "Send the message", "enter" ),
-		NEWLINE( "newline", Place.BOX, "New line in the message", "alt+enter", "shift+enter", "ctrl+j" ),
+		NEWLINE( "newline", Place.BOX, "New line in the message", "shift+enter", "ctrl+j" ),
 		HISTORY_PREVIOUS( "historyPrevious", Place.BOX, "Earlier message (from the first line of the box)", "up" ),
 		HISTORY_NEXT( "historyNext", Place.BOX, "Later message (from the last line of the box)", "down" ),
 		CLEAR( "clear", Place.BOX, "Clear the box; on an empty box, leave", "ctrl+c" ),
@@ -329,7 +329,7 @@ public final class KeyMap {
 		return false;
 	}
 
-	/** @return the keys of the action as people read them, such as {@code Alt+Enter, Shift+Enter, Ctrl+J} */
+	/** @return the keys of the action as people read them, such as {@code Shift+Enter, Ctrl+J} */
 	public String describe( Action action ) {
 		List<String> labels = new ArrayList<>();
 		for ( Chord c : bound.get( action ) ) {

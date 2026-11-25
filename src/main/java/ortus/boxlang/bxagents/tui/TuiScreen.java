@@ -26,6 +26,7 @@ import java.util.Map;
 
 import dev.tamboui.buffer.Buffer;
 import dev.tamboui.terminal.Frame;
+import dev.tamboui.terminal.KeyboardProtocol;
 import dev.tamboui.tui.TuiConfig;
 import dev.tamboui.tui.TuiRunner;
 import dev.tamboui.tui.event.Event;
@@ -102,7 +103,7 @@ public final class TuiScreen implements AutoCloseable {
 		ClassLoader	before	= Thread.currentThread().getContextClassLoader();
 		Thread.currentThread().setContextClassLoader( own );
 		try {
-			TuiConfig cfg = TuiConfig.builder().bracketedPaste( true ).build();
+			TuiConfig cfg = TuiConfig.builder().bracketedPaste( true ).keyboardProtocol( KeyboardProtocol.AUTO ).build();
 			return new TuiScreen( TuiRunner.create( cfg ), Theme.detect(), command, before );
 		} catch ( Exception | Error e ) {
 			Thread.currentThread().setContextClassLoader( before );

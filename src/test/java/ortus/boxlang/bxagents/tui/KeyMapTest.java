@@ -34,12 +34,13 @@ import ortus.boxlang.bxagents.tui.KeyMap.Action;
 class KeyMapTest {
 
 	@Test
-	@DisplayName( "the defaults are the keys the screen has always had" )
+	@DisplayName( "Enter sends; Shift+Enter and Ctrl+J add a line by default" )
 	void defaults() {
 		KeyMap map = KeyMap.defaults();
 		assertThat( map.is( Action.SUBMIT, KeyEvent.ofKey( KeyCode.ENTER ) ) ).isTrue();
 		assertThat( map.is( Action.SUBMIT, KeyEvent.ofKey( KeyCode.ENTER, KeyModifiers.ALT ) ) ).isFalse();
-		assertThat( map.is( Action.NEWLINE, KeyEvent.ofKey( KeyCode.ENTER, KeyModifiers.ALT ) ) ).isTrue();
+		assertThat( map.is( Action.NEWLINE, KeyEvent.ofKey( KeyCode.ENTER, KeyModifiers.SHIFT ) ) ).isTrue();
+		assertThat( map.is( Action.NEWLINE, KeyEvent.ofKey( KeyCode.ENTER, KeyModifiers.ALT ) ) ).isFalse();
 		assertThat( map.is( Action.NEWLINE, KeyEvent.ofChar( 'j', KeyModifiers.CTRL ) ) ).isTrue();
 		assertThat( map.is( Action.CLEAR_SCREEN, KeyEvent.ofChar( 'l', KeyModifiers.CTRL ) ) ).isTrue();
 		assertThat( map.is( Action.CLEAR, KeyEvent.ofChar( 'l', KeyModifiers.CTRL ) ) ).isFalse();
@@ -47,7 +48,7 @@ class KeyMapTest {
 		assertThat( map.is( Action.STOP, KeyEvent.ofChar( 'c', KeyModifiers.CTRL ) ) ).isTrue();
 		assertThat( map.is( Action.CLEAR, KeyEvent.ofChar( 'c', KeyModifiers.CTRL ) ) ).isTrue();
 		assertThat( map.problems() ).isEmpty();
-		assertThat( map.describe( Action.NEWLINE ) ).isEqualTo( "Alt+Enter, Shift+Enter, Ctrl+J" );
+		assertThat( map.describe( Action.NEWLINE ) ).isEqualTo( "Shift+Enter, Ctrl+J" );
 	}
 
 	@Test

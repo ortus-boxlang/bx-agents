@@ -60,7 +60,7 @@ Finished turns are printed as ordinary terminal text, so **your scrollback, sear
 | Key | Does |
 |---|---|
 | Enter | Send the message |
-| Alt+Enter, Shift+Enter, Ctrl+J, or `\` then Enter | New line |
+| Shift+Enter, Ctrl+J, or `\` then Enter | New line |
 | Up / Down | Earlier and later messages, from the first or last line of the box |
 | Tab | Complete a `/command` or an `@file` |
 | Ctrl+A / Home, Ctrl+E / End | Start and end of the line |
@@ -91,7 +91,7 @@ Type to narrow the list: `ctrl` shows the keys with Ctrl, `newline` the key that
 | Esc | Clear the filter; with no filter, close the panel |
 | F1, Ctrl+/ | Close it |
 
-A key you changed in `Agent.yml` shows what it was, as `(was Alt+Enter)`. Some terminals do not pass Ctrl+/ through, which is why F1 is the one to count on.
+A key you changed in `Agent.yml` shows what it was, as `(was Shift+Enter, Ctrl+J)`. Some terminals do not pass Ctrl+/ through, which is why F1 is the one to count on.
 
 <video controls preload="metadata" poster="/assets/video/keys-panel-poster.png" style="max-width:100%">
   <source src="/assets/video/keys-panel.mp4" type="video/mp4">
@@ -106,7 +106,7 @@ Keys live in a file that belongs to you, not to any project: `~/.bxagents/Agent.
 ```yaml
 chat:
   keys:
-    newline: [ ctrl+n, alt+enter ]
+    newline: [ ctrl+n, shift+enter ]
     stop: ctrl+x
 ```
 
