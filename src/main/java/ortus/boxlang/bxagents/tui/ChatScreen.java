@@ -747,10 +747,14 @@ public final class ChatScreen implements AutoCloseable {
 	 * @param text user's message
 	 */
 	public void printUser( String text ) {
-		List<String> lines = Wrap.wrap( text, Math.max( 20, runner.width() - 8 ) );
+		List<String> lines = Wrap.wrap( text, Math.max( 20, runner.width() - 6 ) );
 		for ( int i = 0; i < lines.size(); i++ ) {
 			Row r = Row.of();
-			r.add( i == 0 ? " you  " : "      ", theme.accentBold );
+			if ( i == 0 ) {
+				r.add( "you ", theme.accentBold );
+				// Add a full line for the user's label
+				r.add( "", theme.plain );
+			}
 			r.add( lines.get( i ), theme.plain );
 			out( r.toLine() );
 		}
@@ -788,12 +792,12 @@ public final class ChatScreen implements AutoCloseable {
 		}
 		if ( "source".equals( settings.get( "markdown" ) ) ) {
 			// the text as the model wrote it, wrapped to the screen
-			for ( String l : Wrap.wrap( markdown.strip(), Math.max( 20, runner.width() - 4 ) ) ) {
-				out( Row.of( "  " + l, theme.plain ).toLine() );
+			for ( String l : Wrap.wrap( markdown.strip(), Math.max( 20, runner.width() - 2 ) ) ) {
+				out( Row.of( l, theme.plain ).toLine() );
 			}
 		} else {
-			for ( Line l : MarkdownLines.render( markdown.strip(), runner.width() - 3, theme ) ) {
-				out( Line.from( Span.raw( "  " ) ).append( l ) );
+			for ( Line l : MarkdownLines.render( markdown.strip(), runner.width() - 1, theme ) ) {
+				out( l );
 			}
 		}
 		gap();
