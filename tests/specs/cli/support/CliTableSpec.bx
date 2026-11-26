@@ -1,0 +1,308 @@
+/**
+ * CliTable: static rendering, border styles, colours, and the fluent builder.
+ */
+import bxagents.models.cli.support.CliTable;
+import bxagents.models.cli.support.CliOutput;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "CliTable", function() {
+
+			describe( "static render() — no border", function() {
+
+				it( "renders a simple table with auto-sized columns", function() {
+					var result = CliTable::render(
+						rows = [
+							[ "alice", "short" ],
+							[ "bob", "a much longer value" ]
+						]
+					)
+					var lines = listToArray( result, char( 10 ) )
+
+					expect( lines ).toHaveLength( 2 )
+					expect( lines[ 1 ] ).toInclude( "alice" )
+					expect( lines[ 2 ] ).toInclude( "bob" )
+					expect( lines[ 1 ] ).toMatch( "alice\s{2}short" )
+				} )
+
+				it( "includes a header row when headers are given", function() {
+					var result = CliTable::render(
+						headers = [ "Name", "Value" ],
+						rows = [ [ "alice", "42" ] ]
+					)
+					var lines = listToArray( result, char( 10 ) )
+
+					expect( lines ).toHaveLength( 2 )
+					expect( lines[ 1 ] ).toInclude( "Name" )
+					expect( lines[ 2 ] ).toInclude( "alice" )
+				} )
+
+				it( "right-aligns specified columns", function() {
+					var result = CliTable::render(
+						headers = [ "Name", "Score" ],
+						rows = [
+							[ "alice", "5" ],
+							[ "bob", "100" ]
+						],
+						alignRight = [ 2 ]
+					)
+					var lines = listToArray( result, char( 10 ) )
+
+					expect( lines[ 3 ] ).toMatch( "100$" )
+				} )
+
+				it( "respects minimum column widths", function() {
+					var result = CliTable::render(
+						rows = [ [ "a", "b" ] ],
+						minWidths = { 1 : 10 }
+					)
+					var line = listFirst( result, char( 10 ) )
+
+					expect( len( line ) ).toBeGTE( 10 )
+				} )
+
+				it( "uses a custom gap between columns", function() {
+					var result = CliTable::render(
+						rows = [ [ "a", "b" ] ],
+						gap = 4
+					)
+					expect( result ).toMatch( "a\s{4}b" )
+				} )
+
+				it( "returns empty string for no rows", function() {
+					expect( CliTable::render( rows = [] ) ).toBe( "" )
+				} )
+
+				it( "does not pad the last column in plain mode", function() {
+					var result = CliTable::render(
+						rows = [ [ "alice", "short" ], [ "bob", "x" ] ]
+					)
+					var lines = listToArray( result, char( 10 ) )
+
+					expect( trim( lines[ 1 ] ) ).toBe( lines[ 1 ] )
+					expect( trim( lines[ 2 ] ) ).toBe( lines[ 2 ] )
+				} )
+
+				it( "handles rows with different column counts", function() {
+					var result = CliTable::render(
+						rows = [
+							[ "a", "b", "c" ],
+							[ "d", "e" ]
+						]
+					)
+					var lines = listToArray( result, char( 10 ) )
+
+					expect( lines ).toHaveLength( 2 )
+					expect( lines[ 1 ] ).toInclude( "c" )
+					expect( lines[ 2 ] ).toInclude( "d" )
+				} )
+
+			} )
+
+			describe( "border styles", function() {
+
+				it( "renders 'around' border with box-drawing characters", function() {
+					var result = CliTable::render(
+						headers = [ "A", "B" ],
+						rows = [ [ "1", "2" ] ],
+						border = "around"
+					)
+					var lines = listToArray( result, char( 10 ) )
+
+					// top border, header, middle border, data, bottom border = 5 lines
+					expect( lines ).toHaveLength( 5 )
+					expect( lines[ 1 ] ).toInclude( "┌" )
+					expect( lines[ 1 ] ).toInclude( "┐" )
+					expect( lines[ 2 ] ).toInclude( "│" )
+					expect( lines[ 2 ] ).toInclude( "A" )
+					expect( lines[ 3 ] ).toInclude( "├" )
+					expect( lines[ 4 ] ).toInclude( "1" )
+					expect( lines[ 5 ] ).toInclude( "└" )
+					expect( lines[ 5 ] ).toInclude( "┘" )
+				} )
+
+				it( "renders 'grid' border with lines after every row", function() {
+					var result = CliTable::render(
+						rows = [ [ "a" ], [ "b" ] ],
+						border = "grid"
+					)
+					var lines = listToArray( result, char( 10 ) )
+
+					// top, row1, mid, row2, bottom-border-after-row2, final-bottom = 6 lines
+					expect( lines.len() ).toBeGTE( 5 )
+					expect( lines[ 1 ] ).toInclude( "┌" )
+					expect( lines[ lines.len() ] ).toInclude( "└" )
+				} )
+
+				it( "renders 'rows' border with horizontal lines between rows only", function() {
+					var result = CliTable::render(
+						rows = [ [ "a" ], [ "b" ], [ "c" ] ],
+						border = "rows"
+					)
+					var lines = listToArray( result, char( 10 ) )
+
+					// row1, sep, row2, sep, row3 = 5 lines (no top/bottom border)
+					expect( lines ).toHaveLength( 5 )
+					expect( lines[ 1 ] ).toInclude( "│" )
+					expect( lines[ 2 ] ).toInclude( "├" )
+					expect( lines[ 3 ] ).toInclude( "│" )
+					expect( lines[ 5 ] ).toInclude( "│" )
+					// no top or bottom border
+					expect( lines[ 1 ] ).notToInclude( "┌" )
+					expect( lines[ 5 ] ).notToInclude( "└" )
+				} )
+
+				it( "renders 'header' border with a line under the header only", function() {
+					var result = CliTable::render(
+						headers = [ "H" ],
+						rows = [ [ "a" ], [ "b" ] ],
+						border = "header"
+					)
+					var lines = listToArray( result, char( 10 ) )
+
+					// header, separator, data1, data2 = 4 lines
+					expect( lines ).toHaveLength( 4 )
+					expect( lines[ 1 ] ).toInclude( "H" )
+					expect( lines[ 2 ] ).toInclude( "├" )
+					expect( lines[ 3 ] ).toInclude( "a" )
+					expect( lines[ 4 ] ).toInclude( "b" )
+				} )
+
+				it( "applies headerStyle colour markers to header cells", function() {
+					var result = CliTable::render(
+						headers = [ "Name" ],
+						rows = [ [ "alice" ] ],
+						border = "around",
+						headerStyle = "accent"
+					)
+					var lines = listToArray( result, char( 10 ) )
+
+					// header row should contain the accent marker
+					expect( lines[ 2 ] ).toInclude( "{accent}" )
+					expect( lines[ 2 ] ).toInclude( "{/}" )
+					// data row should not
+					expect( lines[ 4 ] ).notToInclude( "{accent}" )
+				} )
+
+				it( "applies borderStyle colour markers to border characters", function() {
+					var result = CliTable::render(
+						rows = [ [ "a" ] ],
+						border = "around",
+						borderStyle = "muted"
+					)
+					var lines = listToArray( result, char( 10 ) )
+
+					// top border should have muted markers
+					expect( lines[ 1 ] ).toInclude( "{muted}" )
+					expect( lines[ 1 ] ).toInclude( "{/}" )
+				} )
+
+			} )
+
+			describe( "Builder", function() {
+
+				it( "builds a table fluently", function() {
+					var t = CliTable::builder()
+					t.header( [ "Name", "Age" ] )
+					t.row( [ "alice", "30" ] )
+					t.row( [ "bob", "25" ] )
+					var lines = listToArray( t.render(), char( 10 ) )
+
+					expect( lines ).toHaveLength( 3 )
+					expect( lines[ 1 ] ).toInclude( "Name" )
+					expect( lines[ 2 ] ).toInclude( "alice" )
+					expect( lines[ 3 ] ).toInclude( "bob" )
+				} )
+
+				it( "adds multiple rows at once with rows()", function() {
+					var t = CliTable::builder()
+					t.rows( [ [ "a", "1" ], [ "b", "2" ], [ "c", "3" ] ] )
+					expect( listToArray( t.render(), char( 10 ) ) ).toHaveLength( 3 )
+				} )
+
+				it( "supports right-alignment via align()", function() {
+					var t = CliTable::builder()
+					t.header( [ "Name", "Score" ] )
+					t.row( [ "alice", "5" ] )
+					t.row( [ "bob", "100" ] )
+					t.align( 2, "right" )
+					var lines = listToArray( t.render(), char( 10 ) )
+
+					expect( lines[ 3 ] ).toMatch( "100$" )
+				} )
+
+				it( "supports minimum width via minWidth()", function() {
+					var result = CliTable::render(
+						rows = [ [ "x" ] ],
+						minWidths = { "1" : 20 }
+					)
+					expect( len( result ) ).toBeGTE( 20 )
+				} )
+
+				it( "supports custom gap via setGap()", function() {
+					var t = CliTable::builder()
+					t.row( [ "a", "b" ] )
+					t.setGap( 5 )
+					expect( t.render() ).toMatch( "a\s{5}b" )
+				} )
+
+				it( "supports border style via border()", function() {
+					var t = CliTable::builder()
+					t.row( [ "a" ] )
+					t.border( "around" )
+					var lines = listToArray( t.render(), char( 10 ) )
+
+					expect( lines[ 1 ] ).toInclude( "┌" )
+					expect( lines[ 3 ] ).toInclude( "└" )
+				} )
+
+				it( "supports headerStyle via headerStyle()", function() {
+					var t = CliTable::builder()
+					t.header( [ "H" ] )
+					t.row( [ "v" ] )
+					t.border( "header" )
+					t.headerStyle( "bold" )
+					var lines = listToArray( t.render(), char( 10 ) )
+
+					expect( lines[ 1 ] ).toInclude( "{bold}" )
+				} )
+
+				it( "supports borderStyle via borderStyle()", function() {
+					var t = CliTable::builder()
+					t.row( [ "a" ] )
+					t.border( "around" )
+					t.borderStyle( "accent" )
+					var lines = listToArray( t.render(), char( 10 ) )
+
+					expect( lines[ 1 ] ).toInclude( "{accent}" )
+				} )
+
+				it( "end() returns this when no parent output is set", function() {
+					var t = CliTable::builder()
+					t.row( [ "a" ] )
+					expect( t.end() ).toBe( t )
+				} )
+
+				it( "end() renders into parent CliOutput and returns it", function() {
+					var out = new bxagents.models.cli.support.CliOutput( color = false )
+					out.text( "before" )
+					var t = CliTable::builder()
+					t.setOutput( out )
+					t.header( [ "Col" ] )
+					t.row( [ "val" ] )
+					var returned = t.end()
+
+					expect( returned ).toBe( out )
+					var rendered = out.render()
+					expect( rendered ).toInclude( "before" )
+					expect( rendered ).toInclude( "Col" )
+					expect( rendered ).toInclude( "val" )
+				} )
+
+			} )
+
+		} )
+	}
+
+}

@@ -11,6 +11,8 @@
  *
  * Both need a built project: the models are the ones the built app carries.
  */
+import bxModules.bxagents.models.cli.support.CliTable;
+
 class {
 
 	static {
@@ -75,8 +77,8 @@ class {
 		if ( arguments.asJson ) {
 			return { exitCode : 0, message : jsonSerialize( arguments.rows ) }
 		}
-		var lines = arguments.rows.map( r => left( r.name & repeatString( " ", 14 ), 14 ) & left( r.model & repeatString( " ", 32 ), 32 ) & "context " & ( r.contextWindow ? numberFormat( r.contextWindow ) : "?" ) & "  images " & ( len( r.vision ) ? r.vision : "?" ) & "  key " & ( r.hasApiKey ? "set" : "MISSING" ) )
-		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+		var data = arguments.rows.map( r => [ r.name, r.model, r.contextWindow ? numberFormat( r.contextWindow ) : "?", len( r.vision ) ? r.vision : "?", r.hasApiKey ? "set" : "MISSING" ] )
+		return { exitCode : 0, message : CliTable::render( headers = [ "Profile", "Model", "Context", "Images", "Key" ], rows = data, alignRight = [ 3, 4 ] ) }
 	}
 
 	private struct function test( required any chat, required array rows, required struct options ) {
@@ -100,8 +102,8 @@ class {
 		if ( arguments.options.json ?: false ) {
 			return { exitCode : failed ? 1 : 0, message : jsonSerialize( results ) }
 		}
-		var lines = results.map( r => left( r.name & repeatString( " ", 14 ), 14 ) & left( r.model & repeatString( " ", 32 ), 32 ) & ( r.ok ? "ok       #r.ms# ms" : "FAILED   " & r.detail ) )
-		return { exitCode : failed ? 1 : 0, message : lines.toList( char( 10 ) ) }
+		var data = results.map( r => [ r.name, r.model, r.ok ? "ok" : "FAILED", r.ok ? "#r.ms# ms" : r.detail ] )
+		return { exitCode : failed ? 1 : 0, message : CliTable::render( headers = [ "Profile", "Model", "Status", "Time" ], rows = data, alignRight = [ 4 ] ) }
 	}
 
 }

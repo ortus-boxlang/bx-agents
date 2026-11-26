@@ -1,0 +1,382 @@
+/**
+ * Static CLI table helper with border styles, colours, and an inner fluent builder.
+ *
+ * One-call rendering:
+ *
+ *   print( CliTable::render(
+ *       headers    = [ "Profile", "Model", "Context", "Images", "Key" ],
+ *       rows       = [ [ "default", "lfm3-1.7b", "?", "?", "set" ] ],
+ *       alignRight = [ 3, 4 ],
+ *       border     = "around"
+ *   ) )
+ *
+ * Fluent builder:
+ *
+ *   var t = CliTable::builder()
+ *   t.header( [ "Profile", "Model", "Status" ] )
+ *   t.row( [ "default", "lfm3-1.7b", "ok" ] )
+ *   t.align( 3, "right" )
+ *   t.border( "grid" )
+ *   t.headerStyle( "accent" )
+ *   print( t.render() )
+ *
+ * Inline with CliOutput:
+ *
+ *   out.table()
+ *       .header( [ "Profile", "Model", "Status" ] )
+ *       .row( [ "default", "lfm3-1.7b", "ok" ] )
+ *       .border( "around" )
+ *       .end()
+ *
+ * Border styles:
+ *   "none"   — no borders (default), columns separated by spaces
+ *   "around" — a box around the whole table
+ *   "grid"   — borders around every cell
+ *   "rows"   — horizontal lines between rows only
+ *   "header" — a line under the header row only
+ */
+class {
+
+	/**
+	 * Render a table in one static call
+	 *
+	 * @headers      Optional header labels
+	 * @rows         The data rows (array of arrays)
+	 * @alignRight   Array of 1-based column indices to right-align
+	 * @minWidths    Struct of 1-based column index to minimum width
+	 * @gap          Spaces between columns when border is "none" (default 2)
+	 * @border       Border style: "none", "around", "grid", "rows", "header" (default "none")
+	 * @headerStyle  Colour marker for the header row (e.g. "accent", "bold"); empty for no colour
+	 * @borderStyle  Colour marker for border characters (e.g. "muted", "accent"); empty for no colour
+	 *
+	 * @return The rendered table string
+	 */
+	static string function render(
+		array headers = [],
+		required array rows,
+		array alignRight = [],
+		struct minWidths = {},
+		numeric gap = 2,
+		string border = "none",
+		string headerStyle = "",
+		string borderStyle = ""
+	) {
+		var allRows = arguments.headers.len() ? [ arguments.headers ].append( arguments.rows, true ) : duplicate( arguments.rows )
+		if ( !allRows.len() ) {
+			return ""
+		}
+		var colCount = allRows.reduce( ( max, r ) => max( max, r.len() ), 0 )
+		var minWidths = arguments.minWidths
+		var widths = []
+		for ( var c = 1; c <= colCount; c++ ) {
+			var w = allRows.reduce( ( max, r ) => max( max, len( toString( r[ c ] ?: "" ) ) ), 0 )
+			w = max( w, minWidths[ toString( c ) ] ?: 0 )
+			widths.append( w )
+		}
+
+		var hasBorder = arguments.border != "none"
+		var borderMarker = arguments.borderStyle
+		var headerMarker = arguments.headerStyle
+		var bWrap = ( text ) => len( borderMarker ) ? "{" & borderMarker & "}" & text & "{/}" : text
+		var hWrap = ( text ) => len( headerMarker ) ? "{" & headerMarker & "}" & text & "{/}" : text
+
+		// build cell content lines
+		var headersList = arguments.headers
+		var alignRightList = arguments.alignRight
+		var cellLines = []
+		for ( var i = 1; i <= allRows.len(); i++ ) {
+			var r = allRows[ i ]
+			var cells = []
+			var isHeader = headersList.len() && i == 1
+			for ( var c = 1; c <= colCount; c++ ) {
+				var cell = toString( r[ c ] ?: "" )
+				var w = widths[ c ]
+				var padded = ""
+				if ( c == colCount && !hasBorder ) {
+					padded = cell
+				} else if ( alignRightList.find( c ) ) {
+					padded = right( repeatString( " ", w ) & cell, w )
+				} else {
+					padded = left( cell & repeatString( " ", w ), w )
+				}
+				if ( isHeader ) {
+					padded = hWrap( padded )
+				}
+				cells.append( padded )
+			}
+			cellLines.append( cells )
+		}
+
+		if ( !hasBorder ) {
+			// plain mode: join cells with gap spaces
+			var pad = repeatString( " ", arguments.gap )
+			return cellLines.map( cells => cells.toList( pad ) ).toList( char( 10 ) )
+		}
+
+		// bordered mode
+		var lines = []
+		var totalWidth = widths.sum() + ( colCount - 1 ) * 3 + 2 // " | " between cols, "│ " and " │" at edges
+
+		// horizontal rule builder
+		var hRule = ( left, mid, right ) => {
+			var parts = widths.map( w => repeatString( "─", w + 2 ) )
+			return bWrap( left & parts.toList( mid ) & right )
+		}
+
+		// data row builder
+		var dRow = ( cells ) => {
+			return bWrap( "│ " & cells.toList( " │ " ) & " │" )
+		}
+
+		switch ( arguments.border ) {
+			case "around":
+				lines.append( hRule( "┌", "┬", "┐" ) )
+				for ( var i = 1; i <= cellLines.len(); i++ ) {
+					lines.append( dRow( cellLines[ i ] ) )
+					if ( i < cellLines.len() ) {
+						lines.append( hRule( "├", "┼", "┤" ) )
+					}
+				}
+				lines.append( hRule( "└", "┴", "┘" ) )
+				break
+
+			case "grid":
+				lines.append( hRule( "┌", "┬", "┐" ) )
+				for ( var i = 1; i <= cellLines.len(); i++ ) {
+					lines.append( dRow( cellLines[ i ] ) )
+					lines.append( hRule( "├", "┼", "┤" ) )
+				}
+				lines.append( hRule( "└", "┴", "┘" ) )
+				break
+
+			case "rows":
+				for ( var i = 1; i <= cellLines.len(); i++ ) {
+					lines.append( dRow( cellLines[ i ] ) )
+					if ( i < cellLines.len() ) {
+						lines.append( hRule( "├", "┼", "┤" ) )
+					}
+				}
+				break
+
+			case "header":
+				if ( cellLines.len() ) {
+					lines.append( dRow( cellLines[ 1 ] ) )
+					lines.append( hRule( "├", "┼", "┤" ) )
+					for ( var i = 2; i <= cellLines.len(); i++ ) {
+						lines.append( dRow( cellLines[ i ] ) )
+					}
+				}
+				break
+		}
+
+		return lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Create a fluent builder for incremental table construction
+	 *
+	 * @return A Builder instance
+	 */
+	static function builder() {
+		return new Builder()
+	}
+
+	/**
+	 * Fluent builder for CliTable. Created via CliTable::builder() or CliOutput.table().
+	 * Every method returns `this` for chaining, except end() which returns the parent CliOutput.
+	 */
+	class Builder {
+
+		/** The header labels, or an empty array for no header row */
+		property name="headers" type="array";
+		/** The data rows, each an array of cell values */
+		property name="rows" type="array";
+		/** 1-based column indices that should be right-aligned */
+		property name="alignRight" type="array";
+		/** Per-column minimum width in characters, keyed by 1-based index */
+		property name="minWidths" type="struct";
+		/** Number of spaces between columns when border is "none" */
+		property name="gap" type="numeric" default="2";
+		/** Border style: "none", "around", "grid", "rows", "header" */
+		property name="border" type="string" default="none";
+		/** Colour marker for the header row (e.g. "accent", "bold"); empty for no colour */
+		property name="headerStyle" type="string" default="";
+		/** Colour marker for border characters (e.g. "muted", "accent"); empty for no colour */
+		property name="borderStyle" type="string" default="";
+		/** The parent CliOutput when used inline via CliOutput.table(); null when standalone */
+		property name="output";
+
+		/**
+		 * Creates an empty builder
+		 *
+		 * @return this
+		 */
+		function init() {
+			variables.headers = []
+			variables.rows = []
+			variables.alignRight = []
+			variables.minWidths = {}
+			return this
+		}
+
+		/**
+		 * Set the header row
+		 *
+		 * @labels The column labels
+		 *
+		 * @return this
+		 */
+		function header( required array labels ) {
+			variables.headers = arguments.labels.map( l => toString( l ) )
+			return this
+		}
+
+		/**
+		 * Add a single data row
+		 *
+		 * @cells The cell values for this row
+		 *
+		 * @return this
+		 */
+		function row( required array cells ) {
+			variables.rows.append( arguments.cells.map( c => toString( c ) ) )
+			return this
+		}
+
+		/**
+		 * Add multiple data rows at once
+		 *
+		 * @data An array of arrays, each inner array is one row
+		 *
+		 * @return this
+		 */
+		function rows( required array data ) {
+			for ( var r in arguments.data ) {
+				row( r )
+			}
+			return this
+		}
+
+		/**
+		 * Set the alignment for a column
+		 *
+		 * @col   1-based column index
+		 * @align "left" or "right"
+		 *
+		 * @return this
+		 */
+		function align( required numeric col, required string align ) {
+			if ( arguments.align == "right" && !variables.alignRight.find( arguments.col ) ) {
+				variables.alignRight.append( arguments.col )
+			}
+			return this
+		}
+
+		/**
+		 * Set the minimum width for a column
+		 *
+		 * @col   1-based column index
+		 * @width The minimum width in characters
+		 *
+		 * @return this
+		 */
+		function minWidth( required numeric col, required numeric width ) {
+			variables.minWidths[ toString( arguments.col ) ] = arguments.width
+			return this
+		}
+
+		/**
+		 * Set the number of spaces between columns (only used when border is "none")
+		 *
+		 * @gap The gap width (default 2)
+		 *
+		 * @return this
+		 */
+		function setGap( required numeric gap ) {
+			variables.gap = arguments.gap
+			return this
+		}
+
+		/**
+		 * Set the border style
+		 *
+		 * @style "none", "around", "grid", "rows", or "header"
+		 *
+		 * @return this
+		 */
+		function border( required string style ) {
+			variables.border = arguments.style
+			return this
+		}
+
+		/**
+		 * Set the colour style for the header row
+		 *
+		 * @style A colour marker name (e.g. "accent", "bold", "muted") or empty for no colour
+		 *
+		 * @return this
+		 */
+		function headerStyle( required string style ) {
+			variables.headerStyle = arguments.style
+			return this
+		}
+
+		/**
+		 * Set the colour style for border characters
+		 *
+		 * @style A colour marker name (e.g. "muted", "accent") or empty for no colour
+		 *
+		 * @return this
+		 */
+		function borderStyle( required string style ) {
+			variables.borderStyle = arguments.style
+			return this
+		}
+
+		/**
+		 * Set the parent CliOutput for inline table rendering. Called internally by CliOutput.table().
+		 *
+		 * @output The CliOutput instance to render into
+		 *
+		 * @return this
+		 */
+		function setOutput( required any output ) {
+			variables.output = arguments.output
+			return this
+		}
+
+		/**
+		 * End the inline table: render it into the parent CliOutput and return the parent.
+		 * When used standalone (no parent), returns this.
+		 *
+		 * @return The parent CliOutput, or this if no parent
+		 */
+		function end() {
+			if ( !isNull( variables.output ) ) {
+				variables.output.addTableLines( render() )
+				return variables.output
+			}
+			return this
+		}
+
+		/**
+		 * Render the accumulated table as a string, delegating to CliTable::render()
+		 *
+		 * @return The rendered table, one line per row
+		 */
+		string function render() {
+			return CliTable::render(
+				headers      = variables.headers,
+				rows         = variables.rows,
+				alignRight   = variables.alignRight,
+				minWidths    = variables.minWidths,
+				gap          = variables.gap,
+				border       = variables.border,
+				headerStyle  = variables.headerStyle,
+				borderStyle  = variables.borderStyle
+			)
+		}
+
+	}
+
+}

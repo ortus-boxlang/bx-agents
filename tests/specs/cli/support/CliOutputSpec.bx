@@ -1,0 +1,266 @@
+/**
+ * CliOutput: fluent CLI output builder with colour markers, tables, trees, columns and progress.
+ */
+import bxagents.models.cli.support.CliOutput;
+import bxagents.models.cli.support.CliTable;
+
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "CliOutput", function() {
+
+			beforeEach( function() {
+				// color=false so markers are stripped — easier to assert on plain text
+				variables.out = new bxagents.models.cli.support.CliOutput( color = false )
+			} )
+
+			describe( "text blocks", function() {
+
+				it( "adds a header line", function() {
+					out.header( "Models" )
+					expect( out.render() ).toBe( "Models" )
+				} )
+
+				it( "adds a plain text line", function() {
+					out.text( "hello world" )
+					expect( out.render() ).toBe( "hello world" )
+				} )
+
+				it( "adds ok, warn, error, muted, accent, bold lines", function() {
+					out.ok( "success" )
+					out.warn( "careful" )
+					out.error( "bad" )
+					out.muted( "hint" )
+					out.accent( "value" )
+					out.bold( "strong" )
+					var lines = listToArray( out.render(), char( 10 ) )
+
+					expect( lines ).toHaveLength( 6 )
+					expect( lines[ 1 ] ).toBe( "success" )
+					expect( lines[ 2 ] ).toBe( "careful" )
+					expect( lines[ 3 ] ).toBe( "bad" )
+					expect( lines[ 4 ] ).toBe( "hint" )
+					expect( lines[ 5 ] ).toBe( "value" )
+					expect( lines[ 6 ] ).toBe( "strong" )
+				} )
+
+				it( "adds a blank line", function() {
+					out.text( "a" )
+					out.blank()
+					out.text( "b" )
+					var rendered = out.render()
+
+					expect( rendered ).toInclude( "a" & char( 10 ) & char( 10 ) & "b" )
+				} )
+
+				it( "adds an indented muted line", function() {
+					out.indent( "hint text" )
+					expect( out.render() ).toBe( "  hint text" )
+				} )
+
+				it( "adds a label-value pair", function() {
+					out.labelValue( "Model", "gpt-4" )
+					expect( out.render() ).toBe( "Model: gpt-4" )
+				} )
+
+				it( "adds a status line for on and off", function() {
+					out.statusLine( "Cache", true )
+					out.statusLine( "Debug", false )
+					var lines = listToArray( out.render(), char( 10 ) )
+
+					expect( lines[ 1 ] ).toBe( "Cache: on" )
+					expect( lines[ 2 ] ).toBe( "Debug: off" )
+				} )
+
+				it( "adds a bullet point", function() {
+					out.bullet( "item one" )
+					expect( out.render() ).toBe( "· item one" )
+				} )
+
+				it( "adds a divider", function() {
+					out.divider( 10 )
+					expect( out.render() ).toBe( repeatString( "─", 10 ) )
+				} )
+
+				it( "adds a mixed-style line from segments", function() {
+					out.segments( [
+						{ text : "Hello ", style : "bold" },
+						{ text : "world", style : "accent" }
+					] )
+					// color=false strips markers
+					expect( out.render() ).toBe( "Hello world" )
+				} )
+
+			} )
+
+			describe( "colour markers", function() {
+
+				it( "includes markers when color is true", function() {
+					var colored = new bxagents.models.cli.support.CliOutput( color = true )
+					colored.ok( "yes" )
+					expect( colored.render() ).toBe( "{ok}yes{/}" )
+				} )
+
+				it( "strips markers when color is false", function() {
+					out.ok( "yes" )
+					expect( out.render() ).toBe( "yes" )
+				} )
+
+				it( "stripMarkers() removes all marker types", function() {
+					var text = "{ok}green{/} {warn}amber{/} {error}red{/} {accent}teal{/} {bold}bold{/} {muted}gray{/}"
+					expect( CliOutput::stripMarkers( text ) ).toBe( "green amber red teal bold gray" )
+				} )
+
+			} )
+
+			describe( "table integration", function() {
+
+				it( "renders an inline table via table().end()", function() {
+					out.text( "before" )
+					out.table()
+						.header( [ "Name", "Value" ] )
+						.row( [ "alice", "42" ] )
+						.end()
+					out.text( "after" )
+					var lines = listToArray( out.render(), char( 10 ) )
+
+					expect( lines[ 1 ] ).toBe( "before" )
+					expect( lines[ 2 ] ).toInclude( "Name" )
+					expect( lines[ 3 ] ).toInclude( "alice" )
+					expect( lines[ 4 ] ).toBe( "after" )
+				} )
+
+			} )
+
+			describe( "tree", function() {
+
+				it( "renders a simple tree", function() {
+					out.tree( {
+						"root" : {
+							"child1" : {},
+							"child2" : {}
+						}
+					} )
+					var rendered = out.render()
+
+					expect( rendered ).toInclude( "root" )
+					expect( rendered ).toInclude( "child1" )
+					expect( rendered ).toInclude( "child2" )
+					expect( rendered ).toInclude( "├──" )
+					expect( rendered ).toInclude( "└──" )
+				} )
+
+				it( "renders nested trees", function() {
+					out.tree( {
+						"a" : {
+							"b" : {
+								"c" : {}
+							}
+						}
+					} )
+					var lines = listToArray( out.render(), char( 10 ) )
+
+					expect( lines ).toHaveLength( 3 )
+					expect( lines[ 1 ] ).toInclude( "a" )
+					expect( lines[ 2 ] ).toInclude( "b" )
+					expect( lines[ 3 ] ).toInclude( "c" )
+				} )
+
+			} )
+
+			describe( "columns", function() {
+
+				it( "lays items out in columns", function() {
+					out.columns( [ "aaa", "bbb", "ccc", "ddd" ], 2 )
+					var lines = listToArray( out.render(), char( 10 ) )
+
+					expect( lines ).toHaveLength( 2 )
+					expect( lines[ 1 ] ).toInclude( "aaa" )
+					expect( lines[ 1 ] ).toInclude( "bbb" )
+					expect( lines[ 2 ] ).toInclude( "ccc" )
+					expect( lines[ 2 ] ).toInclude( "ddd" )
+				} )
+
+				it( "handles empty items", function() {
+					out.columns( [] )
+					expect( out.render() ).toBe( "" )
+				} )
+
+			} )
+
+			describe( "progress", function() {
+
+				it( "renders a progress bar", function() {
+					out.progress( 5, 10, 10 )
+					var line = out.render()
+
+					expect( line ).toInclude( "█" )
+					expect( line ).toInclude( "░" )
+					expect( line ).toInclude( "50%" )
+				} )
+
+				it( "renders with a label", function() {
+					out.progress( 3, 10, 10, "Building" )
+					var line = out.render()
+
+					expect( line ).toInclude( "Building" )
+					expect( line ).toInclude( "30%" )
+				} )
+
+				it( "caps at 100%", function() {
+					out.progress( 15, 10, 10 )
+					expect( out.render() ).toInclude( "100%" )
+				} )
+
+			} )
+
+			describe( "output", function() {
+
+				it( "render() joins lines with newlines", function() {
+					out.text( "a" )
+					out.text( "b" )
+					expect( out.render() ).toBe( "a" & char( 10 ) & "b" )
+				} )
+
+				it( "toString() is an alias for render()", function() {
+					out.text( "hello" )
+					expect( out.toString() ).toBe( out.render() )
+				} )
+
+				it( "print() clears the buffer", function() {
+					out.text( "hello" )
+					// print() writes to stdout — we just verify the buffer clears
+					// (we can't easily capture stdout in tests, so we test the side effect)
+					out.print()
+					expect( out.render() ).toBe( "" )
+				} )
+
+				it( "chains all methods fluently", function() {
+					var result = out
+						.header( "Title" )
+						.blank()
+						.labelValue( "Key", "Value" )
+						.ok( "Done" )
+						.warn( "Careful" )
+						.error( "Bad" )
+						.muted( "Hint" )
+						.accent( "Teal" )
+						.bold( "Strong" )
+						.indent( "Indented" )
+						.bullet( "Item" )
+						.divider( 5 )
+						.statusLine( "On", true )
+						.statusLine( "Off", false )
+						.text( "Plain" )
+
+					expect( result ).toBe( out )
+					var lines = listToArray( out.render(), char( 10 ) )
+					expect( lines.len() ).toBeGTE( 14 )
+				} )
+
+			} )
+
+		} )
+	}
+
+}

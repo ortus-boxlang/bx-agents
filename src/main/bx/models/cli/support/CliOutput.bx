@@ -1,0 +1,428 @@
+/**
+ * Fluent CLI output builder, inspired by CommandBox's print helper. Builds styled text for the terminal.
+ *
+ * Every method returns `this` so calls chain. Call `render()` to get the final string, or `print()` to emit it.
+ *
+ *   var out = new CliOutput()
+ *   out.header( "Models" )
+ *   out.labelValue( "Default", "OpenAICompatible/lfm3-1.7b" )
+ *   out.ok( "Connected in 234 ms" )
+ *   out.blank()
+ *   out.table()
+ *       .header( [ "Profile", "Model", "Status" ] )
+ *       .row( [ "default", "lfm3-1.7b", "ok" ] )
+ *       .end()
+ *   out.indent( "Run bxAgents models test --all to check every profile." )
+ *   out.print()
+ *
+ * Colour markers: {ok}text{/}, {warn}text{/}, {error}text{/}, {accent}text{/}, {bold}text{/}, {muted}text{/}
+ * Stripped when NO_COLOR is set or color=false. Plain text survives JSON and log files.
+ */
+import bxModules.bxagents.models.cli.support.CliTable;
+
+class {
+
+	/** The accumulated output lines, joined by newlines on render() */
+	property name="lines" type="array";
+	/** Whether colour markers are included; false when NO_COLOR is set or color=false at init */
+	property name="color" type="boolean" default="true";
+
+	/**
+	 * Create a new output builder
+	 *
+	 * @color Whether to include colour markers (default true; overridden by NO_COLOR env var)
+	 *
+	 * @return this
+	 */
+	function init( boolean color = true ) {
+		variables.lines = []
+		variables.color = arguments.color && !len( getSystemSetting( "NO_COLOR", "" ) )
+		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Text blocks
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Add a header line (bold accent)
+	 *
+	 * @text The header text
+	 *
+	 * @return this
+	 */
+	function header( required string text ) {
+		addLine( styleText( arguments.text, "bold", "accent" ) )
+		return this
+	}
+
+	/**
+	 * Add a plain text line with no styling
+	 *
+	 * @text The text
+	 *
+	 * @return this
+	 */
+	function text( required string text ) {
+		addLine( arguments.text )
+		return this
+	}
+
+	/**
+	 * Add a success line (green)
+	 *
+	 * @text The text
+	 *
+	 * @return this
+	 */
+	function ok( required string text ) {
+		addLine( styleText( arguments.text, "ok" ) )
+		return this
+	}
+
+	/**
+	 * Add a warning line (amber)
+	 *
+	 * @text The text
+	 *
+	 * @return this
+	 */
+	function warn( required string text ) {
+		addLine( styleText( arguments.text, "warn" ) )
+		return this
+	}
+
+	/**
+	 * Add an error line (red)
+	 *
+	 * @text The text
+	 *
+	 * @return this
+	 */
+	function error( required string text ) {
+		addLine( styleText( arguments.text, "error" ) )
+		return this
+	}
+
+	/**
+	 * Add a muted line (gray/dim)
+	 *
+	 * @text The text
+	 *
+	 * @return this
+	 */
+	function muted( required string text ) {
+		addLine( styleText( arguments.text, "muted" ) )
+		return this
+	}
+
+	/**
+	 * Add an accent line (teal/cyan)
+	 *
+	 * @text The text
+	 *
+	 * @return this
+	 */
+	function accent( required string text ) {
+		addLine( styleText( arguments.text, "accent" ) )
+		return this
+	}
+
+	/**
+	 * Add a bold line
+	 *
+	 * @text The text
+	 *
+	 * @return this
+	 */
+	function bold( required string text ) {
+		addLine( styleText( arguments.text, "bold" ) )
+		return this
+	}
+
+	/**
+	 * Add a blank line
+	 *
+	 * @return this
+	 */
+	function blank() {
+		variables.lines.append( "" )
+		return this
+	}
+
+	/**
+	 * Add an indented muted line (two leading spaces)
+	 *
+	 * @text The text
+	 *
+	 * @return this
+	 */
+	function indent( required string text ) {
+		addLine( "  " & styleText( arguments.text, "muted" ) )
+		return this
+	}
+
+	/**
+	 * Add a label-value pair: label in muted followed by value in accent
+	 *
+	 * @label The label (rendered as "Label:")
+	 * @value The value
+	 *
+	 * @return this
+	 */
+	function labelValue( required string label, required string value ) {
+		addLine( styleText( arguments.label & ":", "muted" ) & " " & styleText( arguments.value, "accent" ) )
+		return this
+	}
+
+	/**
+	 * Add a status line: label in muted followed by "on" (green) or "off" (red)
+	 *
+	 * @label The label (rendered as "Label:")
+	 * @on    True for green "on", false for red "off"
+	 *
+	 * @return this
+	 */
+	function statusLine( required string label, required boolean on ) {
+		addLine( styleText( arguments.label & ":", "muted" ) & " " & styleText( arguments.on ? "on" : "off", arguments.on ? "ok" : "error" ) )
+		return this
+	}
+
+	/**
+	 * Add a bullet point: accent dot followed by muted text
+	 *
+	 * @text The bullet text
+	 *
+	 * @return this
+	 */
+	function bullet( required string text ) {
+		addLine( styleText( "· ", "accent" ) & styleText( arguments.text, "muted" ) )
+		return this
+	}
+
+	/**
+	 * Add a horizontal divider line of box-drawing characters
+	 *
+	 * @width The width of the divider (default 40)
+	 *
+	 * @return this
+	 */
+	function divider( numeric width = 40 ) {
+		addLine( styleText( repeatString( "─", arguments.width ), "muted" ) )
+		return this
+	}
+
+	/**
+	 * Add a mixed-style line from an array of segments
+	 *
+	 * @segments An array of structs, each with `text` and optional `style` keys
+	 *
+	 * @return this
+	 */
+	function segments( required array segments ) {
+		var line = ""
+		for ( var seg in arguments.segments ) {
+			line &= styleText( seg.text, seg.style ?: "" )
+		}
+		addLine( line )
+		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Table (inline via CliTable.Builder)
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Start an inline table. Returns a CliTable.Builder that renders into this output when end() is called.
+	 *
+	 * @return A CliTable.Builder instance
+	 */
+	function table() {
+		var t = CliTable::builder()
+		t.setOutput( this )
+		return t
+	}
+
+	/**
+	 * Called internally by CliTable.Builder.end() to append rendered table lines
+	 *
+	 * @rendered The rendered table string (newline-separated)
+	 *
+	 * @return this
+	 */
+	function addTableLines( required string rendered ) {
+		for ( var line in listToArray( arguments.rendered, char( 10 ) ) ) {
+			variables.lines.append( line )
+		}
+		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Tree
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Render a hierarchical struct as an ASCII tree with box-drawing connectors.
+	 * Keys are branch names; values are nested structs (branches) or empty structs/strings (leaves).
+	 *
+	 * @data   The tree data
+	 * @prefix Internal: the current indentation prefix (do not pass manually)
+	 *
+	 * @return this
+	 */
+	function tree( required struct data, string prefix = "" ) {
+		var keys = arguments.data.keyArray()
+		for ( var i = 1; i <= keys.len(); i++ ) {
+			var key = keys[ i ]
+			var isLast = i == keys.len()
+			var connector = isLast ? "└── " : "├── "
+			var child = arguments.data[ key ]
+			if ( isStruct( child ) && child.count() ) {
+				addLine( arguments.prefix & connector & styleText( key, "accent" ) )
+				tree( child, arguments.prefix & ( isLast ? "    " : "│   " ) )
+			} else {
+				addLine( arguments.prefix & connector & key )
+			}
+		}
+		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Columns
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Print an array of items in evenly-spaced columns, auto-sized to the terminal width
+	 *
+	 * @items   The items to print
+	 * @columns Number of columns (0 = auto-detect from terminal width and widest item)
+	 *
+	 * @return this
+	 */
+	function columns( required array items, numeric columns = 0 ) {
+		if ( !arguments.items.len() ) {
+			return this
+		}
+		var maxWidth = arguments.items.reduce( ( max, item ) => max( max, len( toString( item ) ) ), 0 )
+		var termWidth = getTerminalWidth()
+		var cols = arguments.columns > 0 ? arguments.columns : max( 1, int( termWidth / ( maxWidth + 4 ) ) )
+		var colWidth = int( termWidth / cols )
+		var line = ""
+		for ( var i = 1; i <= arguments.items.len(); i++ ) {
+			var item = toString( arguments.items[ i ] )
+			line &= left( item & repeatString( " ", colWidth ), colWidth )
+			if ( i mod cols == 0 || i == arguments.items.len() ) {
+				variables.lines.append( trim( line ) )
+				line = ""
+			}
+		}
+		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Progress
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Add a progress bar line with filled/empty blocks and a percentage
+	 *
+	 * @current The current value
+	 * @total   The total value
+	 * @width   The width of the bar in characters (default 30)
+	 * @label   Optional label before the bar
+	 *
+	 * @return this
+	 */
+	function progress( required numeric current, required numeric total, numeric width = 30, string label = "" ) {
+		var pct = arguments.total > 0 ? min( 1, arguments.current / arguments.total ) : 0
+		var filled = int( pct * arguments.width )
+		var bar = repeatString( "█", filled ) & repeatString( "░", arguments.width - filled )
+		var pctText = numberFormat( pct * 100, "0" ) & "%"
+		var prefix = len( arguments.label ) ? arguments.label & " " : ""
+		addLine( prefix & styleText( bar, "accent" ) & " " & styleText( pctText, "muted" ) )
+		return this
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Output
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Render all accumulated lines as a single newline-separated string
+	 *
+	 * @return The rendered output
+	 */
+	string function render() {
+		return variables.lines.toList( char( 10 ) )
+	}
+
+	/**
+	 * Alias for render()
+	 *
+	 * @return The rendered output
+	 */
+	string function toString() {
+		return render()
+	}
+
+	/**
+	 * Print the output to stdout and clear the internal buffer
+	 *
+	 * @return this
+	 */
+	function print() {
+		writeOutput( render() & char( 10 ) )
+		variables.lines = []
+		return this
+	}
+
+	/**
+	 * Strip all colour markers ({ok}, {warn}, {error}, {accent}, {bold}, {muted}, {/}) from a string
+	 *
+	 * @text The text with markers
+	 *
+	 * @return The plain text with all markers removed
+	 */
+	static string function stripMarkers( required string text ) {
+		return reReplace( arguments.text, "\{(?:ok|warn|error|accent|bold|muted)\}", "", "all" ).replace( "{/}", "", "all" )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Helpers
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Append a line to the internal buffer
+	 *
+	 * @line The line to add
+	 */
+	function addLine( required string line ) {
+		variables.lines.append( arguments.line )
+	}
+
+	/**
+	 * Wrap text in a colour marker if colour is enabled and a style is given
+	 *
+	 * @text  The text to wrap
+	 * @style The style name (ok, warn, error, accent, bold, muted) or empty for no wrapping
+	 *
+	 * @return The wrapped text, or the plain text if colour is off or style is empty
+	 */
+	function styleText( required string text, string style = "" ) {
+		if ( !len( arguments.style ) || !variables.color ) {
+			return arguments.text
+		}
+		return "{" & arguments.style & "}" & arguments.text & "{/}"
+	}
+
+	/**
+	 * Get the terminal width from the COLUMNS environment variable, defaulting to 80
+	 *
+	 * @return The terminal width in columns
+	 */
+	function getTerminalWidth() {
+		var cols = getSystemSetting( "COLUMNS", "" )
+		return isNumeric( cols ) && cols > 0 ? int( cols ) : 80
+	}
+
+}
