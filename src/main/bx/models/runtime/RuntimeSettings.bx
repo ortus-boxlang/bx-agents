@@ -17,6 +17,8 @@
  * Some settings are generated into the app (routes, gateways, schedulers, the subagent tree). A person's change to one
  * of those has no effect until `bxAgents build`, so it is reported at start, with its file, and never silently ignored.
  */
+import bxModules.bxagents.models.logs.Logger;
+
 class {
 
 	static {
@@ -117,10 +119,10 @@ class {
 		}
 		new "models.runtime.ModuleSettings@bxagents"().applyStruct( "bxai", new "models.build.AiSettings@bxagents"().settings( result.config ) )
 		for ( var entry in result.changed ) {
-			writeLog( text = "#entry.path# (#entry.op#) from #entry.file#", type = "information", log = "bxagents-settings" )
+			Logger::log( "agent", "debug", "#entry.path# (#entry.op#) from #entry.file#" )
 		}
 		for ( var entry in result.needsRebuild ) {
-			writeLog( text = "#entry.path# in #entry.file# needs a rebuild: bxAgents build. It is generated into the app, so it has no effect until then.", type = "warning", log = "bxagents-settings" )
+			Logger::log( "agent", "warn", "#entry.path# in #entry.file# needs a rebuild: bxAgents build. It is generated into the app, so it has no effect until then." )
 		}
 		return result
 	}
