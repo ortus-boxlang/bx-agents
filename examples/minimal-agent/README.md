@@ -326,17 +326,17 @@ bxAgents serve --port=8080
 Leave it running. **Terminal B**, from this project folder:
 
 ```bash
-curl -sS http://127.0.0.1:8080/__bxagents/health
-curl -sS http://127.0.0.1:8080/__bxagents/info
-curl -sS http://127.0.0.1:8080/__bxagents/tools
-curl -sS http://127.0.0.1:8080/__bxagents/skills
-curl -sS http://127.0.0.1:8080/__bxagents/openapi
+jcurl http://127.0.0.1:8080/__bxagents/health
+jcurl http://127.0.0.1:8080/__bxagents/info
+jcurl http://127.0.0.1:8080/__bxagents/tools
+jcurl http://127.0.0.1:8080/__bxagents/skills
+jcurl http://127.0.0.1:8080/__bxagents/openapi
 ```
 
 Make a real model call:
 
 ```bash
-curl -sS http://127.0.0.1:8080/__bxagents/invoke \
+jcurl http://127.0.0.1:8080/__bxagents/invoke \
   -H 'Content-Type: application/json' \
   --data '{"input":"My name is Ada. Please use sayHello."}'
 ```
