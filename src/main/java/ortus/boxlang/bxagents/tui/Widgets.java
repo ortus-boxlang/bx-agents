@@ -34,7 +34,8 @@ public final class Widgets {
 
 	static {
 		register( AbstractWidget.of( "agent", "the agent's name", "demo-assistant", c -> c.agent ) );
-		register( AbstractWidget.of( "profile", "the profile or model in use", "fast-model", c -> c.profile ) );
+		register( AbstractWidget.of( "profile", "the profile in use", "fast-model", c -> c.profile ) );
+		register( AbstractWidget.of( "model", "the model in use", "openai/gpt-5-mini", c -> c.model ) );
 		register( AbstractWidget.of( "folder", "the folder you are in", "~/work/demo", c -> folder( c.folder ) ) );
 		register( AbstractWidget.of( "user", "who you are on this machine", "ada", c -> c.user ) );
 		register( AbstractWidget.of( "clock", "the time, to the minute", "14:32", c -> c.clock.get().format( DateTimeFormatter.ofPattern( "HH:mm" ) ) ) );

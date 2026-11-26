@@ -35,6 +35,7 @@ class WidgetsTest {
 		WidgetContext c = new WidgetContext();
 		c.agent		= "demo-assistant";
 		c.profile	= "fast-model";
+		c.model		= "openai/gpt-5-mini";
 		c.session	= "billing questions";
 		c.ctx		= "ctx ~253";
 		c.user		= "ada";
@@ -52,7 +53,8 @@ class WidgetsTest {
 	@Test
 	@DisplayName( "the registry lists the widgets and every one describes itself" )
 	void registry() {
-		assertThat( Widgets.names() ).containsExactly( "agent", "profile", "folder", "user", "clock", "machine", "git", "date", "session", "elapsed", "ctx" )
+		assertThat( Widgets.names() )
+		    .containsExactly( "agent", "profile", "model", "folder", "user", "clock", "machine", "git", "date", "session", "elapsed", "ctx" )
 		    .inOrder();
 		for ( Widget w : Widgets.all() ) {
 			assertThat( w.description() ).isNotEmpty();
@@ -67,6 +69,7 @@ class WidgetsTest {
 	void plain() {
 		assertThat( text( "agent" ) ).isEqualTo( "demo-assistant" );
 		assertThat( text( "profile" ) ).isEqualTo( "fast-model" );
+		assertThat( text( "model" ) ).isEqualTo( "openai/gpt-5-mini" );
 		assertThat( text( "session" ) ).isEqualTo( "billing questions" );
 		assertThat( text( "ctx" ) ).isEqualTo( "ctx ~253" );
 		assertThat( text( "user" ) ).isEqualTo( "ada" );
