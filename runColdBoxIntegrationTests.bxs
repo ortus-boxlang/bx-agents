@@ -71,6 +71,15 @@ fileCopy( repoRoot & "tests/runner-coldbox.bxm", buildResult.publicDir & "/runne
 directoryCreate( buildResult.buildDir & "/tests/specs/integration", true, true )
 directoryCopy( repoRoot & "tests/specs/integration/coldbox", buildResult.buildDir & "/tests/specs/integration/coldbox", true )
 directoryCopy( repoRoot & "build/lib-stage/lib/testbox", buildResult.libDir & "/testbox", true )
+// The template's runtime/boxlang.json maps /app, /public, /coldbox and /modules only: the runner page needs /testbox and /tests too, and a
+// project that ships to production has no use for them, so they are added to this fixture's copy of the config, not to the vendored template.
+runtimeConfigPath = buildResult.runtimeDir & "/boxlang.json"
+runtimeConfig = fileRead( runtimeConfigPath, "UTF-8" )
+if ( !runtimeConfig.find( '"/modules": {' ) ) {
+	throw( type = "BxAgents.TemplateChanged", message = "runtime/boxlang.json has no ""/modules"" mapping to put the test mappings beside, the template changed." )
+}
+runtimeConfig = runtimeConfig.replace( '"/modules": {', '"/testbox": "${user-dir}/lib/testbox",' & char( 10 ) & '		"/tests": "${user-dir}/tests",' & char( 10 ) & '		"/modules": {', "one" )
+fileWrite( runtimeConfigPath, runtimeConfig, "UTF-8" )
 
 // ------------------------------------------------------------------
 // 1b. ColdBox and its modules (qb, cbsecurity, cbauth, ...) come from the
