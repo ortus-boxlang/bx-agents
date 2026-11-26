@@ -1,14 +1,14 @@
 ---
 title: The web app
 icon: phosphor-duotone:chat-circle-text
-summary: The generated web app - thirteen pages, streaming chat, routines, vault, logs and backups.
-description: The generated web app: a left menu and thirteen pages (chat, conversations, routines, registry, connectors, memory, vault, settings, agent, gateways, logs, access, data and backups), streaming, approvals and a SQLite store.
+summary: The generated web app - fourteen pages, streaming chat, routines, vault, logs and backups.
+description: The generated web app: a left menu and fourteen pages (chat, conversations, routines, registry, connectors, memory, vault, settings, agent, gateways, logs, access, data and backups), streaming, approvals and a SQLite store.
 tags: [conventions, gateways, web-ui]
 ---
 
 # The web app
 
-A `gateways/*.bx` entry with `exposes: "webui"` ships a complete web app for the agent: a left menu with [thirteen pages](#the-pages), a chat with streaming, reasoning, tool calls and human-in-the-loop approvals, per-visitor theming, and a real SQLite store behind it.
+A `gateways/*.bx` entry with `exposes: "webui"` ships a complete web app for the agent: a left menu with [fourteen pages](#the-pages), a chat with streaming, reasoning, tool calls and human-in-the-loop approvals, per-visitor theming, and a real SQLite store behind it.
 
 It lives under [gateways/](gateways/index.md) because that is where exposures are declared, but it is a subsystem in its own right, which is why it has its own page.
 
@@ -67,7 +67,7 @@ Every page has a **left menu** and a **header**. The menu has two groups, and ea
 | Group | Pages | Who sees it |
 |---|---|---|
 | Main | Chat, Conversations, Routines, Registry, Connectors, Memory, Vault, Settings | everyone who can sign in |
-| Admin | Agent, Gateways, Logs, Access, Data and backups | [admins](#admins-and-members) only |
+| Admin | Agent, Gateways, Embeds, Logs, Access, Data and backups | [admins](#admins-and-members) only |
 
 A member never sees the Admin group: an Admin page answers `403` to a member who is signed in, and the API refuses the routes behind it anyway. The menu shows only the pages this person may use, from the capabilities `GET /agent` reports. It folds to icons (the choice is remembered in the browser) and becomes a drawer on a phone. The header holds the agent's icon and title, a light or dark switch, and either **Password** (an agent without accounts) or who is signed in and **Sign out**. Extensions can add to the Chat page with [slots](extensions.md#the-web-page-slots-and-web).
 
@@ -138,6 +138,12 @@ For admins. **Composition** draws how the agent is put together: what reaches it
 For admins. Each [gateway](gateways/index.md) with its state (connected, stopped, failing or not registered), which of its credentials are set (the names, never a value), when it last had a conversation, its last error and the chats it has talked to. **Reconnect** stops and starts one gateway in place, so a fixed credential does not need an app restart. A run already going is not cancelled.
 
 ![The Gateways page](../assets/webui/webui-gateways.png)
+
+### Embeds
+
+For admins, when the agent keeps its database. The agent on **another website**, for anonymous visitors: define it here, paste the snippet there. The list shows each [embed](embeds.md) with its state (on, off, expired). The editor has a fieldset each for **Agent** (name, which agent answers, an optional model profile), **Look and text** (title, input placeholder, welcome message, up to three suggested questions, colour, position, theme), **What visitors can use** (the agent's tools as a checklist, everything unticked is off), **Allowed websites** (chips that refuse a wildcard, a path or anything that is not an origin, and at least one is required) and **Limits** (per visitor per minute, per day for the whole embed, longest message). A **preview** on the right is the real widget, drawn from the form as you type. For a saved embed the page also shows the **snippet** as HTML, iframe, web component and curl, each with a note and a **Copy** button, and the last seven days: messages, requests refused for a wrong website and requests refused for a limit, or "No visits yet" when nothing has happened. **Save**, **Disable** (it asks first; visitors are then answered as if the embed did not exist) and **Rotate key** (it asks first; every open visitor session ends) are under the form.
+
+![The Embeds page: the editor with the live preview and the snippet](../assets/webui/webui-embeds-editor.png)
 
 ### Logs
 

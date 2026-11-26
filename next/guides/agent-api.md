@@ -36,6 +36,7 @@ agentApi:
   tokenEnvVar: TOKEN_FOR_ADMIN   # the NAME of an environment variable
   tokens: true                   # also accept tokens made with `bxAgents token create`
   manageTokens: true             # an admin may make and revoke tokens over the API
+  embeds: false                  # no embeds: leaves out the embed routes (default true)
 ```
 
 ## Connections
@@ -143,7 +144,7 @@ The same list, create and revoke are on the **Tokens** tab of the [web app](../c
 
 Every path is under `/__bxagents` (or your `agentApi.path`). The table was written from the one list in `ApiContract.bx` that the build makes the routes and the OpenAPI document from; the document a running server hands out at `GET /openapi` is the authority, and it also has the request and answer shapes. **Admin** routes answer `403` to a caller who is not an admin; **Open** routes need no token even on a closed API.
 
-There are 82 routes (90 verb and path pairs); the token routes are there only with `manageTokens: true`.
+There are 88 routes (97 verb and path pairs); the token routes are there only with `manageTokens: true`.
 
 ### Turns
 
@@ -293,6 +294,20 @@ The [built-in connectors](../conventions/connectors.md). Every route answers for
 | `POST /notes/remove` | Caller | Removes a note. |
 | `POST /notes` | Caller | Adds a note. |
 | `GET /notes` | Caller | The notes about the caller and about the agent's own work. |
+
+### Embeds
+
+| Route | Who | Does |
+|---|---|---|
+| `GET /embeds/get` | Admin | One embed, never its key. |
+| `POST /embeds/update` | Admin | Changes an embed (the fields not sent keep their value); enabled false turns it off. |
+| `POST /embeds/rotate` | Admin | Gives an embed a new signing key: every open visitor session stops working. |
+| `GET /embeds/snippets` | Admin | The text to paste on the other website (HTML, iframe, web component, curl). |
+| `GET /embeds/usage` | Admin | What an embed did in the last 7 days: messages, requests refused for a wrong origin, requests refused for a limit. |
+| `POST /embeds` | Admin | Makes an embed. |
+| `GET /embeds` | Admin | The embeds, never a key, and the names of the tools an embed may list. |
+
+These are the admin side. See [Embeds](../conventions/embeds.md) for what visitors use.
 
 ### Tokens
 
