@@ -133,21 +133,50 @@ class {
 		choices.append( { value : "other", label : "Another provider", hint : "type provider/model yourself" } )
 		var picked = variables.prompter.select( "Which model provider?", choices, len( variables.plan.provider ) ? variables.plan.provider : "claude" )
 
+		variables.plan.baseUrl = ""
 		if ( picked == "other" ) {
 			variables.plan.model = variables.prompter.text( "Model", "As provider/model, for example openai/gpt-5. Providers: openai, claude, gemini, ollama, groq, mistral and more.", "", false, "A model is required" )
 			variables.plan.provider = variables.planner.providerOf( variables.plan.model )
+			if ( variables.plan.provider == "openai-compatible" ) {
+				variables.plan.baseUrl = askServerAddress( "" )
+			}
 		} else {
 			variables.plan.provider = picked
 			var chosen = variables.catalog.provider( picked )
-			var modelName = variables.prompter.text(
-				"Which #chosen.name# model?",
-				"Press Enter for the provider's default, or type a model name.",
-				""
-			)
-			variables.plan.model = len( modelName ) ? "#picked#/#modelName#" : picked
+			if ( len( chosen.backend ?: "" ) ) {
+				// a local server: the model is the one it lists, and the address is where it listens
+				var served = variables.prompter.text( "Which model does #chosen.name# serve?", "The id #chosen.name# lists, exactly as it writes it. It is required.", "", false, "A model is required" )
+				variables.plan.model = "#chosen.backend#/#served#"
+				variables.plan.baseUrl = askServerAddress( chosen.baseUrl )
+			} else {
+				var modelName = variables.prompter.text(
+					"Which #chosen.name# model?",
+					"Press Enter for the provider's default, or type a model name.",
+					""
+				)
+				variables.plan.model = len( modelName ) ? "#picked#/#modelName#" : picked
+			}
 		}
 		variables.prompter.record( "model", "Model", variables.plan.model )
 		return true
+	}
+
+	/**
+	 * Where a local model server listens. Asked again until it is an http or https address.
+	 *
+	 * @fallback The address offered, and the answer for an empty line; empty for none
+	 *
+	 * @return The address, or "" to leave the provider's own
+	 */
+	private string function askServerAddress( required string fallback ) {
+		while ( true ) {
+			var typed = trim( variables.prompter.text( "Server address", "Where it listens, up to and including /v1. Press Enter for #len( arguments.fallback ) ? arguments.fallback : 'the provider''s own'#.", arguments.fallback ) )
+			var address = len( typed ) ? typed : arguments.fallback
+			if ( !len( address ) || variables.planner.isServerAddress( address ) ) {
+				return address.reReplace( "/+$", "" )
+			}
+			variables.prompter.note( "Server address", [ "[#address#] is not an address. Write it as http://127.0.0.1:1234/v1" ] )
+		}
 	}
 
 	/**

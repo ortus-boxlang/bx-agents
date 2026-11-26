@@ -222,6 +222,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		)
 		'new' = @(
 			@{ Name = 'app'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'base-url'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'channels'; Value = $true; Choices = @('web', 'api', 'telegram', 'slack', 'discord', 'whatsapp-cloud', 'teams', 'twilio', 'github', 'email', 'signal'); Dir = $false }
 			@{ Name = 'class'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'connectors'; Value = $true; Choices = @(); Dir = $false }

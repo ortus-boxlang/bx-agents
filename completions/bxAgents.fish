@@ -199,6 +199,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb models' -l profile -x
     complete -c $cmd -n '__bxagents_using_verb models' -l projectRoot -x -a '(__fish_complete_directories)'
     complete -c $cmd -n '__bxagents_using_verb new' -l app -x
+    complete -c $cmd -n '__bxagents_using_verb new' -l base-url -x
     complete -c $cmd -n '__bxagents_using_verb new' -l channels -x -a 'web api telegram slack discord whatsapp-cloud teams twilio github email signal'
     complete -c $cmd -n '__bxagents_using_verb new' -l class
     complete -c $cmd -n '__bxagents_using_verb new' -l connectors -x

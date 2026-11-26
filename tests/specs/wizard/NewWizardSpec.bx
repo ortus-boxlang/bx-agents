@@ -72,6 +72,30 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.command ).toInclude( "--prompt=panel --widgets=clock --widgets-bottom=none" );
 			} );
 
+			it( "sets up a local LM Studio: its model, its address, no key", function() {
+				var wizard = wizardFor( [
+					"bot", "", "minimal", "lmstudio", "qwen/qwen3.6-35b-a3b", "", false, [], "cache", [], [], "off", "bars", [], [], "none", "create"
+				] );
+
+				var result = wizard.run();
+
+				expect( prompter.remaining() ).toBe( 0 );
+				expect( result.plan.model ).toBe( "openai-compatible/qwen/qwen3.6-35b-a3b" );
+				expect( result.plan.baseUrl ).toBe( "http://127.0.0.1:1234/v1" );
+				expect( result.command ).toInclude( "--model=openai-compatible/qwen/qwen3.6-35b-a3b --base-url=http://127.0.0.1:1234/v1" );
+			} );
+
+			it( "takes another address for llama.cpp on another machine, and asks again for one that is not an address", function() {
+				var wizard = wizardFor( [
+					"bot", "", "minimal", "llamacpp", "llama-3", "gpu-box:8080", "", "http://gpu-box:8080/v1/", false, [], "cache", [], [], "off", "bars", [], [], "none", "create"
+				] );
+
+				var result = wizard.run();
+
+				expect( prompter.remaining() ).toBe( 0 );
+				expect( result.plan.baseUrl ).toBe( "http://gpu-box:8080/v1" );
+			} );
+
 			it( "never keeps a plain password", function() {
 				var wizard = wizardFor( [
 					"bot", "", "minimal", "openai", "", false, [], "cache", [], [ "web" ],

@@ -60,6 +60,12 @@ class extends="testbox.system.BaseSpec" {
 				expect( writer.instructionLines( {} ) ).toBeEmpty();
 			} );
 
+			it( "writes the settings of a provider under providers:", function() {
+				var lines = writer.agentYamlLines( { providerSettings : { "openai-compatible" : { options : { baseURL : "http://127.0.0.1:1234/v1" } } } } );
+
+				expect( lines.toList( char( 10 ) ) ).toInclude( "providers:" & char( 10 ) & "  openai-compatible:" & char( 10 ) & "    options:" & char( 10 ) & "      baseURL: ""http://127.0.0.1:1234/v1""" );
+			} );
+
 			it( "adds env stubs under a comment and never repeats or overwrites a variable", function() {
 				fileWrite( dir & "/.env", "FOO=1" & char( 10 ) );
 

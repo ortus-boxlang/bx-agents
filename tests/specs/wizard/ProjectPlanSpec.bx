@@ -72,6 +72,32 @@ class extends="testbox.system.BaseSpec" {
 				expect( planner.toFeatures( plan ) ).toBeEmpty();
 			} );
 
+			it( "a local server is the openai-compatible provider at its own address, and asks for no key", function() {
+				var plan = planner.fromFlags( { model : "openai-compatible/qwen/qwen3.6-35b-a3b", "base-url" : "http://127.0.0.1:1234/v1" } );
+				var features = planner.toFeatures( plan );
+
+				expect( plan.baseUrl ).toBe( "http://127.0.0.1:1234/v1" );
+				expect( features.providerSettings ).toBe( { "openai-compatible" : { options : { baseURL : "http://127.0.0.1:1234/v1" } } } );
+				expect( features ).notToHaveKey( "envStubs" );
+				expect( planner.toCommand( plan ) ).toInclude( "--model=openai-compatible/qwen/qwen3.6-35b-a3b --base-url=http://127.0.0.1:1234/v1" );
+				expect( planner.toFeatures( planner.fromFlags( { model : "openai" } ) ) ).notToHaveKey( "providerSettings" );
+				expect( function() {
+					planner.fromFlags( { model : "openai-compatible/x", "base-url" : "localhost:1234" } );
+				} ).toThrow( type = "BxAgents.InvalidNewOption", regex = "not an address" );
+			} );
+
+			it( "lists LM Studio and llama.cpp, each served through openai-compatible with its usual port", function() {
+				var lm = catalog.provider( "lmstudio" );
+				var llama = catalog.provider( "llamacpp" );
+
+				expect( lm.backend ).toBe( "openai-compatible" );
+				expect( lm.baseUrl ).toBe( "http://127.0.0.1:1234/v1" );
+				expect( llama.backend ).toBe( "openai-compatible" );
+				expect( llama.baseUrl ).toBe( "http://127.0.0.1:8080/v1" );
+				expect( lm.envVar ).toBe( "" );
+				expect( llama.envVar ).toBe( "" );
+			} );
+
 			it( "maps capabilities to tools, dependencies and key stubs", function() {
 				var plan = planner.fromFlags( { model : "claude/claude-sonnet-5", with : "time,search,browse", search : "brave" } );
 				var features = planner.toFeatures( plan );
