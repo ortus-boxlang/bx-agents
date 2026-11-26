@@ -281,7 +281,10 @@ final class SettingsPanel {
 		for ( int i = 0; i < TuiSettings.ALL.size(); i++ ) {
 			TuiSettings.Setting	s		= TuiSettings.ALL.get( i );
 			boolean				on		= i == pick;
-			String				value	= resolved.get( s.name() );
+			String				value	= ( asking != null && asking.setting().name().equals( s.name() ) ) ? asking.value() : resolved.get( s.name() );
+			if ( value == null ) {
+				value = resolved.get( s.name() );
+			}
 			String				source	= resolved.source( s.name() );
 			Row					row		= Row.of().add( on ? "❯ " : "  ", theme.accent ).add( pad( s.name(), nameCol ), on ? theme.selected : theme.plain )
 			    .add( pad( value, valCol ), on ? theme.selected : theme.accent )
