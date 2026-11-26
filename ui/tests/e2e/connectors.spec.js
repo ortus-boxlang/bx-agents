@@ -9,6 +9,10 @@ const APP = "/chat";
 const catalog = () => ( {
 	success    : true,
 	policy     : { count: 3, excluded: [ "stripe" ] },
+	categories : [
+		"Developer",
+		"Productivity"
+	],
 	summary    : { toolsOn: 41, toolWarning: 40, over: true, byConnector: { github: 12 } },
 	connectors : [
 		{
@@ -21,9 +25,10 @@ const catalog = () => ( {
 				"bearer",
 				"oauth"
 			],
-			risk : "medium",
-			host : "api.github.com",
-			icon : "git-branch"
+			category : "Developer",
+			risk     : "medium",
+			host     : "api.github.com",
+			icon     : "git-branch"
 		},
 		{
 			id      : "linear",
@@ -34,14 +39,15 @@ const catalog = () => ( {
 				"bearer",
 				"oauth"
 			],
+			category  : "Productivity",
 			risk      : "high",
 			riskNote  : "It can delete issues.",
 			host      : "mcp.linear.app",
 			tokenName : "LINEAR_TOKEN",
 			options   : [ { key: "readonly", label: "Read only", type: "boolean", value: true, onlyWith: "bearer" } ]
 		},
-		{ id: "git", name: "Git", summary: "Local repositories", state: "available", transport: "stdio", program: "uvx", risk: "low" },
-		{ id: "notion", name: "Notion", summary: "Pages", state: "needs_attention", reason: "The token was refused.", ways: [ "oauth" ], risk: "low", host: "mcp.notion.com" }
+		{ id: "git", name: "Git", category: "Developer", summary: "Local repositories", state: "available", transport: "stdio", program: "uvx", risk: "low" },
+		{ id: "notion", name: "Notion", summary: "Pages", state: "needs_attention", reason: "The token was refused.", ways: [ "oauth" ], category: "Productivity", risk: "low", host: "mcp.notion.com" }
 	]
 } );
 
@@ -84,6 +90,13 @@ test( "shows the catalog: tabs with counts, the banner, states and what each per
 	await expect( page.getByText( "Catalog: 3 of 4 connectors available." ) ).toBeVisible();
 	await expect( page.getByText( "Left out: stripe." ) ).toBeVisible();
 	await expect( page.getByText( "Models answer better with fewer than 40." ) ).toBeVisible();
+
+	// the cards sit under a heading for their category, in the order the server gave
+	await expect( page.locator( ".conn-group-title" ) ).toHaveText( [
+		"Developer",
+		"Productivity"
+	] );
+	await expect( page.getByRole( "region", { name: "Developer" } ).getByRole( "article" ) ).toHaveCount( 2 );
 
 	const github = page.getByRole( "article", { name: "GitHub" } );
 	await expect( github ).toContainText( "You connected with your own token · 12 tools on" );

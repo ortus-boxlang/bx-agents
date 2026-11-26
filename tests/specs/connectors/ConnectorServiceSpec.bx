@@ -12,6 +12,13 @@ class extends="testbox.system.BaseSpec" {
 	 *
 	 * @return A ConnectorService over the shared database of this spec
 	 */
+	/**
+	 * @return The ids of every connector the catalog ships, in order. The specs read it so a new connector does not break them.
+	 */
+	private array function catalogIds() {
+		return new bxagents.models.connectors.ConnectorCatalog().ids()
+	}
+
 	private any function serviceFor( struct config = {}, struct deps = {} ) {
 		var all = { vault : variables.vault, signedIn : ( id, person ) => false, programExists : program => false };
 		all.append( arguments.deps );
@@ -53,7 +60,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "lists every connector the agent offers, all available to a person who has connected none", function() {
 				var rows = serviceFor().list( "slack:U01ADA" );
 
-				expect( rows.map( r => r.id ) ).toBe( [ "atlassian", "cloudflare", "context7", "git", "github", "notion", "slack", "stripe", "supabase" ] );
+				expect( rows.map( r => r.id ) ).toBe( catalogIds() );
 				for ( var row in rows.filter( r => r.id != "git" ) ) {
 					expect( row.state ).toBe( "available" );
 					expect( row.connectedWith ).toBe( "" );
@@ -64,7 +71,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( serviceFor( { connectors : { only : [ "github", "notion" ] } } ).ids() ).toBe( [ "github", "notion" ] );
 				expect( serviceFor( { connectors : { exclude : [ "stripe" ] } } ).offers( "stripe" ) ).toBeFalse();
 				expect( serviceFor( { connectors : "none" } ).list( "ada" ) ).toBeEmpty();
-				expect( serviceFor().policy() ).toBe( { mode : "all", excluded : [], shadowed : [], count : 9, toolWarning : 100 } );
+				expect( serviceFor().policy() ).toBe( { mode : "all", excluded : [], shadowed : [], count : catalogIds().len(), toolWarning : 100 } );
 				expect( serviceFor( { connectors : { exclude : [ "stripe", "git" ] } } ).policy().excluded ).toBe( [ "git", "stripe" ] );
 			} );
 

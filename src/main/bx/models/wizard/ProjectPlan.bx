@@ -654,7 +654,7 @@ class {
 	 * @return What it says in words
 	 */
 	string function connectorsText( required struct plan ) {
-		var names = arguments.plan.ids.map( id => variables.catalog.mcpServer( id ).name ?: id ).toList( ", " )
+		var names = arguments.plan.ids.map( id => variables.catalog.connectorChoice( id ).name ?: id ).toList( ", " )
 		switch ( arguments.plan.mode ) {
 			case "none":
 				return "none offered"
@@ -687,11 +687,11 @@ class {
 		}
 		var ids = listToArray( listRest( raw, ":" ), "," ).map( item => trim( item ) ).filter( item => len( item ) )
 		if ( !ids.len() ) {
-			fail( "connectors", "[#raw#] names no connector. Use: #variables.catalog.mcpServers().map( s => s.id ).toList( ', ' )#" )
+			fail( "connectors", "[#raw#] names no connector. Use: #variables.catalog.connectorChoices().map( s => s.id ).toList( ', ' )#" )
 		}
 		for ( var id in ids ) {
-			if ( !variables.catalog.mcpServer( id ).count() ) {
-				fail( "connectors", "[#id#] is not a connector. Use: #variables.catalog.mcpServers().map( s => s.id ).toList( ', ' )#" )
+			if ( !variables.catalog.connectorChoice( id ).count() ) {
+				fail( "connectors", "[#id#] is not a connector. Use: #variables.catalog.connectorChoices().map( s => s.id ).toList( ', ' )#" )
 			}
 		}
 		return { mode : mode, ids : ids }

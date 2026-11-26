@@ -14,12 +14,33 @@ class extends="testbox.system.BaseSpec" {
 				variables.catalog = new bxagents.models.connectors.ConnectorCatalog();
 			} );
 
-			it( "has the nine connectors the wizard offers, and every file passes the checks", function() {
+			it( "passes its own checks, and has the first nine connectors the wizard offered", function() {
 				var result = catalog.check();
 
 				expect( result.errors ).toBeEmpty();
 				expect( result.ok ).toBeTrue();
-				expect( result.ids ).toBe( [ "atlassian", "cloudflare", "context7", "git", "github", "notion", "slack", "stripe", "supabase" ] );
+				expect( result.ids ).toBe( catalog.ids() );
+				for ( var id in [ "atlassian", "cloudflare", "context7", "git", "github", "notion", "slack", "stripe", "supabase" ] ) {
+					expect( result.ids ).toInclude( id );
+				}
+			} );
+
+			it( "puts every connector in a category, and lists them by category in the order the categories are shown", function() {
+				var groups = catalog.grouped();
+
+				expect( catalog.categories() ).toBe( [ "Developer", "Productivity", "Sales", "Finance", "Analytics", "Microsoft 365", "Social Media", "Advertising", "Apps" ] );
+				expect( groups.map( g => g.category ) ).toBe( catalog.categories().filter( name => groups.map( g => g.category ).contains( name ) ) );
+				expect( groups.reduce( ( total, g ) => total + g.connectors.len(), 0 ) ).toBe( catalog.ids().len() );
+				expect( catalog.get( "github" ).category ).toBe( "Developer" );
+				expect( catalog.get( "stripe" ).category ).toBe( "Finance" );
+			} );
+
+			it( "uses only icons the web app's sprite has, so no connector shows a blank icon", function() {
+				var sprite = fileRead( expandPath( "/bxagents/models/build/generators/webui/vendor/icons.svg" ) );
+
+				for ( var entry in catalog.all() ) {
+					expect( sprite ).toInclude( "id=""i-#entry.icon#""", "[#entry.id#] uses the icon [#entry.icon#], which the sprite does not have: add it to tools/webui-vendor/icons.json and run npm run icons" );
+				}
 			} );
 
 			it( "gets one connector by id, and an empty struct for an unknown one", function() {
@@ -32,7 +53,8 @@ class extends="testbox.system.BaseSpec" {
 				for ( var entry in catalog.all() ) {
 					var types = entry.auth.map( m => m.type );
 					if ( entry.transport == "http" ) {
-						expect( types ).toInclude( "bearer" );
+						// a web connector has a sign in or a token, or both
+						expect( types.some( t => [ "oauth", "bearer" ].contains( t ) ) ).toBeTrue();
 					} else {
 						expect( types ).toBe( [ "none" ] );
 					}
@@ -265,6 +287,17 @@ class extends="testbox.system.BaseSpec" {
 				expect( errors()[ 1 ].message ).toMatch( "must be one of: low, medium, high" );
 			} );
 
+			it( "refuses a category outside the list, and a file with none", function() {
+				put( "demo.yml", web().replace( "category: Developer", "category: Gadgets" ) );
+
+				expect( errors()[ 1 ].field ).toBe( "category" );
+				expect( errors()[ 1 ].message ).toMatch( "must be one of: Developer, Productivity" );
+
+				put( "demo.yml", web().replace( "category: Developer" & char( 10 ), "" ) );
+
+				expect( errors().map( e => e.field ) ).toInclude( "category" );
+			} );
+
 			it( "refuses a docs link that is not https and a date that is not a date", function() {
 				put( "demo.yml", web().replace( "https://example.com/docs", "ftp://example.com/docs" ).replace( "verifiedOn: 2026-11-14", "verifiedOn: last week" ) );
 
@@ -353,6 +386,7 @@ class extends="testbox.system.BaseSpec" {
 			"id: demo",
 			"name: Demo",
 			"icon: puzzle-piece",
+			"category: Developer",
 			"summary: A demo connector",
 			"transport: http",
 			"url: https://example.com/mcp",
@@ -377,6 +411,7 @@ class extends="testbox.system.BaseSpec" {
 			"id: tool",
 			"name: Tool",
 			"icon: terminal",
+			"category: Developer",
 			"summary: A local tool",
 			"transport: stdio",
 			"command: [ run-tool, serve ]",

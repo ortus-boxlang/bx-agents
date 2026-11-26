@@ -11,6 +11,13 @@ class extends="testbox.system.BaseSpec" {
 	 *
 	 * @return What is wrong with its connectors key
 	 */
+	/**
+	 * @return The ids of every connector the catalog ships, in order. The specs read it so a new connector does not break them.
+	 */
+	private array function catalogIds() {
+		return new bxagents.models.connectors.ConnectorCatalog().ids()
+	}
+
 	private array function problemsOf( required struct config ) {
 		return ConnectorSettings::problems( arguments.config );
 	}
@@ -35,7 +42,7 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( problemsOf( {} ) ).toBeEmpty();
 				expect( result.mode ).toBe( "all" );
-				expect( result.available.map( c => c.id ) ).toBe( [ "atlassian", "cloudflare", "context7", "git", "github", "notion", "slack", "stripe", "supabase" ] );
+				expect( result.available.map( c => c.id ) ).toBe( catalogIds() );
 				expect( result.excluded ).toBeEmpty();
 			} );
 
@@ -64,7 +71,7 @@ class extends="testbox.system.BaseSpec" {
 				var result = ConnectorSettings::resolve( config );
 
 				expect( problemsOf( config ) ).toBeEmpty();
-				expect( result.available.map( c => c.id ) ).toBe( [ "atlassian", "cloudflare", "context7", "github", "notion", "slack", "supabase" ] );
+				expect( result.available.map( c => c.id ) ).toBe( catalogIds().filter( id => ![ "stripe", "git" ].contains( id ) ) );
 				expect( result.excluded ).toBe( [ "git", "stripe" ] );
 				expect( result.mode ).toBe( "exclude" );
 			} );
@@ -107,7 +114,7 @@ class extends="testbox.system.BaseSpec" {
 				expect( text ).toInclude( "connectors.only names [gitub], which is not in the catalog. Did you mean [github]?" );
 				expect( text ).toInclude( "connectors.exclude names [nothing-like-it], which is not in the catalog." );
 				expect( text ).notToInclude( "nothing-like-it], which is not in the catalog. Did you mean" );
-				expect( text ).toInclude( "The ids are: atlassian, cloudflare, context7, git, github, notion, slack, stripe, supabase" );
+				expect( text ).toInclude( "The ids are: " & catalogIds().toList( ", " ) );
 			} );
 
 			it( "refuses an empty only, a key that is not a list and an unknown key", function() {

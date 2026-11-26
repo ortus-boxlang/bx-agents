@@ -54,10 +54,14 @@ class {
 			return { exitCode : 0, message : jsonSerialize( entries ) }
 		}
 		var lines = [ "ID           NAME                              HOW IN              RISK    VERIFIED" ]
-		for ( var entry in entries ) {
-			lines.append(
-				pad( entry.id, 13 ) & pad( entry.name, 34 ) & pad( ways( entry ), 20 ) & pad( entry.risk, 8 ) & entry.verifiedOn
-			)
+		for ( var group in arguments.catalog.grouped() ) {
+			lines.append( "" )
+			lines.append( group.category )
+			for ( var entry in group.connectors ) {
+				lines.append(
+					"  " & pad( entry.id, 13 ) & pad( entry.name, 34 ) & pad( ways( entry ), 20 ) & pad( entry.risk, 8 ) & entry.verifiedOn
+				)
+			}
 		}
 		lines.append( "" )
 		lines.append( "#entries.len()# connectors. Nothing is active until a person connects one. bxAgents connectors show <id> says more." )
@@ -87,6 +91,7 @@ class {
 			entry.summary,
 			"",
 			entry.transport == "http" ? "Address:  #entry.url#" : "Command:  #entry.command.toList( ' ' )#  (needs #entry.requires.program# on the PATH)",
+			"Group:    #entry.category#",
 			"Risk:     #entry.risk#. #entry.riskNote#",
 			"Docs:     #entry.docs#",
 			"Checked:  #entry.verifiedOn#",

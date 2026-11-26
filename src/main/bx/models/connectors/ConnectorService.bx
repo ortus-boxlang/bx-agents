@@ -47,6 +47,14 @@ class {
 	}
 
 	/**
+	 * @return The categories the offered connectors fall in, in the order they are shown
+	 */
+	array function categories() {
+		var present = variables.policy.available.map( c => c.category ?: "" )
+		return new "models.connectors.ConnectorCatalog@bxagents"().categories().filter( name => present.contains( name ) )
+	}
+
+	/**
 	 * @return The ids of the connectors that are offered
 	 */
 	array function ids() {
@@ -165,6 +173,7 @@ class {
 			id            : item.id,
 			name          : item.name,
 			icon          : item.icon,
+			category      : item.category ?: "",
 			summary       : item.summary,
 			transport     : item.transport,
 			host          : item.transport == "http" ? reReplace( item.url, "^https?://([^/:]+).*$", "\1" ) : "",

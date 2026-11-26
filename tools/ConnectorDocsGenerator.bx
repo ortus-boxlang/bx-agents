@@ -26,16 +26,24 @@ class {
 		out.append( "" )
 		out.append( "This page is written from the connector files in `src/main/bx/catalog/connectors/` (`tools/generate-connector-docs.bxs`), so it says what the product does. See [connectors](connectors.md) for how they work, and [how to add one](connectors.md##adding-a-connector)." )
 		out.append( "" )
-		out.append( "| Connector | Connects with | Risk | What it does |" )
-		out.append( "|---|---|---|---|" )
-		for ( var entry in catalog.all() ) {
-			out.append( "| [#cell( entry.name )#](###slug( entry.name )#) | #how( entry )# | #entry.risk# | #cell( entry.summary )# |" )
+		var ordered = []
+		for ( var group in catalog.grouped() ) {
+			out.append( "#### " & group.category )
+			out.append( "" )
+			out.append( "| Connector | Connects with | Risk | What it does |" )
+			out.append( "|---|---|---|---|" )
+			for ( var entry in group.connectors ) {
+				out.append( "| [#cell( entry.name )#](###slug( entry.name )#) | #how( entry )# | #entry.risk# | #cell( entry.summary )# |" )
+				ordered.append( entry )
+			}
+			out.append( "" )
 		}
-		for ( var entry in catalog.all() ) {
+		out.append( "#### Details" )
+		for ( var entry in ordered ) {
 			out.append( "" )
-			out.append( "#### #entry.name#" )
+			out.append( "###### #entry.name#" )
 			out.append( "" )
-			out.append( "`#entry.id#`. #entry.summary#." )
+			out.append( "`#entry.id#`. #entry.summary#. Listed under #entry.category#." )
 			out.append( "" )
 			out.append( "- **Connects with:** #how( entry )#." )
 			out.append( "- **Risk:** #entry.risk#. #entry.riskNote#" )

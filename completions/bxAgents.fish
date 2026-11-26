@@ -212,7 +212,7 @@ for cmd in bxAgents bxagents
     complete -c $cmd -n '__bxagents_using_verb new' -l guard -x -a 'off flag block'
     complete -c $cmd -n '__bxagents_using_verb new' -l host -x
     complete -c $cmd -n '__bxagents_using_verb new' -l max-tokens -x
-    complete -c $cmd -n '__bxagents_using_verb new' -l mcp -x -a 'atlassian cloudflare context7 git github notion slack stripe supabase'
+    complete -c $cmd -n '__bxagents_using_verb new' -l mcp -x -a 'atlassian buffer cloudflare context7 git github linear notion slack stripe supabase zapier'
     complete -c $cmd -n '__bxagents_using_verb new' -l memory -x -a 'cache file'
     complete -c $cmd -n '__bxagents_using_verb new' -l model -x
     complete -c $cmd -n '__bxagents_using_verb new' -l name -x

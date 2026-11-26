@@ -22,9 +22,14 @@
 	<div x-show="tab !== 'agent'">
 		#view( view = "connectors/_banner", module = "bxagentsui" )#
 		<p class="pg-note" x-show="!loading && !failed && !shown.length" x-cloak x-text="emptyText"></p>
-		<div class="grid conn-grid">
-			<template x-for="row in shown" :key="row.id">#view( view = "connectors/_card", module = "bxagentsui" )#</template>
-		</div>
+		<template x-for="group in groups" :key="group.category">
+			<section class="conn-group" :aria-label="group.category">
+				<h2 class="conn-group-title" x-text="group.category"></h2>
+				<div class="grid conn-grid">
+					<template x-for="row in group.rows" :key="row.id">#view( view = "connectors/_card", module = "bxagentsui" )#</template>
+				</div>
+			</section>
+		</template>
 	</div>
 	<div x-show="tab === 'agent'" x-cloak>#view( view = "connectors/_servers", module = "bxagentsui" )#</div>
 	#view( view = "_components/ui/modal", module = "bxagentsui", args = { title : "Connect", titleExpression : "connectTitle", open : "connect.open", contentView : "connectors/_connect", icon : "plug" } )#

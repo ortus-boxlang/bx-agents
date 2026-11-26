@@ -221,7 +221,7 @@ class extends="testbox.system.BaseSpec" {
 				var found = reporter.build( root ).connectors;
 
 				expect( found.mode ).toBe( "all" );
-				expect( found.available.map( c => c.id ) ).toBe( [ "atlassian", "cloudflare", "context7", "git", "github", "notion", "slack", "stripe", "supabase" ] );
+				expect( found.available.map( c => c.id ) ).toBe( new bxagents.models.connectors.ConnectorCatalog().ids() );
 				expect( found.excluded ).toBeEmpty();
 				expect( found.available.filter( c => c.id == "github" )[ 1 ].ways ).toBe( "token" );
 				expect( found.available.filter( c => c.id == "notion" )[ 1 ].ways ).toBe( "sign in, token" );
@@ -233,7 +233,7 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( found.mode ).toBe( "only" );
 				expect( found.available.map( c => c.id ) ).toBe( [ "github", "notion", "supabase" ] );
-				expect( found.excluded ).toBe( [ "atlassian", "cloudflare", "context7", "git", "slack", "stripe" ] );
+				expect( found.excluded ).toBe( new bxagents.models.connectors.ConnectorCatalog().ids().filter( id => ![ "github", "notion", "supabase" ].contains( id ) ) );
 				expect( found.available.filter( c => c.id == "supabase" )[ 1 ].overridden ).toBeTrue();
 				expect( found.available.filter( c => c.id == "github" )[ 1 ].overridden ).toBeFalse();
 			} );
