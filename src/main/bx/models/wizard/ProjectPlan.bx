@@ -47,6 +47,7 @@ class {
 			template    : "minimal",
 			model       : "",
 			provider    : "",
+			baseUrl     : "",
 			tuning      : { temperature : "", maxTokens : "", timeout : "" },
 			with        : [],
 			search      : "",
@@ -81,6 +82,10 @@ class {
 		}
 		plan.model = trim( o.model ?: "" )
 		plan.provider = providerOf( plan.model )
+		plan.baseUrl = trim( o[ "base-url" ] ?: "" )
+		if ( len( plan.baseUrl ) && !isServerAddress( plan.baseUrl ) ) {
+			fail( "base-url", "[#plan.baseUrl#] is not an address. Write it as http://127.0.0.1:1234/v1" )
+		}
 
 		plan.tuning = tuningFromFlags( o )
 
@@ -197,6 +202,9 @@ class {
 			parts.append( "--template=#p.template#" )
 		}
 		parts.append( "--model=#p.model#" )
+		if ( len( p.baseUrl ) ) {
+			parts.append( "--base-url=#p.baseUrl#" )
+		}
 		if ( len( p.tuning.temperature ) ) {
 			parts.append( "--temperature=#p.tuning.temperature#" )
 		}
@@ -308,6 +316,12 @@ class {
 			var names = p.files.tools == "all" ? variables.catalog.fileToolNames() : ( p.files.tools == "read" ? variables.catalog.readOnlyFileToolNames() : p.files.tools )
 			tools.append( names.map( name => name & "@bxai" ), true )
 			features.toolOptions = { bxai : { allowedPaths : p.files.folders } }
+		}
+
+		// a local server (LM Studio, llama.cpp) is the openai-compatible provider at another address; saying so under
+		// providers: applies it to every agent and profile that uses that provider
+		if ( len( p.baseUrl ) ) {
+			features.providerSettings = { "#providerOf( p.model )#" : { options : { baseURL : p.baseUrl } } }
 		}
 
 		var tuned = ModelTuning::settings( p.tuning )
@@ -468,6 +482,15 @@ class {
 			return "HTTP API"
 		}
 		return variables.catalog.channel( arguments.id ).name ?: arguments.id
+	}
+
+	/**
+	 * @address Text a person typed as a server address
+	 *
+	 * @return True for an http or https address with a host
+	 */
+	boolean function isServerAddress( required string address ) {
+		return reFindNoCase( "^https?://[^\s/]+(/\S*)?$", arguments.address ) > 0
 	}
 
 	/**
