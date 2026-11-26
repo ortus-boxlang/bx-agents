@@ -209,7 +209,7 @@ How the chat looks and behaves is a short list of settings, the same in every fi
 | `thinking` | `show`, `hide` | Show the model's thinking while it works, or only that it is working |
 | `tools` | `detail`, `summary`, `hidden` | Tool calls with their arguments and time, with only the name and result, or not at all |
 | `markdown` | `rendered`, `source` | Answers drawn with headings, lists, tables and coloured code, or as the text the model wrote |
-| `menuRows` | `8` (3 to 20) | How many commands or files the `/` and `@` menus show at once |
+| `menuRows` | `12` (3 to 20) | How many commands or files the `/` and `@` menus show at once |
 | `notify` | `off`, `bell`, `system` | Tell you when an answer that took more than ten seconds is done: nothing, the terminal bell, or a desktop notification |
 | `terminalTitle` | `true`, `false` | Put the agent's name in the terminal's title while the chat is open |
 
