@@ -43,7 +43,7 @@ It is a full-screen UI in the teal of the BxAgents logo. Arrow keys (or `j`/`k`)
 | Channels | Web chat, HTTP API, Telegram, Slack, Discord, WhatsApp, Teams, SMS, GitHub, Email, Signal | A `gateways/*.bx` file and the stubs it needs |
 | Web access | Open, a shared key, or named users with passwords | `apiKeyEnvVar` or `users` on the web chat entry |
 | Guard | Flag or block suspicious input, or turn the guard off | A [`security`](../conventions/agent-yaml.md#settings) block |
-| Look and feel | The terminal chat's prompt style (bars, bars-hints, rule, box or panel), then the widgets for the top bar and for the bottom (agent, profile, folder, user, clock, machine, git, date, session, elapsed, `ctx` for the context size) | A [`tui:`](../conventions/agent-yaml.md#settings) block, written only when you change something |
+| Look and feel | The terminal chat's prompt style (bars, bars-hints, rule, box or panel), then the widgets for the top bar and for the bottom (agent, profile, model, folder, user, clock, machine, git, date, session, elapsed, `ctx` for the context size) | A [`tui:`](../conventions/agent-yaml.md#settings) block, written only when you change something |
 | Deploy | Docker, DigitalOcean, SSH, SFTP, FTP, a local folder, or later | `deploy/<target>.json` |
 | Review | A summary of every answer and the one-line command that repeats it. Choose **Create the project**, **Start over** or **Cancel** | Nothing until you create |
 

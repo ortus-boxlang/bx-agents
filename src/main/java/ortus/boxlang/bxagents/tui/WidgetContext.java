@@ -31,7 +31,7 @@ public final class WidgetContext {
 
 	/** the agent's name */
 	public String					agent			= "";
-	/** the profile or model in use */
+	/** the profile in use, when there is one */
 	public String					profile			= "";
 	/** the model identifier (provider/model), for the prompt label */
 	public String					model			= "";

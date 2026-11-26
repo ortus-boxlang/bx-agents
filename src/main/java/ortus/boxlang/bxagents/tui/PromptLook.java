@@ -33,7 +33,7 @@ import java.util.Map;
 public record PromptLook( String style, List<String> top, List<String> bottom ) {
 
 	/** the widgets in the top bar when nothing says otherwise */
-	public static final List<String> DEFAULT_TOP = List.of( "session" );
+	public static final List<String> DEFAULT_TOP = List.of( "model", "session" );
 	/** the widgets at the bottom when nothing says otherwise */
 	public static final List<String> DEFAULT_BOTTOM = List.of( "ctx", "profile" );
 

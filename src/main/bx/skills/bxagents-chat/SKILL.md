@@ -84,7 +84,7 @@ tui:
   tools: summary
 ```
 
-The message box look is `prompt` (`bars` default, `bars-hints`, `rule`, `box`, `panel`) and `widgets: { top, bottom }` (`agent`, `profile`, `folder`, `user`, `clock`, `machine`, `git`, `date`, `session`, `elapsed`, `ctx`). `/prompt box` and `/prompt top +git -clock` change them for this chat only.
+The message box look is `prompt` (`bars` default, `bars-hints`, `rule`, `box`, `panel`) and `widgets: { top, bottom }` (`agent`, `profile`, `model`, `folder`, `user`, `clock`, `machine`, `git`, `date`, `session`, `elapsed`, `ctx`). `/prompt box` and `/prompt top +git -clock` change them for this chat only.
 
 ## Notes and vault
 
