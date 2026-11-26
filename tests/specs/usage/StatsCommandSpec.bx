@@ -28,7 +28,7 @@ class extends="testbox.system.BaseSpec" {
 			}
 
 			function texts( required any reply ) {
-				return reply.blocks().filter( b => b.type == "text" ).map( b => b.text );
+				return reply.blocks().filter( b => b.type == "text" || b.type == "styled" ).map( b => b.type == "styled" ? b.segments.map( g => g.text ).toList( "" ) : b.text );
 			}
 
 			it( "is a terminal command: a web visitor or a chat platform is never shown everyone's totals", function() {
@@ -43,8 +43,11 @@ class extends="testbox.system.BaseSpec" {
 				var outcome = ask( "/stats", { available : true, recording : true, report : report } );
 
 				expect( outcome.chat.asked() ).toBe( [ { days : 30, by : "model" } ] );
-				expect( texts( outcome.reply )[ 1 ] ).toInclude( "3 calls, 45 tokens" );
-				expect( texts( outcome.reply )[ 1 ] ).toInclude( "gpt-5" );
+				var lines = texts( outcome.reply );
+				// a heading, the totals on one line, then a line a model
+				expect( lines[ 1 ] ).toInclude( "last 30 days" );
+				expect( lines[ 2 ] ).toInclude( "3 calls, 45 tokens" );
+				expect( lines.toList( "|" ) ).toInclude( "gpt-5" );
 			} );
 
 			it( "takes the days and the grouping", function() {
@@ -70,7 +73,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "shows older calls when it is off now but there are some", function() {
 				var outcome = ask( "/stats", { available : true, recording : false, report : report } );
 
-				expect( texts( outcome.reply )[ 1 ] ).toInclude( "Recording is off now" );
+				expect( texts( outcome.reply ).toList( "|" ) ).toInclude( "Recording is off now" );
 			} );
 
 			it( "turns usage on for them with /stats enable, writing the line into Agent.yml", function() {

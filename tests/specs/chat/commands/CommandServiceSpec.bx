@@ -22,7 +22,7 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			function texts( required struct answer ) {
-				return answer.blocks.filter( b => b.type == "text" ).map( b => b.text );
+				return answer.blocks.filter( b => b.type == "text" || b.type == "styled" ).map( b => b.type == "styled" ? b.segments.map( g => g.text ).toList( "" ) : b.text );
 			}
 
 			it( "offers the web commands, without the terminal-only ones", function() {
@@ -33,28 +33,26 @@ class extends="testbox.system.BaseSpec" {
 				expect( names ).notToInclude( "/exit" );
 			} );
 
-			it( "answers /info as a table about the agent, the caller and the conversation", function() {
+			it( "answers /info with a heading and a labelled line each about the agent, the caller and the conversation", function() {
 				var answer = service.execute( "alice", "c-1", "/info" );
 
 				expect( answer.success ).toBeTrue();
 				expect( answer.conversationId ).toBe( "c-1" );
-				var table = answer.blocks[ 1 ];
-				expect( table.type ).toBe( "table" );
-				expect( table.layout ).toBe( "keyvalue" );
-				var rows = {};
-				table.rows.each( r => rows[ r[ 1 ] ] = r[ 2 ] );
-				expect( rows.Agent ).toBe( "helper" );
-				expect( rows.Mode ).toBe( "server" );
-				expect( rows.User ).toBe( "alice" );
-				expect( rows.Conversation ).toBe( "c-1" );
+				expect( answer.blocks[ 1 ] ).toBe( { type : "text", style : "accent", text : "Chat Info" } );
+				var lines = texts( answer );
+				expect( lines ).toInclude( "Agent: helper" );
+				expect( lines ).toInclude( "Mode: server" );
+				expect( lines ).toInclude( "User: alice" );
+				expect( lines ).toInclude( "Conversation: c-1" );
 				// where the database file is stays on the server
-				expect( rows.keyExists( "Database" ) ).toBeFalse();
+				expect( lines.filter( l => l.startsWith( "Database" ) ) ).toBeEmpty();
 			} );
 
 			it( "answers with data that goes through JSON unchanged", function() {
 				var answer = service.execute( "alice", "c-1", "/info" );
 				var again = jsonDeserialize( jsonSerialize( answer ) );
-				expect( again.blocks[ 1 ].type ).toBe( "table" );
+				expect( again.blocks[ 2 ].type ).toBe( "styled" );
+				expect( again.blocks[ 2 ].segments[ 1 ] ).toHaveKey( "text" );
 				expect( again.conversationId ).toBe( "c-1" );
 			} );
 
@@ -72,9 +70,14 @@ class extends="testbox.system.BaseSpec" {
 				sessions.touch( "bob", "c-3", "not alice's" );
 
 				var listed = service.execute( "alice", "", "/sessions" );
-				var rows = listed.blocks[ 1 ].rows;
+				var lines = texts( listed );
+				expect( lines[ 1 ] ).toBe( "Recent Conversations" );
+				// one numbered line a conversation, and the hint on how to go back to one
+				var rows = lines.filter( l => reFind( "^\s+\d+\s", l ) );
 				expect( rows ).toHaveLength( 2 );
-				expect( rows.map( r => r[ 2 ] ).sort( "text" ) ).toBe( [ "first question", "second question" ] );
+				expect( rows.filter( l => l.find( "first question" ) ) ).toHaveLength( 1 );
+				expect( rows.filter( l => l.find( "second question" ) ) ).toHaveLength( 1 );
+				expect( lines.filter( l => l.find( "not alice's" ) ) ).toBeEmpty();
 
 				var opened = service.execute( "alice", "", "/resume c-1" );
 				expect( opened.conversationId ).toBe( "c-1" );
@@ -101,8 +104,8 @@ class extends="testbox.system.BaseSpec" {
 				var answer = service.execute( "alice", "c-1", "/profile fast" );
 				expect( texts( answer )[ 1 ] ).toInclude( "not available here" );
 				var model = service.execute( "alice", "c-1", "/model" );
-				expect( texts( model )[ 1 ] ).toInclude( "Model:" );
-				expect( texts( model ).filter( t => t.startsWith( "Type /profile" ) ) ).toBeEmpty();
+				expect( texts( model ).toList( "|" ) ).toInclude( "Model:" );
+				expect( texts( model ).filter( t => trim( t ).startsWith( "Type /profile" ) ) ).toBeEmpty();
 			} );
 
 			describe( "naming, forking and exporting a conversation", function() {
@@ -195,38 +198,39 @@ class extends="testbox.system.BaseSpec" {
 				it( "tests a profile the app offers, and refuses one it does not", function() {
 					var offering = new bxagents.models.chat.commands.CommandService( agent : agent, sessions : sessions, offered : [ "fast" ] );
 					var ok = offering.execute( "alice", "c-1", "/ping fast" ).blocks[ 1 ];
-					expect( ok.style ).toBe( "ok" );
-					expect( ok.text ).toInclude( "mock/fast-model answered" );
+					expect( ok.type ).toBe( "styled" );
+					expect( ok.segments.map( g => g.text ).toList( "" ) ).toInclude( "mock/fast-model answered" );
 
 					var refused = offering.execute( "alice", "c-1", "/ping secret" ).blocks[ 1 ];
-					expect( refused.style ).toBe( "warn" );
-					expect( refused.text ).toInclude( "That profile is not offered here." );
+					// the model, then why it could not be tested, as one line of mixed styles
+					expect( refused.type ).toBe( "styled" );
+					expect( refused.segments.map( g => g.text ).toList( "" ) ).toInclude( "That profile is not offered here." );
 				} );
 
 			} );
 
 			it( "answers /keys on the web with the page's own shortcuts", function() {
-				var table = service.execute( "alice", "c-1", "/keys" ).blocks[ 1 ];
-				expect( table.type ).toBe( "table" );
-				expect( table.rows.map( r => r[ 2 ] ) ).toInclude( "Send the message" );
-				expect( table.rows.map( r => r[ 2 ] ) ).toInclude( "New line in the message" );
+				var lines = texts( service.execute( "alice", "c-1", "/keys" ) );
+				expect( lines[ 1 ] ).toBe( "Keyboard Shortcuts" );
+				expect( lines.filter( l => l.find( "Send the message" ) ) ).toHaveLength( 1 );
+				expect( lines.filter( l => l.find( "New line in the message" ) ) ).toHaveLength( 1 );
 			} );
 
 			it( "answers /context with the parts of the context and how big each is, nothing sent to a model", function() {
 				agent.run( "plan the launch", {}, { userId : "alice", conversationId : "c-1" } );
 				var answer = service.execute( "alice", "c-1", "/context" );
 
-				var table = answer.blocks[ 1 ];
-				expect( table.type ).toBe( "table" );
-				expect( table.layout ).toBe( "grid" );
-				expect( table.rows.map( r => r[ 1 ] ) ).toBe( [ "System prompt", "Tool definitions", "Notes", "Messages", "Total" ] );
-				expect( table.rows[ 4 ][ 3 ] ).toBe( "2 messages" );
-				expect( texts( answer ).filter( t => t.startsWith( "Estimates" ) ) ).toHaveLength( 1 );
+				var lines = texts( answer );
+				expect( lines[ 1 ] ).toBe( "Context" );
+				// a heading, a line a part with its label in the first 18 characters, and the total last
+				expect( lines.slice( 2, 5 ).map( l => trim( left( l, 18 ) ) ) ).toBe( [ "System prompt", "Tool definitions", "Notes", "Messages", "Total" ] );
+				expect( lines[ 5 ] ).toInclude( "2 messages" );
+				expect( lines.filter( t => trim( t ).startsWith( "Estimates" ) ) ).toHaveLength( 1 );
 			} );
 
 			it( "says the project does not give the window when it does not, and shows the bar when it does", function() {
 				var unsized = texts( service.execute( "alice", "c-1", "/context" ) );
-				expect( unsized.filter( t => t.startsWith( "The project does not say" ) ) ).toHaveLength( 1 );
+				expect( unsized.filter( t => trim( t ).startsWith( "The project does not say" ) ) ).toHaveLength( 1 );
 
 				var settings = getModuleInfo( "bxai" ).settings;
 				var saved = settings.bxagents ?: {};

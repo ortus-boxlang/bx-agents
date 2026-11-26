@@ -32,6 +32,9 @@ class extends="testbox.system.BaseSpec" {
 				s.printUser = ( text ) => s.log.append( [ "user", text ] )
 				s.print = ( style, text ) => s.log.append( [ "print", style, text ] )
 				s.printMarkdown = ( text ) => s.log.append( [ "markdown", text ] )
+				// a line of mixed styles is logged as a print of its plain text (style "styled"), and a blank line on its own
+				s.printStyled = ( segments ) => s.log.append( [ "print", "styled", segments.map( g => g.text ).toList( "" ) ] )
+				s.blankLine = () => s.log.append( [ "blank" ] )
 				s.beginTurn = () => s.log.append( [ "begin" ] )
 				s.endTurn = () => s.log.append( [ "end" ] )
 				s.push = ( event ) => s.pushed.append( event )
@@ -238,7 +241,8 @@ class extends="testbox.system.BaseSpec" {
 					controllerFor( screen, fakeSession() ).run( screen )
 
 					var printed = screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
-					expect( printed[ 1 ] ).toInclude( "openai/gpt-5" );
+					expect( printed[ 1 ] ).toBe( "Model" );
+					expect( printed ).toInclude( "Model: openai/gpt-5" );
 					expect( printed.some( p => p.startsWith( "Profile: default" ) ) ).toBeTrue();
 				} );
 
@@ -315,7 +319,8 @@ class extends="testbox.system.BaseSpec" {
 				var screen = fakeScreen( [ "/tools" ] )
 				controllerFor( screen, fakeSession() ).run( screen )
 
-				expect( screen.log.filter( e => e[ 1 ] == "print" )[ 1 ][ 3 ] ).toBe( "Tools: now, httpGet" );
+				// a heading, then a bullet a tool
+				expect( screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] ) ).toBe( [ "Tools", "· now", "· httpGet" ] );
 			} );
 
 			it( "copies the last answer on /copy, and says when there is none", function() {
@@ -435,7 +440,7 @@ class extends="testbox.system.BaseSpec" {
 				controllerFor( known, session ).run( known )
 				var shown = known.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
 				expect( shown ).toInclude( "Context: 128,000 tokens" );
-				expect( shown ).toInclude( "Images:  the model can see them" );
+				expect( shown ).toInclude( "Images: the model can see them" );
 			} );
 
 			it( "tests the model on /ping, and a named profile on /ping <profile>", function() {
@@ -445,8 +450,9 @@ class extends="testbox.system.BaseSpec" {
 
 				expect( session.pinged ).toBe( [ "", "fast" ] );
 				var printed = screen.log.filter( e => e[ 1 ] == "print" )
-				expect( printed[ 1 ][ 2 ] ).toBe( "ok" );
-				expect( printed[ 1 ][ 3 ] ).toBe( "openai/gpt-5 answered in 412 ms." );
+				// one line of mixed styles: the model, then what it answered
+				expect( printed[ 1 ][ 2 ] ).toBe( "styled" );
+				expect( printed[ 1 ][ 3 ] ).toBe( "openai/gpt-5 answered in 412 ms" );
 			} );
 
 			it( "prints what /context says, from the session's report", function() {
@@ -460,14 +466,15 @@ class extends="testbox.system.BaseSpec" {
 				controllerFor( screen, session ).run( screen )
 
 				var printed = screen.log.filter( e => e[ 1 ] == "print" ).map( e => e[ 3 ] )
-				expect( printed[ 1 ] ).toStartWith( "System prompt" );
-				expect( printed[ 1 ] ).toInclude( "~800" );
-				expect( printed[ 2 ] ).toInclude( "2 tools" );
-				expect( printed[ 3 ] ).toStartWith( "Total" );
-				expect( printed[ 3 ] ).toInclude( "of 8,000 tokens" );
-				expect( printed[ 4 ] ).toBe( "[##---------] 14% of the window" );
-				expect( printed[ 5 ] ).toBe( "Largest tool definitions: httpGet ~200, now ~100" );
-				expect( printed[ 6 ] ).toInclude( "1 MCP server are fetched" );
+				expect( printed[ 1 ] ).toBe( "Context" );
+				expect( printed[ 2 ] ).toStartWith( "System prompt" );
+				expect( printed[ 2 ] ).toInclude( "~800" );
+				expect( printed[ 3 ] ).toInclude( "2 tools" );
+				expect( printed[ 4 ] ).toStartWith( "Total" );
+				expect( printed[ 4 ] ).toInclude( "of 8,000 tokens" );
+				expect( printed[ 5 ] ).toBe( "[##---------] 14% of the window" );
+				expect( printed[ 6 ] ).toBe( "Largest tool definitions: httpGet ~200, now ~100" );
+				expect( printed[ 7 ] ).toInclude( "1 MCP server are fetched" );
 			} );
 
 			it( "shows the size of the context in the hint row before each prompt, with the window when it is known", function() {
@@ -744,7 +751,7 @@ class extends="testbox.system.BaseSpec" {
 				controllerFor( screen, session ).run( screen )
 
 				var printed = screen.log.filter( e => e[ 1 ] == "print" )
-				expect( printed[ 1 ][ 2 ] ).toBe( "warn" );
+				expect( printed[ 1 ][ 2 ] ).toBe( "styled" );
 				expect( printed[ 1 ][ 3 ] ).toBe( "claude/claude-opus-4: No API key was found for claude, so there is nothing to test yet." );
 			} );
 
@@ -852,7 +859,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "offers its commands to the screen for the slash menu", function() {
 				var names = new bxagents.models.cli.chat.ChatController( fakeSession() ).commands().map( c => c.name )
 
-				expect( names ).toBe( [ "/help", "/new", "/name", "/fork", "/tools", "/volumes", "/skills", "/routines", "/routine", "/sessions", "/agent", "/resume", "/clear", "/cls", "/settings", "/compact", "/context", "/stats", "/keys", "/prompt", "/model", "/ping", "/profile", "/default", "/info", "/remember", "/notes", "/logs", "/vault", "/connect", "/copy", "/export", "/record", "/exit" ] );
+				expect( names ).toBe( [ "/agent", "/clear", "/cls", "/compact", "/connect", "/context", "/copy", "/default", "/exit", "/export", "/fork", "/help", "/info", "/keys", "/logs", "/model", "/name", "/new", "/notes", "/ping", "/profile", "/prompt", "/record", "/remember", "/resume", "/routine", "/routines", "/sessions", "/settings", "/skills", "/stats", "/tools", "/vault", "/volumes" ] );
 			} );
 
 		} );

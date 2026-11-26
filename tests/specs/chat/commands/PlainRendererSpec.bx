@@ -1,0 +1,45 @@
+/**
+ * PlainRenderer: a command's answer as plain text for a chat app. Every kind of block the commands make has to come out as text,
+ * or a person on Telegram or Slack gets an empty answer. The "styled" block (a line of mixed styles, Reply.styled()) was left out
+ * once, which dropped every labelled line of /info, /help and the rest on a gateway.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "PlainRenderer", function() {
+
+			beforeEach( function() {
+				variables.renderer = new bxagents.models.chat.commands.PlainRenderer();
+			} );
+
+			it( "writes a line of mixed styles as the text of its segments", function() {
+				var reply = new bxagents.models.chat.commands.Reply()
+					.header( "Chat Info" )
+					.labelValue( "Agent", "helper" )
+					.commandLine( "/help", "What I can do" )
+					.bullet( "one" )
+					.indent( "a hint" );
+
+				expect( renderer.render( reply.toStruct() ).listToArray( char( 10 ) ) ).toBe( [ "Chat Info", "Agent: helper", "/help  What I can do", "· one", "  a hint" ] );
+			} );
+
+			it( "still writes plain text, lines, tables, choices and transcripts", function() {
+				var reply = new bxagents.models.chat.commands.Reply()
+					.ok( "Done." )
+					.keyValues( [ [ "Agent", "helper" ] ] )
+					.choose( "Which?", [ { label : "a", hint : "the first", line : "/x a" } ] );
+
+				expect( renderer.render( reply.toStruct() ).listToArray( char( 10 ) ) ).toBe( [ "Done.", "Agent: helper", "Which?", "1. a (the first): /x a" ] );
+			} );
+
+			it( "survives the trip over HTTP as JSON, which is how a served agent hands the answer to a gateway", function() {
+				var reply = new bxagents.models.chat.commands.Reply().labelValue( "User", "alice" );
+				var again = jsonDeserialize( jsonSerialize( reply.toStruct() ) );
+
+				expect( renderer.render( again ) ).toBe( "User: alice" );
+			} );
+
+		} );
+	}
+
+}

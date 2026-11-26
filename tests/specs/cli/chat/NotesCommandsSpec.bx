@@ -18,6 +18,8 @@ class extends="testbox.system.BaseSpec" {
 				}
 				s.banner = ( agent, model, mode ) => {}
 				s.print = ( style, text ) => s.printed.append( style & ": " & text )
+				s.printStyled = ( segments ) => s.printed.append( "styled: " & segments.map( g => g.text ).toList( "" ) )
+				s.blankLine = () => s.printed.append( "blank" )
 				s.printUser = ( text ) => {}
 				s.beginTurn = () => {}
 				s.endTurn = () => {}
@@ -120,8 +122,8 @@ class extends="testbox.system.BaseSpec" {
 				provider.add( "user", "alice", "likes tea" );
 				var out = say( sessionWith( kept ), [ "/notes stats" ] );
 
-				expect( out ).toInclude( "user  (alice)" );
-				expect( out ).toInclude( "agent (shared)" );
+				expect( out ).toInclude( "User (alice): " );
+				expect( out ).toInclude( "Agent (shared): " );
 				expect( out ).toInclude( "In the system prompt: 9 characters" );
 			} );
 
