@@ -768,7 +768,7 @@ public final class ChatScreen implements AutoCloseable {
 	 * @param text  the note
 	 */
 	public void print( String style, String text ) {
-		String			marker	= style.equals( "error" ) ? " ✖ " : style.equals( "ok" ) ? " ✔ " : style.equals( "warn" ) ? " ! " : " · ";
+		String			marker	= style.equals( "error" ) ? "✖ " : style.equals( "ok" ) ? "✔ " : style.equals( "warn" ) ? "! " : "· ";
 		Row				r		= Row.of().add( marker, styleOf( style ) );
 		List<String>	lines	= Wrap.wrap( text, Math.max( 20, runner.width() - 6 ) );
 		for ( int i = 0; i < lines.size(); i++ ) {
@@ -1536,7 +1536,7 @@ public final class ChatScreen implements AutoCloseable {
 		boolean	ok		= status.equals( "ok" );
 		Object	ms		= get( e, "ms" );
 		String	took	= ms == null ? "" : String.format( "  %.1fs", Double.parseDouble( String.valueOf( ms ) ) / 1000.0 );
-		Row		r		= Row.of().add( " ⚙ ", theme.muted ).add( String.valueOf( get( e, "name" ) ), theme.accentBold );
+		Row		r		= Row.of().add( "⚙ ", theme.muted ).add( String.valueOf( get( e, "name" ) ), theme.accentBold );
 		String	summary	= String.valueOf( get( e, "summary" ) );
 		if ( !summary.isEmpty() && !summary.equals( "null" ) && "detail".equals( settings.get( "tools" ) ) ) {
 			r.add( "  " + clip( summary, Math.max( 10, runner.width() - 30 ) ), theme.muted );
