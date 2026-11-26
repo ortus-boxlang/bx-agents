@@ -119,7 +119,7 @@ class extends="testbox.system.BaseSpec" {
 				session.handleInbound( message( "/help" ), mock );
 
 				expect( shown ).toHaveLength( 1 );
-				expect( shown[ 1 ] ).toBe( [ "/help", "/tools", "/model", "/ping", "/info", "/remember", "/notes", "/connect" ] );
+				expect( shown[ 1 ] ).toBe( [ "/connect", "/help", "/info", "/model", "/notes", "/ping", "/remember", "/tools" ] );
 			} );
 
 			it( "keeps answering when a gateway fails to take the menu", function() {
@@ -162,7 +162,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "does not offer a command outside its safe set, such as /clear", function() {
 				var session = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ] );
-				expect( session.commandMenu().map( c => c.name ) ).toBe( [ "/help", "/tools", "/model", "/ping", "/info", "/remember", "/notes", "/connect" ] );
+				expect( session.commandMenu().map( c => c.name ) ).toBe( [ "/connect", "/help", "/info", "/model", "/notes", "/ping", "/remember", "/tools" ] );
 				var done = session.handleInbound( message( "/clear" ), mock );
 				expect( isNull( done ) ).toBeFalse();
 				done.get();
@@ -170,7 +170,7 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "can be widened or switched off in the project's config", function() {
 				var wide = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ mock ], commands : { allow : [ "help", "clear" ] } );
-				expect( wide.commandMenu().map( c => c.name ) ).toBe( [ "/help", "/clear" ] );
+				expect( wide.commandMenu().map( c => c.name ) ).toBe( [ "/clear", "/help" ] );
 
 				var off = new bxagents.models.gateways.CommandGatewaySession( store : store, agent : agent, gateways : [ aiGateway( "mock" ) ], commands : { enabled : false } );
 				var done = off.handleInbound( message( "/help" ), mock );
@@ -320,7 +320,7 @@ class extends="testbox.system.BaseSpec" {
 
 				it( "answers /routines and /routine for the person on the chat app, once the developer allows them", function() {
 					var session = routineSession();
-					expect( session.commandMenu().map( c => c.name ) ).toBe( [ "/routines", "/routine" ] );
+					expect( session.commandMenu().map( c => c.name ) ).toBe( [ "/routine", "/routines" ] );
 
 					session.handleInbound( message( "/routines", "ada" ), mock );
 					expect( replies()[ 1 ] ).toInclude( "daily" );

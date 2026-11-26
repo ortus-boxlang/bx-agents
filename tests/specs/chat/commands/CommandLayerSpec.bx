@@ -57,20 +57,21 @@ class extends="testbox.system.BaseSpec" {
 					variables.context = ( transport, admin = true ) => new bxagents.models.chat.commands.CommandContext( {}, transport, admin );
 				} );
 
-				it( "lists the built-in commands in the order the help shows them", function() {
-					expect( registry.menu( "tui" ).map( c => c.name ) ).toBe( [ "/help", "/new", "/name", "/fork", "/tools", "/volumes", "/skills", "/routines", "/routine", "/sessions", "/agent", "/resume", "/clear", "/cls", "/settings", "/compact", "/context", "/stats", "/keys", "/prompt", "/model", "/ping", "/profile", "/default", "/info", "/remember", "/notes", "/logs", "/vault", "/connect", "/copy", "/export", "/record", "/exit" ] );
+				it( "lists the built-in commands alphabetically, as the help shows them", function() {
+					expect( registry.menu( "tui" ).map( c => c.name ) ).toBe( [ "/agent", "/clear", "/cls", "/compact", "/connect", "/context", "/copy", "/default", "/exit", "/export", "/fork", "/help", "/info", "/keys", "/logs", "/model", "/name", "/new", "/notes", "/ping", "/profile", "/prompt", "/record", "/remember", "/resume", "/routine", "/routines", "/sessions", "/settings", "/skills", "/stats", "/tools", "/vault", "/volumes" ] );
 				} );
 
 				it( "leaves the terminal-only commands out of the web menu, and the conversation ones out of the gateway menu", function() {
 					var web = registry.menu( "web" ).map( c => c.name );
-					expect( web ).toBe( [ "/help", "/new", "/name", "/fork", "/tools", "/volumes", "/skills", "/routines", "/routine", "/sessions", "/resume", "/clear", "/compact", "/context", "/keys", "/model", "/ping", "/info", "/remember", "/notes", "/vault", "/connect", "/export" ] );
-					expect( registry.menu( "gateway" ).map( c => c.name ) ).toBe( [ "/help", "/new", "/tools", "/volumes", "/skills", "/routines", "/routine", "/sessions", "/resume", "/clear", "/compact", "/model", "/ping", "/info", "/remember", "/notes", "/vault", "/connect" ] );
+					expect( web ).toBe( [ "/clear", "/compact", "/connect", "/context", "/export", "/fork", "/help", "/info", "/keys", "/model", "/name", "/new", "/notes", "/ping", "/remember", "/resume", "/routine", "/routines", "/sessions", "/skills", "/tools", "/vault", "/volumes" ] );
+					expect( registry.menu( "gateway" ).map( c => c.name ) ).toBe( [ "/clear", "/compact", "/connect", "/help", "/info", "/model", "/new", "/notes", "/ping", "/remember", "/resume", "/routine", "/routines", "/sessions", "/skills", "/tools", "/vault", "/volumes" ] );
 				} );
 
 				it( "builds every built-in the catalog lists, in its order, each named after its class", function() {
 					var builtins = new bxagents.models.chat.commands.CommandCatalog().builtins();
 					expect( builtins ).toHaveLength( 34 );
-					expect( registry.menu( "tui" ).map( c => c.name ) ).toBe( builtins.map( n => "/" & lCase( n ) ) );
+					// the menu and the help list the commands alphabetically (CommandRegistry.menu), the catalog keeps its own order
+					expect( registry.menu( "tui" ).map( c => c.name ) ).toBe( builtins.map( n => "/" & lCase( n ) ).sort( ( a, b ) => compareNoCase( a, b ) ) );
 					// a copy: changing it leaves the catalog as it was
 					builtins.clear();
 					expect( new bxagents.models.chat.commands.CommandCatalog().builtins() ).toHaveLength( 34 );
@@ -112,7 +113,7 @@ class extends="testbox.system.BaseSpec" {
 							return { ok : true, area : area, lines : [ { time : "2026-11-19T05:00:00,000", level : "error", subject : "telegram", message : "send failed" } ] };
 						}
 					};
-					var run = ( text, admin = true ) => registry.run( text, new bxagents.models.chat.commands.CommandContext( chat, "tui", admin ) ).blocks().map( b => b.text );
+					var run = ( text, admin = true ) => registry.run( text, new bxagents.models.chat.commands.CommandContext( chat, "tui", admin ) ).blocks().map( b => b.type == "styled" ? b.segments.map( g => g.text ).toList( "" ) : b.text );
 
 					expect( run( "/logs" ).toList( "|" ) ).toInclude( "gateways" );
 					expect( run( "/logs gateways --tail=5 --level=error --grep=send" ).toList( "|" ) ).toInclude( "ERROR  [telegram] send failed" );

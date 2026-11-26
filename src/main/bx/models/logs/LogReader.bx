@@ -33,7 +33,9 @@ class {
 	}
 
 	/**
-	 * @return [ { area, file, bytes, modified } ] for the areas that have a file, in the order of Logger::areas()
+	 * @return [ { area, file, bytes, modified } ] for the areas that have a log with something in it, in the order of Logger::areas().
+	 *         Logger::use() makes every area's logger up front (to keep it out of the console), which makes an empty file for each: an
+	 *         empty one is not a log yet, so the list and "No logs yet" are as they were.
 	 */
 	array function list() {
 		var found = []
@@ -41,7 +43,9 @@ class {
 			var file = variables.folder & "/" & area & ".log"
 			if ( fileExists( file ) ) {
 				var info = getFileInfo( file )
-				found.append( { area : area, file : area & ".log", bytes : info.size, modified : info.lastModified } )
+				if ( info.size > 0 ) {
+					found.append( { area : area, file : area & ".log", bytes : info.size, modified : info.lastModified } )
+				}
 			}
 		}
 		return found

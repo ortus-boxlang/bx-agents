@@ -130,7 +130,13 @@ describe( "the counters", () => {
 
 describe( "embed icons", () => {
 	it( "offers the five built-in names, with the chat bubble as the default", () => {
-		expect( ICONS.map( i => i.name ) ).toEqual( [ "chat", "question", "sparkle", "headset", "book" ] );
+		expect( ICONS.map( i => i.name ) ).toEqual( [
+			"chat",
+			"question",
+			"sparkle",
+			"headset",
+			"book"
+		] );
 		expect( blankEmbed().look.icon ).toBe( "chat" );
 	} );
 

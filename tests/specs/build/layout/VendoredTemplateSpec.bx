@@ -40,8 +40,9 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "keeps the mappings the layout depends on, relative to the folder the server runs in", function() {
 				var config = fileRead( root & "/runtime/boxlang.json" );
-				for ( var mapping in [ '"/app" :  {"path": "${user-dir}/app"', '"/public" : "${user-dir}/public"', '"/modules" :  {"path": "${user-dir}/lib/modules", "external": true }' ] ) {
-					expect( config ).toInclude( mapping );
+				// the file has comments, so it is read as text; white space between the parts is not part of what is checked
+				for ( var mapping in [ '"/app"\s*:\s*\{\s*"path"\s*:\s*"\$\{user-dir\}/app"', '"/public"\s*:\s*"\$\{user-dir\}/public"', '"/modules"\s*:\s*\{\s*"path"\s*:\s*"\$\{user-dir\}/lib/modules"\s*,\s*"external"\s*:\s*true' ] ) {
+					expect( reFind( mapping, config ) ).toBeGT( 0, mapping );
 				}
 				expect( config ).toInclude( '"${user-dir}/runtime/modules"' );
 			} );

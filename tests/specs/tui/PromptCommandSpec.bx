@@ -17,7 +17,7 @@ class extends="testbox.system.BaseSpec" {
 			}
 
 			function texts( required any reply ) {
-				return reply.blocks().filter( b => b.type == "text" ).map( b => b.text );
+				return reply.blocks().filter( b => b.type == "text" || b.type == "styled" ).map( b => b.type == "styled" ? b.segments.map( g => g.text ).toList( "" ) : b.text );
 			}
 
 			it( "is in the terminal's menu and not the web's", function() {
@@ -28,12 +28,16 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "shows the style and widgets in use, and the choices", function() {
 				var reply = ask( "/prompt" );
-				var tables = reply.blocks().filter( b => b.type == "table" );
+				var lines = texts( reply );
 
-				expect( tables[ 1 ].rows ).toBe( [ [ "prompt", "bars" ], [ "top", "agent, folder, user, clock" ], [ "bottom", "ctx, profile" ] ] );
-				expect( tables[ 2 ].rows.map( r => r[ 1 ] ) ).toInclude( "bars *" );
-				expect( tables[ 2 ].rows.map( r => r[ 1 ] ) ).toInclude( "panel" );
-				expect( tables[ 3 ].rows.map( r => r[ 1 ] ) ).toInclude( "git" );
+				expect( lines[ 1 ] ).toBe( "Prompt" );
+				expect( lines ).toInclude( "Style: bars" );
+				expect( lines ).toInclude( "Top bar: agent, folder, user, clock" );
+				expect( lines ).toInclude( "Bottom bar: ctx, profile" );
+				// the styles, the current one marked, and the widgets, each with its name first on its line
+				expect( lines.filter( l => l.startsWith( "bars *" ) ) ).toHaveLength( 1 );
+				expect( lines.filter( l => l.startsWith( "panel" ) ) ).toHaveLength( 1 );
+				expect( lines.filter( l => l.startsWith( "git" ) ) ).toHaveLength( 1 );
 			} );
 
 			it( "switches the style by name", function() {
