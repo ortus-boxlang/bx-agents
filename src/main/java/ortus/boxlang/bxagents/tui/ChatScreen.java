@@ -1568,8 +1568,8 @@ public final class ChatScreen implements AutoCloseable {
 	private List<Row> idleRows() {
 		List<Row> rows = new ArrayList<>();
 		slash.sync( composer.text(), composer.rowCount() );
-		List<Row> menu = slashRows();
-		List<String> files = atMatches();
+		List<Row>		menu	= slashRows();
+		List<String>	files	= atMatches();
 		for ( int i = 0; i < files.size(); i++ ) {
 			menu.add( Row.of().add( "   @" + files.get( i ), i == Math.min( atPick, files.size() - 1 ) ? theme.selected : theme.plain ) );
 		}
