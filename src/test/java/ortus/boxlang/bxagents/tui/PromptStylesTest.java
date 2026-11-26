@@ -188,8 +188,8 @@ class PromptStylesTest {
 	void lookDefaults() {
 		PromptLook look = PromptLook.of( null );
 		assertThat( look.style() ).isEqualTo( "bars" );
-		assertThat( look.top() ).isEmpty();
-		assertThat( look.bottom() ).containsExactly( "folder", "git", "ctx", "profile" ).inOrder();
+		assertThat( look.top() ).containsExactly( "session" );
+		assertThat( look.bottom() ).containsExactly( "ctx", "profile" ).inOrder();
 	}
 
 	@Test

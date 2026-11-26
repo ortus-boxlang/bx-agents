@@ -53,7 +53,7 @@ class TuiSettingsTest {
 		TuiSettings.Resolved resolved = TuiSettings.defaults();
 		assertThat( resolved.bool( "fullscreen" ) ).isTrue();
 		assertThat( resolved.get( "header" ) ).isEqualTo( "full" );
-		assertThat( resolved.integer( "menuRows" ) ).isEqualTo( 8 );
+		assertThat( resolved.integer( "menuRows" ) ).isEqualTo( 12 );
 		assertThat( resolved.source( "theme" ) ).isEqualTo( "default" );
 		for ( TuiSettings.Setting s : TuiSettings.ALL ) {
 			assertThat( TuiSettings.normalize( s, s.def() ) ).isEqualTo( s.def() );
