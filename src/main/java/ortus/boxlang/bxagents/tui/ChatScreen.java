@@ -1821,6 +1821,7 @@ public final class ChatScreen implements AutoCloseable {
 			    "  " + clip( item.description(), room ),
 			    theme.muted ) );
 		}
+		rows.add( Row.of() );
 		rows.add( Row.of(
 		    "   " + slash.position() + "/" + slash.size() + " · ↑↓ move · tab fills · enter " + ( slash.picked().runsAtOnce() ? "runs" : "fills" )
 		        + " · esc closes",
