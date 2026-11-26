@@ -1837,6 +1837,7 @@ public final class ChatScreen implements AutoCloseable {
 	private List<Row> turnRows() {
 		List<Row>	rows	= new ArrayList<>();
 		int			width	= Math.max( 20, runner.width() - 4 );
+		rows.add( Row.of() );
 		if ( segment.length() > 0 ) {
 			for ( String l : Wrap.tail( segment.toString(), width, MAX_TAIL ) ) {
 				rows.add( Row.of( "  " + l, theme.plain ) );
