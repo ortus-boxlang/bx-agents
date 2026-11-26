@@ -10,6 +10,14 @@ class extends="testbox.system.BaseSpec" {
 				variables.doc = new bxagents.models.api.OpenApiDocument( "demo", { manageTokens : true } ).build( "/__bxagents", "token" );
 			} );
 
+			it( "leaves the embed operations out when embeds are off", function() {
+				var withEmbeds = ApiContract::actions( {} ).filter( a => a.findNoCase( "embed" ) );
+				var without = ApiContract::actions( { embeds : false } ).filter( a => a.findNoCase( "embed" ) );
+
+				expect( withEmbeds ).notToBeEmpty();
+				expect( without ).toBeEmpty();
+			} );
+
 			it( "has a handler action for every route of the contract, with the token routes too", function() {
 				for ( var action in ApiContract::actions( { manageTokens : true } ) ) {
 					expect( handlerSource ).toInclude( "function #action#( event, rc, prc )", "no action #action#" );

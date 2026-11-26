@@ -84,7 +84,7 @@ class {
 	private function service() {
 		// once per request: the probe for the shared database is a query
 		if ( !request.keyExists( "bxagentsService" ) ) {
-			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered(), { manageTokens : manageTokens(), data : appData(), connections : connectionService(), gateways : gatewayInfo(), routines : jsonDeserialize( "__ROUTINES__" ), connectors : jsonDeserialize( "__CONNECTORS__" ), apiPath : apiPath(), served : accessMode() != "open" } )
+			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered(), { manageTokens : manageTokens(), embeds : embedsOn(), data : appData(), connections : connectionService(), gateways : gatewayInfo(), routines : jsonDeserialize( "__ROUTINES__" ), connectors : jsonDeserialize( "__CONNECTORS__" ), apiPath : apiPath(), served : accessMode() != "open" } )
 		}
 		return request.bxagentsService
 	}
@@ -133,6 +133,13 @@ class {
 	 */
 	private boolean function manageTokens() {
 		return "__MANAGE_TOKENS__" == "true"
+	}
+
+	/**
+	 * Whether embeds are on (agentApi.embeds, true unless the project turned it off), as the build stamped it in.
+	 */
+	private boolean function embedsOn() {
+		return "__EMBEDS__" != "false"
 	}
 
 	/**

@@ -36,6 +36,7 @@ agentApi:
   tokenEnvVar: TOKEN_FOR_ADMIN   # the NAME of an environment variable
   tokens: true                   # also accept tokens made with `bxAgents token create`
   manageTokens: true             # an admin may make and revoke tokens over the API
+  embeds: false                  # no embeds: leaves out the embed routes (default true)
 ```
 
 ## Connections

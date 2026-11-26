@@ -757,7 +757,7 @@ class {
 
 		var agentApi = arguments.resolvedConfig.agentApi
 		if ( !isStruct( agentApi ) ) {
-			arguments.errors.append( "Agent.bx's 'agentApi' must be a struct of { enabled, access, tokenEnvVar, tokens, profiles, path, allowedIPs, rateLimit, manageTokens }" )
+			arguments.errors.append( "Agent.bx's 'agentApi' must be a struct of { enabled, access, tokenEnvVar, tokens, profiles, path, allowedIPs, rateLimit, manageTokens, embeds }" )
 			return
 		}
 
@@ -765,7 +765,7 @@ class {
 			arguments.errors.append( "Agent.bx's 'agentApi.enabled' is false, but a gateways/ entry exposes the web UI: the page is a client of the agent API and cannot run without it" )
 		}
 
-		var validKeys = [ "enabled", "access", "tokenEnvVar", "tokens", "profiles", "path", "allowedIPs", "rateLimit", "manageTokens" ]
+		var validKeys = [ "enabled", "access", "tokenEnvVar", "tokens", "profiles", "path", "allowedIPs", "rateLimit", "manageTokens", "embeds" ]
 		for ( var key in agentApi ) {
 			if ( !validKeys.contains( key ) ) {
 				arguments.errors.append( "Agent.bx's 'agentApi' has an unknown key [#key#] - valid keys: #validKeys.toList( ", " )#" )
@@ -776,6 +776,9 @@ class {
 			arguments.errors.append( "Agent.bx's 'agentApi.enabled' must be a boolean" )
 		}
 
+		if ( structKeyExists( agentApi, "embeds" ) && !isBoolean( agentApi.embeds ) ) {
+			arguments.errors.append( "Agent.bx's 'agentApi.embeds' must be a boolean" )
+		}
 		if ( structKeyExists( agentApi, "manageTokens" ) ) {
 			if ( !isBoolean( agentApi.manageTokens ) ) {
 				arguments.errors.append( "Agent.bx's 'agentApi.manageTokens' must be a boolean" )

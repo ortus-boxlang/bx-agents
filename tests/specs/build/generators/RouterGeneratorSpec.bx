@@ -171,6 +171,17 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			it( "leaves every embed route out, public and admin, when agentApi.embeds is false", function() {
+				var discovery = discoverer.discover( fixtures & "/valid-minimal" );
+				var router = fileRead( generator.generate( discovery, newAppDir(), false, false, false, false, false, { embeds : false } ).router );
+
+				expect( router ).notToInclude( "embed" );
+				// the rest of the API is still there
+				expect( router ).toInclude( "AgentApi.notes" );
+				var on = fileRead( generator.generate( discovery, newAppDir(), false, false, false, false, false, {} ).router );
+				expect( on ).toInclude( "AgentApi.embedWidget" );
+			} );
+
 			it( "emits the WhatsApp Cloud GET/POST webhook routes when hasWhatsAppCloudGateway is true", function() {
 				var discovery = discoverer.discover( fixtures & "/gateways-mixed" );
 				var result = generator.generate( discovery, newAppDir(), false, true );

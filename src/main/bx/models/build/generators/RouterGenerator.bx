@@ -308,11 +308,14 @@ class {
 			"// so this module's own tooling (chat --server, invoke --server) always has",
 			"// an address. A project's own public API belongs in gateways/ instead."
 		]
-		lines.append( embedRoutes( ApiPath::of( arguments.agentApi ) ), true )
+		var embedsOn = ( arguments.agentApi.embeds ?: true ) != false
+		if ( embedsOn ) {
+			lines.append( embedRoutes( ApiPath::of( arguments.agentApi ) ), true )
+		}
 		lines.append( "" )
 		lines.append( turnRoutes( ApiPath::of( arguments.agentApi ), gated ), true )
 		lines.append( "" )
-		lines.append( renderRunControlRoutes( gated, ApiPath::of( arguments.agentApi ), ( arguments.agentApi.manageTokens ?: false ) == true ), true )
+		lines.append( renderRunControlRoutes( gated, ApiPath::of( arguments.agentApi ), ( arguments.agentApi.manageTokens ?: false ) == true, embedsOn ), true )
 		return lines
 	}
 
@@ -323,13 +326,14 @@ class {
 	 * @gated True when they go through `gate`
 	 * @apiBase The path the API is served on
 	 * @manageTokens True when an admin may manage access tokens over the API (agentApi.manageTokens)
+	 * @embeds False when agentApi.embeds turned the embeds off (no embed routes)
 	 *
 	 * @return The route statement lines
 	 */
-	private array function renderRunControlRoutes( required boolean gated, required string apiBase, boolean manageTokens = false ) {
-		var rest = ApiContract::actions( { manageTokens : arguments.manageTokens } ).filter( ( action ) => ![ "invoke", "stream", "batch", "info" ].contains( action ) )
+	private array function renderRunControlRoutes( required boolean gated, required string apiBase, boolean manageTokens = false, boolean embeds = true ) {
+		var rest = ApiContract::actions( { manageTokens : arguments.manageTokens, embeds : arguments.embeds } ).filter( ( action ) => ![ "invoke", "stream", "batch", "info" ].contains( action ) )
 		return [ "// Run control, conversations, notes and the rest - the same path, served by handlers/AgentApi.bx" ].append(
-			contractRoutes( arguments.apiBase, arguments.gated, { manageTokens : arguments.manageTokens }, rest ),
+			contractRoutes( arguments.apiBase, arguments.gated, { manageTokens : arguments.manageTokens, embeds : arguments.embeds }, rest ),
 			true
 		)
 	}

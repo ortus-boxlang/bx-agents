@@ -301,6 +301,17 @@ class extends="testbox.system.BaseSpec" {
 					expect( isNull( allowing.tokens() ) ).toBeFalse();
 				} );
 
+				it( "keeps no embeds with agentApi.embeds false, even with the database", function() {
+					var root = new bxagents.models.api.Caller( id = "root", scope = "admin" );
+					var off = new bxagents.models.api.AgentService( agent = agent, store = store, options = { embeds : false } );
+
+					expect( service.keepsEmbeds() ).toBeTrue();
+					expect( off.keepsEmbeds() ).toBeFalse();
+					expect( isNull( off.embeds() ) ).toBeTrue();
+					expect( off.about( root ).data().capabilities.embeds ).toBeFalse();
+					expect( service.about( root ).data().capabilities.embeds ).toBeTrue();
+				} );
+
 				it( "hands out the routine manager only when routines are on, and the reports only with a data home", function() {
 					expect( isNull( service.routines() ) ).toBeTrue();
 					var settings = bxagents.models.routines.RoutineSettings::resolve( { enabled : true } );
