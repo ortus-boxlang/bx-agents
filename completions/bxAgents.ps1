@@ -235,7 +235,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'guard'; Value = $true; Choices = @('off', 'flag', 'block'); Dir = $false }
 			@{ Name = 'host'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'max-tokens'; Value = $true; Choices = @(); Dir = $false }
-			@{ Name = 'mcp'; Value = $true; Choices = @('atlassian', 'cloudflare', 'git', 'github', 'notion', 'stripe', 'supabase'); Dir = $false }
+			@{ Name = 'mcp'; Value = $true; Choices = @('atlassian', 'cloudflare', 'context7', 'git', 'github', 'notion', 'slack', 'stripe', 'supabase'); Dir = $false }
 			@{ Name = 'memory'; Value = $true; Choices = @('cache', 'file'); Dir = $false }
 			@{ Name = 'model'; Value = $true; Choices = @(); Dir = $false }
 			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }
