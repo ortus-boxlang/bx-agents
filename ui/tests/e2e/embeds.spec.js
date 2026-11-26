@@ -124,6 +124,10 @@ test.describe( "The Embeds page", () => {
 		await page.keyboard.press( "Enter" );
 		await page.locator( "#embedColor" ).fill( "#0f766e" );
 		await page.locator( "#embedPosition" ).selectOption( "bottom-left" );
+		// the button icon: the chat bubble is the default, and a pick is a real radio group
+		await expect( page.locator( "#embedIcon-chat" ) ).toBeChecked();
+		await page.locator( "label.icon-opt", { has: page.locator( "#embedIcon-headset" ) } ).click();
+		await expect( page.locator( "#embedIcon-headset" ) ).toBeChecked();
 		await page.locator( "label.check" ).first().locator( "input" ).check();
 
 		// the preview is the real widget, drawn from the form as it is typed
@@ -205,7 +209,7 @@ test.describe( "A visitor of another website", () => {
 	test.beforeAll( async( { playwright } ) => {
 		const admin = await playwright.request.newContext( { storageState: ( await import( "./support.js" ) ).AUTH + "ada.json" } );
 		now = await timeTool( admin );
-		embed = await makeEmbed( admin, { name: "Visitor test", tools: [ now ], look: { title: "Ask the docs", welcome: "Hi, visitor.", suggestions: [ "When are you open?" ] } } );
+		embed = await makeEmbed( admin, { name: "Visitor test", tools: [ now ], look: { title: "Ask the docs", welcome: "Hi, visitor.", suggestions: [ "When are you open?" ], icon: "sparkle" } } );
 		await admin.dispose();
 		sites = [
 			await website( ALLOWED_PORT, () => embed.id ),
@@ -226,6 +230,8 @@ test.describe( "A visitor of another website", () => {
 		const launcher = page.locator( "bx-agent .launcher" );
 		await expect( launcher ).toBeVisible();
 		await expect( launcher ).toHaveAttribute( "aria-label", "Open chat" );
+		// the icon the admin picked (sparkle), not the default bubble
+		await expect( launcher.locator( "svg path" ).first() ).toHaveAttribute( "d", /^M12 3l1\.9/ );
 		await launcher.click();
 		// opening moves focus to the input, and Esc closes and hands it back to the launcher
 		await expect( page.locator( "bx-agent textarea" ) ).toBeFocused();

@@ -43,7 +43,7 @@ web app while the agent runs, and it holds a key.
   expires    optional date        an expired embed answers like an unknown one
   keyVersion 1                    goes up when the key is rotated
   target     { agent, profile }   which agent and which model profile answer
-  look       { title, welcome, placeholder, suggestions[<=3], color, position, theme }
+  look       { title, welcome, placeholder, suggestions[<=3], color, position, theme, icon }
   tools      [ "docs_search" ]    names; the ONLY tools a visitor's turn may use
   limits     { allowedOrigins[], perVisitorPerMinute, dailyMessages, maxMessageChars }
 }
@@ -60,7 +60,7 @@ browser. Every field is validated on save and again on use.
 | `perVisitorPerMinute` | default 10 |
 | `dailyMessages` | default 200, for the whole embed |
 | `maxMessageChars` | default 2000 |
-| `look.color` | `#rrggbb` only; `look.position` `bottom-right` or `bottom-left`; `look.theme` `light`, `dark` or `auto` |
+| `look.color` | `#rrggbb` only; `look.position` `bottom-right` or `bottom-left`; `look.theme` `light`, `dark` or `auto`; `look.icon` one of `chat` (the default), `question`, `sparkle`, `headset`, `book` |
 | `look.suggestions` | up to 3 strings, each up to 120 characters |
 
 The server uses **only the stored record**. A page can send an agent, profile, model, tool list, limit or user id and it changes
@@ -113,7 +113,7 @@ GET  <api>/embeds/usage?id=     counters for the last 7 days: messages, refused 
 ```
 
 They are in `ApiContract`, so the OpenAPI document and the route specs have them. Embed management needs the app's shared database;
-without one the routes answer `not_found`. There is no opt-in flag like `manageTokens`: admin scope is the only gate.
+without one the routes answer `not_found`. Admin scope is the gate, and `agentApi.embeds: false` is a master switch: with it the admin routes and the seven public routes are not written at all, the page leaves the menu and the OpenAPI document does not list them (see [the master switch](#the-master-switch)).
 
 CLI: `bxAgents embed create|list|show|disable|rotate`. They are added to `ApiContract`, so the OpenAPI document and the route
 specs pick them up.
@@ -263,7 +263,7 @@ light, dark) and usable by keyboard.
 | Agent        name, agent, profile            |  Live preview of the widget       |
 | Look & text  title, placeholder, welcome,    |  (updates as you type)            |
 |              up to 3 suggestions, color,     |                                   |
-|              position, theme                 |  Snippet   [HTML][iframe][web     |
+|              position, theme, icon           |  Snippet   [HTML][iframe][web     |
 | What visitors can use   [x] docs_search      |            component][curl] [Copy]|
 |              [ ] note_remember (all off=none)|                                   |
 | Allowed websites   (chips, no wildcards)     |  Last 7 days                      |
@@ -274,9 +274,28 @@ light, dark) and usable by keyboard.
 
 The counters are real numbers read from stored usage, or an honest empty state ("No visits yet"). They are never invented.
 
+## The button icon
+
+`look.icon` picks the glyph on the widget's button from a fixed set: `chat` (the speech bubble, and the default for every embed that
+has none), `question`, `sparkle`, `headset` and `book`. The widget draws them itself from its own SVG; an unknown name is refused
+on save ("look.icon is one of: ..."), and the widget falls back to the bubble for any other value. It is a name, never markup or a
+URL, so an embed cannot make a visitor's page load an image from somewhere else. The editor shows the five as a radio group. A custom
+image (a URL, with a rule on which hosts) is not built.
+
+## The master switch
+
+```yaml
+agentApi:
+  embeds: false      # default true
+```
+
+With `embeds: false` the build writes no embed route (public or admin), `GET /__bxagents/capabilities` says `embeds: false` (so the web app
+hides the Embeds page), the OpenAPI document leaves the embed operations out and `AgentService.embeds()` answers nothing. The embed
+tables stay in the database, and the tool filter stays attached (nothing can be an embed caller without the routes). Anything but a boolean is a build error.
+
 ## Open points (proposed, tell me if you disagree)
 
-1. `agentApi.embeds: false` to turn the public routes off. *Proposed, optional, not built.*
+1. `agentApi.embeds: false` to turn embeds off. *Built, see [the master switch](#the-master-switch).*
 2. The daily cap and the counters are kept in the database (`embed_usage`, one row per embed per day), so a restart does not reset the cap. The per-minute window is in memory. *Built: the table and the counters. The window comes with the public routes.*
 3. The signing key is stored as it is in the `embeds` table, not sealed like a vault secret: a stolen database file would let someone mint sessions, which an anonymous visitor can already get. It is never returned by any route.
 4. "Visitors who hit the limit" is shown as **requests refused for a limit**, a count of refusals, because counting distinct visitors would need to store visitor ids.

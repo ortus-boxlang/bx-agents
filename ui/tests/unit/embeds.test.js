@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { blankEmbed, bodyOf, formOf, formProblems, noVisits, normalizeOrigin, originProblem } from "../../resources/assets/js/components/admin/EmbedsPage.js";
+import { readFileSync } from "node:fs";
+import { ICONS, blankEmbed, bodyOf, formOf, formProblems, noVisits, normalizeOrigin, originProblem } from "../../resources/assets/js/components/admin/EmbedsPage.js";
 
 describe( "embed origins", () => {
 	it( "accepts exactly scheme, host and an optional port", () => {
@@ -124,5 +125,19 @@ describe( "the counters", () => {
 		expect( noVisits( null ) ).toBe( true );
 		expect( noVisits( { messages: 1, blockedOrigin: 0, limited: 0 } ) ).toBe( false );
 		expect( noVisits( { messages: 0, blockedOrigin: 2, limited: 0 } ) ).toBe( false );
+	} );
+} );
+
+describe( "embed icons", () => {
+	it( "offers the five built-in names, with the chat bubble as the default", () => {
+		expect( ICONS.map( i => i.name ) ).toEqual( [ "chat", "question", "sparkle", "headset", "book" ] );
+		expect( blankEmbed().look.icon ).toBe( "chat" );
+	} );
+
+	it( "draws what the widget draws: the same path data as widget.js", () => {
+		const widget = readFileSync( new URL( "../../../src/main/bx/models/embed/widget.js", import.meta.url ), "utf8" );
+		for ( const icon of ICONS ) {
+			expect( widget, icon.name ).toContain( icon.svg );
+		}
 	} );
 } );

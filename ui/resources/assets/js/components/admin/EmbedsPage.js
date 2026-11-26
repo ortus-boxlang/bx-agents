@@ -72,6 +72,15 @@ export function normalizeOrigin( text ) {
 /**
  * @returns {object} A new embed's form, with the defaults the server would give
  */
+/** The launcher glyphs an embed may pick: the same names and drawings as the widget's (widget.js ICONS) */
+export const ICONS = [
+	{ name: "chat", label: "Chat bubble", svg: "<path d=\"M21 11.5a8.4 8.4 0 0 1-9 8.4 8.6 8.6 0 0 1-3.6-.8L3 21l1.9-5.1A8.4 8.4 0 0 1 3 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z\"/>" },
+	{ name: "question", label: "Question mark", svg: "<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7\"/><path d=\"M12 17h.01\"/>" },
+	{ name: "sparkle", label: "Sparkle", svg: "<path d=\"M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z\"/><path d=\"M19 15l.7 1.8 1.8.7-1.8.7L19 20l-.7-1.8-1.8-.7 1.8-.7z\"/>" },
+	{ name: "headset", label: "Headset", svg: "<path d=\"M4 14v-2a8 8 0 0 1 16 0v2\"/><rect x=\"3\" y=\"14\" width=\"4\" height=\"6\" rx=\"1.5\"/><rect x=\"17\" y=\"14\" width=\"4\" height=\"6\" rx=\"1.5\"/><path d=\"M19 20c0 1-1.5 2-4 2h-2\"/>" },
+	{ name: "book", label: "Book", svg: "<path d=\"M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5z\"/><path d=\"M4 5.5v16\"/><path d=\"M8 7h8\"/>" }
+];
+
 export function blankEmbed() {
 	return {
 		id      : "",
@@ -79,7 +88,7 @@ export function blankEmbed() {
 		enabled : true,
 		expires : "",
 		target  : { agent: "", profile: "" },
-		look    : { title: "", welcome: "", placeholder: "Ask a question", suggestions: [], color: "#2563eb", position: "bottom-right", theme: "auto" },
+		look    : { title: "", welcome: "", placeholder: "Ask a question", suggestions: [], color: "#2563eb", position: "bottom-right", theme: "auto", icon: "chat" },
 		tools   : [],
 		limits  : { allowedOrigins: [], perVisitorPerMinute: 10, dailyMessages: 200, maxMessageChars: 2000 }
 	};
@@ -176,6 +185,8 @@ export function noVisits( usage ) {
  */
 export function embedsPage() {
 	return {
+		/** @type {Array<{ name: string, label: string, svg: string }>} The launcher glyphs to pick from */
+		icons           : ICONS,
 		/** @type {boolean} True until the list answered */
 		loading         : true,
 		/** @type {string} Why the list could not be read */

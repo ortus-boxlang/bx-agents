@@ -51,9 +51,17 @@ class extends="testbox.system.BaseSpec" {
 				expect( made.limits.allowedOrigins ).toBe( [ "https://docs.example.com", "http://localhost:9100" ] );
 			} );
 
+			it( "gives the chat bubble by default, and keeps one of the built-in icons when it is named", function() {
+				expect( embeds.create( duplicate( good ) ).look.icon ).toBe( "chat" );
+				var named = duplicate( good );
+				named.name = "with icon";
+				named.look = { icon : "headset" };
+				expect( embeds.create( named ).look.icon ).toBe( "headset" );
+			} );
+
 			it( "checks the look, the limits and the tools, and says every problem at once", function() {
 				var bad = duplicate( good );
-				bad.look = { color : "blue", position : "middle", theme : "neon", suggestions : [ "a", "b", "c", "d" ] };
+				bad.look = { color : "blue", position : "middle", theme : "neon", icon : "rocket", suggestions : [ "a", "b", "c", "d" ] };
 				bad.limits.perVisitorPerMinute = 0;
 				bad.limits.dailyMessages = 1.5;
 				bad.limits.maxMessageChars = "lots";
@@ -63,7 +71,7 @@ class extends="testbox.system.BaseSpec" {
 					fail( "an invalid embed was saved" );
 				} catch ( any e ) {
 					expect( e.type ).toBe( "BxAgents.InvalidEmbed" );
-					for ( var word in [ "look.color", "look.position", "look.theme", "look.suggestions", "perVisitorPerMinute", "dailyMessages", "maxMessageChars", "[delete_all]" ] ) {
+					for ( var word in [ "look.color", "look.position", "look.theme", "look.icon", "look.suggestions", "perVisitorPerMinute", "dailyMessages", "maxMessageChars", "[delete_all]" ] ) {
 						expect( e.message ).toInclude( word );
 					}
 				}

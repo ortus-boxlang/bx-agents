@@ -14,7 +14,7 @@
  *   credentials  the fetch credentials mode, "omit" by default (the embed routes use no cookies)
  *
  * Properties, read when they are used, so they may be set at any time:
- *   look            the look and text ({ title, welcome, placeholder, suggestions, color, position, theme }); set it in "preview" mode
+ *   look            the look and text ({ title, welcome, placeholder, suggestions, color, position, theme, icon }); set it in "preview" mode
  *   headers         async () => ({ name: value }), merged into every request
  *   onUnauthorized  () => void, called when the agent refuses a new session
  *
@@ -85,7 +85,18 @@
 		"@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}"
 	].join( "" );
 
-	var ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.6 8.6 0 0 1-3.6-.8L3 21l1.9-5.1A8.4 8.4 0 0 1 3 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z"/></svg>';
+	// the launcher glyphs a look may pick (look.icon); the names are the server's list. Any other value draws the chat bubble
+	var ICONS = {
+		chat: '<path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.6 8.6 0 0 1-3.6-.8L3 21l1.9-5.1A8.4 8.4 0 0 1 3 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z"/>',
+		question: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7"/><path d="M12 17h.01"/>',
+		sparkle: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.7 1.8 1.8.7-1.8.7L19 20l-.7-1.8-1.8-.7 1.8-.7z"/>',
+		headset: '<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/><path d="M19 20c0 1-1.5 2-4 2h-2"/>',
+		book: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5z"/><path d="M4 5.5v16"/><path d="M8 7h8"/>'
+	};
+	function iconSvg( name ) {
+		var body = Object.prototype.hasOwnProperty.call( ICONS, name ) ? ICONS[ name ] : ICONS.chat;
+		return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + body + '</svg>';
+	}
 
 	/** Black or white, whichever reads better on the colour (WCAG relative luminance) */
 	function textOn( hex ) {
@@ -443,6 +454,7 @@
 			this.style.setProperty( "--accent", look.color );
 			this.style.setProperty( "--accent-fg", textOn( look.color ) );
 		}
+		this._launcher.innerHTML = iconSvg( look.icon );
 		this._panel.setAttribute( "aria-label", look.title || "Chat" );
 		this._title.textContent = look.title || "Chat";
 		this._input.setAttribute( "placeholder", look.placeholder || "Ask a question" );
@@ -483,7 +495,7 @@
 			self._log, form
 		] );
 		self._launcher = el( "button", { class: "launcher", type: "button", "aria-label": "Open chat", "aria-expanded": "false", "aria-controls": "panel" } );
-		self._launcher.innerHTML = ICON;
+		self._launcher.innerHTML = iconSvg( "chat" );
 
 		if ( self._mode !== "widget" ) {
 			root.appendChild( self._panel );
