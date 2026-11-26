@@ -1415,6 +1415,7 @@ public final class ChatScreen implements AutoCloseable {
 		}
 		drain();
 		flushSegment();
+		out( Text.from( "" ) );
 		running.clear();
 		notifyDone( facts.lastTurnMs );
 	}
