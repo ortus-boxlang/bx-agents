@@ -1854,6 +1854,9 @@ public final class ChatScreen implements AutoCloseable {
 			}
 			rows.add( r );
 		}
+		if ( !rows.isEmpty() ) {
+			rows.add( Row.of() );
+		}
 		long secs = ( System.currentTimeMillis() - turnStarted ) / 1000;
 		rows.addAll( promptRows( true, spin + " " + ( cancel ? "stopping" : "working" ) + " " + secs + "s",
 		    lower( keys.first( KeyMap.Action.STOP ) ) + " stops · enter steers" ) );
