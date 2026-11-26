@@ -33,7 +33,7 @@ It is a full-screen UI in the teal of the BxAgents logo. Arrow keys (or `j`/`k`)
 |---|---|---|
 | Name, purpose | The agent's name and a one-line description | `name`, `description` in [`Agent.yml`](../conventions/agent-yaml.md) |
 | Shape | A single agent, a team, a scheduled agent, an MCP server | The matching [template](../agent-templates.md) |
-| Model | A provider, then optionally a model name (Enter takes the provider's default). **Another provider** lets you type `provider/model` yourself | `model`, and a stub for the provider's `<PROVIDER>_API_KEY` in `.env` |
+| Model | A provider, then optionally a model name (Enter takes the provider's default). **LM Studio** and **llama.cpp** ask for the model id the server lists and the address it listens on (the usual port is filled in; `1234` and `8080`), and need no key. **Another provider** lets you type `provider/model` yourself | `model`, and a stub for the provider's `<PROVIDER>_API_KEY` in `.env`. A local server is written as `openai-compatible/<id>`, with its address under `providers:` and no key |
 | Model settings | Whether to tune the model, then the temperature (0 to 2), the longest answer in tokens and the timeout in seconds. Enter leaves one unset | [`params`](../conventions/models.md) (`temperature`, `max_tokens`) and [`options`](../conventions/models.md) (`timeout`) in `Agent.yml` |
 | Tools | Date and time, fetch pages, search the web, browse websites, files, images, speech and translation | A [`tools:`](../conventions/agent-yaml.md#tools) list; browsing also adds `bx-playwright` to your `box.json` |
 | Search provider | The built-in one, Brave, Tavily, Exa or Google | A key stub in `.env`, and a line in `instructions.md` telling the agent which provider to use |
@@ -131,6 +131,7 @@ bxAgents new support-bot --name=support-bot --model=claude --with=time,fetch,sea
 | `--with` | `time`, `fetch`, `search`, `browse`, `files`, `media` (a list) |
 | `--search` | `http`, `brave`, `tavily`, `exa`, `google` |
 | `--files`, `--files-dir` | `read`, `all` or a list of tool names; folders as `tmp`, `cwd` or absolute paths. Both are needed together |
+| `--base-url` | Where a local model server listens, such as `http://127.0.0.1:1234/v1`. Used with `--model=openai-compatible/<id>`; written under `providers:` |
 | `--temperature` | A number from 0 to 2 |
 | `--max-tokens`, `--timeout` | A positive whole number (tokens, seconds) |
 | `--memory` | `cache` or `file` |
