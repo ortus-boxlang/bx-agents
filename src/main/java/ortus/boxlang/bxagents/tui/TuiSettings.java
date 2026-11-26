@@ -99,7 +99,7 @@ public final class TuiSettings {
 	        "Tool calls with their arguments and time, with only the name and result, or not at all" ),
 	    choice( "markdown", List.of( "rendered", "source" ), "rendered",
 	        "Answers drawn with headings, lists, tables and coloured code, or as the text the model wrote" ),
-	    number( "menuRows", 8, 3, 20, "How many commands or files the / and @ menus show at once" ),
+	    number( "menuRows", 12, 3, 20, "How many commands or files the / and @ menus show at once" ),
 	    choice( "notify", List.of( "off", "bell", "system" ), "off",
 	        "Tell you when a long answer is done: nothing, the terminal bell, or a desktop notification" ),
 	    choice( "terminalTitle", List.of( "true", "false" ), "true", "Put the agent's name in the terminal's title while the chat is open" ) );

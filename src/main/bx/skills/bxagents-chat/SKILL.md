@@ -72,7 +72,7 @@ Every chat is a conversation in the project's chat database, listed under your u
 | `thinking` | `show`, `hide` |
 | `tools` | `detail`, `summary`, `hidden` |
 | `markdown` | `rendered`, `source` |
-| `menuRows` | `8` (3 to 20) |
+| `menuRows` | `12` (3 to 20) |
 | `notify` | `off`, `bell`, `system` |
 | `terminalTitle` | `true`, `false` |
 
