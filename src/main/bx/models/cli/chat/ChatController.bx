@@ -391,20 +391,44 @@ class {
 		try {
 			var info = variables.session.modelInfo()
 			facts.profile = len( info.profile ?: "" ) ? info.profile : ( info.model ?: "" )
+			facts.model = info.model ?: ""
 		} catch ( any e ) {
 			try {
 				facts.profile = variables.session.modelName()
+				facts.model = facts.profile
 			} catch ( any e2 ) {
 			}
 		}
 		try {
 			facts.session = variables.session.conversationTitle()
 		} catch ( any e ) {
+			// the session store may be unavailable or the conversation unnamed; leave facts.session as it was
+		}
+		try {
+			var usage = variables.session.usageReport( 1, "model" )
+			facts.usageOn = usage.recording ?: false
+			if ( facts.usageOn && isStruct( usage.report ?: "" ) ) {
+				var totals = usage.report.totals ?: {}
+				var inputTokens = totals.inputTokens ?: 0
+				var outputTokens = totals.outputTokens ?: 0
+				facts.usageSummary = "tokens today: #formatTokens( inputTokens )# in / #formatTokens( outputTokens )# out"
+			}
+		} catch ( any e ) {
 		}
 		try {
 			variables.screen.setFacts( facts )
 		} catch ( any e ) {
 		}
+	}
+
+	private string function formatTokens( numeric n ) {
+		if ( arguments.n >= 1000000 ) {
+			return numberFormat( arguments.n / 1000000, "0.0" ) & "M"
+		}
+		if ( arguments.n >= 1000 ) {
+			return numberFormat( arguments.n / 1000, "0.0" ) & "k"
+		}
+		return toString( arguments.n )
 	}
 
 	/**

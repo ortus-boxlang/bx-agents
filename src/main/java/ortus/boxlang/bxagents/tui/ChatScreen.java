@@ -687,7 +687,8 @@ public final class ChatScreen implements AutoCloseable {
 	}
 
 	/**
-	 * Tells the widgets what the chat knows: {@code agent}, {@code profile} and {@code session}. A missing entry is left as it was.
+	 * Tells the widgets what the chat knows: {@code agent}, {@code profile}, {@code model}, {@code session},
+	 * {@code usageOn} and {@code usageSummary}. A missing entry is left as it was.
 	 *
 	 * @param values fact names and values to update
 	 */
@@ -700,9 +701,21 @@ public final class ChatScreen implements AutoCloseable {
 		if ( v != null ) {
 			facts.profile = String.valueOf( v );
 		}
+		v = values.get( "model" );
+		if ( v != null ) {
+			facts.model = String.valueOf( v );
+		}
 		v = values.get( "session" );
 		if ( v != null ) {
 			facts.session = String.valueOf( v );
+		}
+		v = values.get( "usageOn" );
+		if ( v != null ) {
+			facts.usageOn = Boolean.parseBoolean( String.valueOf( v ) );
+		}
+		v = values.get( "usageSummary" );
+		if ( v != null ) {
+			facts.usageSummary = String.valueOf( v );
 		}
 	}
 
@@ -1555,14 +1568,30 @@ public final class ChatScreen implements AutoCloseable {
 	private List<Row> idleRows() {
 		List<Row> rows = new ArrayList<>();
 		slash.sync( composer.text(), composer.rowCount() );
-		rows.addAll( slashRows() );
+		List<Row> menu = slashRows();
 		List<String> files = atMatches();
 		for ( int i = 0; i < files.size(); i++ ) {
-			rows.add( Row.of().add( "   @" + files.get( i ), i == Math.min( atPick, files.size() - 1 ) ? theme.selected : theme.plain ) );
+			menu.add( Row.of().add( "   @" + files.get( i ), i == Math.min( atPick, files.size() - 1 ) ? theme.selected : theme.plain ) );
 		}
-		String picture = images.isEmpty() ? "" : images.size() + ( images.size() == 1 ? " picture" : " pictures" ) + " attached · ";
-		rows.addAll( promptRows( false, "you", picture + lower( keys.first( KeyMap.Action.SUBMIT ) ) + " send · " + lower( keys.first( KeyMap.Action.NEWLINE ) )
-		    + " new line · ? keys" + ( slash.isOpen() || !files.isEmpty() ? " · tab completes" : "" ) ) );
+		if ( !menu.isEmpty() ) {
+			rows.addAll( menu );
+			rows.add( Row.of() );
+		}
+		String	label	= facts.model.isEmpty() ? ( facts.profile.isEmpty() ? "you" : facts.profile ) : facts.model;
+		String	folder	= Widgets.get( "folder" ).text( facts );
+		String	branch	= facts.git.apply( facts.folder );
+		String	hint	= folder + ( branch.isEmpty() ? "" : " [" + branch + "]" );
+		String	picture	= images.isEmpty() ? "" : images.size() + ( images.size() == 1 ? " picture" : " pictures" ) + " attached · ";
+		if ( !picture.isEmpty() ) {
+			hint = picture + hint;
+		}
+		if ( slash.isOpen() || !atMatches().isEmpty() ) {
+			hint += " · tab completes";
+		}
+		rows.addAll( promptRows( false, label, hint ) );
+		if ( facts.usageOn && !facts.usageSummary.isEmpty() ) {
+			rows.add( Row.of().add( " " + facts.usageSummary, theme.muted ) );
+		}
 		return rows;
 	}
 
