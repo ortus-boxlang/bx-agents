@@ -1,0 +1,46 @@
+/**
+ * What the agent serves to the other website: the widget script and the hosted chat page.
+ *
+ * Both are read from this module's own folder (found from where this class lives, not from a mapping, so it works in a
+ * built app and in a spec). The script is the same for every embed: it holds no secret and reads the embed's id from its own
+ * tag, so any website may load it.
+ */
+class {
+
+	/**
+	 * @return The widget script's source, and a fingerprint of it for ETag
+	 */
+	struct function widget() {
+		var file = getDirectoryFromPath( getCurrentTemplatePath() ) & "widget.js"
+		var source = fileRead( file, "UTF-8" )
+		return { source : source, etag : '"' & lCase( left( hash( source, "SHA-256" ), 32 ) ) & '"' }
+	}
+
+	/**
+	 * The page an <iframe> shows: the widget filling the whole frame. It is served with a Content-Security-Policy that
+	 * only lets the websites of the embed frame it (see the handler); this only makes the markup.
+	 *
+	 * @embedId The embed's id (already checked to be an id)
+	 * @apiBase The path the agent API is served on, such as /__bxagents
+	 * @title The embed's title
+	 */
+	string function frame( required string embedId, required string apiBase, required string title ) {
+		var script = arguments.apiBase & "/embed/widget.js"
+		var lf = char( 10 )
+		return '<!doctype html>' & lf
+			& '<html lang="en">' & lf
+			& '<head>' & lf
+			& '<meta charset="utf-8">' & lf
+			& '<meta name="viewport" content="width=device-width, initial-scale=1">' & lf
+			& '<meta name="referrer" content="no-referrer">' & lf
+			& '<title>' & encodeForHTML( arguments.title ) & '</title>' & lf
+			& '<style>html,body{margin:0;height:100%}</style>' & lf
+			& '</head>' & lf
+			& '<body>' & lf
+			& '<bx-agent embed="' & encodeForHTML( arguments.embedId ) & '" base="' & encodeForHTML( arguments.apiBase ) & '" mode="page"></bx-agent>' & lf
+			& '<script src="' & encodeForHTML( script ) & '"></script>' & lf
+			& '</body>' & lf
+			& '</html>' & lf
+	}
+
+}

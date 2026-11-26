@@ -1,0 +1,271 @@
+/**
+ * api.EmbedPublic: what a visitor of another website can and cannot do, with the real store, session, limiter and
+ * TurnRunner, and a stand-in agent.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "api.EmbedPublic", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-embed-public-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.embeds = new bxagents.models.store.EmbedService( store );
+				variables.agent = new FakeAgent();
+				variables.service = new bxagents.models.api.AgentService( agent, store );
+				variables.ms = { value : 5000000 };
+				variables.limiter = new bxagents.models.api.EmbedLimiter( () => ms.value );
+				variables.jwt = new cbsecurity.modules.jwtcfml.models.jwt();
+				variables.pub = new bxagents.models.api.EmbedPublic( embeds, new bxagents.models.api.EmbedSession( jwt ), limiter, service );
+				variables.site = "https://docs.example.com";
+				variables.embed = embeds.create( {
+					name : "Docs helper", tools : [ "fake_tool" ],
+					look : { title : "Ask the docs", welcome : "Hi!", suggestions : [ "How do I install it?" ] },
+					limits : { allowedOrigins : [ site, "https://other.example.com" ], perVisitorPerMinute : 3, dailyMessages : 5, maxMessageChars : 50 }
+				} );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			function bearer( origin = site ) {
+				return "Bearer " & pub.startSession( embed.id, arguments.origin, "10.0.0.1" ).data().token;
+			}
+
+			describe( "config", function() {
+
+				it( "gives only the look and the text to a listed website", function() {
+					var out = pub.config( embed.id, site );
+
+					expect( out.succeeded() ).toBeTrue();
+					expect( out.data().look.title ).toBe( "Ask the docs" );
+					expect( out.data().look.suggestions ).toBe( [ "How do I install it?" ] );
+					var text = jsonSerialize( out.data() );
+					expect( text ).notToInclude( "fake_tool" );
+					expect( text ).notToInclude( "allowedOrigins" );
+					expect( text ).notToInclude( "perVisitorPerMinute" );
+					expect( text ).notToInclude( embeds.signingKey( embed.id ).key );
+				} );
+
+				it( "refuses a website that is not listed, and a request with no origin, and counts them", function() {
+					expect( pub.config( embed.id, "https://evil.example.com" ).code() ).toBe( "forbidden" );
+					expect( pub.config( embed.id, "" ).code() ).toBe( "forbidden" );
+					expect( pub.config( embed.id, "http://docs.example.com" ).code() ).toBe( "forbidden" );
+					expect( pub.config( embed.id, "https://docs.example.com:8443" ).code() ).toBe( "forbidden" );
+					expect( embeds.usage( embed.id ).blockedOrigin ).toBe( 4 );
+				} );
+
+				it( "answers an unknown, a disabled and an expired embed the same", function() {
+					var unknown = pub.config( "emb_0000000000", site );
+					embeds.update( embed.id, { enabled : false } );
+					var off = pub.config( embed.id, site );
+					embeds.update( embed.id, { enabled : true, expires : dateAdd( "h", -1, now() ) } );
+					var expired = pub.config( embed.id, site );
+
+					for ( var one in [ unknown, off, expired ] ) {
+						expect( one.code() ).toBe( "not_found" );
+						expect( one.reason() ).toBe( unknown.reason() );
+					}
+				} );
+
+			} );
+
+			describe( "session", function() {
+
+				it( "is only given to a listed website, and limits how often an address asks", function() {
+					expect( pub.startSession( embed.id, "https://evil.example.com", "10.0.0.1" ).code() ).toBe( "forbidden" );
+					for ( var i = 1; i <= 20; i++ ) {
+						expect( pub.startSession( embed.id, site, "10.0.0.1" ).succeeded() ).toBeTrue();
+					}
+					expect( pub.startSession( embed.id, site, "10.0.0.1" ).code() ).toBe( "rate_limited" );
+					expect( pub.startSession( embed.id, site, "10.0.0.2" ).succeeded() ).toBeTrue();
+				} );
+
+			} );
+
+			describe( "message", function() {
+
+				it( "refuses a missing, malformed, forged, other-origin and other-embed token", function() {
+					var other = embeds.create( { name : "Other", limits : { allowedOrigins : [ site ] } } );
+					var good = bearer();
+					var asked = { input : "hello" };
+
+					expect( pub.message( embed.id, site, "", asked ).code() ).toBe( "unauthorized" );
+					expect( pub.message( embed.id, site, "Bearer", asked ).code() ).toBe( "unauthorized" );
+					expect( pub.message( embed.id, site, "Bearer not.a.token", asked ).code() ).toBe( "unauthorized" );
+					expect( pub.message( embed.id, site, good & "x", asked ).code() ).toBe( "unauthorized" );
+					// the same token from another website that the embed also lists
+					expect( pub.message( embed.id, "https://other.example.com", good, asked ).code() ).toBe( "unauthorized" );
+					// and from one it does not list
+					expect( pub.message( embed.id, "https://evil.example.com", good, asked ).code() ).toBe( "forbidden" );
+					// a token of another embed
+					expect( pub.message( other.id, site, good, asked ).code() ).toBe( "unauthorized" );
+					// a token made with a key the server does not have
+					var forged = jwt.encode( { emb : embed.id, v : "abcdefgh12345678", o : site, kv : 1, exp : 4102444800, xp : 4102444800 }, "another-key-another-key-another-1", "HS256" );
+					expect( pub.message( embed.id, site, "Bearer " & forged, asked ).code() ).toBe( "unauthorized" );
+				} );
+
+				it( "stops every session of an embed when its key is rotated", function() {
+					var good = bearer();
+					expect( pub.message( embed.id, site, good, { input : "hi" } ).succeeded() ).toBeTrue();
+
+					embeds.rotate( embed.id );
+					expect( pub.message( embed.id, site, good, { input : "hi" } ).code() ).toBe( "unauthorized" );
+				} );
+
+				it( "runs the turn as the visitor, with the embed's own settings, whatever the body says", function() {
+					embeds.update( embed.id, { target : { profile : "docs-model" } } );
+					var good = bearer();
+					var out = pub.message( embed.id, site, good, {
+						input : "hello", userId : "admin", agent : "secret", profile : "gpt-admin", tools : [ "delete_all" ], scope : "admin",
+						options : { profile : "gpt-admin", userId : "admin", _resumeContext : { x : 1 } }, params : { model : "gpt-admin" }
+					} );
+
+					expect( out.succeeded() ).toBeTrue();
+					out.data().run();
+					var seen = agent.seen();
+					expect( seen.options.userId ).toMatch( "^v:[a-z0-9]{20}$" );
+					expect( seen.options.usageMetadata.embedId ).toBe( embed.id );
+					expect( seen.options.profile ).toBe( "docs-model" );
+					expect( seen.options.keyExists( "_resumeContext" ) ).toBeFalse();
+					expect( seen.params.keyExists( "model" ) ).toBeFalse();
+					expect( seen.input ).toBe( "hello" );
+				} );
+
+				it( "gives each visitor its own conversation namespace, from a label it cannot use to reach another's", function() {
+					var one = pub.message( embed.id, site, bearer(), { input : "a", conversationId : "My Chat 1!" } );
+					one.data().run();
+					var first = agent.seen().options.conversationId;
+					var two = pub.message( embed.id, site, bearer(), { input : "b", conversationId : "c-" & mid( agent.seen().options.userId, 3, 12 ) & "-my-chat-1" } );
+					two.data().run();
+					var second = agent.seen().options.conversationId;
+
+					expect( first ).toMatch( "^c-[a-z0-9]{12}-mychat1$" );
+					expect( second ).notToBe( first );
+					// naming the first visitor's id as a label lands under the second visitor's own prefix, so it reaches nothing of the first
+					var firstPrefix = left( first, 14 );
+					expect( left( second, 14 ) ).notToBe( firstPrefix );
+					expect( second ).toMatch( "^c-[a-z0-9]{12}-c-" );
+					var long = pub.message( embed.id, site, bearer(), { input : "c", conversationId : repeatString( "a", 80 ) } );
+					long.data().run();
+					expect( len( listLast( agent.seen().options.conversationId, "-" ) ) ).toBe( 24 );
+				} );
+
+				it( "refuses an empty message and one over the length limit, and counts neither", function() {
+					var good = bearer();
+
+					expect( pub.message( embed.id, site, good, { input : "   " } ).code() ).toBe( "bad_request" );
+					expect( pub.message( embed.id, site, good, {} ).code() ).toBe( "bad_request" );
+					expect( pub.message( embed.id, site, good, { input : { a : 1 } } ).code() ).toBe( "bad_request" );
+					var tooLong = pub.message( embed.id, site, good, { input : repeatString( "x", 51 ) } );
+					expect( tooLong.code() ).toBe( "bad_request" );
+					expect( tooLong.reason() ).toInclude( "50" );
+					expect( pub.message( embed.id, site, good, { input : repeatString( "x", 50 ) } ).succeeded() ).toBeTrue();
+					expect( embeds.usage( embed.id ).messages ).toBe( 1 );
+				} );
+
+				it( "limits a visitor per minute, on the server's clock, and counts what it refused", function() {
+					var good = bearer();
+					for ( var i = 1; i <= 3; i++ ) {
+						expect( pub.message( embed.id, site, good, { input : "hi" } ).succeeded() ).toBeTrue();
+					}
+					expect( pub.message( embed.id, site, good, { input : "hi" } ).code() ).toBe( "rate_limited" );
+					expect( embeds.usage( embed.id ).limited ).toBe( 1 );
+
+					ms.value += 61000;
+					expect( pub.message( embed.id, site, good, { input : "hi" } ).succeeded() ).toBeTrue();
+				} );
+
+				it( "caps the embed per day, across visitors", function() {
+					var a = bearer();
+					var b = bearer();
+					for ( var i = 1; i <= 3; i++ ) { pub.message( embed.id, site, a, { input : "hi" } ); }
+					for ( var i = 1; i <= 2; i++ ) { pub.message( embed.id, site, b, { input : "hi" } ); }
+					expect( embeds.messagesToday( embed.id ) ).toBe( 5 );
+
+					var over = pub.message( embed.id, site, bearer(), { input : "hi" } );
+					expect( over.code() ).toBe( "rate_limited" );
+					expect( over.reason() ).toInclude( "today" );
+				} );
+
+				it( "does not run for an embed that was turned off after the session started", function() {
+					var good = bearer();
+					embeds.update( embed.id, { enabled : false } );
+					expect( pub.message( embed.id, site, good, { input : "hi" } ).code() ).toBe( "not_found" );
+				} );
+
+			} );
+
+			describe( "cancel and history", function() {
+
+				it( "stops only the visitor's own run", function() {
+					var good = bearer();
+					var out = pub.cancel( embed.id, site, good, "thread-1" );
+
+					expect( out.succeeded() ).toBeTrue();
+					expect( agent.cancelled()[ 1 ] ).toMatch( "^u:v%3A[a-z0-9]{20}:thread-1$" );
+					expect( pub.cancel( embed.id, site, "", "thread-1" ).code() ).toBe( "unauthorized" );
+					expect( pub.cancel( embed.id, site, good, "" ).code() ).toBe( "bad_request" );
+				} );
+
+				it( "reads the visitor's own conversation and nobody else's", function() {
+					var mine = bearer();
+					var theirs = bearer();
+					pub.message( embed.id, site, mine, { input : "hello", conversationId : "notes" } ).data().run();
+
+					var own = pub.history( embed.id, site, mine, "notes" );
+					expect( own.succeeded() ).toBeTrue();
+					expect( own.data().messages ).toHaveLength( 2 );
+					expect( pub.history( embed.id, site, theirs, "notes" ).code() ).toBe( "not_found" );
+					expect( pub.history( embed.id, site, "", "notes" ).code() ).toBe( "unauthorized" );
+				} );
+
+			} );
+
+			describe( "the agent's own origin, where the hosted page runs", function() {
+
+				it( "is accepted as well as the listed websites, and a token made for it is for it alone", function() {
+					var own = "https://agent.example.com";
+					var hosted = new bxagents.models.api.EmbedPublic( embeds, new bxagents.models.api.EmbedSession( jwt ), limiter, service, own );
+
+					expect( hosted.config( embed.id, own ).succeeded() ).toBeTrue();
+					expect( hosted.corsOrigin( embed.id, own ) ).toBe( own );
+					var token = "Bearer " & hosted.startSession( embed.id, own, "10.0.0.1" ).data().token;
+					expect( hosted.message( embed.id, own, token, { input : "hi" } ).succeeded() ).toBeTrue();
+					// the token is for the agent's own origin, not for a listed website
+					expect( hosted.message( embed.id, site, token, { input : "hi" } ).code() ).toBe( "unauthorized" );
+					// a website that is neither is still refused, and so is a request with no origin at all
+					expect( hosted.config( embed.id, "https://evil.example.com" ).code() ).toBe( "forbidden" );
+					expect( hosted.config( embed.id, "" ).code() ).toBe( "forbidden" );
+					// an agent that does not know its own origin accepts nothing extra
+					expect( pub.config( embed.id, own ).code() ).toBe( "forbidden" );
+				} );
+
+			} );
+
+			describe( "cors and the frame", function() {
+
+				it( "names an origin for CORS only when the embed is live and lists it", function() {
+					expect( pub.corsOrigin( embed.id, site ) ).toBe( site );
+					expect( pub.corsOrigin( embed.id, "https://evil.example.com" ) ).toBe( "" );
+					expect( pub.corsOrigin( embed.id, "" ) ).toBe( "" );
+					expect( pub.corsOrigin( "emb_0000000000", site ) ).toBe( "" );
+					embeds.update( embed.id, { enabled : false } );
+					expect( pub.corsOrigin( embed.id, site ) ).toBe( "" );
+				} );
+
+				it( "gives the websites that may frame the page, and nothing for an embed that is not live", function() {
+					expect( pub.frameOrigins( embed.id ).data().origins ).toBe( [ site, "https://other.example.com" ] );
+					embeds.update( embed.id, { enabled : false } );
+					expect( pub.frameOrigins( embed.id ).code() ).toBe( "not_found" );
+				} );
+
+			} );
+
+		} );
+	}
+
+}

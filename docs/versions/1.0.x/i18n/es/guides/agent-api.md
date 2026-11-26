@@ -126,7 +126,7 @@ La misma lista, creación y revocación están en la pestaña **Tokens** de la p
 
 ## Todas las rutas
 
-Todas las rutas cuelgan de `/__bxagents` (o de tu `agentApi.path`). Hay 82 rutas (90 pares de verbo y ruta); las rutas de tokens solo existen con `manageTokens: true`. La tabla sale de la lista única de `ApiContract.bx` con la que el build crea las rutas y el documento OpenAPI; la autoridad es el documento que un servidor en marcha entrega en `GET /openapi`, que además trae las formas de petición y respuesta. Las descripciones de la columna Hace son las del propio documento OpenAPI, en inglés. **Admin** responde `403` a quien no es admin; **Open** no necesita token ni en una API cerrada.
+Todas las rutas cuelgan de `/__bxagents` (o de tu `agentApi.path`). Hay 88 rutas (97 pares de verbo y ruta); las rutas de tokens solo existen con `manageTokens: true`. La tabla sale de la lista única de `ApiContract.bx` con la que el build crea las rutas y el documento OpenAPI; la autoridad es el documento que un servidor en marcha entrega en `GET /openapi`, que además trae las formas de petición y respuesta. Las descripciones de la columna Hace son las del propio documento OpenAPI, en inglés. **Admin** responde `403` a quien no es admin; **Open** no necesita token ni en una API cerrada.
 
 ### Turns
 

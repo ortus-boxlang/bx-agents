@@ -1,0 +1,148 @@
+/**
+ * Embeds: validated on save, a key that never leaves the service, a live check that treats off, expired and unknown alike,
+ * and counters that are real counts.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "EmbedService", function() {
+
+			beforeEach( function() {
+				variables.dir = createTempDirectory( prefix = "bxagents-embeds-" );
+				variables.store = bxagents.models.store.ChatStore::forFile( dir & "/chat.db" );
+				variables.embeds = new bxagents.models.store.EmbedService( store );
+				variables.good = { name : "Docs helper", tools : [ "docs_search" ], limits : { allowedOrigins : [ "https://docs.example.com" ] } };
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "makes an embed with an id, defaults and no key in what it answers", function() {
+				var made = embeds.create( good );
+
+				expect( made.id ).toMatch( "^emb_[A-Za-z0-9]{10}$" );
+				expect( made.enabled ).toBeTrue();
+				expect( made.keyVersion ).toBe( 1 );
+				expect( made.look.title ).toBe( "Docs helper" );
+				expect( made.look.position ).toBe( "bottom-right" );
+				expect( made.limits.perVisitorPerMinute ).toBe( 10 );
+				expect( made.limits.dailyMessages ).toBe( 200 );
+				expect( made.limits.maxMessageChars ).toBe( 2000 );
+				expect( made.tools ).toBe( [ "docs_search" ] );
+				expect( jsonSerialize( made ) ).notToInclude( embeds.signingKey( made.id ).key );
+				expect( jsonSerialize( embeds.list() ) ).notToInclude( embeds.signingKey( made.id ).key );
+			} );
+
+			it( "refuses an embed without a website, and every kind of bad origin", function() {
+				expect( () => embeds.create( { name : "x", limits : { allowedOrigins : [] } } ) ).toThrow( "BxAgents.InvalidEmbed" );
+				expect( () => embeds.create( { name : "x" } ) ).toThrow( "BxAgents.InvalidEmbed" );
+				for ( var bad in [ "*", "https://*.example.com", "example.com", "https://example.com/docs", "https://example.com/", "http://user@example.com", "null", "ftp://example.com", "https://exa mple.com", "https://example.com:99999", "https://example..com", "javascript:alert(1)" ] ) {
+					var tried = { name : "x", limits : { allowedOrigins : [ bad ] } };
+					expect( () => embeds.create( tried ) ).toThrow( "BxAgents.InvalidEmbed" );
+				}
+			} );
+
+			it( "takes exact origins, with a port, and writes them in lower case once", function() {
+				var made = embeds.create( { name : "x", limits : { allowedOrigins : [ "https://Docs.Example.com", "https://docs.example.com", "http://localhost:9100" ] } } );
+
+				expect( made.limits.allowedOrigins ).toBe( [ "https://docs.example.com", "http://localhost:9100" ] );
+			} );
+
+			it( "gives the chat bubble by default, and keeps one of the built-in icons when it is named", function() {
+				expect( embeds.create( duplicate( good ) ).look.icon ).toBe( "chat" );
+				var named = duplicate( good );
+				named.name = "with icon";
+				named.look = { icon : "headset" };
+				expect( embeds.create( named ).look.icon ).toBe( "headset" );
+			} );
+
+			it( "checks the look, the limits and the tools, and says every problem at once", function() {
+				var bad = duplicate( good );
+				bad.look = { color : "blue", position : "middle", theme : "neon", icon : "rocket", suggestions : [ "a", "b", "c", "d" ] };
+				bad.limits.perVisitorPerMinute = 0;
+				bad.limits.dailyMessages = 1.5;
+				bad.limits.maxMessageChars = "lots";
+				bad.tools = [ "docs_search", "delete_all" ];
+				try {
+					embeds.create( bad, [ "docs_search" ] );
+					fail( "an invalid embed was saved" );
+				} catch ( any e ) {
+					expect( e.type ).toBe( "BxAgents.InvalidEmbed" );
+					for ( var word in [ "look.color", "look.position", "look.theme", "look.icon", "look.suggestions", "perVisitorPerMinute", "dailyMessages", "maxMessageChars", "[delete_all]" ] ) {
+						expect( e.message ).toInclude( word );
+					}
+				}
+				expect( embeds.list() ).toHaveLength( 0 );
+			} );
+
+			it( "changes an embed and keeps the id and the key; rotating changes the key and the version", function() {
+				var made = embeds.create( good );
+				var keyBefore = embeds.signingKey( made.id );
+
+				var changed = embeds.update( made.id, { name : "Docs helper 2", look : { title : "Ask the docs", color : "##112233" }, limits : { allowedOrigins : [ "https://a.example.com", "https://b.example.com" ], perVisitorPerMinute : 5 } } );
+				expect( changed.id ).toBe( made.id );
+				expect( changed.look.title ).toBe( "Ask the docs" );
+				expect( changed.limits.allowedOrigins ).toHaveLength( 2 );
+				expect( changed.limits.perVisitorPerMinute ).toBe( 5 );
+				expect( changed.tools ).toBe( [ "docs_search" ] );
+				expect( embeds.signingKey( made.id ) ).toBe( keyBefore );
+
+				var rotated = embeds.rotate( made.id );
+				expect( rotated.keyVersion ).toBe( 2 );
+				expect( embeds.signingKey( made.id ).key ).notToBe( keyBefore.key );
+				expect( embeds.signingKey( made.id ).version ).toBe( 2 );
+				expect( () => embeds.rotate( "emb_0000000000" ) ).toThrow( "BxAgents.EmbedNotFound" );
+				expect( () => embeds.update( "emb_0000000000", good ) ).toThrow( "BxAgents.EmbedNotFound" );
+			} );
+
+			it( "treats an off, an expired and an unknown embed the same: not live", function() {
+				var made = embeds.create( good );
+				expect( embeds.isLive( made.id ) ).toBeTrue();
+
+				embeds.update( made.id, { enabled = false } );
+				expect( embeds.isLive( made.id ) ).toBeFalse();
+
+				embeds.update( made.id, { enabled = true, expires = dateAdd( "h", -1, now() ) } );
+				expect( embeds.isLive( made.id ) ).toBeFalse();
+
+				embeds.update( made.id, { expires = dateAdd( "h", 1, now() ) } );
+				expect( embeds.isLive( made.id ) ).toBeTrue();
+
+				expect( embeds.isLive( "emb_0000000000" ) ).toBeFalse();
+				expect( embeds.isLive( "x'; DROP TABLE embeds;--" ) ).toBeFalse();
+				expect( embeds.get( "x'; DROP TABLE embeds;--" ) ).toBe( {} );
+			} );
+
+			it( "counts what happened, as real numbers with zeros when nothing did", function() {
+				var made = embeds.create( good );
+				expect( embeds.usage( made.id ) ).toBe( { days : 7, messages : 0, blockedOrigin : 0, limited : 0 } );
+
+				embeds.count( made.id, "messages" );
+				embeds.count( made.id, "messages" );
+				embeds.count( made.id, "blockedOrigin" );
+				embeds.count( made.id, "limited", 3 );
+
+				expect( embeds.messagesToday( made.id ) ).toBe( 2 );
+				var seen = embeds.usage( made.id );
+				expect( seen.messages ).toBe( 2 );
+				expect( seen.blockedOrigin ).toBe( 1 );
+				expect( seen.limited ).toBe( 3 );
+				expect( () => embeds.count( made.id, "messages = 0 --" ) ).toThrow( "BxAgents.InvalidEmbedCounter" );
+			} );
+
+			it( "only counts a day inside the window", function() {
+				var made = embeds.create( good );
+				store.exec( "INSERT INTO embed_usage ( embedId, day, messages ) VALUES ( :id, :day, 40 )", { id : made.id, day : dateFormat( dateAdd( "d", -10, now() ), "yyyy-MM-dd" ) } );
+				embeds.count( made.id, "messages" );
+
+				expect( embeds.usage( made.id, 7 ).messages ).toBe( 1 );
+				expect( embeds.usage( made.id, 30 ).messages ).toBe( 41 );
+			} );
+
+		} );
+	}
+
+}

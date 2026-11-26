@@ -9,7 +9,7 @@ tags: [course, conventions, web-ui]
 # The Web App
 
 A `gateways/*.bx` entry with `exposes: "webui"` gives your agent a complete web app: a chat with streaming,
-reasoning, tool calls and approvals, and thirteen pages around it (your conversations, routines, what the agent
+reasoning, tool calls and approvals, and fourteen pages around it (your conversations, routines, what the agent
 can use, its memory, its settings, and for admins its logs, access and backups). It is a ColdBox module that calls
 the agent API at `/__bxagents`, built ahead of time and shipped inside BxAgents, so `bxAgents build` never runs
 `npm install` and a project never needs Node.

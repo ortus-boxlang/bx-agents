@@ -1,0 +1,182 @@
+<!--- The embed editor: the form on the left, the preview, the snippets and the counters on the right. Inside embedsPage,
+      where `form` is the embed being edited. --->
+<bx:output>
+<div class="embeds-editor">
+	<form class="stack embeds-form" autocomplete="off" novalidate @submit.prevent="save()" aria-label="Embed">
+		<p class="pg-error" role="alert" x-show="problemOf( '' )" x-text="problemOf( '' )"></p>
+
+		<fieldset class="fs">
+			<legend>Agent</legend>
+			<label class="field">Name
+				<input id="embedName" maxlength="80" required x-model="form.name" :aria-invalid="problemOf( 'name' ) ? 'true' : null" aria-describedby="embedNameNote">
+				<span class="pg-note" id="embedNameNote">Only you see this name.</span>
+				<span class="pg-error" role="alert" x-show="problemOf( 'name' )" x-text="problemOf( 'name' )"></span>
+			</label>
+			<label class="field">Which agent answers
+				<select id="embedAgent" x-model="form.target.agent">
+					<option value="">The main agent</option>
+					<template x-for="a in $store.session.agents.filter( a => a.parent )" :key="a.name">
+						<option :value="a.name" x-text="a.name" :selected="form.target.agent === a.name"></option>
+					</template>
+				</select>
+			</label>
+			<label class="field">Model profile (optional)
+				<input id="embedProfile" maxlength="64" x-model="form.target.profile" aria-describedby="embedProfileNote">
+				<span class="pg-note" id="embedProfileNote">Leave blank for the agent's own model. The profile is set here, never by the page.</span>
+			</label>
+		</fieldset>
+
+		<fieldset class="fs">
+			<legend>Look and text</legend>
+			<label class="field">Title
+				<input id="embedTitle" maxlength="80" x-model="form.look.title" placeholder="Ask the docs">
+			</label>
+			<label class="field">Input placeholder
+				<input id="embedPlaceholder" maxlength="120" x-model="form.look.placeholder">
+			</label>
+			<label class="field">Welcome message
+				<textarea id="embedWelcome" rows="2" maxlength="500" x-model="form.look.welcome" placeholder="Hi! Ask me anything about the docs."></textarea>
+			</label>
+			<div class="field" role="group" aria-labelledby="embedSuggestLabel">
+				<span id="embedSuggestLabel">Suggested questions (up to three)</span>
+				<ul class="plain-list embeds-chips">
+					<template x-for="( s, i ) in form.look.suggestions" :key="i">
+						<li class="chip"><span x-text="s"></span>
+							<button type="button" class="chip-x" @click="removeSuggestion( i )" :aria-label="'Remove ' + s">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "x" } )#</button></li>
+					</template>
+				</ul>
+				<div class="pg-actions" x-show="form.look.suggestions.length < 3">
+					<input id="embedSuggestion" maxlength="120" x-model="suggestionDraft" @keydown.enter.prevent="addSuggestion()" aria-label="A suggested question">
+					<button type="button" class="btn" @click="addSuggestion()" :disabled="!suggestionDraft.trim()">Add</button>
+				</div>
+			</div>
+			<div class="pg-actions">
+				<label class="field">Colour
+					<input id="embedColor" type="color" x-model="form.look.color" :aria-invalid="problemOf( 'color' ) ? 'true' : null">
+				</label>
+				<label class="field">Position
+					<select id="embedPosition" x-model="form.look.position">
+						<option value="bottom-right">Bottom right</option>
+						<option value="bottom-left">Bottom left</option>
+					</select>
+				</label>
+				<label class="field">Theme
+					<select id="embedTheme" x-model="form.look.theme">
+						<option value="light">Light</option>
+						<option value="dark">Dark</option>
+						<option value="auto">Follow the page</option>
+					</select>
+				</label>
+			</div>
+			<fieldset class="icon-pick">
+				<legend>Button icon</legend>
+				<template x-for="ic in icons" :key="ic.name">
+					<label class="icon-opt" :class="{ on: form.look.icon === ic.name }">
+						<input type="radio" name="embedIcon" :value="ic.name" x-model="form.look.icon" :id="'embedIcon-' + ic.name">
+						<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" x-html="ic.svg"></svg>
+						<span class="visually-hidden" x-text="ic.label"></span>
+					</label>
+				</template>
+			</fieldset>
+		</fieldset>
+
+		<fieldset class="fs">
+			<legend>What visitors can use</legend>
+			<p class="pg-note">The agent's tools. Everything unticked is off: a visitor's turn can only run the ticked ones.</p>
+			<p class="pg-note" x-show="!toolChoices.length">This agent has no tools, so visitors can only chat.</p>
+			<ul class="plain-list embeds-tools">
+				<template x-for="t in toolChoices" :key="t">
+					<li><label class="check"><input type="checkbox" :checked="form.tools.includes( t )" @change="toggleTool( t )"><span x-text="t"></span></label>
+						<span class="chip warn" x-show="toolGone( t )">not on the agent any more</span></li>
+				</template>
+			</ul>
+		</fieldset>
+
+		<fieldset class="fs">
+			<legend>Allowed websites</legend>
+			<p class="pg-note" id="embedOriginNote">Exactly the websites that may show the chat, such as https://docs.example.com. No wildcards. At least one.</p>
+			<ul class="plain-list embeds-chips" aria-label="Allowed websites">
+				<template x-for="( o, i ) in form.limits.allowedOrigins" :key="o">
+					<li class="chip"><span x-text="o"></span>
+						<button type="button" class="chip-x" @click="removeOrigin( i )" :aria-label="'Remove ' + o">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "x" } )#</button></li>
+				</template>
+			</ul>
+			<div class="pg-actions">
+				<input id="embedOrigin" x-model="originDraft" @keydown.enter.prevent="addOrigin()" aria-label="Add a website" aria-describedby="embedOriginNote embedOriginError"
+					:aria-invalid="originError ? 'true' : null" placeholder="https://docs.example.com" inputmode="url">
+				<button type="button" class="btn" id="addOrigin" @click="addOrigin()">Add</button>
+			</div>
+			<p class="pg-error" id="embedOriginError" role="alert" x-show="originError || problemOf( 'origins' )" x-text="originError || problemOf( 'origins' )"></p>
+		</fieldset>
+
+		<fieldset class="fs">
+			<legend>Limits</legend>
+			<p class="pg-note">These are what protect the agent, so each is required. The server counts them on its own clock.</p>
+			<div class="pg-actions">
+				<label class="field">Messages per visitor per minute
+					<input id="embedPerMinute" type="number" min="1" max="600" required x-model="form.limits.perVisitorPerMinute" :aria-invalid="problemOf( 'perVisitorPerMinute' ) ? 'true' : null">
+					<span class="pg-error" role="alert" x-show="problemOf( 'perVisitorPerMinute' )" x-text="problemOf( 'perVisitorPerMinute' )"></span>
+				</label>
+				<label class="field">Messages per day, for the whole embed
+					<input id="embedDaily" type="number" min="1" max="1000000" required x-model="form.limits.dailyMessages" :aria-invalid="problemOf( 'dailyMessages' ) ? 'true' : null">
+					<span class="pg-error" role="alert" x-show="problemOf( 'dailyMessages' )" x-text="problemOf( 'dailyMessages' )"></span>
+				</label>
+				<label class="field">Longest message (characters)
+					<input id="embedMaxChars" type="number" min="1" max="20000" required x-model="form.limits.maxMessageChars" :aria-invalid="problemOf( 'maxMessageChars' ) ? 'true' : null">
+					<span class="pg-error" role="alert" x-show="problemOf( 'maxMessageChars' )" x-text="problemOf( 'maxMessageChars' )"></span>
+				</label>
+			</div>
+		</fieldset>
+
+		<div class="pg-actions embeds-actions">
+			<button type="submit" class="btn primary" id="saveEmbed" :disabled="!!( saving || ( form.id && !dirty ) )">Save</button>
+			<button type="button" class="btn" id="toggleEmbed" @click="toggleEnabled()" x-show="form.id" x-text="form.enabled ? 'Disable' : 'Enable'"></button>
+			<button type="button" class="btn danger" id="rotateEmbed" @click="rotate()" x-show="form.id">Rotate key</button>
+			<button type="button" class="btn" id="closeEmbed" @click="close()">Close</button>
+			<span class="pg-note" x-show="dirty" role="status">Unsaved changes</span>
+		</div>
+	</form>
+
+	<aside class="embeds-side" aria-label="Preview, snippets and counters">
+		<section class="card" aria-labelledby="embedPreviewHead">
+			<h3 id="embedPreviewHead">Preview</h3>
+			<p class="pg-note">The real widget, drawn from the form. Nothing you type here is sent.</p>
+			<div class="embeds-preview">
+				<bx-agent mode="preview" x-effect="paint( $el )" x-show="widgetReady"></bx-agent>
+				<p class="pg-note" x-show="!widgetReady">The preview needs the agent's widget script, which has not loaded.</p>
+			</div>
+		</section>
+
+		<section class="card" aria-labelledby="embedSnippetHead">
+			<h3 id="embedSnippetHead">Snippet</h3>
+			<p class="pg-note" x-show="!form.id">Save the embed to get its snippets.</p>
+			<div x-show="form.id && snippets.length">
+				<div role="tablist" aria-label="Snippet" class="pg-tabs" @keydown="$tabKeys( $event )">
+					<template x-for="s in snippets" :key="s.id">
+						<button type="button" role="tab" :id="'snipTab-' + s.id" :aria-selected="isTab( s ) ? 'true' : 'false'" :tabindex="isTab( s ) ? 0 : -1"
+							:aria-controls="'snipPanel-' + s.id" @click="snippetTab = s.id" x-text="s.title"></button>
+					</template>
+				</div>
+				<template x-for="s in snippets" :key="s.id">
+					<div role="tabpanel" :id="'snipPanel-' + s.id" :aria-labelledby="'snipTab-' + s.id" x-show="isTab( s )" tabindex="0">
+						<pre class="embeds-code"><code x-ref="snippetCode" x-text="s.code"></code></pre>
+						<p class="pg-note" x-text="s.note"></p>
+						<button type="button" class="btn" @click="copy( s )" :aria-label="'Copy the ' + s.title + ' snippet'">
+							#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "copy" } )# <span x-text="copied === s.id ? 'Copied' : 'Copy'"></span></button>
+					</div>
+				</template>
+			</div>
+		</section>
+
+		<section class="card" aria-labelledby="embedUsageHead" x-show="form.id">
+			<h3 id="embedUsageHead">Last 7 days</h3>
+			<p class="pg-note" x-show="!usage || noVisits( usage )">No visits yet. Numbers appear after the first visitor.</p>
+			<dl class="embeds-usage" x-show="usage && !noVisits( usage )">
+				<div><dt>Messages</dt><dd x-text="usage ? usage.messages : 0"></dd></div>
+				<div><dt>Refused for a wrong website</dt><dd x-text="usage ? usage.blockedOrigin : 0"></dd></div>
+				<div><dt>Refused for a limit</dt><dd x-text="usage ? usage.limited : 0"></dd></div>
+			</dl>
+		</section>
+	</aside>
+</div>
+</bx:output>

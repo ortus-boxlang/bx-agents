@@ -223,6 +223,16 @@ class {
 				statements : [
 					"CREATE TABLE IF NOT EXISTS connector_settings ( owner VARCHAR(255) NOT NULL, connector VARCHAR(64) NOT NULL, settingKey VARCHAR(32) NOT NULL, value TEXT NOT NULL, updatedAt DATETIME, PRIMARY KEY ( owner, connector, settingKey ) )"
 				]
+			},
+			{
+				// embeds: an agent put on another website for anonymous visitors (see EmbedService). `config` is the JSON of
+				// target, look, tools and limits. The signing key is kept here, server side, and never read out by any route.
+				// embed_usage is one row per embed per day, so the counters survive a restart and the daily cap is not kept in memory.
+				version    : 15,
+				statements : [
+					"CREATE TABLE IF NOT EXISTS embeds ( id VARCHAR(32) NOT NULL PRIMARY KEY, name VARCHAR(80) NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, expiresAt DATETIME, keyVersion INTEGER NOT NULL DEFAULT 1, signingKey VARCHAR(128) NOT NULL, config TEXT NOT NULL, createdAt DATETIME, updatedAt DATETIME )",
+					"CREATE TABLE IF NOT EXISTS embed_usage ( embedId VARCHAR(32) NOT NULL, day VARCHAR(10) NOT NULL, messages INTEGER NOT NULL DEFAULT 0, blockedOrigin INTEGER NOT NULL DEFAULT 0, limited INTEGER NOT NULL DEFAULT 0, PRIMARY KEY ( embedId, day ) )"
+				]
 			}
 		]
 	}

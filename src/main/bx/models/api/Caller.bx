@@ -5,7 +5,9 @@
  *
  *   id      what ownership is keyed on (`local`, a token's name, an account id, `slack:U123`)
  *   name    what to show for the caller
- *   scope   `chat` (own conversations and runs) or `admin` (also what the app's operator may do)
+ *   scope   `chat` (own conversations and runs), `admin` (also what the app's operator may do) or `embed` (an anonymous
+ *           visitor of an embed: may chat, stop its own run and read its own chats, and nothing else; only the embed's
+ *           public routes ever make one, from a verified session, and no other route accepts it)
  *   source  which surface the call came in on: `web`, `terminal`, `api`, or a gateway's platform name
  */
 class {
@@ -54,12 +56,18 @@ class {
 	 * @scope `chat` or `admin`
 	 * @source The surface: lower case letters, digits, `-` and `_`
 	 */
-	function init( required string id, string name = "", string scope = "chat", string source = "api" ) {
+	function init( required string id, string name = "", string scope = "chat", string source = "api", string embedId = "" ) {
 		if ( !len( trim( arguments.id ) ) ) {
 			throw( type = "BxAgents.InvalidCaller", message = "A caller needs an id" )
 		}
-		if ( !listFindNoCase( "chat,admin", arguments.scope ) ) {
-			throw( type = "BxAgents.InvalidCaller", message = "A caller's scope is chat or admin, not [#arguments.scope#]" )
+		if ( !listFindNoCase( "chat,admin,embed", arguments.scope ) ) {
+			throw( type = "BxAgents.InvalidCaller", message = "A caller's scope is chat, admin or embed, not [#arguments.scope#]" )
+		}
+		// an embed caller always says which embed it is for, and nothing else carries one
+		var wantsEmbed = lCase( arguments.scope ) == "embed"
+		var hasEmbed = len( arguments.embedId ) > 0
+		if ( wantsEmbed != hasEmbed ) {
+			throw( type = "BxAgents.InvalidCaller", message = "A caller of scope embed has an embedId, and a caller of another scope has none" )
 		}
 		if ( !reFind( "^[a-z0-9][a-z0-9_-]{0,31}$", arguments.source ) ) {
 			throw( type = "BxAgents.InvalidCaller", message = "A caller's source is lower case letters, digits, - and _, up to 32, not [#arguments.source#]" )
@@ -68,6 +76,7 @@ class {
 		variables.callerName = len( arguments.name ) ? arguments.name : arguments.id
 		variables.callerScope = lCase( arguments.scope )
 		variables.callerSource = arguments.source
+		variables.callerEmbed = arguments.embedId
 		return this
 	}
 
@@ -87,6 +96,28 @@ class {
 		return variables.callerSource
 	}
 
+	/** @return The embed an `embed` caller is a visitor of; blank for any other caller */
+	string function embedId() {
+		return variables.callerEmbed
+	}
+
+	boolean function isEmbed() {
+		return variables.callerScope == "embed"
+	}
+
+	/**
+	 * A visitor of an embed, made from a verified session only.
+	 *
+	 * @embedId The embed's id
+	 * @visitorId The visitor the session was issued to: lower case letters and digits
+	 */
+	static any function fromEmbed( required string embedId, required string visitorId ) {
+		if ( !reFind( "^[a-z0-9]{8,64}$", arguments.visitorId ) ) {
+			throw( type = "BxAgents.InvalidCaller", message = "A visitor id is 8 to 64 lower case letters and digits" )
+		}
+		return new Caller( id = "v:" & arguments.visitorId, name = "visitor", scope = "embed", source = "embed", embedId = arguments.embedId )
+	}
+
 	boolean function isAdmin() {
 		return variables.callerScope == "admin"
 	}
@@ -95,7 +126,7 @@ class {
 	 * @return The same caller, coming in on another surface
 	 */
 	any function via( required string source ) {
-		return new Caller( id = variables.callerId, name = variables.callerName, scope = variables.callerScope, source = arguments.source )
+		return new Caller( id = variables.callerId, name = variables.callerName, scope = variables.callerScope, source = arguments.source, embedId = variables.callerEmbed )
 	}
 
 	struct function toStruct() {

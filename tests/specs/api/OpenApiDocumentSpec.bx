@@ -10,6 +10,14 @@ class extends="testbox.system.BaseSpec" {
 				variables.doc = new bxagents.models.api.OpenApiDocument( "demo", { manageTokens : true } ).build( "/__bxagents", "token" );
 			} );
 
+			it( "leaves the embed operations out when embeds are off", function() {
+				var withEmbeds = ApiContract::actions( {} ).filter( a => a.findNoCase( "embed" ) );
+				var without = ApiContract::actions( { embeds : false } ).filter( a => a.findNoCase( "embed" ) );
+
+				expect( withEmbeds ).notToBeEmpty();
+				expect( without ).toBeEmpty();
+			} );
+
 			it( "has a handler action for every route of the contract, with the token routes too", function() {
 				for ( var action in ApiContract::actions( { manageTokens : true } ) ) {
 					expect( handlerSource ).toInclude( "function #action#( event, rc, prc )", "no action #action#" );
@@ -20,7 +28,13 @@ class extends="testbox.system.BaseSpec" {
 				var routed = ApiContract::actions( { manageTokens : true } );
 				var found = handlerSource.reMatch( "\n\tfunction (\w+)\( event, rc, prc \)" ).map( ( line ) => line.reReplace( "^\s*function (\w+).*", "\1" ) );
 
-				expect( found.filter( ( name ) => name != "extensionFile" && !routed.contains( name ) ) ).toBeEmpty();
+				// the embed routes a visitor calls are public, outside the token-gated contract; their own list (embedPublic) is checked below
+				var publicEmbed = ApiContract::embedPublic().map( ( r ) => r.action );
+				expect( found.filter( ( name ) => name != "extensionFile" && !routed.contains( name ) && !publicEmbed.contains( name ) ) ).toBeEmpty();
+				for ( var name in publicEmbed ) {
+					expect( found ).toInclude( name );
+					expect( routed ).notToInclude( name );
+				}
 			} );
 
 			it( "gives each route its own action and path, so a route is never written twice", function() {

@@ -1,0 +1,17 @@
+import bxModules.bxai.models.middleware.AiMiddlewareResult;
+class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
+	function init( required array allowed, boolean hide ) { super.init(); variables.allowed = allowed; variables.hide = hide; return this }
+	AiMiddlewareResult function beforeLLMCall( required struct context ) {
+		systemOutput( "beforeLLMCall keys: " & context.keyList() & " | packet keys: " & ( context.dataPacket ?: {} ).keyList(), true )
+		if ( hide ) {
+			var packet = context.dataPacket
+			packet.tools = packet.tools.filter( t => allowed.findNoCase( t.function.name ?: t.name ?: "" ) > 0 )
+		}
+		return AiMiddlewareResult.continue()
+	}
+	AiMiddlewareResult function beforeToolCall( required struct context ) {
+		systemOutput( "beforeToolCall keys: " & context.keyList(), true )
+		if ( allowed.findNoCase( context.toolName ) == 0 ) return AiMiddlewareResult.reject( "not on the embed list" )
+		return AiMiddlewareResult.continue()
+	}
+}

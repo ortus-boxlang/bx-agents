@@ -1,0 +1,392 @@
+/**
+ * Embeds: an agent put on another website for anonymous visitors, kept in the shared chat database next to the access tokens.
+ *
+ * An embed is a stored record (what the widget looks like, which tools a visitor's turn may use, which websites may show it,
+ * how much a visitor may ask). The server uses ONLY this record: a page cannot send an agent, a profile, a tool list or a
+ * limit. Each embed has its own signing key, used to sign the visitors' session tokens; the key lives in this table and no
+ * method here returns it except `signingKey()`, which only the session code calls. A stolen database file would let someone
+ * mint sessions for an embed, which is no more than an anonymous visitor can already get, so the key is stored as it is
+ * and not sealed like a vault secret.
+ *
+ * Every field is validated on save. A bad save throws `BxAgents.InvalidEmbed` with every problem in the message.
+ */
+class {
+
+	static {
+		ID_PREFIX = "emb_"
+		ID_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
+		POSITIONS = [ "bottom-right", "bottom-left" ]
+		THEMES = [ "light", "dark", "auto" ]
+		// the launcher glyphs the widget draws itself: a name, never markup or a URL a visitor's page would load
+		ICONS = [ "chat", "question", "sparkle", "headset", "book" ]
+		DEFAULT_LOOK = { title : "", welcome : "", placeholder : "Ask a question", suggestions : [], color : "##2563eb", position : "bottom-right", theme : "auto", icon : "chat" }
+		DEFAULT_LIMITS = { perVisitorPerMinute : 10, dailyMessages : 200, maxMessageChars : 2000 }
+		// what a limit may be set to: a typo of 100000 per minute is not a limit
+		LIMIT_RANGES = { perVisitorPerMinute : [ 1, 600 ], dailyMessages : [ 1, 1000000 ], maxMessageChars : [ 1, 20000 ] }
+	}
+
+	/**
+	 * @store A ChatStore, already migrated
+	 */
+	function init( required any store ) {
+		variables.store = arguments.store
+		return this
+	}
+
+	/**
+	 * Makes an embed. Left-out fields get their defaults, except `limits.allowedOrigins`, which is required.
+	 *
+	 * @fields { name, enabled?, expires?, target?, look?, tools?, limits : { allowedOrigins, ... } }
+	 * @knownTools The names of the tools the agent has; when given, a tool outside it is refused. Omit to skip that check
+	 *
+	 * @return The embed as a visitor-safe struct (see view()); never the key
+	 */
+	struct function create( required struct fields, array knownTools ) {
+		var clean = normalize( arguments.fields, {}, arguments.knownTools ?: nullValue() )
+		var id = newId()
+		variables.store.exec(
+			"INSERT INTO embeds ( id, name, enabled, expiresAt, keyVersion, signingKey, config, createdAt, updatedAt ) VALUES ( :id, :name, :enabled, :expires, 1, :key, :config, :now, :now )",
+			{
+				id      : id,
+				name    : clean.name,
+				enabled : clean.enabled ? 1 : 0,
+				key     : newKey(),
+				config  : jsonSerialize( { target : clean.target, look : clean.look, tools : clean.tools, limits : clean.limits } ),
+				expires : { value : clean.expires, cfsqltype : "timestamp", null : !isDate( clean.expires ) },
+				now     : { value : now(), cfsqltype : "timestamp" }
+			}
+		)
+		return get( id )
+	}
+
+	/**
+	 * Changes an embed. The fields replace the stored ones as a whole (the web page sends the whole form); the key and the
+	 * key version are not touched here, see rotate().
+	 *
+	 * @id The embed's id
+	 * @fields As create()
+	 * @knownTools As create()
+	 *
+	 * @return The embed after the change; throws BxAgents.EmbedNotFound when there is none
+	 */
+	struct function update( required string id, required struct fields, array knownTools ) {
+		var current = get( arguments.id )
+		if ( current.isEmpty() ) {
+			throw( type = "BxAgents.EmbedNotFound", message = "There is no embed [#arguments.id#]" )
+		}
+		var clean = normalize( arguments.fields, current, arguments.knownTools ?: nullValue() )
+		variables.store.exec(
+			"UPDATE embeds SET name = :name, enabled = :enabled, expiresAt = :expires, config = :config, updatedAt = :now WHERE id = :id",
+			{
+				id      : current.id,
+				name    : clean.name,
+				enabled : clean.enabled ? 1 : 0,
+				config  : jsonSerialize( { target : clean.target, look : clean.look, tools : clean.tools, limits : clean.limits } ),
+				expires : { value : clean.expires, cfsqltype : "timestamp", null : !isDate( clean.expires ) },
+				now     : { value : now(), cfsqltype : "timestamp" }
+			}
+		)
+		return get( current.id )
+	}
+
+	/**
+	 * Gives the embed a new signing key and goes up one key version: every session token made before it stops working.
+	 *
+	 * @id The embed's id
+	 *
+	 * @return The embed after the change; throws BxAgents.EmbedNotFound when there is none
+	 */
+	struct function rotate( required string id ) {
+		var current = get( arguments.id )
+		if ( current.isEmpty() ) {
+			throw( type = "BxAgents.EmbedNotFound", message = "There is no embed [#arguments.id#]" )
+		}
+		variables.store.exec(
+			"UPDATE embeds SET signingKey = :key, keyVersion = keyVersion + 1, updatedAt = :now WHERE id = :id",
+			{ id : current.id, key : newKey(), now : { value : now(), cfsqltype : "timestamp" } }
+		)
+		return get( current.id )
+	}
+
+	/**
+	 * @return The embed without its key, or an empty struct when there is none. An id in the wrong shape is none, without a query.
+	 */
+	struct function get( required string id ) {
+		if ( !isId( arguments.id ) ) {
+			return {}
+		}
+		var found = variables.store.rows( "SELECT id, name, enabled, expiresAt, keyVersion, config, createdAt, updatedAt FROM embeds WHERE id = :id", { id : arguments.id } )
+		return found.len() ? view( found[ 1 ] ) : {}
+	}
+
+	/**
+	 * @return Every embed without its key, newest first
+	 */
+	array function list() {
+		return variables.store.rows( "SELECT id, name, enabled, expiresAt, keyVersion, config, createdAt, updatedAt FROM embeds ORDER BY createdAt DESC, id" ).map( row => view( row ) )
+	}
+
+	/**
+	 * Whether visitors may use the embed now: it exists, it is switched on and it has not expired. A visitor is told the same
+	 * thing for all three, so an id cannot be probed.
+	 */
+	boolean function isLive( required string id ) {
+		var one = get( arguments.id )
+		return !one.isEmpty() && one.enabled && !( isDate( one.expires ) && one.expires <= now() )
+	}
+
+	/**
+	 * The key and its version, for signing and checking a session token. Only the session code calls this.
+	 *
+	 * @return { key, version }, or an empty struct when there is no such embed
+	 */
+	struct function signingKey( required string id ) {
+		if ( !isId( arguments.id ) ) {
+			return {}
+		}
+		var found = variables.store.rows( "SELECT signingKey, keyVersion FROM embeds WHERE id = :id", { id : arguments.id } )
+		return found.len() ? { key : found[ 1 ].signingKey, version : found[ 1 ].keyVersion } : {}
+	}
+
+	/**
+	 * Counts one thing that happened to an embed today.
+	 *
+	 * @id The embed's id
+	 * @kind messages, blockedOrigin or limited
+	 */
+	void function count( required string id, required string kind, numeric by = 1 ) {
+		if ( ![ "messages", "blockedOrigin", "limited" ].contains( arguments.kind ) ) {
+			throw( type = "BxAgents.InvalidEmbedCounter", message = "An embed counter is messages, blockedOrigin or limited. Got [#arguments.kind#]." )
+		}
+		var day = dateFormat( now(), "yyyy-MM-dd" )
+		variables.store.exec( "INSERT OR IGNORE INTO embed_usage ( embedId, day ) VALUES ( :id, :day )", { id : arguments.id, day : day } )
+		// the column name is one of the three words checked above, never text from a caller
+		variables.store.exec( "UPDATE embed_usage SET #arguments.kind# = #arguments.kind# + :by WHERE embedId = :id AND day = :day", { id : arguments.id, day : day, by : int( arguments.by ) } )
+	}
+
+	/**
+	 * @return How many messages the embed has had today, which is what the daily cap is checked against
+	 */
+	numeric function messagesToday( required string id ) {
+		var found = variables.store.rows( "SELECT messages FROM embed_usage WHERE embedId = :id AND day = :day", { id : arguments.id, day : dateFormat( now(), "yyyy-MM-dd" ) } )
+		return found.len() ? found[ 1 ].messages : 0
+	}
+
+	/**
+	 * @days How many days back, today included
+	 *
+	 * @return { days, messages, blockedOrigin, limited }: real counts from stored usage, zeros when nothing happened
+	 */
+	struct function usage( required string id, numeric days = 7 ) {
+		var since = dateFormat( dateAdd( "d", -( max( 1, int( arguments.days ) ) - 1 ), now() ), "yyyy-MM-dd" )
+		var found = variables.store.rows(
+			"SELECT COALESCE( SUM( messages ), 0 ) AS messages, COALESCE( SUM( blockedOrigin ), 0 ) AS blockedOrigin, COALESCE( SUM( limited ), 0 ) AS limited FROM embed_usage WHERE embedId = :id AND day >= :since",
+			{ id : arguments.id, since : since }
+		)[ 1 ]
+		return { days : arguments.days, messages : found.messages, blockedOrigin : found.blockedOrigin, limited : found.limited }
+	}
+
+	/**
+	 * @return True when the text has the shape of an embed id, which is also the only shape that is ever put in a query
+	 */
+	boolean function isId( required string id ) {
+		return reFind( "^emb_[A-Za-z0-9]{10}$", arguments.id ) > 0
+	}
+
+	/**
+	 * Whether a text is an origin the way a browser writes it: scheme, host and an optional port, nothing else.
+	 * No wildcard, no path, no query, no user info, no `null`.
+	 *
+	 * @return The origin in lower case, or an empty string when it is not one
+	 */
+	string function originOf( required string text ) {
+		var value = trim( arguments.text )
+		if ( !reFind( "^https?://[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?(:[0-9]{1,5})?$", value ) ) {
+			return ""
+		}
+		var port = reFind( ":[0-9]{1,5}$", value ) ? val( listLast( value, ":" ) ) : 1
+		return port >= 1 && port <= 65535 && !value.find( ".." ) ? lCase( value ) : ""
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * Checks the fields and fills in the defaults. A field left out keeps what `current` has, then the default.
+	 *
+	 * @return { name, enabled, expires, target, look, tools, limits }
+	 */
+	private struct function normalize( required struct fields, required struct current, any knownTools ) {
+		var problems = []
+		var f = arguments.fields
+		var old = arguments.current
+
+		var name = trim( toString( f.name ?: old.name ?: "" ) )
+		if ( !len( name ) || len( name ) > 80 ) {
+			problems.append( "name is 1 to 80 characters" )
+		}
+		var enabled = f.enabled ?: old.enabled ?: true
+		if ( !isBoolean( enabled ) ) {
+			problems.append( "enabled is true or false" )
+			enabled = true
+		}
+		var expires = f.keyExists( "expires" ) ? f.expires : ( old.expires ?: "" )
+		if ( isSimpleValue( expires ) && len( trim( expires ) ) && !isDate( expires ) ) {
+			problems.append( "expires is a date, or blank for never" )
+			expires = ""
+		}
+
+		var target = { agent : "", profile : "" }
+		var givenTarget = isStruct( f.target ?: "" ) ? f.target : ( old.target ?: {} )
+		for ( var key in [ "agent", "profile" ] ) {
+			var text = trim( toString( givenTarget[ key ] ?: "" ) )
+			if ( !reFind( "^[A-Za-z0-9._-]{0,64}$", text ) ) {
+				problems.append( "target.#key# is up to 64 letters, digits, dots, dashes or underscores" )
+				text = ""
+			}
+			target[ key ] = text
+		}
+
+		var look = lookOf( isStruct( f.look ?: "" ) ? f.look : ( old.look ?: {} ), name, problems )
+		var tools = toolsOf( f.tools ?: old.tools ?: [], arguments.knownTools ?: nullValue(), problems )
+		var limits = limitsOf( isStruct( f.limits ?: "" ) ? f.limits : ( old.limits ?: {} ), problems )
+
+		if ( problems.len() ) {
+			throw( type = "BxAgents.InvalidEmbed", message = "The embed is not valid: " & problems.toList( "; " ) & "." )
+		}
+		return { name : name, enabled : ( enabled ? true : false ), expires : isDate( expires ) ? parseDateTime( expires ) : "", target : target, look : look, tools : tools, limits : limits }
+	}
+
+	private struct function lookOf( required struct given, required string name, required array problems ) {
+		var look = duplicate( static.DEFAULT_LOOK )
+		look.title = arguments.name
+		var lengths = { title : 80, welcome : 500, placeholder : 120 }
+		for ( var key in [ "title", "welcome", "placeholder" ] ) {
+			if ( arguments.given.keyExists( key ) ) {
+				var text = isSimpleValue( arguments.given[ key ] ) ? trim( toString( arguments.given[ key ] ) ) : ""
+				if ( len( text ) > lengths[ key ] || !isSimpleValue( arguments.given[ key ] ) ) {
+					arguments.problems.append( "look.#key# is up to #lengths[ key ]# characters" )
+				} else {
+					look[ key ] = text
+				}
+			}
+		}
+		if ( arguments.given.keyExists( "suggestions" ) ) {
+			var list = arguments.given.suggestions
+			if ( !isArray( list ) || list.len() > 3 || list.some( s => !isSimpleValue( s ) || len( trim( s ) ) > 120 ) ) {
+				arguments.problems.append( "look.suggestions is up to 3 texts of up to 120 characters" )
+			} else {
+				look.suggestions = list.map( s => trim( s ) ).filter( s => len( s ) )
+			}
+		}
+		if ( arguments.given.keyExists( "color" ) ) {
+			if ( !reFind( "^##[0-9a-fA-F]{6}$", toString( arguments.given.color ) ) ) {
+				arguments.problems.append( "look.color is a color like ##2563eb" )
+			} else {
+				look.color = lCase( arguments.given.color )
+			}
+		}
+		for ( var pick in [ { key : "position", list : static.POSITIONS }, { key : "theme", list : static.THEMES }, { key : "icon", list : static.ICONS } ] ) {
+			if ( arguments.given.keyExists( pick.key ) ) {
+				if ( !isSimpleValue( arguments.given[ pick.key ] ) || !pick.list.contains( arguments.given[ pick.key ] ) ) {
+					arguments.problems.append( "look.#pick.key# is one of: #pick.list.toList( ', ' )#" )
+				} else {
+					look[ pick.key ] = arguments.given[ pick.key ]
+				}
+			}
+		}
+		return look
+	}
+
+	private array function toolsOf( required any given, any known, required array problems ) {
+		if ( !isArray( arguments.given ) || arguments.given.some( t => !isSimpleValue( t ) || !reFind( "^[A-Za-z0-9_.@-]{1,100}$", t ) ) ) {
+			arguments.problems.append( "tools is a list of tool names" )
+			return []
+		}
+		var names = []
+		for ( var tool in arguments.given ) {
+			if ( !names.contains( tool ) ) {
+				names.append( tool )
+			}
+		}
+		if ( !isNull( arguments.known ) ) {
+			var unknown = names.filter( t => !known.contains( t ) )
+			if ( unknown.len() ) {
+				arguments.problems.append( "the agent has no tool named #unknown.map( t => '[' & t & ']' ).toList( ', ' )#" )
+			}
+		}
+		return names
+	}
+
+	private struct function limitsOf( required struct given, required array problems ) {
+		var limits = duplicate( static.DEFAULT_LIMITS )
+		var origins = []
+		var asked = arguments.given.allowedOrigins ?: []
+		if ( !isArray( asked ) || !asked.len() ) {
+			arguments.problems.append( "limits.allowedOrigins needs at least one website, such as https://docs.example.com" )
+		} else {
+			for ( var text in asked ) {
+				var origin = isSimpleValue( text ) ? originOf( text ) : ""
+				if ( !len( origin ) ) {
+					arguments.problems.append( "[#isSimpleValue( text ) ? text : 'a non-text entry'#] is not an origin: write scheme, host and an optional port, with no path and no wildcard" )
+				} else if ( !origins.contains( origin ) ) {
+					origins.append( origin )
+				}
+			}
+		}
+		for ( var key in static.DEFAULT_LIMITS.keyArray() ) {
+			if ( arguments.given.keyExists( key ) ) {
+				var number = arguments.given[ key ]
+				var range = static.LIMIT_RANGES[ key ]
+				if ( !isNumeric( number ) || number != int( number ) || number < range[ 1 ] || number > range[ 2 ] ) {
+					arguments.problems.append( "limits.#key# is a whole number from #range[ 1 ]# to #range[ 2 ]#" )
+				} else {
+					limits[ key ] = int( number )
+				}
+			}
+		}
+		limits.allowedOrigins = origins
+		return limits
+	}
+
+	/**
+	 * @return A row as the struct everything outside this class sees: the stored config unpacked, no key
+	 */
+	private struct function view( required struct row ) {
+		var config = jsonDeserialize( arguments.row.config )
+		var look = duplicate( static.DEFAULT_LOOK )
+		look.append( config.look ?: {}, true )
+		var limits = duplicate( static.DEFAULT_LIMITS )
+		limits.append( config.limits ?: {}, true )
+		limits.allowedOrigins = config.limits.allowedOrigins ?: []
+		return {
+			id         : arguments.row.id,
+			name       : arguments.row.name,
+			enabled    : arguments.row.enabled == 1,
+			expires    : isDate( arguments.row.expiresAt ?: "" ) ? arguments.row.expiresAt : "",
+			keyVersion : arguments.row.keyVersion,
+			target     : { agent : config.target.agent ?: "", profile : config.target.profile ?: "" },
+			look       : look,
+			tools      : config.tools ?: [],
+			limits     : limits,
+			createdAt  : arguments.row.createdAt,
+			updatedAt  : arguments.row.updatedAt
+		}
+	}
+
+	private string function newId() {
+		var random = createObject( "java", "java.security.SecureRandom" ).init()
+		var alphabet = static.ID_ALPHABET
+		var text = ""
+		for ( var i = 1; i <= 10; i++ ) {
+			text &= mid( alphabet, random.nextInt( len( alphabet ) ) + 1, 1 )
+		}
+		return static.ID_PREFIX & text
+	}
+
+	private string function newKey() {
+		var bytes = createObject( "java", "java.lang.reflect.Array" ).newInstance( createObject( "java", "java.lang.Byte" ).TYPE, 32 )
+		createObject( "java", "java.security.SecureRandom" ).init().nextBytes( bytes )
+		return createObject( "java", "java.util.Base64" ).getUrlEncoder().withoutPadding().encodeToString( bytes )
+	}
+
+}

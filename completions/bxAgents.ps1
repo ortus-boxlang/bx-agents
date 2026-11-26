@@ -17,6 +17,7 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 		'data' = 'Locate the data home and its volumes'
 		'deploy' = 'Deploy to a local or remote target'
 		'doctor' = 'Check your environment and project'
+		'embed' = 'Manage the agent as an embed on other websites'
 		'extensions' = 'Install and manage CLI and chat extensions'
 		'hash-password' = 'Hash a password for web sign-in'
 		'inspect' = 'Explore the agent''s tools and configuration'
@@ -153,6 +154,25 @@ Register-ArgumentCompleter -Native -CommandName 'bxAgents', 'bxagents' -ScriptBl
 			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
 		)
 		'doctor:positional' = 'dir'
+		'embed' = @(
+			@{ Name = 'agent'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'color'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'daily'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'id'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'max-chars'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'name'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'origin'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'per-minute'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'placeholder'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'position'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'profile'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'projectRoot'; Value = $true; Choices = @(); Dir = $true }
+			@{ Name = 'theme'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'title'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'tools'; Value = $true; Choices = @(); Dir = $false }
+			@{ Name = 'welcome'; Value = $true; Choices = @(); Dir = $false }
+		)
+		'embed:positional' = 'dir'
 		'extensions' = @(
 			@{ Name = 'force'; Value = $false; Choices = @(); Dir = $false }
 			@{ Name = 'installed'; Value = $false; Choices = @(); Dir = $false }

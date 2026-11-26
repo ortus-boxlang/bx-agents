@@ -18,6 +18,7 @@ const PAGES = [
 	"settings",
 	"agent",
 	"gateways",
+	"embeds",
 	"logs",
 	"access",
 	"data"

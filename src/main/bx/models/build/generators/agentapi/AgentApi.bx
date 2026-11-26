@@ -32,6 +32,12 @@ class {
 			answer( arguments.event, new "models.api.Authenticator@bxagents"().refusal() )
 			return true
 		}
+		// an anonymous visitor of an embed has its own routes (embed*) and is never let into any other action, whatever put it here
+		if ( caller.isEmbed() ) {
+			new "models.logs.Logger@bxagents"().write( "api", "warn", "Refused an embed visitor on #arguments.event.getCurrentAction()#" )
+			answer( arguments.event, failed( "forbidden", "This route is not for embed visitors" ) )
+			return true
+		}
 		// a route the contract marks admin only is refused here, before its action does anything
 		if ( !caller.isAdmin() && new "models.api.ApiContract@bxagents"().needsAdmin( arguments.event.getCurrentAction() ) ) {
 			new "models.logs.Logger@bxagents"().write( "api", "warn", "Refused #caller.id()# on the admin route #arguments.event.getCurrentAction()#" )
@@ -78,7 +84,7 @@ class {
 	private function service() {
 		// once per request: the probe for the shared database is a query
 		if ( !request.keyExists( "bxagentsService" ) ) {
-			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered(), { manageTokens : manageTokens(), data : appData(), connections : connectionService(), gateways : gatewayInfo(), routines : jsonDeserialize( "__ROUTINES__" ), connectors : jsonDeserialize( "__CONNECTORS__" ), apiPath : apiPath(), served : accessMode() != "open" } )
+			request[ "bxagentsService" ] = new "models.api.AgentService@bxagents"( agent(), sharedStore(), offered(), { manageTokens : manageTokens(), embeds : embedsOn(), data : appData(), connections : connectionService(), gateways : gatewayInfo(), routines : jsonDeserialize( "__ROUTINES__" ), connectors : jsonDeserialize( "__CONNECTORS__" ), apiPath : apiPath(), served : accessMode() != "open" } )
 		}
 		return request.bxagentsService
 	}
@@ -127,6 +133,13 @@ class {
 	 */
 	private boolean function manageTokens() {
 		return "__MANAGE_TOKENS__" == "true"
+	}
+
+	/**
+	 * Whether embeds are on (agentApi.embeds, true unless the project turned it off), as the build stamped it in.
+	 */
+	private boolean function embedsOn() {
+		return "__EMBEDS__" != "false"
 	}
 
 	/**
@@ -1457,6 +1470,281 @@ class {
 			return
 		}
 		answer( event, kept.revoke( callerOf( event ), event.getHTTPContent( json : true ).name ?: "" ) )
+	}
+
+	/**
+	 * The embeds, for an admin: GET lists them (never a key) with the names of the tools an embed may list, POST makes one.
+	 * Body of POST: { name, enabled?, expires?, target?, look?, tools?, limits : { allowedOrigins, ... } }
+	 */
+	function embeds( event, rc, prc ) {
+		embedAction( event, ( kept, who ) => event.getHTTPMethod() == "POST" ? kept.create( who, bodyOf( event ) ) : kept.list( who ) )
+	}
+
+	/** One embed. Query: id */
+	function embed( event, rc, prc ) {
+		embedAction( event, ( kept, who ) => kept.get( who, toString( rc.id ?: "" ) ) )
+	}
+
+	/** Body: { id, ...the fields to change } */
+	function updateEmbed( event, rc, prc ) {
+		var body = bodyOf( event )
+		embedAction( event, ( kept, who ) => kept.update( who, toString( body.id ?: "" ), body ) )
+	}
+
+	/** A new signing key for an embed. Body: { id } */
+	function rotateEmbed( event, rc, prc ) {
+		var body = bodyOf( event )
+		embedAction( event, ( kept, who ) => kept.rotate( who, toString( body.id ?: "" ) ) )
+	}
+
+	/** What to paste on the other website. Query: id, base (the address the agent is reached at, an origin) */
+	function embedSnippets( event, rc, prc ) {
+		embedAction( event, ( kept, who ) => kept.snippets( who, toString( rc.id ?: "" ), toString( rc.base ?: "" ) ) )
+	}
+
+	/** What an embed did in the last 7 days. Query: id */
+	function embedUsage( event, rc, prc ) {
+		embedAction( event, ( kept, who ) => kept.usage( who, toString( rc.id ?: "" ) ) )
+	}
+
+	/**
+	 * Runs one embeds call for the caller, or answers that this app keeps no database for them.
+	 *
+	 * @run ( embeds, caller ) => an Outcome
+	 */
+	private void function embedAction( required any event, required function run ) {
+		if ( refused( arguments.event ) ) {
+			return
+		}
+		var kept = service().embeds()
+		if ( isNull( kept ) ) {
+			answer( arguments.event, failed( "not_found", "This server keeps no database, so it has no embeds" ) )
+			return
+		}
+		answer( arguments.event, arguments.run( kept, callerOf( arguments.event ) ) )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Embeds, the public side: the routes a visitor of another website calls. They are outside the token gate and the
+	// address guards (a visitor holds no token and comes from anywhere) and have their own checks, all in models.api.EmbedPublic:
+	// the embed is live, the Origin is one of its websites, and a signed session. See docs/conventions/embeds.md.
+	// ----------------------------------------------------------------------------------
+
+	/** The widget script, the same for every embed; any website may load it, as a classic script or as a module */
+	function embedWidget( event, rc, prc ) {
+		var asset = new "models.embed.EmbedAssets@bxagents"().widget()
+		event.setHTTPHeader( name : "Access-Control-Allow-Origin", value : "*" )
+		event.setHTTPHeader( name : "Cache-Control", value : "public, max-age=300" )
+		event.setHTTPHeader( name : "ETag", value : asset.etag )
+		event.setHTTPHeader( name : "X-Content-Type-Options", value : "nosniff" )
+		if ( ( getHTTPRequestData( false ).headers[ "if-none-match" ] ?: "" ) == asset.etag ) {
+			event.renderData( type : "text", data : "", statusCode : 304 )
+			return
+		}
+		event.renderData( type : "text", data : asset.source, contentType : "text/javascript; charset=utf-8" )
+	}
+
+	/**
+	 * The look and the text of an embed, for a listed website. Never reused without asking again (no-cache): a recording found that
+	 * a 30 second cache kept the chat bubble on a website for up to 30 seconds after the embed was turned off.
+	 */
+	function embedConfig( event, rc, prc ) {
+		embedCall( event, rc.id ?: "", ( pub, origin ) => pub.config( rc.id, origin ), "Cache-Control: no-cache" )
+	}
+
+	/** Starts a visitor's session. Answers { token, expiresAt, expiresIn } */
+	function embedSession( event, rc, prc ) {
+		embedCall( event, rc.id ?: "", ( pub, origin ) => pub.startSession( rc.id, origin, cgi.remote_addr ?: "" ), "Cache-Control: no-store" )
+	}
+
+	/** One message of a visitor, answered as a stream. Body: { input, conversationId? } */
+	function embedEvents( event, rc, prc ) {
+		if ( embedPreflight( event, rc.id ?: "" ) ) {
+			return
+		}
+		var pub = embedPublic()
+		if ( isNull( pub ) ) {
+			answer( event, failed( "not_found", "There is no such chat" ) )
+			return
+		}
+		var origin = embedOrigin()
+		embedCors( event, pub, rc.id ?: "", origin )
+		var prepared = pub.message( rc.id ?: "", origin, embedAuthorization(), bodyOf( event ) )
+		if ( !prepared.succeeded() ) {
+			event.setHTTPHeader( name : "Cache-Control", value : "no-store" )
+			answer( event, prepared )
+			return
+		}
+		event.setHTTPHeader( name : "X-Thread-Id", value : prepared.data().threadId )
+		return streamEmbedTurn( prepared.data() )
+	}
+
+	/** Stops the visitor's own run. Body: { threadId } */
+	function embedCancel( event, rc, prc ) {
+		var body = bodyOf( event )
+		embedCall( event, rc.id ?: "", ( pub, origin ) => pub.cancel( rc.id, origin, embedAuthorization(), toString( body.threadId ?: "" ) ), "Cache-Control: no-store" )
+	}
+
+	/** The visitor's own saved conversation. Query: c (the label the visitor used) */
+	function embedHistory( event, rc, prc ) {
+		embedCall( event, rc.id ?: "", ( pub, origin ) => pub.history( rc.id, origin, embedAuthorization(), toString( rc.c ?: "" ) ), "Cache-Control: no-store" )
+	}
+
+	/** The hosted chat page for an <iframe>; only the websites of the embed may frame it */
+	function embedFrame( event, rc, prc ) {
+		var pub = embedPublic()
+		var found = isNull( pub ) ? failed( "not_found", "There is no such chat" ) : pub.frameOrigins( rc.id ?: "" )
+		if ( !found.succeeded() ) {
+			event.renderData( type : "text", data : "There is no such chat", statusCode : 404, contentType : "text/plain; charset=utf-8" )
+			return
+		}
+		event.setHTTPHeader( name : "Content-Security-Policy", value : "frame-ancestors " & found.data().origins.toList( " " ) )
+		event.setHTTPHeader( name : "X-Content-Type-Options", value : "nosniff" )
+		event.setHTTPHeader( name : "Cache-Control", value : "no-store" )
+		var embed = new "models.store.EmbedService@bxagents"( sharedStore() ).get( rc.id )
+		event.renderData( type : "html", data : new "models.embed.EmbedAssets@bxagents"().frame( rc.id, apiPath(), embed.look.title ), contentType : "text/html; charset=utf-8" )
+	}
+
+	/**
+	 * Runs one public embed call: answers a preflight, or asks EmbedPublic and sends its Outcome with the CORS headers for a
+	 * listed website (none for any other, so a page of another website cannot read the answer).
+	 *
+	 * @run ( EmbedPublic, origin ) => an Outcome
+	 * @header One extra header, "Name: value"
+	 */
+	private void function embedCall( required any event, required string embedId, required function run, string header = "" ) {
+		if ( embedPreflight( arguments.event, arguments.embedId ) ) {
+			return
+		}
+		var pub = embedPublic()
+		if ( isNull( pub ) ) {
+			answer( arguments.event, failed( "not_found", "There is no such chat" ) )
+			return
+		}
+		var origin = embedOrigin()
+		embedCors( arguments.event, pub, arguments.embedId, origin )
+		if ( len( arguments.header ) ) {
+			arguments.event.setHTTPHeader( name : listFirst( arguments.header, ":" ), value : trim( listRest( arguments.header, ":" ) ) )
+		}
+		answer( arguments.event, arguments.run( pub, origin ) )
+	}
+
+	/**
+	 * Answers the browser's CORS preflight for an embed route. Only a listed website is told what is allowed.
+	 *
+	 * @return True when the request was a preflight and has been answered
+	 */
+	private boolean function embedPreflight( required any event, required string embedId ) {
+		if ( arguments.event.getHTTPMethod() != "OPTIONS" ) {
+			return false
+		}
+		var pub = embedPublic()
+		if ( !isNull( pub ) ) {
+			embedCors( arguments.event, pub, arguments.embedId, embedOrigin() )
+		}
+		arguments.event.renderData( type : "text", data : "", statusCode : 204 )
+		return true
+	}
+
+	/**
+	 * The CORS headers, only when the embed is live and lists the request's origin. No Allow-Credentials: the embed routes
+	 * use a bearer token and no cookies.
+	 */
+	private void function embedCors( required any event, required any pub, required string embedId, required string origin ) {
+		var allowed = arguments.pub.corsOrigin( arguments.embedId, arguments.origin )
+		if ( !len( allowed ) ) {
+			return
+		}
+		arguments.event.setHTTPHeader( name : "Access-Control-Allow-Origin", value : allowed )
+		arguments.event.setHTTPHeader( name : "Vary", value : "Origin" )
+		arguments.event.setHTTPHeader( name : "Access-Control-Allow-Methods", value : "GET, POST, OPTIONS" )
+		arguments.event.setHTTPHeader( name : "Access-Control-Allow-Headers", value : "Authorization, Content-Type" )
+		arguments.event.setHTTPHeader( name : "Access-Control-Expose-Headers", value : "X-Thread-Id" )
+		arguments.event.setHTTPHeader( name : "Access-Control-Max-Age", value : "600" )
+	}
+
+	/**
+	 * The origin the request comes from: its Origin header. A browser sends none on a GET to the same origin, which is how the
+	 * hosted page (served by the agent itself) asks for its config; `Sec-Fetch-Site: same-origin` says so and a page script
+	 * cannot set it, so such a request counts as coming from the agent's own origin.
+	 */
+	private string function embedOrigin() {
+		var headers = getHTTPRequestData( false ).headers
+		var given = trim( headers[ "origin" ] ?: "" )
+		if ( len( given ) ) {
+			return given
+		}
+		return lCase( headers[ "sec-fetch-site" ] ?: "" ) == "same-origin" ? embedSelfOrigin() : ""
+	}
+
+	/** The scheme, host and port this request was made to, as a browser writes an origin */
+	private string function embedSelfOrigin() {
+		var headers = getHTTPRequestData( false ).headers
+		var host = trim( headers[ "host" ] ?: "" )
+		if ( !len( host ) ) {
+			return ""
+		}
+		var proto = lCase( listFirst( headers[ "x-forwarded-proto" ] ?: "", "," ) )
+		if ( proto != "https" && proto != "http" ) {
+			proto = ( cgi.server_port_secure ?: 0 ) == 1 || lCase( cgi.https ?: "" ) == "on" ? "https" : "http"
+		}
+		return lCase( proto & "://" & host )
+	}
+
+	private string function embedAuthorization() {
+		return trim( getHTTPRequestData( false ).headers[ "authorization" ] ?: "" )
+	}
+
+	/**
+	 * The public side of the embeds for this request, or null when the app has no shared database. The limiter lives in the
+	 * application scope: its counts are the server's, not a request's.
+	 */
+	private any function embedPublic() {
+		if ( !request.keyExists( "bxagentsEmbedPublic" ) ) {
+			if ( !application.keyExists( "bxagentsEmbedLimiter" ) ) {
+				lock name="bxagents-embed-limiter" type="exclusive" timeout="5" {
+					if ( !application.keyExists( "bxagentsEmbedLimiter" ) ) {
+						application[ "bxagentsEmbedLimiter" ] = new "models.api.EmbedLimiter@bxagents"()
+					}
+				}
+			}
+			var made = service().embedPublic( application.bxagentsEmbedLimiter, getInstance( "jwt@jwtcfml" ), embedSelfOrigin() )
+			request[ "bxagentsEmbedPublic" ] = isNull( made ) ? "" : made
+		}
+		return isSimpleValue( request.bxagentsEmbedPublic ) ? nullValue() : request.bxagentsEmbedPublic
+	}
+
+	/**
+	 * Opens the event stream and runs a visitor's turn in it. A visitor sees the thread id, the answer, the names of the tools
+	 * that run and when they finish, errors and the end: not the arguments of a tool call, and no approval frames (a visitor
+	 * cannot approve anything).
+	 */
+	private string function streamEmbedTurn( required struct turn ) {
+		var runner = service().turns()
+		var prepared = arguments.turn
+		var wanted = [ "thread", "chunk", "tool", "error", "done" ]
+		SSE(
+			callback : ( emitter ) => {
+				runner.execute(
+					prepared,
+					( name, data ) => {
+						if ( !wanted.contains( name ) ) {
+							return
+						}
+						if ( name == "tool" && isStruct( data ) ) {
+							data = { "id" : data.id ?: "", "name" : data.name ?: "", "status" : data.status ?: "", "ms" : data.ms ?: 0 }
+						}
+						emitter.send( data, name )
+					},
+					() => !emitter.isClosed()
+				)
+				if ( !emitter.isClosed() ) {
+					emitter.close()
+				}
+			},
+			keepAliveInterval : 30000
+		)
+		return ""
 	}
 
 	/**

@@ -1,0 +1,65 @@
+/**
+ * The embed verb: make, list, show, turn off and rotate the embeds in the project's chat database.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	function run() {
+		describe( "cli.Embed", function() {
+
+			beforeEach( function() {
+				variables.verb = new bxagents.models.cli.Embed();
+				variables.root = createTempDirectory( prefix = "bxagents-cli-embed-" );
+				variables.usesDefaultPath = !len( getSystemSetting( "BXAGENTS_DB", "" ) );
+			} );
+
+			afterEach( function() {
+				if ( directoryExists( root ) ) {
+					directoryDelete( root, true );
+				}
+			} );
+
+			it( "needs a project root and a known action", function() {
+				expect( function() { verb.run( {} ); } ).toThrow( "BxAgents.MissingProjectRoot" );
+				expect( function() { verb.run( { projectRoot : root } ); } ).toThrow( "BxAgents.UnknownEmbedAction" );
+				expect( function() { verb.run( { projectRoot : root, _positional : "delete" } ); } ).toThrow( "BxAgents.UnknownEmbedAction" );
+			} );
+
+			it( "makes an embed, lists and shows it, never prints the key, and says what is wrong", function() {
+				if ( !usesDefaultPath ) { return; }
+
+				expect( function() { verb.run( { projectRoot : root, _positional : "create", origin : "https://docs.example.com" } ); } ).toThrow( "BxAgents.MissingEmbedName" );
+				var bad = verb.run( { projectRoot : root, _positional : "create", name : "Docs", origin : "https://*.example.com" } );
+				expect( bad.exitCode ).toBe( 1 );
+				expect( bad.message ).toInclude( "not an origin" );
+
+				var made = verb.run( { projectRoot : root, _positional : "create", name : "Docs helper", origin : "https://docs.example.com,http://localhost:9100", tools : "docs_search", "per-minute" : "5", color : "##112233" } );
+				expect( made.exitCode ).toBe( 0 );
+				expect( made.id ).toMatch( "^emb_[A-Za-z0-9]{10}$" );
+				expect( made.message ).toInclude( "5 a minute per visitor" );
+				expect( fileExists( root & "/data/chat.db" ) ).toBeTrue();
+
+				var listed = verb.run( { projectRoot : root, _positional : "list" } );
+				expect( listed.message ).toInclude( made.id );
+				expect( listed.message ).toInclude( "Docs helper" );
+				var shown = jsonDeserialize( verb.run( { projectRoot : root, _positional : "show", id : made.id } ).message );
+				expect( shown.limits.allowedOrigins ).toHaveLength( 2 );
+				expect( shown.look.color ).toBe( "##112233" );
+				expect( shown.keyExists( "signingKey" ) ).toBeFalse();
+				expect( verb.run( { projectRoot : root, _positional : "show", id : "emb_0000000000" } ).exitCode ).toBe( 1 );
+			} );
+
+			it( "turns an embed off and rotates its key", function() {
+				if ( !usesDefaultPath ) { return; }
+				var made = verb.run( { projectRoot : root, _positional : "create", name : "Docs", origin : "https://docs.example.com" } );
+
+				expect( verb.run( { projectRoot : root, _positional : "rotate", id : made.id } ).message ).toInclude( "version 2" );
+				expect( verb.run( { projectRoot : root, _positional : "disable", id : made.id } ).exitCode ).toBe( 0 );
+				expect( jsonDeserialize( verb.run( { projectRoot : root, _positional : "show", id : made.id } ).message ).state ).toBe( "off" );
+				expect( verb.run( { projectRoot : root, _positional : "disable", id : "emb_0000000000" } ).exitCode ).toBe( 1 );
+				expect( verb.run( { projectRoot : root, _positional : "rotate", id : "emb_0000000000" } ).exitCode ).toBe( 1 );
+			} );
+
+		} );
+	}
+
+}

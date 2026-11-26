@@ -1,0 +1,218 @@
+/**
+ * Embeds, over the API: the list, make, change, rotate, snippets and counters an admin uses (the Embeds page and
+ * `bxAgents embed`). Admin only, and it only works where the app keeps its shared database.
+ *
+ * An embed is what lets visitors of another website chat with the agent (see EmbedService and docs/conventions/embeds.md).
+ * Nothing here ever answers the signing key.
+ *
+ * Every answer is an Outcome.
+ */
+import bxModules.bxagents.models.api.Outcome;
+
+class {
+
+	/**
+	 * @service An EmbedService
+	 * @knownTools The names of the tools the agent has; an embed can only list those
+	 * @apiPath Where the agent API is served (for the snippets), such as /__bxagents
+	 */
+	function init( required any service, array knownTools = [], string apiPath = "/__bxagents" ) {
+		variables.service = arguments.service
+		variables.knownTools = arguments.knownTools
+		variables.apiPath = arguments.apiPath
+		return this
+	}
+
+	/**
+	 * @caller The Caller; it must be an admin
+	 *
+	 * @return An Outcome: { embeds : [ embed ], tools : [ every tool name the agent has ] }, newest first, never a key
+	 */
+	any function list( required any caller ) {
+		var refused = adminOnly( arguments.caller )
+		if ( !isNull( refused ) ) {
+			return refused
+		}
+		return Outcome::done( { "embeds" : variables.service.list().map( e => shaped( e ) ), "tools" : variables.knownTools } )
+	}
+
+	/**
+	 * @caller The Caller; it must be an admin
+	 * @id The embed's id
+	 *
+	 * @return An Outcome: the embed, or not_found
+	 */
+	any function get( required any caller, required string id ) {
+		var refused = adminOnly( arguments.caller )
+		if ( !isNull( refused ) ) {
+			return refused
+		}
+		var found = variables.service.get( trim( arguments.id ) )
+		return found.isEmpty() ? missing( arguments.id ) : Outcome::done( shaped( found ) )
+	}
+
+	/**
+	 * @caller The Caller; it must be an admin
+	 * @fields { name, enabled?, expires?, target?, look?, tools?, limits : { allowedOrigins, ... } }
+	 *
+	 * @return An Outcome: the new embed, or bad_request with every problem
+	 */
+	any function create( required any caller, required struct fields ) {
+		var refused = adminOnly( arguments.caller )
+		if ( !isNull( refused ) ) {
+			return refused
+		}
+		try {
+			return Outcome::done( shaped( variables.service.create( arguments.fields, variables.knownTools ) ) )
+		} catch ( any e ) {
+			return mapped( e )
+		}
+	}
+
+	/**
+	 * @caller The Caller; it must be an admin
+	 * @id The embed's id
+	 * @fields As create(); what is left out keeps its value
+	 *
+	 * @return An Outcome: the embed after the change, not_found, or bad_request
+	 */
+	any function update( required any caller, required string id, required struct fields ) {
+		var refused = adminOnly( arguments.caller )
+		if ( !isNull( refused ) ) {
+			return refused
+		}
+		try {
+			return Outcome::done( shaped( variables.service.update( trim( arguments.id ), arguments.fields, variables.knownTools ) ) )
+		} catch ( any e ) {
+			return mapped( e )
+		}
+	}
+
+	/**
+	 * A new signing key. Every open session of the embed stops working.
+	 *
+	 * @caller The Caller; it must be an admin
+	 * @id The embed's id
+	 *
+	 * @return An Outcome: the embed with its new key version, or not_found
+	 */
+	any function rotate( required any caller, required string id ) {
+		var refused = adminOnly( arguments.caller )
+		if ( !isNull( refused ) ) {
+			return refused
+		}
+		try {
+			return Outcome::done( shaped( variables.service.rotate( trim( arguments.id ) ) ) )
+		} catch ( any e ) {
+			return mapped( e )
+		}
+	}
+
+	/**
+	 * The text to paste on the other website, one per way of doing it.
+	 *
+	 * @caller The Caller; it must be an admin
+	 * @id The embed's id
+	 * @base The address the agent is reached at, an origin such as https://agent.example.com
+	 *
+	 * @return An Outcome: { snippets : [ { id, title, language, code, note } ] }, not_found, or bad_request for a base that is not an origin
+	 */
+	any function snippets( required any caller, required string id, required string base ) {
+		var refused = adminOnly( arguments.caller )
+		if ( !isNull( refused ) ) {
+			return refused
+		}
+		var found = variables.service.get( trim( arguments.id ) )
+		if ( found.isEmpty() ) {
+			return missing( arguments.id )
+		}
+		var origin = variables.service.originOf( arguments.base )
+		if ( !len( origin ) ) {
+			return Outcome::failed( "bad_request", "base is the address of the agent as an origin, such as https://agent.example.com" )
+		}
+		var api = origin & variables.apiPath
+		var id = found.id
+		var lf = char( 10 )
+		return Outcome::done( { "snippets" : [
+			{
+				"id"       : "html",
+				"title"    : "HTML",
+				"language" : "html",
+				"code"     : '<script src="#api#/embed/widget.js" data-embed="#id#" defer></script>',
+				"note"     : "Paste it before the closing body tag of any page. It adds the chat bubble. Only the websites you allowed can use it."
+			},
+			{
+				"id"       : "iframe",
+				"title"    : "iframe",
+				"language" : "html",
+				"code"     : '<iframe src="#api#/embed/#id#/frame" title="#encodeForHTML( found.look.title )#" width="400" height="600" style="border:0" allow="clipboard-write"></iframe>',
+				"note"     : "For a page where the chat is part of the layout. Only the websites you allowed may frame it."
+			},
+			{
+				"id"       : "component",
+				"title"    : "Web component",
+				"language" : "html",
+				"code"     : '<script type="module" src="#api#/embed/widget.js"></script>' & lf & '<bx-agent embed="#id#" base="#api#"></bx-agent>',
+				"note"     : "For a framework app (Vue, React, Quasar). Set the attributes in the markup, not later from script: the widget reads them when it connects."
+			},
+			{
+				"id"       : "curl",
+				"title"    : "curl",
+				"language" : "shell",
+				"code"     : 'curl -X POST #api#/embed/#id#/session -H "Origin: #found.limits.allowedOrigins[ 1 ]#"',
+				"note"     : "To try the API from a terminal. The Origin header must be one of your allowed websites. A browser sets it for you, so this does not protect the embed by itself: the tool list and the limits do."
+			}
+		] } )
+	}
+
+	/**
+	 * @caller The Caller; it must be an admin
+	 * @id The embed's id
+	 *
+	 * @return An Outcome: { days, messages, blockedOrigin, limited } over the last 7 days: real counts, zeros when nothing happened
+	 */
+	any function usage( required any caller, required string id ) {
+		var refused = adminOnly( arguments.caller )
+		if ( !isNull( refused ) ) {
+			return refused
+		}
+		var found = variables.service.get( trim( arguments.id ) )
+		return found.isEmpty() ? missing( arguments.id ) : Outcome::done( variables.service.usage( found.id, 7 ) )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private any function adminOnly( required any caller ) {
+		return arguments.caller.isAdmin() ? nullValue() : Outcome::failed( "forbidden", "Only an admin may manage embeds" )
+	}
+
+	private any function missing( required string id ) {
+		return Outcome::failed( "not_found", "There is no embed [#left( trim( arguments.id ), 40 )#]" )
+	}
+
+	private any function mapped( required any error ) {
+		if ( arguments.error.type == "BxAgents.EmbedNotFound" ) {
+			return Outcome::failed( "not_found", arguments.error.message )
+		}
+		if ( arguments.error.type == "BxAgents.InvalidEmbed" ) {
+			return Outcome::failed( "bad_request", arguments.error.message )
+		}
+		rethrow
+	}
+
+	/**
+	 * @return The embed as JSON-friendly values: dates as ISO 8601 text, "" for no expiry
+	 */
+	private struct function shaped( required struct embed ) {
+		var out = duplicate( arguments.embed )
+		out.expires = stamped( out.expires )
+		out.createdAt = stamped( out.createdAt )
+		out.updatedAt = stamped( out.updatedAt )
+		return out
+	}
+
+	private string function stamped( any value ) {
+		return isDate( arguments.value ?: "" ) ? dateTimeFormat( arguments.value, "yyyy-MM-dd'T'HH:mm:ss" ) : ""
+	}
+
+}

@@ -197,6 +197,15 @@ class extends="testbox.system.BaseSpec" {
 					expect( notBoolean.errors.filter( e => e.findNoCase( "manageTokens" ) ) ).toHaveLength( 1 );
 				} );
 
+				it( "takes agentApi.embeds as a boolean and refuses anything else", function() {
+					var nl = char( 10 );
+					var off = profiledProject( "agentApi:" & nl & "  embeds: false" & nl );
+					var notBoolean = profiledProject( "agentApi:" & nl & "  embeds: maybe" & nl );
+
+					expect( off.errors ).toBeEmpty();
+					expect( notBoolean.errors.filter( e => e.findNoCase( "agentApi.embeds" ) ) ).toHaveLength( 1 );
+				} );
+
 				it( "reports an agentApi.path that is not text, instead of failing on it", function() {
 					var nl = char( 10 );
 					var result = profiledProject( "agentApi:" & nl & "  path: [ /a ]" & nl );

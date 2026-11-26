@@ -1,0 +1,95 @@
+/**
+ * How often something may happen in a window, counted on the server's clock and kept in memory: an embed's per-visitor
+ * limit per minute, and how often an address may ask for a session. Nothing here comes from the client.
+ *
+ * A window slides: a hit counts for `windowMs` after it. The counts are shared by every request of the server (hold one
+ * instance, in the application scope) and are lost on a restart, which only gives a visitor a fresh minute. The daily cap is
+ * not here: it is stored (EmbedService.messagesToday), so a restart does not reset it.
+ */
+class {
+
+	static {
+		// a sweep of the whole map every this many hits, so a key nobody uses again does not stay for ever
+		SWEEP_EVERY = 500
+		MAX_KEYS = 50000
+	}
+
+	/**
+	 * @nowFn A function that answers milliseconds; the server's clock when omitted. For specs
+	 */
+	function init( any nowFn ) {
+		if ( isNull( arguments.nowFn ) ) {
+			variables.nowFn = () => createObject( "java", "java.lang.System" ).currentTimeMillis()
+		} else {
+			variables.nowFn = arguments.nowFn
+		}
+		variables.windows = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
+		variables.hits = createObject( "java", "java.util.concurrent.atomic.AtomicLong" ).init( 0 )
+		return this
+	}
+
+	/**
+	 * Counts a hit, unless the limit is already used up.
+	 *
+	 * @key What is counted, such as `msg:emb_x:visitor`
+	 * @limit How many hits the window allows
+	 * @windowMs How long a hit counts
+	 *
+	 * @return True when this hit is allowed (and was counted), false when the limit is used up (nothing was counted)
+	 */
+	boolean function allow( required string key, required numeric limit, numeric windowMs = 60000 ) {
+		var at = variables.nowFn()
+		if ( variables.hits.incrementAndGet() % static.SWEEP_EVERY == 0 || variables.windows.size() > static.MAX_KEYS ) {
+			sweep( at, arguments.windowMs )
+		}
+		var cutoff = at - arguments.windowMs
+		var limit = arguments.limit
+		var outcome = { allowed : false }
+		// compute() runs the function for one key at a time, so two requests of the same visitor cannot both take the last place
+		variables.windows.compute( arguments.key, ( k, times ) => {
+			if ( isNull( times ) ) {
+				times = createObject( "java", "java.util.ArrayList" ).init()
+			}
+			while ( times.size() && times.get( 0 ) <= cutoff ) {
+				times.remove( 0 )
+			}
+			if ( times.size() < limit ) {
+				times.add( at )
+				outcome.allowed = true
+			}
+			return times
+		} )
+		return outcome.allowed
+	}
+
+	/**
+	 * @return How many hits of a key count right now
+	 */
+	numeric function used( required string key, numeric windowMs = 60000 ) {
+		var times = variables.windows.get( arguments.key )
+		if ( isNull( times ) ) {
+			return 0
+		}
+		var cutoff = variables.nowFn() - arguments.windowMs
+		var count = 0
+		for ( var t in times ) {
+			if ( t > cutoff ) {
+				count++
+			}
+		}
+		return count
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	private void function sweep( required numeric at, required numeric windowMs ) {
+		var cutoff = arguments.at - arguments.windowMs
+		for ( var key in variables.windows.keySet().toArray() ) {
+			var times = variables.windows.get( key )
+			if ( isNull( times ) || !times.size() || times.get( times.size() - 1 ) <= cutoff ) {
+				variables.windows.remove( key )
+			}
+		}
+	}
+
+}

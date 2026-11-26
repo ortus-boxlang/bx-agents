@@ -1,0 +1,24 @@
+/**
+ * Gives every agent the embed filter. The generated agent factory calls it for each agent it builds, the main one and each
+ * sub-agent, so a visitor's turn is held to the embed's tool list wherever a tool is called.
+ *
+ * It costs nothing for a turn that is not an embed's: see EmbedFilterMiddleware.
+ */
+class {
+
+	/**
+	 * @agent The AiAgent
+	 * @embeds An EmbedService; omitted, the filter reads the app's shared chat database when an embed turn needs it
+	 *
+	 * @return The agent
+	 */
+	any function attach( required any agent, any embeds ) {
+		if ( isNull( arguments.embeds ) ) {
+			arguments.agent.withMiddleware( new "models.embed.EmbedFilterMiddleware@bxagents"() )
+		} else {
+			arguments.agent.withMiddleware( new "models.embed.EmbedFilterMiddleware@bxagents"( arguments.embeds ) )
+		}
+		return arguments.agent
+	}
+
+}

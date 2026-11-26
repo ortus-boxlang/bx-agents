@@ -71,10 +71,18 @@ class {
 			Logger::log( "agent", "warn", "Ignored what #arguments.caller.source()# sent in a turn request: #ignored.toList( ', ' )#" )
 		}
 		var options = cleanOptions.value
-		if ( !profileAllowed( options ) ) {
+		// a visitor of an embed never chooses a profile: the embed's own record does, set by the server (EmbedPublic), so it
+		// is not held to the list of profiles a client may ask for
+		if ( !arguments.caller.isEmbed() && !profileAllowed( options ) ) {
 			return Outcome::failed( "bad_profile", "profile is not offered here" )
 		}
 		options[ "userId" ] = arguments.caller.id()
+		// what the embed filter reads to know this is an embed turn and which embed it is for (see EmbedFilterMiddleware); a
+		// client cannot send it, TurnOptions drops every key it does not know and this is set after that
+		if ( arguments.caller.isEmbed() ) {
+			// `usageMetadata` is a property of every bx-ai request, so the filter can read it from the request in its hooks
+			options[ "usageMetadata" ] = { "embedId" : arguments.caller.embedId() }
+		}
 		options[ "threadId" ] = scoped( arguments.caller, threadId )
 
 		var input = arguments.request.input ?: ""

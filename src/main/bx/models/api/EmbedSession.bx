@@ -1,0 +1,90 @@
+/**
+ * The session of a visitor of an embed: a signed token, HS256, made with the embed's own key.
+ *
+ * Claims: `emb` (the embed), `v` (the visitor), `o` (the origin it was issued to), `kv` (the key version), `iat`, `exp` and
+ * `xp` (the expiry, one hour on, as a plain number). The signing and checking are cbsecurity's own jwtcfml `jwt` class, which takes the key on each call, so one
+ * object serves every embed.
+ *
+ * A token is refused when the signature is wrong, it has expired, it is for another embed, it was issued to another origin,
+ * the key was rotated since, or there is none. The reason is only for the log: a visitor is told `unauthorized` for all of
+ * them.
+ */
+class {
+
+	static {
+		TTL_SECONDS = 3600
+		ALGORITHM = "HS256"
+	}
+
+	/**
+	 * @jwt jwtcfml's `jwt` object
+	 * @nowFn A function that answers the time in seconds since 1970; the server's own clock when omitted. For specs
+	 */
+	function init( required any jwt, any nowFn ) {
+		variables.jwt = arguments.jwt
+		if ( isNull( arguments.nowFn ) ) {
+			variables.nowFn = () => int( createObject( "java", "java.lang.System" ).currentTimeMillis() / 1000 )
+		} else {
+			variables.nowFn = arguments.nowFn
+		}
+		return this
+	}
+
+	/**
+	 * @embedId The embed's id
+	 * @key { key, version } from EmbedService.signingKey()
+	 * @visitor The visitor's id
+	 * @origin The origin the session is issued to
+	 *
+	 * @return { token, expiresAt (seconds since 1970), expiresIn (seconds) }
+	 */
+	struct function issue( required string embedId, required struct key, required string visitor, required string origin ) {
+		var now = variables.nowFn()
+		var expires = now + static.TTL_SECONDS
+		var token = variables.jwt.encode(
+			{ "emb" : arguments.embedId, "v" : arguments.visitor, "o" : arguments.origin, "kv" : arguments.key.version, "iat" : now, "exp" : expires, "xp" : expires },
+			arguments.key.key,
+			static.ALGORITHM
+		)
+		return { token : token, expiresAt : expires, expiresIn : static.TTL_SECONDS }
+	}
+
+	/**
+	 * @token What the visitor sent, without the `Bearer ` word
+	 * @embedId The embed the request is for
+	 * @key { key, version } of that embed now
+	 * @origin The Origin header of this request
+	 *
+	 * @return { ok, visitor, reason }: the visitor on success, a reason for the log on failure
+	 */
+	struct function verify( required string token, required string embedId, required struct key, required string origin ) {
+		if ( !len( arguments.token ) || arguments.key.isEmpty() ) {
+			return { ok : false, visitor : "", reason : "no token" }
+		}
+		var claims = {}
+		try {
+			// jwtcfml checks the signature, then `exp` and `nbf` against the real clock, and answers the payload with `exp` turned
+			// into a date. `xp` is the same moment as a plain number, checked below against this class's own clock (which a spec moves)
+			claims = variables.jwt.decode( arguments.token, arguments.key.key, [ static.ALGORITHM ] )
+		} catch ( any e ) {
+			return { ok : false, visitor : "", reason : "bad token: " & e.type }
+		}
+		if ( ( claims.emb ?: "" ) != arguments.embedId ) {
+			return { ok : false, visitor : "", reason : "token is for another embed" }
+		}
+		if ( ( claims.o ?: "" ) != arguments.origin ) {
+			return { ok : false, visitor : "", reason : "token was issued to another origin" }
+		}
+		if ( ( claims.kv ?: 0 ) != arguments.key.version ) {
+			return { ok : false, visitor : "", reason : "the key was rotated" }
+		}
+		if ( !isNumeric( claims.xp ?: "" ) || claims.xp <= variables.nowFn() ) {
+			return { ok : false, visitor : "", reason : "token expired" }
+		}
+		if ( !reFind( "^[a-z0-9]{8,64}$", toString( claims.v ?: "" ) ) ) {
+			return { ok : false, visitor : "", reason : "token has no visitor" }
+		}
+		return { ok : true, visitor : claims.v, reason : "" }
+	}
+
+}

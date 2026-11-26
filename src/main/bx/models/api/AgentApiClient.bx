@@ -777,6 +777,57 @@ class {
 		return post( "tokens/revoke", { "name" : arguments.name } )
 	}
 
+	// ---- Embeds (an admin): the agent on another website, for anonymous visitors ----------------
+
+	/** The embeds, never a key, and the names of the tools an embed may list. */
+	struct function embeds() {
+		return get( "embeds" )
+	}
+
+	/**
+	 * Makes an embed.
+	 *
+	 * @fields { name, enabled?, expires?, target?, look?, tools?, limits : { allowedOrigins, ... } }
+	 */
+	struct function createEmbed( required struct fields ) {
+		return post( "embeds", arguments.fields )
+	}
+
+	/** One embed, never its key. */
+	struct function embed( required string id ) {
+		return get( "embeds/get", { "id" : arguments.id } )
+	}
+
+	/**
+	 * Changes an embed; the fields left out keep their value.
+	 *
+	 * @fields The fields to change
+	 */
+	struct function updateEmbed( required string id, required struct fields ) {
+		var body = duplicate( arguments.fields )
+		body[ "id" ] = arguments.id
+		return post( "embeds/update", body )
+	}
+
+	/** A new signing key: every open visitor session stops working. */
+	struct function rotateEmbed( required string id ) {
+		return post( "embeds/rotate", { "id" : arguments.id } )
+	}
+
+	/**
+	 * The text to paste on the other website.
+	 *
+	 * @base The address the agent is reached at, an origin such as https://agent.example.com
+	 */
+	struct function embedSnippets( required string id, required string base ) {
+		return get( "embeds/snippets", { "id" : arguments.id, "base" : arguments.base } )
+	}
+
+	/** What the embed did in the last 7 days. */
+	struct function embedUsage( required string id ) {
+		return get( "embeds/usage", { "id" : arguments.id } )
+	}
+
 	// ---- inside ------------------------------------------------------------------------------
 
 	private struct function get( required string route, struct query = {} ) {

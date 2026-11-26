@@ -1,0 +1,11 @@
+hide = ( server.cli.parsed.options.hide ?: "false" ) == "true"
+ran = []
+docs = aiTool( "docs_search", "Search the docs", () => { ran.append( "docs_search" ); return "found 3 pages" } )
+wipe = aiTool( "delete_all", "Deletes everything", () => { ran.append( "delete_all" ); return "DELETED" } )
+filt = new Filt( [ "docs_search" ], hide )
+agent = aiAgent( name = "t", model = aiModel( provider = "openai-compatible", apiKey = "x", options = { baseUrl : "http://localhost:8099/v1" }, params = { model : "scripted" } ), tools = [ docs, wipe ], middleware = [ filt ] )
+for ( q in [ "wipe it", "docs please" ] ) {
+	r = agent.run( q )
+	systemOutput( "Q=#q# -> " & ( isSimpleValue( r ) ? r : jsonSerialize( r ) ), true )
+}
+systemOutput( "TOOLS ACTUALLY RUN: " & ran.toList(), true )

@@ -33,6 +33,8 @@ class {
 	 */
 	function init( required any agent, any store, any offered, struct options = {} ) {
 		variables.manageTokens = arguments.options.manageTokens ?: false
+		// agentApi.embeds: false is the master switch: no embeds even when the app has the database
+		variables.embedsOn = arguments.options.embeds ?: true
 		// an AppData: the data home and volumes of the app; without one the volume list is empty and there is no data report
 		variables.appData = arguments.options.data ?: nullValue()
 		variables.connectionService = arguments.options.connections ?: nullValue()
@@ -72,6 +74,39 @@ class {
 	}
 
 	/**
+	 * @return True when the app has the shared database the embeds are kept in
+	 */
+	boolean function keepsEmbeds() {
+		return variables.embedsOn && !isNull( variables.store )
+	}
+
+	/**
+	 * @return Embed management for an admin caller, or null when the app keeps no shared database. An embed can only list
+	 *         tools the agent has.
+	 */
+	any function embeds() {
+		if ( !keepsEmbeds() ) {
+			return nullValue()
+		}
+		var names = ( variables.agent.getConfig().tools ?: [] ).map( t => isStruct( t ) ? ( t.name ?: "" ) : toString( t ) ).filter( n => len( n ) )
+		return new Embeds( new "models.store.EmbedService@bxagents"( variables.store ), names, variables.apiPath )
+	}
+
+	/**
+	 * The public side of the embeds (what a visitor of another website calls), or null when the app keeps no shared database.
+	 *
+	 * @limiter The EmbedLimiter the whole server shares
+	 * @jwt jwtcfml's jwt object, which signs and checks the visitors' sessions
+	 * @selfOrigin The origin this request was made to, which is always an accepted origin (the hosted page runs there)
+	 */
+	any function embedPublic( required any limiter, required any jwt, string selfOrigin = "" ) {
+		if ( !keepsEmbeds() ) {
+			return nullValue()
+		}
+		return new EmbedPublic( new "models.store.EmbedService@bxagents"( variables.store ), new EmbedSession( arguments.jwt ), arguments.limiter, this, arguments.selfOrigin )
+	}
+
+	/**
 	 * @return Account management for an admin caller, or null when the app keeps no shared database
 	 */
 	any function accounts() {
@@ -90,7 +125,7 @@ class {
 	 *         the token routes are in it only when this server offers them
 	 */
 	struct function apiDocument( required string apiBase, string access = "open" ) {
-		return new OpenApiDocument( variables.agent.getConfig().name ?: "agent", { manageTokens : variables.manageTokens } ).build( arguments.apiBase, arguments.access )
+		return new OpenApiDocument( variables.agent.getConfig().name ?: "agent", { manageTokens : variables.manageTokens, embeds : variables.embedsOn } ).build( arguments.apiBase, arguments.access )
 	}
 
 	/** @return The SessionStore, or null */
@@ -312,6 +347,7 @@ class {
 				"preferences"   : keepsSessions(),
 				"profiles"      : variables.offered.any(),
 				"tokens"        : keepsTokens() && arguments.caller.isAdmin(),
+				"embeds"        : keepsEmbeds() && arguments.caller.isAdmin(),
 				"logs"          : !isNull( variables.appData ) && arguments.caller.isAdmin(),
 				"gateways"      : !isNull( variables.gatewayInfo ) && arguments.caller.isAdmin(),
 				"status"        : new "models.extensions.ServedStatus@bxagents"().available(),
