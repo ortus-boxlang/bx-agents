@@ -285,8 +285,8 @@ final class SettingsPanel {
 			if ( value == null ) {
 				value = resolved.get( s.name() );
 			}
-			String				source	= resolved.source( s.name() );
-			Row					row		= Row.of().add( on ? "❯ " : "  ", theme.accent ).add( pad( s.name(), nameCol ), on ? theme.selected : theme.plain )
+			String	source	= resolved.source( s.name() );
+			Row		row		= Row.of().add( on ? "❯ " : "  ", theme.accent ).add( pad( s.name(), nameCol ), on ? theme.selected : theme.plain )
 			    .add( pad( value, valCol ), on ? theme.selected : theme.accent )
 			    .add( pad( source, srcCol ), "default".equals( source ) ? theme.muted : theme.ok )
 			    .add( NEXT_START.contains( s.name() ) ? "next start" : "", theme.warn );
