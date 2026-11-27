@@ -143,7 +143,9 @@ For admins. Each [gateway](gateways/index.md) with its state (connected, stopped
 
 For admins, when the agent keeps its database. The agent on **another website**, for anonymous visitors: define it here, paste the snippet there. The page is a list of the [embeds](embeds.md) with a search (name and websites), a state filter (All, On, Off, Expired, each with its count), the state of each in words, a **switch** to turn it on or off at once, and **Edit** and **Delete** (which asks first and removes the embed for good). **New embed** and Edit open the same drawer, and saving a new embed keeps the drawer open as the edit of it. The drawer has a fieldset each for **Agent** (name, which agent answers, an optional model profile), **Look and text** (title, input placeholder, welcome message, up to three suggested questions, colour, position, theme), **What visitors can use** (the agent's tools as a checklist, everything unticked is off), **Allowed websites** (chips that refuse a wildcard, a path or anything that is not an origin, and at least one is required) and **Limits** (per visitor per minute, per day for the whole embed, longest message). A **preview** on the right is the real widget, drawn from the form as you type. For a saved embed the page also shows the **snippet** as HTML, iframe, web component and curl, each with a note and a **Copy** button, and the last seven days: messages, requests refused for a wrong website and requests refused for a limit, or "No visits yet" when nothing has happened. **Save**, **Disable** (it asks first; visitors are then answered as if the embed did not exist) and **Rotate key** (it asks first; every open visitor session ends) are under the form.
 
-![The Embeds page: the editor with the live preview and the snippet](../assets/webui/webui-embeds-editor.png)
+![The Embeds page: the list with its search, state filter, switch, Edit and Delete](../assets/webui/webui-embeds-list.png)
+
+![The panel for a new or an edited embed, with the live preview](../assets/webui/webui-embeds-editor.png)
 
 ### Logs
 

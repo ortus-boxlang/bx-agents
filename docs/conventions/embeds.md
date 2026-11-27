@@ -28,7 +28,7 @@ hooks, bot protection, variables and context.
   <track kind="captions" src="/assets/video/embeds-tour.vtt" srclang="en" label="English" default>
 </video>
 
-*About a minute: an admin makes an embed, a visitor chats from another website, and the admin looks at the counters, rotates the key and disables it. The answers come from a scripted demo model, so they are canned. Narrated, with captions.*
+*About a minute and a half: an admin makes an embed in the panel of the Embeds page, a visitor chats from another website, and the admin looks at the counters, rotates the key, then searches the list, turns the embed off with its switch and sees that Delete asks first. The answers come from a scripted demo model, so they are canned. Narrated, with captions.*
 
 ## The record
 
@@ -231,7 +231,9 @@ The hosted page runs on the agent's own origin, so a request from it is from tha
 
 The pictures below are from that run.
 
-![The Embeds editor: the agent, the look and text on the left, and on the right the preview, which is the real widget drawn from the form](../assets/webui/webui-embeds-editor.png)
+![The Embeds list: a search, the state filter with its counts, a switch, Edit and Delete a row](../assets/webui/webui-embeds-list.png)
+
+![The panel that opens for New and Edit: the agent, the look and text on the left, and on the right the preview, which is the real widget drawn from the form](../assets/webui/webui-embeds-editor.png)
 
 ![A wildcard website is refused in words before anything is saved](../assets/webui/webui-embeds-wildcard-refused.png)
 
@@ -242,6 +244,8 @@ The pictures below are from that run.
 ![The last seven days: real counters](../assets/webui/webui-embeds-counters.png)
 
 ![Rotate key asks first](../assets/webui/webui-embeds-rotate.png)
+
+![Delete asks first, and says what it removes](../assets/webui/webui-embeds-delete.png)
 
 A disabled or expired embed stops showing its bubble at the next page load: `config` is sent with `Cache-Control: no-cache`, so a browser asks again every time. (A 30 second cache was tried first. A recording of the tour showed the bubble staying on the website for up to 30 seconds after Disable, so it was removed.)
 
