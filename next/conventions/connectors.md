@@ -1,14 +1,14 @@
 ---
 title: connectors
 icon: phosphor-duotone:plugs-connected
-summary: Ready-made connections to GitHub, Stripe, Notion, Atlassian, Cloudflare, Supabase and Git. Each person connects their own account.
+summary: Ready-made connections to GitHub, Stripe, Notion, Atlassian, Cloudflare, Supabase, Git, Context7 and Slack. Each person connects their own account.
 description: The connector catalog that ships with BX Agents, how a person connects one, how an admin limits them, and how they behave in the web page, the terminal and chat gateways.
 tags: [conventions, mcp, secrets]
 ---
 
 # Connectors
 
-A **connector** is a ready-made connection to a service that has an MCP server. BX Agents ships with seven: [GitHub, Stripe, Notion, Atlassian, Cloudflare, Supabase and Git](connector-catalog.md). Every agent offers them by default. Offering one does not connect it: nothing contacts a service until a person connects their own account.
+A **connector** is a ready-made connection to a service that has an MCP server. BX Agents ships with nine: [GitHub, Stripe, Notion, Atlassian, Cloudflare, Supabase, Git, Context7 and Slack](connector-catalog.md). Every agent offers them by default. Offering one does not connect it: nothing contacts a service until a person connects their own account.
 
 - **Personal.** A token or sign in belongs to one person. The agent uses it only when that person asks, and two people never share a token or a session.
 - **Sealed.** Tokens are stored in the [vault](vault.md), locked to the host of the service. The model never sees one.
