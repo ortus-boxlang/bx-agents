@@ -148,6 +148,24 @@ class extends="testbox.system.BaseSpec" {
 				expect( frames[ 2 ].data.message ).toBe( "model failed" );
 			} );
 
+			it( "tells a visitor of an embed nothing about why a turn failed, in a frame or in an answer", function() {
+				agent.failing();
+				var visitor = bxagents.models.api.Caller::fromEmbed( "emb_AAAAAAAAAA", "abcdef0123456789" );
+				var generic = "Something went wrong. Please try again in a moment.";
+
+				runner().stream( visitor, { input : "hi" }, collect );
+				expect( frames[ 2 ].data.message ).toBe( generic );
+				expect( frames[ 2 ].data.message ).notToInclude( "model failed" );
+				// not even the terminal's full diagnostic, whatever the runner was built to give
+				frames.clear();
+				new bxagents.models.api.TurnRunner( agent = agent, localImages = true ).stream( visitor, { input : "hi" }, collect );
+				expect( frames[ 2 ].data.message ).toBe( generic );
+
+				var answered = runner().run( visitor, { input : "hi" } );
+				expect( answered.code() ).toBe( "internal" );
+				expect( answered.reason() ).toBe( generic );
+			} );
+
 			it( "stops sending once the client has gone", function() {
 				var gone = { value : false };
 				var seenFrames = [];

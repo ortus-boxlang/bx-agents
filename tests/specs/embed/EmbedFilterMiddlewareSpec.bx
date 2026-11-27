@@ -44,6 +44,16 @@ class extends="testbox.system.BaseSpec" {
 				expect( broken.beforeToolCall( { chatRequest : {}, toolName : "delete_all" } ).isTerminal() ).toBeFalse();
 			} );
 
+			it( "fails closed for a request object that cannot say what it is: nothing it offers or calls may run", function() {
+				// an object (not a struct) whose usage metadata cannot be read: not provably a turn that is not an embed's
+				var unreadable = new tests.support.UnreadableRequest();
+				var packet = { tools : openAiTools() };
+
+				filter.beforeLLMCall( { chatRequest : unreadable, dataPacket : packet } );
+				expect( packet.tools ).toBeEmpty();
+				expect( filter.beforeToolCall( { chatRequest : unreadable, toolName : "docs_search" } ).isTerminal() ).toBeTrue();
+			} );
+
 			it( "takes the tools that are not listed out of what the model is offered", function() {
 				var packet = { tools : openAiTools() };
 

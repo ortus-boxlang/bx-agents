@@ -30,11 +30,24 @@ class extends="testbox.system.BaseSpec" {
 				expect( embeds.create( chat, good ).code() ).toBe( "forbidden" );
 				expect( embeds.update( chat, made.id, { name : "x" } ).code() ).toBe( "forbidden" );
 				expect( embeds.rotate( chat, made.id ).code() ).toBe( "forbidden" );
+				expect( embeds.delete( chat, made.id ).code() ).toBe( "forbidden" );
 				expect( embeds.snippets( chat, made.id, "https://agent.example.com" ).code() ).toBe( "forbidden" );
 				expect( embeds.usage( chat, made.id ).code() ).toBe( "forbidden" );
 				// and nothing changed
 				expect( service.get( made.id ).name ).toBe( "Docs helper" );
 				expect( service.get( made.id ).keyVersion ).toBe( 1 );
+				expect( service.list() ).toHaveLength( 1 );
+			} );
+
+			it( "deletes an embed for an admin, and answers not_found for one that is not there", function() {
+				var made = embeds.create( admin, good ).data();
+
+				var gone = embeds.delete( admin, made.id );
+				expect( gone.succeeded() ).toBeTrue();
+				expect( gone.data() ).toBe( { deleted : true, id : made.id } );
+				expect( service.list() ).toHaveLength( 0 );
+				expect( embeds.delete( admin, made.id ).code() ).toBe( "not_found" );
+				expect( embeds.get( admin, made.id ).code() ).toBe( "not_found" );
 			} );
 
 			it( "lists embeds with the tools an embed may list, and never answers a key", function() {

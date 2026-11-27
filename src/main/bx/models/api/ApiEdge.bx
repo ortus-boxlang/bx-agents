@@ -49,6 +49,19 @@ class {
 	/**
 	 * @outcome A service Outcome
 	 *
+	 * @return The seconds to put in a Retry-After header, or 0 for no header: only a failure that says how long to wait has one
+	 */
+	numeric function retryAfterOf( required any outcome ) {
+		if ( arguments.outcome.succeeded() ) {
+			return 0
+		}
+		var data = arguments.outcome.data()
+		return isStruct( data ) ? val( data.retryAfter ?: 0 ) : 0
+	}
+
+	/**
+	 * @outcome A service Outcome
+	 *
 	 * @return The JSON body to send
 	 */
 	struct function bodyFor( required any outcome ) {

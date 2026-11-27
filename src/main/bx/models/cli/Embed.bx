@@ -10,6 +10,7 @@
  *   bxAgents embed show --id=emb_... [--json]
  *   bxAgents embed disable --id=emb_...
  *   bxAgents embed rotate --id=emb_...
+ *   bxAgents embed delete --id=emb_...
  *
  * Run it where the agent's database is. The tools are not checked against the agent here (the web app's Embeds page does that);
  * a name the agent does not have is simply never run. The signing key is never printed.
@@ -17,7 +18,7 @@
 class {
 
 	/**
-	 * @options { projectRoot (required), _positional (create, list, show, disable or rotate), id, name, origin, tools, ... }
+	 * @options { projectRoot (required), _positional (create, list, show, disable, rotate or delete), id, name, origin, tools, ... }
 	 */
 	struct function run( struct options = {} ) {
 		var projectRoot = trim( arguments.options.projectRoot ?: "" )
@@ -25,8 +26,8 @@ class {
 			throw( type = "BxAgents.MissingProjectRoot", message = "`embed` requires a project root" )
 		}
 		var action = lCase( trim( arguments.options._positional ?: "" ) )
-		if ( !len( action ) || ![ "create", "list", "show", "disable", "rotate" ].contains( action ) ) {
-			throw( type = "BxAgents.UnknownEmbedAction", message = "`embed` needs one of: create, list, show, disable, rotate - for example `bxAgents embed list`." )
+		if ( !len( action ) || ![ "create", "list", "show", "disable", "rotate", "delete" ].contains( action ) ) {
+			throw( type = "BxAgents.UnknownEmbedAction", message = "`embed` needs one of: create, list, show, disable, rotate, delete - for example `bxAgents embed list`." )
 		}
 
 		var file = new "models.store.ChatStorePath@bxagents"().forProject( projectRoot )
@@ -46,6 +47,8 @@ class {
 				return disable( embeds, arguments.options )
 			case "rotate":
 				return rotate( embeds, arguments.options )
+			case "delete":
+				return remove( embeds, arguments.options )
 		}
 	}
 
@@ -132,6 +135,15 @@ class {
 		}
 		var rotated = arguments.embeds.rotate( id )
 		return { exitCode : 0, message : "Embed #id# has a new signing key (version #rotated.keyVersion#). Every open visitor session stopped working; the snippet on your website needs no change." }
+	}
+
+	private struct function remove( required any embeds, required struct options ) {
+		var id = trim( arguments.options.id ?: "" )
+		if ( arguments.embeds.get( id ).isEmpty() ) {
+			return { exitCode : 1, message : "There is no embed [#id#]. See `bxAgents embed list`." }
+		}
+		arguments.embeds.delete( id )
+		return { exitCode : 0, message : "Embed #id# is deleted, with its signing key and its counters. The widget on your website now shows nothing; to turn an embed off and keep it, use `embed disable`." }
 	}
 
 	private string function state( required struct embed ) {
