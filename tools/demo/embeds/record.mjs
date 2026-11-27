@@ -159,7 +159,6 @@ await scene( "define", async() => {
 	await page.keyboard.press( "Enter" );
 	await page.locator( "#embedColor" ).fill( "#7c3aed" );
 	await pause( 400 );
-	await page.evaluate( () => window.scrollTo( 0, 0 ) );
 	await shot( "editor-with-live-preview" );
 } );
 
@@ -181,9 +180,10 @@ await scene( "limits", async() => {
 await scene( "snippet", async() => {
 	await click( page.locator( "#saveEmbed" ) );
 	await page.getByText( "Made Docs helper." ).waitFor();
+	// saving a new embed keeps the panel open, now as the edit of the embed it made
+	await page.getByRole( "heading", { name: "Edit Docs helper" } ).waitFor();
 	await pause( 700 );
 	embedId = ( await page.locator( "[role=tabpanel]:visible code" ).textContent() ).match( /emb_[A-Za-z0-9]{10}/ )[ 0 ];
-	await page.evaluate( () => window.scrollTo( 0, 0 ) );
 	await pause( 500 );
 	await click( page.getByRole( "tab", { name: "iframe" } ) );
 	await pause( 700 );
@@ -210,7 +210,7 @@ await scene( "visitor", async() => {
 
 await scene( "counters", async() => {
 	await page.goto( AGENT + "/chat/embeds" );
-	await click( page.locator( ".embeds-item" ).first().locator( "button" ) );
+	await click( page.getByRole( "button", { name: "Edit Docs helper" } ) );
 	await page.getByRole( "heading", { name: "Last 7 days" } ).waitFor();
 	await pause( 900 );
 	await page.getByRole( "heading", { name: "Last 7 days" } ).scrollIntoViewIfNeeded();
@@ -220,11 +220,28 @@ await scene( "counters", async() => {
 	await shot( "rotate-asks-first" );
 	await click( page.locator( "#confirmYes" ) );
 	await pause( 1200 );
-	await click( page.locator( "#toggleEmbed" ) );
+	await click( page.locator( "dialog.drawer" ).getByRole( "button", { name: "Close" } ) );
 	await pause( 700 );
-	await click( page.locator( "#confirmYes" ) );
+} );
+
+await scene( "list", async() => {
+	await shot( "list" );
+	await click( page.locator( "#embedSearch" ) );
+	await page.locator( "#embedSearch" ).pressSequentially( "docs", { delay: 90 } );
+	await pause( 600 );
+	await click( page.getByRole( "button", { name: /^On/ } ) );
+	await pause( 700 );
+	await shot( "list-filtered" );
+	await click( page.getByRole( "button", { name: /^All/ } ) );
+	await click( page.locator( "tbody tr" ).filter( { hasText: "Docs helper" } ).locator( ".switch" ) );
+	await page.getByText( "Docs helper is off." ).waitFor();
 	await pause( 900 );
-	await shot( "disabled" );
+	await shot( "switched-off" );
+	await click( page.getByRole( "button", { name: "Delete Docs helper" } ) );
+	await pause( 900 );
+	await shot( "delete-asks-first" );
+	await click( page.locator( "#confirmNo" ) );
+	await pause( 500 );
 } );
 
 await scene( "outro", async() => {
