@@ -248,6 +248,8 @@ export function embedsPage() {
 		form            : null,
 		/** @type {string} The form as it was last saved, to tell what changed */
 		savedJson       : "",
+		/** @type {boolean} True while close() is asking about unsaved changes */
+		closing         : false,
 		/** @type {boolean} True while Save is going */
 		saving          : false,
 		/** @type {Array<{ field: string, text: string }>} What the page or the server refused */
@@ -409,15 +411,20 @@ export function embedsPage() {
 			] );
 		},
 
-		/** Closes the editor. */
+		/** Closes the editor, after asking when there are changes that are not saved. A second request while it asks is ignored. */
 		async close() {
-			if ( !this.form ) {
+			if ( !this.form || this.closing ) {
 				return;
 			}
-			if ( this.dirty && !await this.$confirm( { title: "Leave without saving?", body: "Your changes are not saved.", yes: "Leave", danger: true } ) ) {
-				return;
+			this.closing = true;
+			try {
+				if ( this.dirty && !await this.$confirm( { title: "Leave without saving?", body: "Your changes are not saved.", yes: "Leave", danger: true } ) ) {
+					return;
+				}
+				this.form = null;
+			} finally {
+				this.closing = false;
 			}
-			this.form = null;
 		},
 
 		/**
@@ -583,10 +590,12 @@ export function embedsPage() {
 				return;
 			}
 			this.$toast.success( ( isNew ? "Made " : "Saved " ) + result.data.name + "." );
-			await this.load();
+			// the form becomes the saved embed (a new one is now an edit of itself) BEFORE the list is read again: the other way
+			// round, whatever was typed while the list loaded was thrown away when the form was set from the answer
 			this.form = formOf( result.data );
 			this.savedJson = JSON.stringify( this.form );
 			this.problems = [];
+			await this.load();
 			await Promise.all( [
 				this.loadSnippets(),
 				this.loadUsage()
