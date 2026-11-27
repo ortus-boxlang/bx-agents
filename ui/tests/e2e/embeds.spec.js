@@ -291,9 +291,13 @@ test.describe( "The Embeds page", () => {
 			await expect( row( tag + " beta" ) ).toHaveCount( 0 );
 			expect( ( await request.get( API + "/embeds/get?id=" + beta.id, { headers: JSON_HEADERS } ) ).status() ).toBe( 404 );
 			expect( errors ).toEqual( [] );
+		} catch ( error ) {
+			// said here so the first failure is not hidden behind the clean-up below running out of time
+			console.log( "FIRST ERROR: " + String( error.message ).split( "\n" ).slice( 0, 12 ).join( " | " ) );
+			throw error;
 		} finally {
 			for ( const embed of made ) {
-				await request.post( API + "/embeds/delete", { headers: JSON_HEADERS, data: { id: embed.id } } );
+				await request.post( API + "/embeds/delete", { headers: JSON_HEADERS, data: { id: embed.id }, timeout: 5000 } ).catch( () => {} );
 			}
 		}
 	} );
