@@ -237,7 +237,7 @@ GitHub y Signal - coordinados por una sola sesión con políticas `queue` / `ste
 Cada persona y cada hilo tienen su propia conversación, y los comandos de barra también funcionan allí.
 :::
 ::: card title="HTTP y MCP" icon="phosphor-duotone:stack" href="guides/agent-api.md"
-Todo agente sirve una API HTTP (88 rutas) con un documento OpenAPI, abierta en tu máquina o tras tokens,
+Todo agente sirve una API HTTP (89 rutas) con un documento OpenAPI, abierta en tu máquina o tras tokens,
 `allowedIPs` y un límite de frecuencia. Aloja servidores MCP locales desde `mcp/` para que
 otros clientes puedan llamar a tus tools.
 :::

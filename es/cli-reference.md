@@ -901,13 +901,13 @@ Inicia sesión en los servicios de un proyecto que piden iniciar sesión a cada 
 
 ```bash
 bxAgents connect
-bxAgents connect mail [--port=8765] [--no-open] [--timeout=300]
+bxAgents connect mail [--port=8765] [--no-open] [--timeout=120]
 bxAgents connect mail --remove
 bxAgents connect [--user=NAME] [--json]
 ```
 
 - Sin nombre lista los servicios y si estás conectado (`--json` para un script).
-- Con un nombre imprime una dirección y abre tu navegador, espera la redirección en `127.0.0.1` (un puerto libre, o `--port`) y termina el inicio de sesión. `--no-open` solo imprime. `--timeout` son los segundos de espera, 300 por defecto.
+- Con un nombre imprime una dirección y abre tu navegador, espera la redirección en `127.0.0.1` (un puerto libre, o `--port`) y termina el inicio de sesión. `--no-open` solo imprime. `--timeout` son los segundos de espera, 120 por defecto.
 - `--remove` olvida tu inicio de sesión. `--user` indica de quién: `local` por defecto, el único usuario de un servidor abierto.
 - Los tokens se sellan en la base de datos del chat del proyecto. Ejecútalo donde está la base de datos: en el proyecto, o en un servidor con `BXAGENTS_DB` definido.
 
