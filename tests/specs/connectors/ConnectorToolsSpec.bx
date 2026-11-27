@@ -101,6 +101,63 @@ class extends="testbox.system.BaseSpec" {
 				expect( fake.requests().map( r => r.token ).toSet().toArray() ).toBe( [ "tok-ada" ] );
 			} );
 
+			it( "lists the tools of a public server without any token", function() {
+				fake.open( true );
+				var policy = policyFor();
+				for ( var entry in policy.available ) {
+					if ( entry.id == "excalidraw" ) {
+						entry.url = fake.mcpUrl();
+					}
+				}
+				var holder = {};
+				var openClients = new bxagents.models.connectors.ConnectorClients( ( id, person ) => "", 1800, { endpointFor : ( id, person ) => holder.tools.endpointFor( id, person ) } );
+				var svc = new bxagents.models.connectors.ConnectorService( policy, settings, { vault : vault, programExists : p => true } );
+				holder.tools = new bxagents.models.connectors.ConnectorTools( svc, settings, openClients, { cacheSeconds : 0 } );
+
+				expect( () => holder.tools.tools( "excalidraw", "ada" ) ).toThrow( "BxAgents.NotConnected" );
+				settings.set( "ada", "excalidraw", "enabled", { on : true } );
+				var listed = holder.tools.tools( "excalidraw", "ada" );
+
+				expect( listed.map( t => t.name ) ).toInclude( "search_repositories" );
+				expect( fake.requests().every( r => r.token == "" ) ).toBeTrue();
+				openClients.close();
+			} );
+
+			it( "lists the tools of a sign in BxAgents does itself, with the token it keeps for the person and renews", function() {
+				var oauthFake = new tests.support.FakeOAuthServer().start();
+				try {
+					var oauth = { endpoints : { authorize : "https://accounts.example.com/auth", token : oauthFake.tokenUrl(), revoke : oauthFake.revokeUrl() }, clientId : "c", clientSecret : "s", redirectUri : "https://app.example.com/cb", scopes : [ "x" ] };
+					var app = new bxagents.models.connect.OAuthApp( "gmail", oauth, vault, {} );
+					var started = app.startAuthorization( "ada" );
+					app.completeAuthorization( "good-code", started.state, "" );
+					var policy = policyFor();
+					for ( var entry in policy.available ) {
+						if ( entry.id == "gmail" ) {
+							entry.url = fake.mcpUrl();
+						}
+					}
+					var holder = {};
+					var ownClients = new bxagents.models.connectors.ConnectorClients(
+						( id, person ) => id == "gmail" ? app.accessToken( person ) : "",
+						1800,
+						{ endpointFor : ( id, person ) => holder.tools.endpointFor( id, person ) }
+					);
+					var svc = new bxagents.models.connectors.ConnectorService( policy, settings, { vault : vault, programExists : p => true, signedIn : ( id, person ) => id == "gmail" && app.isAuthorized( person ) } );
+					holder.tools = new bxagents.models.connectors.ConnectorTools( svc, settings, ownClients, { cacheSeconds : 0 } );
+
+					var row = svc.get( "gmail", "ada" );
+					expect( row.connectedWith ).toBe( "oauth" );
+					expect( row.ownSignIn ).toBeTrue();
+					expect( holder.tools.tools( "gmail", "ada" ).map( t => t.name ) ).toInclude( "search_repositories" );
+					expect( fake.requests().map( r => r.token ).toSet().toArray() ).toBe( [ "access-1" ] );
+					// somebody who did not sign in has nothing
+					expect( () => holder.tools.tools( "gmail", "grace" ) ).toThrow( "BxAgents.NotConnected" );
+					ownClients.close();
+				} finally {
+					oauthFake.stop();
+				}
+			} );
+
 			it( "says to connect first when the person has not", function() {
 				expect( () => tools.tools( "github", "linus" ) ).toThrow( "BxAgents.NotConnected" );
 				expect( () => tools.tools( "nope", "ada" ) ).toThrow( "BxAgents.UnknownConnector" );

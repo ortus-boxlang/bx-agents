@@ -84,6 +84,29 @@ class {
 	}
 
 	/**
+	 * Notes that a person's conversation used a connector whose data is not kept once they disconnect it (`onDisconnect: purge`),
+	 * so what the agent saved of that conversation can be taken out then. Nothing is noted for any other connector, and a
+	 * conversation is noted once.
+	 *
+	 * @id The connector
+	 * @person The person
+	 * @conversation The conversation (the thread the agent keeps its memory under)
+	 */
+	void function noteUse( required string id, required string person, required string conversation ) {
+		var entry = entryOf( arguments.id )
+		if ( !len( arguments.conversation ) || ( entry.onDisconnect ?: "" ) != "purge" ) {
+			return
+		}
+		var held = variables.settings.get( arguments.person, arguments.id, "marks" ).conversations ?: []
+		if ( held.contains( arguments.conversation ) ) {
+			return
+		}
+		held.append( arguments.conversation )
+		// the newest five hundred: a person with more has more than a sign in to disconnect
+		variables.settings.set( arguments.person, arguments.id, "marks", { conversations : held.len() > 500 ? held.slice( held.len() - 499 ) : held } )
+	}
+
+	/**
 	 * Which connectors a person has connected, and nothing else: the cheap question the tool middleware asks before every call to
 	 * the model and every tool call. It does not build the rows (options, status, descriptions): one read of the person's own
 	 * secrets, one read of the sign ins, and for a program the switch an admin set.
@@ -197,6 +220,7 @@ class {
 			verifiedOn    : item.verifiedOn,
 			ways          : ways,
 			needsApp      : needsApp ? true : false,
+			ownSignIn     : ConnectorEndpoint::hasOwnEndpoints( item ),
 			appHelp       : appMethod.count() ? ( appMethod.help ?: "" ) : "",
 			tokenName     : tokenMethod.len() ? tokenMethod[ 1 ].envVar : "",
 			state         : state,

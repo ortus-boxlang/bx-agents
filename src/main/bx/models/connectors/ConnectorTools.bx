@@ -230,7 +230,8 @@ class {
 			return held.tools
 		}
 		var found = []
-		if ( arguments.row.connectedWith == "token" ) {
+		// reached with the person's own token: a token, a public server, and a sign in BxAgents does itself
+		if ( arguments.row.connectedWith == "token" || arguments.row.connectedWith == "open" || ( arguments.row.connectedWith == "oauth" && ( arguments.row.ownSignIn ?: false ) ) ) {
 			var client = variables.clients.forPerson( endpointFor( arguments.entry.id, arguments.person ), arguments.person )
 			if ( isNull( client ) ) {
 				throw( type = "BxAgents.NotConnected", message = "#arguments.entry.name# is not connected for this person." )

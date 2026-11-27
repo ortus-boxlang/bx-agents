@@ -91,6 +91,82 @@ class extends="testbox.system.BaseSpec" {
 				}
 			} );
 
+			it( "notes which conversations used a connector that keeps no data, and nothing for any other", function() {
+				var svc = new bxagents.models.connectors.ConnectorService( ConnectorSettings::resolve( {} ), settings, { vault : vault, signedIn : ( id, person ) => id == "gmail" && person == "ada", programExists : p => true } );
+				var tls = new bxagents.models.connectors.ConnectorTools( svc, settings, clients, { cacheSeconds : 0 } );
+				var guard = new bxagents.models.connectors.ConnectorToolMiddleware( svc, tls );
+				vault.set( "GITHUB_PERSONAL_ACCESS_TOKEN", "tok-ada", { scope : "user", owner : "ada" } );
+				var call = ( who, conversation, name ) => {
+					var asked = new bxModules.bxai.models.requests.AiChatRequest( new bxModules.bxai.models.runnables.AiMessage(), {}, { userId : who, conversationId : conversation } );
+					return guard.beforeToolCall( { chatRequest : asked, toolName : name, toolArgs : {}, tool : {}, toolCall : {} } );
+				};
+
+				expect( call( "ada", "u:ada:t1", "gmail__search_threads" ).isContinue() ).toBeTrue();
+				expect( call( "ada", "u:ada:t1", "gmail__search_threads" ).isContinue() ).toBeTrue();
+				expect( call( "ada", "u:ada:t2", "gmail__read_message" ).isContinue() ).toBeTrue();
+				expect( settings.get( "ada", "gmail", "marks" ).conversations ).toBe( [ "u:ada:t1", "u:ada:t2" ] );
+
+				// a connector that keeps nothing of the kind is not noted, nor is a call that was refused
+				expect( call( "ada", "u:ada:t1", "github__search_repositories" ).isContinue() ).toBeTrue();
+				expect( settings.get( "ada", "github", "marks" ) ).toBeEmpty();
+				expect( call( "grace", "u:grace:t1", "gmail__search_threads" ).isRejected() ).toBeTrue();
+				expect( settings.get( "grace", "gmail", "marks" ) ).toBeEmpty();
+			} );
+
+			it( "takes the saved answers out of the conversations that used a connector when it is disconnected, and leaves the person's own words", function() {
+				var held = {};
+				var memory = {
+					getAll : ( user, conversation ) => duplicate( held[ user & "|" & conversation ] ?: [] ),
+					clear  : ( user, conversation ) => { held[ user & "|" & conversation ] = []; },
+					add    : ( message, user, conversation ) => { held[ user & "|" & conversation ] = held[ user & "|" & conversation ] ?: []; held[ user & "|" & conversation ].append( message ); }
+				};
+				memory.add( { role : "user", content : "what did the bank write?" }, "ada", "u:ada:t1" );
+				memory.add( { role : "assistant", content : "The bank wrote that your balance is 12 pounds." }, "ada", "u:ada:t1" );
+				memory.add( { role : "user", content : "thanks" }, "ada", "u:ada:t1" );
+				memory.add( { role : "assistant", content : "A different chat that never used Gmail." }, "ada", "u:ada:other" );
+				settings.set( "ada", "gmail", "marks", { conversations : [ "u:ada:t1" ] } );
+				var withMemory = { withMCPServer : () => {}, listMCPServers : () => [], getMemories : () => [ memory ] };
+				var runtime2 = new bxagents.models.connectors.ConnectorRuntime( withMemory, service, clients, { settings : settings, vault : vault } );
+
+				var cleaned = runtime2.purgeAnswers( "gmail", "ada" );
+
+				expect( cleaned ).toBe( { purged : 1, pending : 0 } );
+				var after = memory.getAll( "ada", "u:ada:t1" );
+				expect( after ).toHaveLength( 3 );
+				expect( after[ 1 ].content ).toBe( "what did the bank write?" );
+				expect( after[ 2 ].role ).toBe( "assistant" );
+				expect( after[ 2 ].content ).notToInclude( "12 pounds" );
+				expect( after[ 2 ].content ).toInclude( "Gmail was disconnected" );
+				expect( after[ 3 ].content ).toBe( "thanks" );
+				// a conversation that did not use it is not touched, and the marks are gone
+				expect( memory.getAll( "ada", "u:ada:other" )[ 1 ].content ).toInclude( "never used Gmail" );
+				expect( settings.get( "ada", "gmail", "marks" ) ).toBeEmpty();
+				// nothing to do the second time, and nothing for a connector that keeps no data
+				expect( runtime2.purgeAnswers( "gmail", "ada" ) ).toBe( { purged : 0, pending : 0 } );
+				expect( runtime2.purgeAnswers( "github", "ada" ) ).toBe( { purged : 0, pending : 0 } );
+			} );
+
+			it( "leaves the marks when the memory cannot be reached from here, and finishes the job when the agent starts", function() {
+				settings.set( "ada", "gmail", "marks", { conversations : [ "u:ada:t1" ] } );
+
+				// the agent has no memory to reach (the terminal's connect command): nothing is lost, the marks stay
+				expect( runtime.purgeAnswers( "gmail", "ada" ) ).toBe( { purged : 0, pending : 1 } );
+				expect( settings.get( "ada", "gmail", "marks" ).conversations ).toBe( [ "u:ada:t1" ] );
+
+				var held = { "ada|u:ada:t1" : [ { role : "user", content : "hi" }, { role : "assistant", content : "Your mail says secret things." } ] };
+				var memory = {
+					getAll : ( user, conversation ) => duplicate( held[ user & "|" & conversation ] ?: [] ),
+					clear  : ( user, conversation ) => { held[ user & "|" & conversation ] = []; },
+					add    : ( message, user, conversation ) => { held[ user & "|" & conversation ].append( message ); }
+				};
+				var started = new bxagents.models.connectors.ConnectorRuntime( { withMCPServer : () => {}, listMCPServers : () => [], getMemories : () => [ memory ] }, service, clients, { settings : settings, vault : vault } );
+
+				// the person has not connected it any more: the start cleans what was marked
+				expect( started.purgePending() ).toBe( 1 );
+				expect( held[ "ada|u:ada:t1" ][ 2 ].content ).notToInclude( "secret" );
+				expect( settings.get( "ada", "gmail", "marks" ) ).toBeEmpty();
+			} );
+
 			it( "attaches nothing until somebody has connected", function() {
 				expect( runtime.attach( "github", "ada" ) ).toBeFalse();
 				expect( runtime.restore() ).toBe( 0 );

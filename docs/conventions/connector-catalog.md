@@ -35,6 +35,9 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 | [Canva](#canva) | sign in (your own app) | medium | Create, find, edit, comment on and export Canva designs and assets |
 | [ClickUp](#clickup) | sign in | high | Search, create and update tasks, documents and chat messages |
 | [Gamma](#gamma) | sign in | medium | Create, search, edit and export presentations, documents and webpages |
+| [Gmail](#gmail) | sign in (your own app) | high | Search and read mail, manage drafts and labels, send, reply and forward |
+| [Google Calendar](#google-calendar) | sign in (your own app) | medium | List and search events, check free time, create, update and answer events |
+| [Google Drive](#google-drive) | sign in (your own app) | medium | Search and read files, check sharing, create, copy, update and trash files |
 | [HyperFrames by HeyGen](#hyperframes-by-heygen) | sign in | medium | Create, revise and render videos from a text description |
 | [Linear](#linear) | sign in or token | medium | Find, create and update issues, projects, documents and comments |
 | [Notion](#notion) | sign in or token | medium | Search, read, create and update pages and databases |
@@ -285,6 +288,39 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 - **Sign in:** OAuth.
 
 [Documentation](https://developers.gamma.app/mcp/gamma-mcp-server). Checked on 2026-11-26.
+
+### Gmail
+
+`gmail`. Search and read mail, manage drafts and labels, send, reply and forward. Listed under Productivity.
+
+- **Connects with:** sign in (your own app).
+- **Risk:** high. Can send, reply to and forward email as the person, change labels and move messages to Trash or Spam.
+- **Address:** `https://gmailmcp.googleapis.com/mcp/v1`
+- **Sign in, with your own app:** the service takes no dynamic client registration, so an admin registers an app and sets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the agent's vault or environment. In the Google Cloud console (Google Auth Platform, Clients) create an OAuth client with Use this client for an AI-powered agent ticked. For the web app make it a Web application client and add the app's public address followed by /__bxagents/connect/callback as an authorized redirect address; for the terminal make it a Desktop app client, which takes any loopback address. Gmail, Calendar and Drive share the one client. Enable the API and its MCP service in the project first. Then set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and restart the agent. Scopes: `https://www.googleapis.com/auth/gmail.readonly`, `https://www.googleapis.com/auth/gmail.compose`, `https://www.googleapis.com/auth/gmail.modify`. (not verified yet)
+
+[Documentation](https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server). Checked on 2026-11-27.
+
+### Google Calendar
+
+`google-calendar`. List and search events, check free time, create, update and answer events. Listed under Productivity.
+
+- **Connects with:** sign in (your own app).
+- **Risk:** medium. Can create, change, answer and delete events on the person's calendars, which can send invitations to other people.
+- **Address:** `https://calendarmcp.googleapis.com/mcp/v1`
+- **Sign in, with your own app:** the service takes no dynamic client registration, so an admin registers an app and sets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the agent's vault or environment. In the Google Cloud console (Google Auth Platform, Clients) create an OAuth client with Use this client for an AI-powered agent ticked. For the web app make it a Web application client and add the app's public address followed by /__bxagents/connect/callback as an authorized redirect address; for the terminal make it a Desktop app client, which takes any loopback address. Gmail, Calendar and Drive share the one client. Enable the API and its MCP service in the project first. Then set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and restart the agent. Scopes: `https://www.googleapis.com/auth/calendar.calendarlist.readonly`, `https://www.googleapis.com/auth/calendar.events.freebusy`, `https://www.googleapis.com/auth/calendar.events.readonly`, `https://www.googleapis.com/auth/calendar.events`. (not verified yet)
+
+[Documentation](https://developers.google.com/workspace/calendar/api/guides/configure-mcp-server). Checked on 2026-11-27.
+
+### Google Drive
+
+`google-drive`. Search and read files, check sharing, create, copy, update and trash files. Listed under Productivity.
+
+- **Connects with:** sign in (your own app).
+- **Risk:** medium. Can create, copy, update and trash files in the person's Drive.
+- **Address:** `https://drivemcp.googleapis.com/mcp/v1`
+- **Sign in, with your own app:** the service takes no dynamic client registration, so an admin registers an app and sets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the agent's vault or environment. In the Google Cloud console (Google Auth Platform, Clients) create an OAuth client with Use this client for an AI-powered agent ticked. For the web app make it a Web application client and add the app's public address followed by /__bxagents/connect/callback as an authorized redirect address; for the terminal make it a Desktop app client, which takes any loopback address. Gmail, Calendar and Drive share the one client. Enable the API and its MCP service in the project first. Then set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and restart the agent. Scopes: `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/drive.file`. (not verified yet)
+
+[Documentation](https://developers.google.com/workspace/drive/api/guides/configure-mcp-server). Checked on 2026-11-27.
 
 ### HyperFrames by HeyGen
 

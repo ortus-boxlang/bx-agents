@@ -63,7 +63,7 @@ class {
 				return false
 			}
 			var added = false
-			if ( row.connectedWith == "token" || row.connectedWith == "open" ) {
+			if ( row.connectedWith == "token" || row.connectedWith == "open" || ( row.connectedWith == "oauth" && ( row.ownSignIn ?: false ) ) ) {
 				added = attachToken( entry, arguments.person )
 			} else if ( row.connectedWith == "program" ) {
 				added = attachProgram( entry )
@@ -84,11 +84,96 @@ class {
 	 * @return How many were attached
 	 */
 	numeric function restore() {
+		purgePending()
 		var count = 0
 		for ( var entry in variables.service.ids().map( id => variables.service.entryOf( id ) ) ) {
 			var person = lastConnector( entry )
 			if ( len( person ) && attach( entry.id, person ) ) {
 				count += 1
+			}
+		}
+		return count
+	}
+
+	/**
+	 * Takes out of the agent's memory what a connector's data left in a person's conversations, when they disconnect it
+	 * (`onDisconnect: purge`). The agent keeps the person's own words and the answers it gave; tool results are not kept at all.
+	 * The answers of every conversation that used the connector are replaced by a note, since an answer may say what an email
+	 * or a file said. The person's own messages stay.
+	 *
+	 * @id The connector
+	 * @person The person
+	 *
+	 * @return { purged : how many conversations were cleaned, pending : how many could not be reached from here and are left for the agent's next start }
+	 */
+	struct function purgeAnswers( required string id, required string person ) {
+		var entry = variables.service.entryOf( arguments.id )
+		if ( !entry.count() || ( entry.onDisconnect ?: "" ) != "purge" || !isObject( variables.settings ) ) {
+			return { purged : 0, pending : 0 }
+		}
+		var marks = variables.settings.get( arguments.person, arguments.id, "marks" ).conversations ?: []
+		if ( !marks.len() ) {
+			return { purged : 0, pending : 0 }
+		}
+		var memories = []
+		try {
+			memories = variables.agent.getMemories()
+		} catch ( any e ) {
+			return { purged : 0, pending : marks.len() }
+		}
+		if ( !memories.len() ) {
+			return { purged : 0, pending : marks.len() }
+		}
+		var note = "[Removed: #entry.name# was disconnected, and what it brought is not kept.]"
+		for ( var conversation in marks ) {
+			for ( var memory in memories ) {
+				var held = memory.getAll( arguments.person, conversation )
+				if ( !held.len() ) {
+					continue
+				}
+				memory.clear( arguments.person, conversation )
+				for ( var message in held ) {
+					var kept = duplicate( message )
+					if ( ( kept.role ?: "" ) == "assistant" ) {
+						kept.content = note
+						kept.delete( "tool_calls" )
+					}
+					memory.add( kept, arguments.person, conversation )
+				}
+			}
+		}
+		variables.settings.remove( arguments.person, arguments.id, "marks" )
+		return { purged : marks.len(), pending : 0 }
+	}
+
+	/**
+	 * After a restart: finishes what a disconnect could not do from where it was made (the terminal's `connect` command does not
+	 * run the agent): for each person who has conversations marked for a connector they no longer have connected, takes the
+	 * answers out.
+	 *
+	 * @return How many conversations were cleaned
+	 */
+	numeric function purgePending() {
+		var count = 0
+		if ( !isObject( variables.settings ) ) {
+			return 0
+		}
+		for ( var id in variables.service.ids() ) {
+			if ( ( variables.service.entryOf( id ).onDisconnect ?: "" ) != "purge" ) {
+				continue
+			}
+			for ( var person in variables.settings.owners( id, "marks" ) ) {
+				if ( person == "*" ) {
+					continue
+				}
+				try {
+					if ( len( variables.service.get( id, person ).connectedWith ?: "" ) ) {
+						continue
+					}
+					count += purgeAnswers( id, person ).purged
+				} catch ( any e ) {
+					writeLog( text = "Could not take the saved answers of [#id#] out for [#person#]: #e.message#", type = "warning", log = "ai" )
+				}
 			}
 		}
 		return count
@@ -248,10 +333,12 @@ class {
 			return isObject( variables.settings ) && ( variables.settings.get( "*", arguments.entry.id, "lastOpen" ).on ?: false ) ? ( variables.settings.get( "*", arguments.entry.id, "lastOpen" ).by ?: "" ) : ""
 		}
 		var methods = arguments.entry.auth.filter( m => m.type == "bearer" )
-		if ( !methods.len() || !isObject( variables.vault ) ) {
+		var ownSignIn = ConnectorEndpoint::hasOwnEndpoints( arguments.entry )
+		if ( ( !methods.len() && !ownSignIn ) || !isObject( variables.vault ) ) {
 			return ""
 		}
-		var secretName = methods[ 1 ].envVar
+		// the person who signed in last: for a sign in BxAgents does itself, the secret its tokens are kept in
+		var secretName = ownSignIn ? bxModules.bxagents.models.connect.OAuthApp::secretName( arguments.entry.id ) : methods[ 1 ].envVar
 		var mine = variables.vault.listAll().filter( s => s.scope == "user" && s.name == secretName )
 		if ( !mine.len() ) {
 			return ""

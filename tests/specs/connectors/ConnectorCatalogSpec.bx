@@ -387,6 +387,47 @@ class extends="testbox.system.BaseSpec" {
 				expect( errors().map( e => e.field ) ).toInclude( "auth.app" );
 			} );
 
+			it( "takes the addresses of a sign in BxAgents does itself: https, and extra parameters the sign in does not own", function() {
+				var own = web().replace( "  - type: bearer" & char( 10 ) & "    envVar: DEMO_TOKEN" & char( 10 ) & "    help: A token.", [
+					"  - type: oauth",
+					"    app: own",
+					"    endpoints:",
+					"      authorize: https://accounts.example.com/auth",
+					"      token: https://accounts.example.com/token",
+					"      revoke: https://accounts.example.com/revoke",
+					"    params:",
+					"      access_type: offline",
+					"      prompt: consent",
+					"    scopes: [ read ]",
+					"    envVars:",
+					"      clientId: DEMO_CLIENT_ID",
+					"      clientSecret: DEMO_CLIENT_SECRET",
+					"    help: Register an app and give it the redirect address."
+				].toList( char( 10 ) ) );
+				put( "demo.yml", own );
+				expect( errors() ).toBeEmpty();
+
+				put( "demo.yml", own.replace( "authorize: https://accounts.example.com/auth", "authorize: http://accounts.example.com/auth" ) );
+				expect( errors().map( e => e.field ) ).toInclude( "auth.endpoints" );
+
+				put( "demo.yml", own.replace( "      token: https://accounts.example.com/token" & char( 10 ), "" ) );
+				expect( errors().map( e => e.field ) ).toInclude( "auth.endpoints" );
+
+				put( "demo.yml", own.replace( "      prompt: consent", "      redirect_uri: https://evil.example.com/" ) );
+				expect( errors().map( e => e.message ).toList( " " ) ).toMatch( "cannot set \[redirect_uri\]" );
+
+				// endpoints belong to an app of the admin's own
+				put( "demo.yml", web().replace( "    envVar: DEMO_TOKEN", "    envVar: DEMO_TOKEN" & char( 10 ) & "    endpoints:" & char( 10 ) & "      authorize: https://a.example.com/a" & char( 10 ) & "      token: https://a.example.com/t" ) );
+				expect( errors().map( e => e.field ) ).toInclude( "auth.endpoints" );
+			} );
+
+			it( "says a connector deletes what the agent saved of a person's conversations when they disconnect it, or leaves that out", function() {
+				put( "demo.yml", web().replace( "verifiedOn:", "onDisconnect: purge" & char( 10 ) & "verifiedOn:" ) );
+				expect( errors() ).toBeEmpty();
+				put( "demo.yml", web().replace( "verifiedOn:", "onDisconnect: keep" & char( 10 ) & "verifiedOn:" ) );
+				expect( errors().map( e => e.field ) ).toInclude( "onDisconnect" );
+			} );
+
 			it( "refuses a docs link that is not https and a date that is not a date", function() {
 				put( "demo.yml", web().replace( "https://example.com/docs", "ftp://example.com/docs" ).replace( "verifiedOn: 2026-11-14", "verifiedOn: last week" ) );
 

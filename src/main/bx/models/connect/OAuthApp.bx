@@ -1,0 +1,426 @@
+/**
+ * A sign in to a service whose OAuth addresses are written in the connector file, with an app of the admin's own
+ * (Google, for one): the authorization code flow with PKCE, the person's tokens kept sealed in the vault, and the
+ * access token refreshed when it is about to run out.
+ *
+ * It does what bx-ai's `withOAuth` does for an MCP server that publishes its metadata, for a service that does not (or
+ * whose metadata does not fit). It answers the same questions ConnectionService asks of that client, so the connect
+ * routes, the terminal's loopback listener and the callback page work for it without knowing the difference:
+ *
+ * ```
+ * app = new OAuthApp( "gmail", oauth, vault )
+ * link = app.startAuthorization( "alice" )                 // { authorizationUrl, state }
+ * done = app.completeAuthorization( code, state, "" )      // { subject, scope }
+ * token = app.accessToken( "alice" )                       // a token that works now, refreshed first when it must be
+ * app.revokeAuthorization( "alice" )                       // revoked at the service, and forgotten here
+ * ```
+ *
+ * `oauth` is { endpoints : { authorize, token, revoke }, clientId, clientSecret, scopes, params, redirectUri }. A person is
+ * never named in an address: the single use `state` kept here says who is coming back. The client secret is held in
+ * memory and sent only to the token endpoint; no token or secret is returned by anything but `accessToken()`, which is
+ * for the runtime to put in a request.
+ */
+class {
+
+	static {
+		// a sign in the person never finished is forgotten after this long
+		STATE_SECONDS = 600
+		// a token is refreshed when it has less than this to live
+		REFRESH_MARGIN_SECONDS = 60
+	}
+
+	/**
+	 * @name The connector's id
+	 * @oauth { endpoints : { authorize, token, revoke }, clientId, clientSecret, scopes, params, redirectUri }
+	 * @vault A VaultService, where the tokens are sealed per person
+	 * @options { post : ( address, fields ) => { status, body }, replaces the HTTP call in tests; now : () => epoch seconds }
+	 */
+	function init( required string name, required struct oauth, required any vault, struct options = {} ) {
+		variables.name = arguments.name
+		variables.oauth = arguments.oauth
+		variables.vault = arguments.vault
+		variables.options = arguments.options
+		return this
+	}
+
+	/**
+	 * @name The connector's id
+	 *
+	 * @return The name of the vault secret a person's tokens are kept in
+	 */
+	static string function secretName( required string name ) {
+		return "OAUTH_" & arguments.name.ucase().reReplace( "[^A-Z0-9]", "_", "all" ) & "_TOKENS"
+	}
+
+	/**
+	 * @return The name of the vault secret this app's tokens are kept in
+	 */
+	private string function secret() {
+		return "OAUTH_" & variables.name.ucase().reReplace( "[^A-Z0-9]", "_", "all" ) & "_TOKENS"
+	}
+
+	/**
+	 * @subject The person
+	 *
+	 * @return True when they have signed in and the sign in still works: a token that is valid, or one that can be refreshed
+	 */
+	boolean function isAuthorized( required string subject ) {
+		var tokens = readTokens( arguments.subject )
+		return !tokens.isEmpty() && ( !isExpired( tokens ) || len( tokens.refresh ?: "" ) )
+	}
+
+	/**
+	 * Begins a sign in: a fresh PKCE verifier and a single use state, kept for ten minutes, and the address to send the person to.
+	 *
+	 * @subject The person
+	 *
+	 * @return { authorizationUrl, state }
+	 *
+	 * @throws MCPOAuthMissingRedirectUri when the app has no address the service can send the person back to
+	 */
+	struct function startAuthorization( required string subject ) {
+		var redirect = variables.oauth.redirectUri ?: ""
+		if ( !len( redirect ) ) {
+			throw(
+				type    = "MCPOAuthMissingRedirectUri",
+				message = "Signing in to #variables.name# needs the address the service sends people back to. Set BXAGENTS_PUBLIC_URL to the public address of this app (at a terminal this is not needed)."
+			)
+		}
+		var verifier = randomToken( 48 )
+		var state = randomToken( 24 )
+		// BoxLang cache timeouts are in seconds
+		cache( "default" ).set( cacheKey( state ), { subject : arguments.subject, verifier : verifier, redirectUri : redirect }, static.STATE_SECONDS, 0 )
+		var query = [
+			"response_type=code",
+			"client_id=" & encode( variables.oauth.clientId ),
+			"redirect_uri=" & encode( redirect ),
+			"state=" & encode( state ),
+			"code_challenge=" & encode( challengeOf( verifier ) ),
+			"code_challenge_method=S256"
+		]
+		var scopes = variables.oauth.scopes ?: []
+		if ( isArray( scopes ) && scopes.len() ) {
+			query.append( "scope=" & encode( scopes.toList( " " ) ) )
+		}
+		// what the service asks for besides: access_type=offline and prompt=consent for Google, so it hands out a refresh token
+		var extra = variables.oauth.params ?: {}
+		for ( var key in extra.keyArray() ) {
+			query.append( encode( key ) & "=" & encode( toString( extra[ key ] ) ) )
+		}
+		var address = variables.oauth.endpoints.authorize
+		return { "authorizationUrl" : address & ( address.find( "?" ) ? "&" : "?" ) & query.toList( "&" ), "state" : state }
+	}
+
+	/**
+	 * Finishes a sign in from what the service sent back: finds the person from the state, trades the code for tokens and
+	 * seals them in the vault.
+	 *
+	 * @code The code
+	 * @state The state
+	 * @issuer Not used by a service whose addresses are written in the file
+	 *
+	 * @return { subject, scope }
+	 *
+	 * @throws MCPOAuthInvalidState when the state is not known here, was used, or is older than ten minutes
+	 * @throws BxAgents.OAuthRefused when the service refused the code
+	 */
+	struct function completeAuthorization( required string code, required string state, string issuer = "" ) {
+		var kept = len( arguments.state ) ? cache( "default" ).get( cacheKey( arguments.state ) ).orElse( javacast( "null", "" ) ) : javacast( "null", "" )
+		if ( isNull( kept ) || !isStruct( kept ) ) {
+			throw( type = "MCPOAuthInvalidState", message = "This sign in is not known here. It may have been used or it may have expired. Start it again." )
+		}
+		// single use: gone before anything else, so a second try with the same state finds nothing
+		cache( "default" ).clear( cacheKey( arguments.state ) )
+		var fields = {
+			"grant_type"    : "authorization_code",
+			"code"          : arguments.code,
+			"redirect_uri"  : kept.redirectUri,
+			"client_id"     : variables.oauth.clientId,
+			"code_verifier" : kept.verifier
+		}
+		if ( len( variables.oauth.clientSecret ?: "" ) ) {
+			fields[ "client_secret" ] = variables.oauth.clientSecret
+		}
+		var answer = send( variables.oauth.endpoints.token, fields )
+		if ( answer.status < 200 || answer.status > 299 || !isStruct( answer.body ) || !len( answer.body.access_token ?: "" ) ) {
+			throw( type = "BxAgents.OAuthRefused", message = "#variables.name# did not accept the sign in: #describeError( answer )#." )
+		}
+		var tokens = tokenRecord( answer.body, {} )
+		writeTokens( kept.subject, tokens )
+		return { "subject" : kept.subject, "scope" : tokens.scope }
+	}
+
+	/**
+	 * A token that works now, refreshed first when it has less than a minute to live. For the runtime to put in a request.
+	 *
+	 * @subject The person
+	 *
+	 * @return The access token
+	 *
+	 * @throws BxAgents.OAuthReauthRequired when they have not signed in, or the service no longer accepts what it gave them
+	 */
+	string function accessToken( required string subject ) {
+		var tokens = readTokens( arguments.subject )
+		if ( tokens.isEmpty() ) {
+			throw( type = "BxAgents.OAuthReauthRequired", message = "#variables.name# is not connected for this person. Sign in again." )
+		}
+		if ( !isExpired( tokens ) ) {
+			return tokens.access
+		}
+		// two calls of one person that arrive together do one refresh, not two: the second finds the new token
+		lock name = "bxagents-oauth-refresh-#variables.name#-#arguments.subject#" timeout = 30 type = "exclusive" {
+			tokens = readTokens( arguments.subject )
+			if ( !isExpired( tokens ) ) {
+				return tokens.access
+			}
+			return refresh( arguments.subject, tokens ).access
+		}
+	}
+
+	/**
+	 * Revokes the person's grant at the service and forgets their tokens here. Forgetting never waits on the service: a
+	 * revoke that fails still removes what is kept.
+	 *
+	 * @subject The person
+	 */
+	void function revokeAuthorization( required string subject ) {
+		var tokens = readTokens( arguments.subject )
+		if ( tokens.isEmpty() ) {
+			return
+		}
+		var revoke = variables.oauth.endpoints.revoke ?: ""
+		if ( len( revoke ) ) {
+			try {
+				// the refresh token when there is one: revoking it ends the whole grant, access token and all
+				send( revoke, { "token" : len( tokens.refresh ?: "" ) ? tokens.refresh : tokens.access } )
+			} catch ( any e ) {
+				writeLog( text = "Could not revoke the sign in to [#variables.name#] at the service: #e.message#. It was forgotten here.", type = "warning", log = "ai" )
+			}
+		}
+		variables.vault.remove( secret(), { scope : "user", owner : arguments.subject, actor : arguments.subject, via : "oauth" } )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @subject The person
+	 * @tokens What they have now
+	 *
+	 * @return The new record, already kept
+	 */
+	private struct function refresh( required string subject, required struct tokens ) {
+		if ( !len( arguments.tokens.refresh ?: "" ) ) {
+			throw( type = "BxAgents.OAuthReauthRequired", message = "The sign in to #variables.name# has run out and cannot be renewed. Sign in again." )
+		}
+		var fields = {
+			"grant_type"    : "refresh_token",
+			"refresh_token" : arguments.tokens.refresh,
+			"client_id"     : variables.oauth.clientId
+		}
+		if ( len( variables.oauth.clientSecret ?: "" ) ) {
+			fields[ "client_secret" ] = variables.oauth.clientSecret
+		}
+		var answer = send( variables.oauth.endpoints.token, fields )
+		if ( answer.status < 200 || answer.status > 299 || !isStruct( answer.body ) || !len( answer.body.access_token ?: "" ) ) {
+			// the service says no for good (the person took the access away, or it expired): they have to sign in again
+			if ( isStruct( answer.body ) && ( answer.body.error ?: "" ) == "invalid_grant" ) {
+				throw( type = "BxAgents.OAuthReauthRequired", message = "#variables.name# no longer accepts this sign in. Sign in again." )
+			}
+			throw( type = "BxAgents.CouldNotReach", message = "Could not renew the sign in to #variables.name#: #describeError( answer )#." )
+		}
+		var renewed = tokenRecord( answer.body, arguments.tokens )
+		writeTokens( arguments.subject, renewed )
+		return renewed
+	}
+
+	/**
+	 * @answer What the token endpoint said
+	 * @previous What was kept before (a refresh answer often leaves the refresh token out: the old one stays good)
+	 *
+	 * @return { access, refresh, expiresAt, scope }
+	 */
+	private struct function tokenRecord( required struct answer, required struct previous ) {
+		var lives = isNumeric( arguments.answer.expires_in ?: "" ) ? val( arguments.answer.expires_in ) : 3600
+		return {
+			"access"    : arguments.answer.access_token,
+			"refresh"   : len( arguments.answer.refresh_token ?: "" ) ? arguments.answer.refresh_token : ( arguments.previous.refresh ?: "" ),
+			"expiresAt" : epoch() + lives,
+			"scope"     : arguments.answer.scope ?: ( arguments.previous.scope ?: "" )
+		}
+	}
+
+	/**
+	 * @tokens A record
+	 *
+	 * @return True when the access token is out of time, or about to be
+	 */
+	private boolean function isExpired( required struct tokens ) {
+		return epoch() + static.REFRESH_MARGIN_SECONDS >= ( arguments.tokens.expiresAt ?: 0 )
+	}
+
+	/**
+	 * @subject The person
+	 *
+	 * @return Their record, or an empty struct
+	 */
+	private struct function readTokens( required string subject ) {
+		try {
+			var text = variables.vault.resolve( secret(), { user : arguments.subject, host : tokenHost(), via : "oauth", ownOnly : true } )
+			var parsed = jsonDeserialize( text )
+			return isStruct( parsed ) ? parsed : {}
+		} catch ( any e ) {
+			return {}
+		}
+	}
+
+	/**
+	 * @subject The person
+	 * @tokens The record
+	 */
+	private void function writeTokens( required string subject, required struct tokens ) {
+		variables.vault.set( secret(), jsonSerialize( arguments.tokens ), {
+			scope       : "user",
+			owner       : arguments.subject,
+			// only to the service that gave them
+			hosts       : hostsOf(),
+			description : "#variables.name# sign in, connected by #arguments.subject#",
+			actor       : arguments.subject,
+			via         : "oauth"
+		} )
+	}
+
+	/**
+	 * @return The hosts the tokens may be sent to: the token endpoint, the revoke endpoint, and the API the connector calls
+	 */
+	private array function hostsOf() {
+		var found = []
+		for ( var key in [ "token", "revoke" ] ) {
+			var host = hostOf( variables.oauth.endpoints[ key ] ?: "" )
+			if ( len( host ) && !found.contains( host ) ) {
+				found.append( host )
+			}
+		}
+		var api = hostOf( variables.options.apiAddress ?: "" )
+		if ( len( api ) && !found.contains( api ) ) {
+			found.append( api )
+		}
+		return found
+	}
+
+	/**
+	 * @return The host the vault is asked to release the tokens to when this reads them
+	 */
+	private string function tokenHost() {
+		return hostOf( variables.oauth.endpoints.token )
+	}
+
+	/**
+	 * @address An address
+	 *
+	 * @return Its host
+	 */
+	private string function hostOf( required string address ) {
+		return reReplace( arguments.address, "^https?://([^/:]+).*$", "\1" )
+	}
+
+	/**
+	 * One POST of a form. https only, except to the machine itself (a test, or a development server).
+	 *
+	 * @address The address
+	 * @fields The form
+	 *
+	 * @return { status, body }
+	 */
+	private struct function send( required string address, required struct fields ) {
+		if ( isClosure( variables.options.post ?: "" ) ) {
+			return variables.options.post( arguments.address, arguments.fields )
+		}
+		if ( !reFindNoCase( "^https://", arguments.address ) && !reFindNoCase( "^http://(127\.0\.0\.1|localhost|\[::1\])(:|/|$)", arguments.address ) ) {
+			throw( type = "BxAgents.OAuthRefused", message = "#variables.name# sign in addresses must be https." )
+		}
+		bx:http url = arguments.address method = "POST" result = "httpResult" charset = "utf-8" timeout = 30 {
+			bx:httpParam type = "header" name = "accept" value = "application/json";
+			for ( var field in arguments.fields ) {
+				bx:httpParam type = "formfield" name = "#field#" value = "#arguments.fields[ field ]#";
+			}
+		}
+		var raw = httpResult.filecontent ?: ""
+		var parsed = raw
+		try {
+			if ( len( raw ) ) {
+				parsed = jsonDeserialize( raw )
+			}
+		} catch ( any e ) {
+			parsed = raw
+		}
+		return { "status" : httpResult.status_code ?: 0, "body" : parsed }
+	}
+
+	/**
+	 * @answer The answer of send()
+	 *
+	 * @return The service's own words for what went wrong, never a token or a secret
+	 */
+	private string function describeError( required struct answer ) {
+		if ( isStruct( arguments.answer.body ) && len( arguments.answer.body.error ?: "" ) ) {
+			return arguments.answer.body.error & ( len( arguments.answer.body.error_description ?: "" ) ? " (" & arguments.answer.body.error_description & ")" : "" )
+		}
+		return "HTTP " & arguments.answer.status
+	}
+
+	/**
+	 * @return Epoch seconds now
+	 */
+	private numeric function epoch() {
+		return isClosure( variables.options.now ?: "" ) ? variables.options.now() : int( createObject( "java", "java.lang.System" ).currentTimeMillis() / 1000 )
+	}
+
+	/**
+	 * @state The state
+	 *
+	 * @return Where it is kept
+	 */
+	private string function cacheKey( required string state ) {
+		return "bxagents-oauth-state:" & variables.name & ":" & arguments.state
+	}
+
+	/**
+	 * @bytes How many random bytes
+	 *
+	 * @return That many random bytes as URL-safe text
+	 */
+	private string function randomToken( required numeric bytes ) {
+		var buffer = createObject( "java", "java.lang.reflect.Array" ).newInstance( createObject( "java", "java.lang.Byte" ).TYPE, arguments.bytes )
+		createObject( "java", "java.security.SecureRandom" ).init().nextBytes( buffer )
+		return base64Url( buffer )
+	}
+
+	/**
+	 * @verifier The PKCE verifier
+	 *
+	 * @return Its S256 challenge
+	 */
+	string function challengeOf( required string verifier ) {
+		var digest = createObject( "java", "java.security.MessageDigest" ).getInstance( "SHA-256" )
+		return base64Url( digest.digest( arguments.verifier.getBytes( "UTF-8" ) ) )
+	}
+
+	/**
+	 * @bytes A Java byte array
+	 *
+	 * @return URL-safe Base64 with no padding
+	 */
+	private string function base64Url( required any bytes ) {
+		return createObject( "java", "java.util.Base64" ).getUrlEncoder().withoutPadding().encodeToString( arguments.bytes )
+	}
+
+	/**
+	 * @value Any text
+	 *
+	 * @return The text encoded for a query string
+	 */
+	private string function encode( required string value ) {
+		return urlEncodedFormat( arguments.value ).replace( "+", "%20", "all" )
+	}
+
+}
