@@ -193,6 +193,8 @@ test.describe( "The Embeds page", () => {
 
 	test( "lists the embeds with a search and a state filter, a switch each, Edit and Delete", async( { page, request, errors } ) => {
 		const tag = "z" + Date.now();
+		// websites no earlier run used, so the search for one finds only this run's embed
+		const port = 41000 + ( Date.now() % 20000 );
 		const made = [];
 		for ( const [
 			suffix,
@@ -202,12 +204,12 @@ test.describe( "The Embeds page", () => {
 				[
 					"alpha",
 					true,
-					"http://127.0.0.1:39101"
+					"http://127.0.0.1:" + port
 				],
 				[
 					"beta",
 					false,
-					"http://127.0.0.1:39102"
+					"http://127.0.0.1:" + ( port + 1 )
 				]
 			] ) {
 			made.push( await makeEmbed( request, { name: tag + " " + suffix, enabled, limits: { allowedOrigins: [ origin ] } } ) );
@@ -224,7 +226,7 @@ test.describe( "The Embeds page", () => {
 			// search: by name, and by website
 			await page.locator( "#embedSearch" ).fill( tag );
 			await expect( rows ).toHaveCount( 2 );
-			await page.locator( "#embedSearch" ).fill( "39102" );
+			await page.locator( "#embedSearch" ).fill( String( port + 1 ) );
 			await expect( rows ).toHaveCount( 1 );
 			await expect( row( tag + " beta" ) ).toBeVisible();
 			await expect( page.getByText( "Showing 1 of" ) ).toBeVisible();
