@@ -206,6 +206,32 @@ class {
 	}
 
 	/**
+	 * Every connector of the catalog, the ones a person signs in to as well as the ones that take a token, grouped by category in
+	 * the order the categories are shown. The question "which connectors to leave out" and the `--connectors` flag name these,
+	 * since every one of them is offered to every person.
+	 *
+	 * @return [ { id, name, summary, risk, category } ]
+	 */
+	array function connectorChoices() {
+		var out = []
+		for ( var group in connectors().grouped() ) {
+			for ( var entry in group.connectors ) {
+				out.append( { id : entry.id, name : entry.name, summary : entry.summary, risk : entry.risk, category : entry.category } )
+			}
+		}
+		return out
+	}
+
+	/**
+	 * @id A connector id such as github
+	 *
+	 * @return The connector as connectorChoices() lists it, or an empty struct for an id the catalog does not list
+	 */
+	struct function connectorChoice( required string id ) {
+		return byId( connectorChoices(), arguments.id )
+	}
+
+	/**
 	 * @return The connector catalog this wizard reads its MCP servers from
 	 */
 	private any function connectors() {

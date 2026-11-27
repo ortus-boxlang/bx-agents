@@ -82,7 +82,17 @@ class {
 			} else {
 				variables.seen = all
 				rows = all.connectors
-				for ( var row in rows ) {
+				// by category, in the order the page shows them; a row with none (an older server) goes last, as it came
+				var order = all.categories ?: []
+				var shownFirst = rows.filter( r => order.contains( r.category ?: "" ) )
+				var rest = rows.filter( r => !order.contains( r.category ?: "" ) )
+				for ( var category in order ) {
+					variables.io.text( category )
+					for ( var row in shownFirst.filter( r => r.category == category ) ) {
+						variables.io.text( "  " & lineOf( row, all.summary ?: {} ) )
+					}
+				}
+				for ( var row in rest ) {
 					variables.io.text( lineOf( row, all.summary ?: {} ) )
 				}
 				if ( ( all.summary ?: {} ).over ?: false ) {

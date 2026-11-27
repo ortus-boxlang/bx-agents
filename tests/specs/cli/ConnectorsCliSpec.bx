@@ -11,6 +11,13 @@ class extends="testbox.system.BaseSpec" {
 	 *
 	 * @return The verb's { exitCode, message }
 	 */
+	/**
+	 * @return The ids of every connector the catalog ships, in order. The specs read it so a new connector does not break them.
+	 */
+	private array function catalogIds() {
+		return new bxagents.models.connectors.ConnectorCatalog().ids()
+	}
+
 	private struct function connectors( array positionals = [], struct options = {} ) {
 		var all = { _positionals : arguments.positionals };
 		all.append( arguments.options );
@@ -30,8 +37,18 @@ class extends="testbox.system.BaseSpec" {
 				expect( result.message ).toInclude( "github" );
 				expect( result.message ).toInclude( "sign in, token" );
 				expect( result.message ).toInclude( "no sign in" );
-				expect( result.message ).toInclude( "9 connectors" );
+				expect( result.message ).toInclude( "#catalogIds().len()# connectors" );
 				expect( result.message ).toInclude( "Nothing is active until a person connects one" );
+			} );
+
+			it( "lists them under a heading for each category, in the order the web page shows them", function() {
+				var lines = connectors().message.listToArray( char( 10 ) );
+				var headings = lines.filter( l => [ "Developer", "Productivity", "Finance" ].contains( l ) );
+
+				expect( headings ).toBe( [ "Developer", "Productivity", "Finance" ] );
+				var github = lines.find( l => l.trim().startsWith( "github" ) );
+				expect( lines.find( "Developer" ) ).toBeLT( github );
+				expect( github ).toBeLT( lines.find( "Productivity" ) );
 			} );
 
 			it( "lists the same with the word list", function() {
@@ -41,7 +58,7 @@ class extends="testbox.system.BaseSpec" {
 			it( "prints the catalog as JSON for a script", function() {
 				var parsed = jsonDeserialize( connectors( [ "list" ], { json : true } ).message );
 
-				expect( parsed ).toHaveLength( 9 );
+				expect( parsed ).toHaveLength( catalogIds().len() );
 				expect( parsed.map( c => c.id ) ).toInclude( "supabase" );
 			} );
 
@@ -68,7 +85,7 @@ class extends="testbox.system.BaseSpec" {
 				try {
 					connectors( [ "show", "nope" ] );
 				} catch ( any e ) {
-					expect( e.message ).toInclude( "atlassian, cloudflare, context7, git, github, notion, slack, stripe, supabase" );
+					expect( e.message ).toInclude( catalogIds().toList( ", " ) );
 				}
 			} );
 
@@ -80,7 +97,7 @@ class extends="testbox.system.BaseSpec" {
 				var result = connectors( [ "check" ] );
 
 				expect( result.exitCode ).toBe( 0 );
-				expect( result.message ).toInclude( "9 connectors checked, no problems" );
+				expect( result.message ).toInclude( "#catalogIds().len()# connectors checked, no problems" );
 			} );
 
 			describe( "checking a folder with a mistake", function() {

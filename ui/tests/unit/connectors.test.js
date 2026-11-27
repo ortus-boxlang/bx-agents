@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { webAddress, connectorChips, connectorWho, connectorActions, connectorRows } from "../../resources/assets/js/components/connectors/ConnectorsPage.js";
+import { webAddress, connectorChips, connectorWho, connectorActions, connectorRows, connectorGroups } from "../../resources/assets/js/components/connectors/ConnectorsPage.js";
 
 describe( "connector helpers", () => {
 	it( "only ever opens a web address", () => {
@@ -47,4 +47,30 @@ describe( "connector helpers", () => {
 		expect( connectorRows( rows, "connected", "" ).map( r => r.name ) ).toEqual( [ "GitHub" ] );
 		expect( connectorRows( rows, "all", "ISSUES" ).map( r => r.name ) ).toEqual( [ "Linear" ] );
 	} );
+
+	it( "groups the connectors by category in the server's order, and keeps the ones with none under Other", () => {
+		const rows = [
+			{ id: "slack", category: "Productivity" },
+			{ id: "git", category: "Developer" },
+			{ id: "github", category: "Developer" },
+			{ id: "odd" }
+		];
+		const groups = connectorGroups( rows, [
+			"Developer",
+			"Productivity",
+			"Finance"
+		] );
+		expect( groups.map( g => g.category ) ).toEqual( [
+			"Developer",
+			"Productivity",
+			"Other"
+		] );
+		expect( groups[ 0 ].rows.map( r => r.id ) ).toEqual( [
+			"git",
+			"github"
+		] );
+		expect( connectorGroups( rows, undefined ).map( g => g.category ) ).toEqual( [ "Other" ] );
+		expect( connectorGroups( [], [ "Developer" ] ) ).toEqual( [] );
+	} );
+
 } );

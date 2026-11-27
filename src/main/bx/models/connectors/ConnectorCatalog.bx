@@ -20,10 +20,12 @@ class {
 		TRANSPORTS = [ "http", "stdio" ]
 		AUTH_TYPES = [ "oauth", "bearer", "none" ]
 		RISKS = [ "low", "medium", "high" ]
+		// The groups a connector is listed under, in the order they are shown
+		CATEGORIES = [ "Developer", "Productivity", "Sales", "Finance", "Analytics", "Microsoft 365", "Social Media", "Advertising", "Apps" ]
 		OPTION_TYPES = [ "text", "boolean" ]
 		OPTION_TARGETS = [ "query", "header", "path", "arg", "env" ]
-		REQUIRED = [ "id", "name", "icon", "summary", "transport", "auth", "risk", "riskNote", "docs", "verifiedOn" ]
-		ALLOWED = [ "id", "name", "icon", "summary", "transport", "url", "command", "requires", "auth", "options", "risk", "riskNote", "docs", "verifiedOn" ]
+		REQUIRED = [ "id", "name", "icon", "category", "summary", "transport", "auth", "risk", "riskNote", "docs", "verifiedOn" ]
+		ALLOWED = [ "id", "name", "icon", "category", "summary", "transport", "url", "command", "requires", "auth", "options", "risk", "riskNote", "docs", "verifiedOn" ]
 		AUTH_ALLOWED = [ "type", "scopes", "envVar", "help", "verified", "unverifiedNote" ]
 		OPTION_ALLOWED = [ "key", "label", "help", "type", "target", "name", "default", "onlyWith" ]
 
@@ -61,6 +63,27 @@ class {
 	 */
 	array function all() {
 		return load().entries
+	}
+
+	/**
+	 * @return The categories, in the order they are shown
+	 */
+	array function categories() {
+		return duplicate( static.CATEGORIES )
+	}
+
+	/**
+	 * @return [ { category, connectors : [ entry ] } ] the connectors by category, in the order the categories are shown; a category with none is left out
+	 */
+	array function grouped() {
+		var groups = []
+		for ( var category in static.CATEGORIES ) {
+			var members = all().filter( entry => entry.category == category )
+			if ( members.len() ) {
+				groups.append( { category : category, connectors : members } )
+			}
+		}
+		return groups
 	}
 
 	/**
@@ -306,6 +329,9 @@ class {
 		checkText( entry, "icon", file, problems )
 		if ( !reFind( "^[a-z][a-z0-9-]*$", toString( entry.icon ) ) ) {
 			problems.append( problem( file, "icon", "The icon must be the name of a Phosphor icon, such as git-branch." ) )
+		}
+		if ( !static.CATEGORIES.find( toString( entry.category ) ) ) {
+			problems.append( problem( file, "category", "The category [#entry.category#] must be one of: #static.CATEGORIES.toList( ', ' )#." ) )
 		}
 		if ( !static.RISKS.findNoCase( toString( entry.risk ) ) ) {
 			problems.append( problem( file, "risk", "The risk [#entry.risk#] must be one of: #static.RISKS.toList( ', ' )#." ) )

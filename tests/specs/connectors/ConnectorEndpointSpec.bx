@@ -59,7 +59,10 @@ class extends="testbox.system.BaseSpec" {
 				var entries = ConnectorEndpoint::oauthEntries( ConnectorSettings::resolve( {} ).available );
 				var names = entries.map( e => e.name );
 
-				expect( names ).toBe( [ "atlassian", "cloudflare", "notion", "stripe", "supabase" ] );
+				expect( names ).toBe( new bxagents.models.connectors.ConnectorCatalog().all().filter( e => e.auth.some( m => m.type == "oauth" ) ).map( e => e.id ) );
+				for ( var id in [ "atlassian", "cloudflare", "notion", "stripe", "supabase" ] ) {
+					expect( names ).toInclude( id );
+				}
 				expect( names ).notToInclude( "github" );
 				expect( names ).notToInclude( "git" );
 			} );

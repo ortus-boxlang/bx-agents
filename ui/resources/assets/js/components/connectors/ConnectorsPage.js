@@ -107,6 +107,23 @@ export function connectorRows( rows, tab, query ) {
 }
 
 /**
+ * The connectors by category: one group for each category in `order` that has a connector, then the rest (a connector from an
+ * older server that names none) under "Other".
+ *
+ * @param {Array<object>} rows The connectors to show
+ * @param {Array<string>} order The category names, in the order they are shown
+ * @returns {Array<{ category: string, rows: Array<object> }>} The groups, none of them empty
+ */
+export function connectorGroups( rows, order ) {
+	const names = Array.isArray( order ) ? order : [];
+	const groups = names
+		.map( category => ( { category, rows: rows.filter( r => r.category === category ) } ) )
+		.filter( g => g.rows.length );
+	const rest = rows.filter( r => !names.includes( r.category ) );
+	return rest.length ? groups.concat( [ { category: "Other", rows: rest } ] ) : groups;
+}
+
+/**
  * @returns {object} Alpine component state and actions
  */
 export function connectorsPage() {
@@ -142,6 +159,11 @@ export function connectorsPage() {
 		/** @returns {Array<object>} The connectors of the open tab that match the search */
 		get shown() {
 			return connectorRows( this.rows, this.tab, this.query );
+		},
+
+		/** @returns {Array<{ category: string, rows: Array<object> }>} The connectors of the open tab, by category */
+		get groups() {
+			return connectorGroups( this.shown, this.data && this.data.categories );
 		},
 
 		/** @returns {Array<object>} The tabs, with their counts */
