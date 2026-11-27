@@ -951,7 +951,7 @@ Connect the built-in [connectors](conventions/connectors.md) (GitHub, Stripe, No
 
 ```bash
 bxAgents connect
-bxAgents connect mail [--port=8765] [--no-open] [--timeout=300]
+bxAgents connect mail [--port=8765] [--no-open] [--timeout=120]
 bxAgents connect mail --remove
 bxAgents connect [--user=NAME] [--json]
 bxAgents connect github --token-env=GITHUB_TOKEN --confirm   # a script: no hidden box
@@ -965,7 +965,7 @@ bxAgents connect github options repository=/path/to/repo      # connectors that 
 
 - Without a name it lists the connectors and services and whether you are connected (`--json` for a script).
 - A connector that takes a token asks for it in a hidden box. Medium and high risk connectors show what they can do and need a yes, or `--confirm`. The token is checked with the service before it is sealed.
-- With a name it prints an address and opens your browser, waits for the redirect on `127.0.0.1` (a free port, or `--port`), and finishes the sign in. `--no-open` only prints. `--timeout` is the seconds to wait, 300 by default.
+- With a name it prints an address and opens your browser, waits for the redirect on `127.0.0.1` (a free port, or `--port`), and finishes the sign in. `--no-open` only prints. `--timeout` is the seconds to wait, 120 by default.
 - `--remove` forgets your sign in. `--user` is whose: `local` by default, the one user an open server has.
 - Tokens are sealed in the project's chat database. Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
 
