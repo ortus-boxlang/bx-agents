@@ -48,15 +48,20 @@ class {
 			out.append( "- **Connects with:** #how( entry )#." )
 			out.append( "- **Risk:** #entry.risk#. #entry.riskNote#" )
 			if ( entry.transport == "http" ) {
-				out.append( "- **Address:** `#entry.url#`" )
+				out.append( "- **Address:** `#entry.url#`" & ( hosts( entry ).len() > 1 ? " (the host is one of #hosts( entry ).len()#, see the option below)" : "" ) )
 			} else {
 				out.append( "- **Runs:** `#entry.command.toList( ' ' )#` on the machine the agent runs on. It needs `#entry.requires.program#` on the PATH. #entry.requires.help ?: ''#" )
 			}
 			for ( var method in entry.auth ) {
 				if ( method.type == "bearer" ) {
-					out.append( "- **Token:** sealed in the vault as `#method.envVar#`, only for #hostOf( entry )#. #method.help ?: ''##method.verified ? '' : ' (not verified yet)'#" )
+					var sentIn = len( method.header ?: "" ) && method.header.lcase() != "authorization" ? " It is sent in the `#method.header#` header." : ( ( method.prefix ?: "Bearer " ) == "" && ( method.header ?: "" ) != "" ? " It is sent alone in the `Authorization` header." : "" )
+					out.append( "- **Token:** sealed in the vault as `#method.envVar#`, only for #hosts( entry ).map( h => '`' & h & '`' ).toList( ', ' )#.#sentIn# #method.help ?: ''##method.verified ? '' : ' (not verified yet)'#" )
+				} else if ( method.type == "oauth" && ( method.app ?: "" ) == "own" ) {
+					out.append( "- **Sign in, with your own app:** the service takes no dynamic client registration, so an admin registers an app and sets `#method.envVars.clientId#`" & ( method.envVars.keyExists( "clientSecret" ) ? " and `#method.envVars.clientSecret#`" : " (a public client has no secret)" ) & " in the agent's vault or environment. #method.help ?: ''#" & ( ( method.scopes ?: [] ).len() ? " Scopes: " & method.scopes.map( s => '`' & s & '`' ).toList( ', ' ) & "." : "" ) & ( method.verified ? "" : " (not verified yet)" ) )
 				} else if ( method.type == "oauth" ) {
-					out.append( "- **Sign in:** OAuth#method.scopes.len() ? ' with the scopes ' & method.scopes.map( s => '`' & s & '`' ).toList( ', ' ) : ''#.#method.verified ? '' : ' (not verified yet)'#" )
+					out.append( "- **Sign in:** OAuth#( method.scopes ?: [] ).len() ? ' with the scopes ' & method.scopes.map( s => '`' & s & '`' ).toList( ', ' ) : ''#.#method.verified ? '' : ' (not verified yet)'#" )
+				} else if ( method.type == "none" ) {
+					out.append( "- **Sign in:** none. A person switches it on for themselves, and no secret is stored." )
 				}
 			}
 			if ( entry.options.len() ) {
@@ -64,7 +69,7 @@ class {
 				out.append( "| Option | What it does | Goes to | For |" )
 				out.append( "|---|---|---|---|" )
 				for ( var option in entry.options ) {
-					out.append( "| `#option.key#` | #option.help# | #option.target# `#option.name#` | #len( option.onlyWith ) ? ( option.onlyWith == 'bearer' ? 'a token' : option.onlyWith ) : 'every way in'# |" )
+					out.append( "| `#option.key#` | #option.help##option.keyExists( 'choices' ) ? ' One of: ' & option.choices.map( c => '`' & c.value & '` (' & c.label & ')' ).toList( ', ' ) & '.' : ''# | #option.target# `#option.name ?: option.key#` | #len( option.onlyWith ) ? ( option.onlyWith == 'bearer' ? 'a token' : option.onlyWith ) : 'every way in'# |" )
 				}
 			}
 			out.append( "" )
@@ -100,17 +105,22 @@ class {
 		if ( arguments.entry.transport == "stdio" ) {
 			return "a local program (an admin)"
 		}
-		var ways = arguments.entry.auth.map( m => m.type == "oauth" ? "sign in" : "token" )
+		var ways = arguments.entry.auth.map( m => m.type == "oauth" ? ( ( m.app ?: "" ) == "own" ? "sign in (your own app)" : "sign in" ) : ( m.type == "none" ? "no sign in" : "token" ) )
 		return ways.toList( " or " )
 	}
 
 	/**
 	 * @entry A connector
 	 *
-	 * @return The host its token is sealed for
+	 * @return Every host it may be reached at: the choices of its host option, or the host of its address
 	 */
-	private static string function hostOf( required struct entry ) {
-		return reReplace( arguments.entry.url, "^https?://([^/:]+).*$", "\1" )
+	private static array function hosts( required struct entry ) {
+		for ( var option in arguments.entry.options ) {
+			if ( option.target == "host" ) {
+				return option.choices.map( c => c.value )
+			}
+		}
+		return [ reReplace( arguments.entry.url, "^https?://([^/:]+).*$", "\1" ) ]
 	}
 
 }

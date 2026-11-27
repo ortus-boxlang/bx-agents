@@ -99,7 +99,7 @@ class {
 			"How a person gets in:"
 		]
 		for ( var method in entry.auth ) {
-			lines.append( "  " & describeMethod( method ) )
+			lines.append( "  " & describeMethod( method, entry ) )
 		}
 		if ( entry.options.len() ) {
 			lines.append( "" )
@@ -145,17 +145,21 @@ class {
 
 	/**
 	 * @method One auth method of a connector
+	 * @entry The connector it belongs to
 	 *
 	 * @return One line that says what it is
 	 */
-	private string function describeMethod( required struct method ) {
+	private string function describeMethod( required struct method, required struct entry ) {
 		switch ( arguments.method.type ) {
 			case "oauth":
-				return "Sign in" & ( arguments.method.scopes.len() ? " (asks for #arguments.method.scopes.toList( ', ' )#)" : "" ) & ". Each person signs in once and the agent acts as them."
+				var scopes = arguments.method.scopes ?: []
+				var own = ( arguments.method.app ?: "" ) == "own"
+				return "Sign in" & ( own ? " through an app of your own (an admin sets #arguments.method.envVars.clientId#" & ( arguments.method.envVars.keyExists( 'clientSecret' ) ? " and #arguments.method.envVars.clientSecret#" : "" ) & ")" : "" ) & ( scopes.len() ? " (asks for #scopes.toList( ', ' )#)" : "" ) & ". Each person signs in once and the agent acts as them." & ( own ? " #arguments.method.help#" : "" )
 			case "bearer":
-				return "A token in #arguments.method.envVar#. " & arguments.method.help
+				var header = len( arguments.method.header ?: "" ) ? " Sent in the #arguments.method.header# header." : ""
+				return "A token in #arguments.method.envVar#.#header# " & arguments.method.help
 			default:
-				return "None. It runs on the machine the agent runs on."
+				return arguments.entry.transport == "http" ? "None. It is a public server: a person switches it on for themselves." : "None. It runs on the machine the agent runs on."
 		}
 	}
 

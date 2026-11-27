@@ -23,11 +23,13 @@ class {
 		// The groups a connector is listed under, in the order they are shown
 		CATEGORIES = [ "Developer", "Productivity", "Sales", "Finance", "Analytics", "Microsoft 365", "Social Media", "Advertising", "Apps" ]
 		OPTION_TYPES = [ "text", "boolean" ]
-		OPTION_TARGETS = [ "query", "header", "path", "arg", "env" ]
+		OPTION_TARGETS = [ "query", "header", "path", "host", "arg", "env" ]
+		// Headers a token may not be sent in: they belong to the connection, not to the sign in
+		FORBIDDEN_HEADERS = [ "host", "content-length", "content-type", "accept", "connection", "transfer-encoding", "cookie", "set-cookie", "upgrade", "te", "trailer", "expect", "mcp-session-id", "mcp-protocol-version", "origin", "referer", "user-agent" ]
 		REQUIRED = [ "id", "name", "icon", "category", "summary", "transport", "auth", "risk", "riskNote", "docs", "verifiedOn" ]
 		ALLOWED = [ "id", "name", "icon", "category", "summary", "transport", "url", "command", "requires", "auth", "options", "risk", "riskNote", "docs", "verifiedOn" ]
-		AUTH_ALLOWED = [ "type", "scopes", "envVar", "help", "verified", "unverifiedNote" ]
-		OPTION_ALLOWED = [ "key", "label", "help", "type", "target", "name", "default", "onlyWith" ]
+		AUTH_ALLOWED = [ "type", "scopes", "envVar", "header", "prefix", "app", "envVars", "help", "verified", "unverifiedNote" ]
+		OPTION_ALLOWED = [ "key", "label", "help", "type", "target", "name", "default", "onlyWith", "choices" ]
 
 		// What a secret looks like when somebody pastes one into a file. The message never repeats the value.
 		SECRET_PATTERNS = [
@@ -159,8 +161,10 @@ class {
 			view.unverifiedNote = entry.auth[ 1 ].unverifiedNote ?: ""
 			return view
 		}
-		var tokens = entry.auth.filter( method => method.type == "bearer" )
-		if ( !tokens.len() ) {
+		// the wizard writes an `mcpServers` entry with a plain bearer token and a fixed address: a connector whose token goes in
+		// another header, or whose host is chosen from a list, is offered as a connector only
+		var tokens = entry.auth.filter( method => method.type == "bearer" && !len( method.header ?: "" ) && ( method.prefix ?: "Bearer " ) == "Bearer " )
+		if ( !tokens.len() || find( "{", entry.url ) ) {
 			return {}
 		}
 		view.url = withDefaultQuery( entry )
@@ -363,10 +367,26 @@ class {
 	 */
 	private void function checkWeb( required struct entry, required string fileName, required array problems ) {
 		var address = toString( arguments.entry.url ?: "" )
+		// one {key} may stand for the whole host: its option lists every host it may be (target: host, with choices)
+		var holes = reMatch( "\{[^}]*\}", address )
+		var plain = address
+		if ( holes.len() ) {
+			if ( holes.len() > 1 || !reFind( "^https://\{[a-z][A-Za-z0-9_]*\}(:[0-9]+)?(/|$)", address ) ) {
+				arguments.problems.append( problem( arguments.fileName, "url", "A url may have one {key} and only in place of the whole host, as in https://{site}/mcp." ) )
+			}
+			plain = address.replace( holes[ 1 ], "placeholder.example", "one" )
+		}
 		if ( !len( address ) ) {
 			arguments.problems.append( problem( arguments.fileName, "url", "A web connector needs a url." ) )
-		} else if ( !reFind( "^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[^\s?##]*)?$", address ) ) {
+		} else if ( !reFind( "^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[^\s?##]*)?$", plain ) ) {
 			arguments.problems.append( problem( arguments.fileName, "url", "The url must be an https address with no user name, query or fragment. Values that change the address are options." ) )
+		}
+		var hostOptions = isArray( arguments.entry.options ?: "" ) ? arguments.entry.options.filter( o => isStruct( o ) && ( o.target ?: "" ) == "host" ) : []
+		if ( holes.len() == 1 && !hostOptions.some( o => "{" & ( o.key ?: "" ) & "}" == holes[ 1 ] ) ) {
+			arguments.problems.append( problem( arguments.fileName, "url", "The url has #holes[ 1 ]# but no option with that key and target: host." ) )
+		}
+		if ( hostOptions.len() && !holes.len() ) {
+			arguments.problems.append( problem( arguments.fileName, "options", "An option with target: host needs its {key} in the url." ) )
 		}
 		if ( arguments.entry.keyExists( "command" ) || arguments.entry.keyExists( "requires" ) ) {
 			arguments.problems.append( problem( arguments.fileName, "command", "command and requires belong to a stdio connector, not a web one." ) )
@@ -426,8 +446,44 @@ class {
 			if ( arguments.entry.transport == "stdio" && type != "none" ) {
 				arguments.problems.append( problem( file, "auth.type", "A stdio connector has no sign in or token: its auth is a single method of type none." ) )
 			}
-			if ( arguments.entry.transport == "http" && type == "none" ) {
-				arguments.problems.append( problem( file, "auth.type", "A web connector must say how a person gets in: oauth, bearer or both." ) )
+			if ( arguments.entry.transport == "http" && type == "none" && methods.len() > 1 ) {
+				arguments.problems.append( problem( file, "auth.type", "A web connector with no sign in says so alone: its auth is a single method of type none. Otherwise it says oauth, bearer or both." ) )
+			}
+			if ( method.keyExists( "header" ) || method.keyExists( "prefix" ) ) {
+				if ( type != "bearer" ) {
+					arguments.problems.append( problem( file, "auth.header", "header and prefix belong to a bearer method." ) )
+				} else {
+					var sentIn = toString( method.header ?: "Authorization" )
+					if ( !reFind( "^[A-Za-z][A-Za-z0-9-]*$", sentIn ) ) {
+						arguments.problems.append( problem( file, "auth.header", "The header [#sentIn#] is not a valid header name." ) )
+					} else if ( sentIn.lcase() != "authorization" && static.FORBIDDEN_HEADERS.findNoCase( sentIn ) ) {
+						arguments.problems.append( problem( file, "auth.header", "A token cannot be sent in the header [#sentIn#]: it belongs to the connection." ) )
+					}
+					if ( method.keyExists( "prefix" ) && ( !isSimpleValue( method.prefix ) || len( toString( method.prefix ) ) > 16 || reFind( "[\r\n]", toString( method.prefix ) ) ) ) {
+						arguments.problems.append( problem( file, "auth.prefix", "The prefix is up to 16 characters on one line, such as Bearer or Token. Leave it empty to send the token alone." ) )
+					}
+				}
+			}
+			if ( method.keyExists( "app" ) || method.keyExists( "envVars" ) ) {
+				if ( type != "oauth" || toString( method.app ?: "" ) != "own" ) {
+					arguments.problems.append( problem( file, "auth.app", "app: own, with envVars, belongs to an oauth method." ) )
+				} else {
+					var ids = isStruct( method.envVars ?: "" ) ? method.envVars : {}
+					if ( !reFind( "^[A-Z][A-Z0-9_]*$", toString( ids.clientId ?: "" ) ) ) {
+						arguments.problems.append( problem( file, "auth.envVars", "An oauth method with app: own needs envVars.clientId, the name of the variable that holds the client id. Values never go in this file." ) )
+					}
+					if ( ids.keyExists( "clientSecret" ) && !reFind( "^[A-Z][A-Z0-9_]*$", toString( ids.clientSecret ) ) ) {
+						arguments.problems.append( problem( file, "auth.envVars", "envVars.clientSecret is the name of the variable that holds the client secret, such as SLACK_CLIENT_SECRET." ) )
+					}
+					for ( var idKey in ids.keyArray() ) {
+						if ( ![ "clientId", "clientSecret" ].contains( idKey ) ) {
+							arguments.problems.append( problem( file, "auth.envVars", "[#idKey#] is not one of envVars: clientId, clientSecret." ) )
+						}
+					}
+					if ( !len( toString( method.help ?: "" ) ) ) {
+						arguments.problems.append( problem( file, "auth.help", "An oauth method with app: own says in help how an admin registers the app and which redirect address to give it." ) )
+					}
+				}
 			}
 			if ( type == "bearer" && !reFind( "^[A-Z][A-Z0-9_]*$", toString( method.envVar ?: "" ) ) ) {
 				arguments.problems.append( problem( file, "auth.envVar", "A bearer method needs envVar, the name of an environment variable such as GITHUB_PERSONAL_ACCESS_TOKEN. The token itself never goes in this file." ) )
@@ -462,7 +518,7 @@ class {
 		}
 		var authTypes = isArray( arguments.entry.auth ) ? arguments.entry.auth.filter( method => isStruct( method ) ).map( method => toString( method.type ?: "" ) ) : []
 		var keys = []
-		var wanted = arguments.entry.transport == "stdio" ? [ "arg", "env" ] : [ "query", "header", "path" ]
+		var wanted = arguments.entry.transport == "stdio" ? [ "arg", "env" ] : [ "query", "header", "path", "host" ]
 		for ( var option in arguments.entry.options ) {
 			if ( !isStruct( option ) ) {
 				arguments.problems.append( problem( file, "options", "Every option must be a mapping." ) )
@@ -493,10 +549,13 @@ class {
 				arguments.problems.append( problem( file, "options.#name#.target", "The target of option [#name#] must be one of: #wanted.toList( ', ' )# for a #arguments.entry.transport# connector." ) )
 			} else {
 				var sent = toString( option.name ?: name )
-				var shape = { query : "^[A-Za-z_][A-Za-z0-9_.-]*$", header : "^[A-Za-z][A-Za-z0-9-]*$", path : "^[A-Za-z0-9_-]+$", arg : "^--?[a-z][a-z0-9-]*$", env : "^[A-Z][A-Z0-9_]*$" }
+				var shape = { query : "^[A-Za-z_][A-Za-z0-9_.-]*$", header : "^[A-Za-z][A-Za-z0-9-]*$", path : "^[A-Za-z0-9_-]+$", host : "^[a-z][A-Za-z0-9_]*$", arg : "^--?[a-z][a-z0-9-]*$", env : "^[A-Z][A-Z0-9_]*$" }
 				if ( !reFind( shape[ target ], sent ) ) {
 					arguments.problems.append( problem( file, "options.#name#.name", "The name [#sent#] is not a valid #target# name." ) )
 				}
+			}
+			if ( option.keyExists( "choices" ) || target == "host" ) {
+				checkChoices( option, name, target, file, arguments.problems )
 			}
 			if ( option.keyExists( "default" ) && !isSimpleValue( option.default ) ) {
 				arguments.problems.append( problem( file, "options.#name#.default", "The default of option [#name#] must be text or true or false." ) )
@@ -504,6 +563,44 @@ class {
 			if ( option.keyExists( "onlyWith" ) && !authTypes.findNoCase( toString( option.onlyWith ) ) ) {
 				arguments.problems.append( problem( file, "options.#name#.onlyWith", "onlyWith [#option.onlyWith#] must be one of the auth types this connector lists." ) )
 			}
+		}
+	}
+
+	/**
+	 * A host option may only be one of a fixed list, so no person can point a connector at a server of their choosing.
+	 *
+	 * @option The option
+	 * @name Its key
+	 * @target Where its value goes
+	 * @file Its file
+	 * @problems Filled with what is wrong
+	 */
+	private void function checkChoices( required struct option, required string name, required string target, required string file, required array problems ) {
+		if ( arguments.target != "host" ) {
+			arguments.problems.append( problem( arguments.file, "options.#arguments.name#.choices", "choices belongs to an option with target: host." ) )
+			return
+		}
+		var list = arguments.option.choices ?: []
+		if ( !isArray( list ) || list.len() < 2 ) {
+			arguments.problems.append( problem( arguments.file, "options.#arguments.name#.choices", "A host option lists the hosts it may be: choices, at least two, each with a value (the host) and a label." ) )
+			return
+		}
+		var values = []
+		for ( var choice in list ) {
+			var host = isStruct( choice ) ? toString( choice.value ?: "" ) : ""
+			if ( !isStruct( choice ) || !len( toString( choice.label ?: "" ) ) || !reFind( "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", host ) ) {
+				arguments.problems.append( problem( arguments.file, "options.#arguments.name#.choices", "Every choice is a host name in lower case as value (such as mcp.example.com, no port or path) and a label." ) )
+			} else if ( values.find( host ) ) {
+				arguments.problems.append( problem( arguments.file, "options.#arguments.name#.choices", "The host [#host#] is listed twice." ) )
+			} else {
+				values.append( host )
+			}
+		}
+		if ( !len( toString( arguments.option.default ?: "" ) ) || !values.find( toString( arguments.option.default ) ) ) {
+			arguments.problems.append( problem( arguments.file, "options.#arguments.name#.default", "The default of a host option is one of its choices." ) )
+		}
+		if ( ( arguments.option.type ?: "" ) != "text" ) {
+			arguments.problems.append( problem( arguments.file, "options.#arguments.name#.type", "A host option is of type text." ) )
 		}
 	}
 

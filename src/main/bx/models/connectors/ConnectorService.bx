@@ -16,6 +16,7 @@
  * credential and the person's options and tool switches are in `connector_settings`.
  */
 import bxModules.bxagents.models.util.ProgramFinder;
+import bxModules.bxagents.models.connectors.ConnectorEndpoint;
 
 class {
 
@@ -36,6 +37,8 @@ class {
 		variables.vault = arguments.deps.vault ?: ""
 		variables.signedIn = arguments.deps.signedIn ?: ( ( connectorId, person ) => false )
 		variables.programExists = arguments.deps.programExists ?: ( program => ProgramFinder::exists( program ) )
+		// whether the admin has set the app of a sign in that needs an app of their own: ( connectorId ) => boolean
+		variables.appReady = arguments.deps.appReady ?: ( ( id ) => true )
 		return this
 	}
 
@@ -99,7 +102,7 @@ class {
 				on = variables.programExists( item.requires.program ) && ( variables.settings.get( "*", item.id, "enabled" ).on ?: false )
 			} else {
 				var tokenMethod = item.auth.filter( m => m.type == "bearer" )
-				on = ( item.auth.some( m => m.type == "oauth" ) && variables.signedIn( item.id, who ) ) || ( tokenMethod.len() && secretNames.contains( tokenMethod[ 1 ].envVar ) )
+				on = ( item.auth.some( m => m.type == "oauth" ) && variables.signedIn( item.id, who ) ) || ( tokenMethod.len() && secretNames.contains( tokenMethod[ 1 ].envVar ) ) || ( ConnectorEndpoint::isOpen( item ) && ( variables.settings.get( who, item.id, "enabled" ).on ?: false ) )
 			}
 			out[ item.id ] = on ? true : false
 		}
@@ -146,6 +149,12 @@ class {
 		var switchedOff = variables.settings.get( who, item.id, "tools" ).off ?: []
 		var tokenMethod = item.auth.filter( m => m.type == "bearer" )
 		var ways = item.auth.map( m => m.type )
+		// a sign in through an app of the admin's own is offered only once the admin has set the app
+		var appMethod = ConnectorEndpoint::ownApp( item )
+		var needsApp = appMethod.count() && !variables.appReady( item.id )
+		if ( needsApp ) {
+			ways = ways.filter( w => w != "oauth" )
+		}
 
 		var connectedWith = ""
 		var state = "available"
@@ -163,6 +172,8 @@ class {
 				connectedWith = "oauth"
 			} else if ( tokenMethod.len() && hasOwnToken( tokenMethod[ 1 ].envVar, who ) ) {
 				connectedWith = "token"
+			} else if ( ConnectorEndpoint::isOpen( item ) && ( variables.settings.get( who, item.id, "enabled" ).on ?: false ) ) {
+				connectedWith = "open"
 			}
 			if ( len( connectedWith ) ) {
 				state = connectedWith == "token" && ( status.state ?: "" ) == "needs_attention" ? "needs_attention" : "connected"
@@ -176,7 +187,8 @@ class {
 			category      : item.category ?: "",
 			summary       : item.summary,
 			transport     : item.transport,
-			host          : item.transport == "http" ? reReplace( item.url, "^https?://([^/:]+).*$", "\1" ) : "",
+			host          : item.transport == "http" ? ConnectorEndpoint::hostFor( item, saved ) : "",
+			tokenHeader   : item.transport == "http" ? ConnectorEndpoint::of( item, saved ).tokenHeader : "",
 			program       : item.transport == "stdio" ? item.requires.program : "",
 			programFound  : found,
 			risk          : item.risk,
@@ -184,6 +196,8 @@ class {
 			docs          : item.docs,
 			verifiedOn    : item.verifiedOn,
 			ways          : ways,
+			needsApp      : needsApp ? true : false,
+			appHelp       : appMethod.count() ? ( appMethod.help ?: "" ) : "",
 			tokenName     : tokenMethod.len() ? tokenMethod[ 1 ].envVar : "",
 			state         : state,
 			connectedWith : connectedWith,

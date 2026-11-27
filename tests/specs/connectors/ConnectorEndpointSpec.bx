@@ -41,6 +41,69 @@ class extends="testbox.system.BaseSpec" {
 				expect( ConnectorEndpoint::of( github ).url ).toBe( "https://api.githubcopilot.com/mcp/" );
 			} );
 
+			it( "puts the chosen host in the address, and never a host that is not one of the choices", function() {
+				var datadog = entryFor( "datadog" );
+
+				expect( ConnectorEndpoint::of( datadog ).url ).toBe( "https://mcp.datadoghq.com/v1/mcp" );
+				expect( ConnectorEndpoint::of( datadog ).host ).toBe( "mcp.datadoghq.com" );
+				expect( ConnectorEndpoint::of( datadog, { site : "mcp.datadoghq.eu" } ).url ).toBe( "https://mcp.datadoghq.eu/v1/mcp" );
+				expect( ConnectorEndpoint::of( datadog, { site : "mcp.datadoghq.eu" } ).host ).toBe( "mcp.datadoghq.eu" );
+				// somebody else's server is not a choice: the default is used
+				expect( ConnectorEndpoint::of( datadog, { site : "evil.example.com" } ).url ).toBe( "https://mcp.datadoghq.com/v1/mcp" );
+				expect( ConnectorEndpoint::of( datadog, { site : "mcp.datadoghq.com@evil.example.com" } ).host ).toBe( "mcp.datadoghq.com" );
+				expect( ConnectorEndpoint::of( datadog ).url ).notToInclude( "{" );
+			} );
+
+			it( "lists every host a connector may be reached at, so a token is sealed for all of them", function() {
+				expect( ConnectorEndpoint::hostsOf( entryFor( "datadog" ) ) ).toHaveLength( 7 );
+				expect( ConnectorEndpoint::hostsOf( entryFor( "datadog" ) ) ).toInclude( "mcp.datadoghq.eu" );
+				expect( ConnectorEndpoint::hostsOf( entryFor( "github" ) ) ).toBe( [ "api.githubcopilot.com" ] );
+				expect( ConnectorEndpoint::hostFor( entryFor( "mixpanel" ), { region : "mcp-eu.mixpanel.com" } ) ).toBe( "mcp-eu.mixpanel.com" );
+			} );
+
+			it( "says which header a token goes in: Authorization with Bearer unless the connector names another", function() {
+				var plain = ConnectorEndpoint::of( entryFor( "github" ) );
+				var keyed = ConnectorEndpoint::of( entryFor( "bigdata" ) );
+
+				expect( plain.tokenHeader ).toBe( "" );
+				expect( plain.tokenPrefix ).toBe( "Bearer " );
+				expect( keyed.tokenHeader ).toBe( "x-api-key" );
+				expect( keyed.tokenPrefix ).toBe( "" );
+				expect( ConnectorEndpoint::of( entryFor( "wix" ), { wix_account_id : "acc-1" }, "bearer" ).headers ).toBe( { "wix-account-id" : "acc-1" } );
+				expect( ConnectorEndpoint::of( entryFor( "wix" ), { wix_account_id : "acc-1" }, "oauth" ).headers ).toBeEmpty();
+			} );
+
+			it( "knows a public server from one that asks for a sign in or a token", function() {
+				expect( ConnectorEndpoint::isOpen( entryFor( "excalidraw" ) ) ).toBeTrue();
+				expect( ConnectorEndpoint::of( entryFor( "excalidraw" ) ).open ).toBeTrue();
+				expect( ConnectorEndpoint::isOpen( entryFor( "github" ) ) ).toBeFalse();
+				expect( ConnectorEndpoint::isOpen( entryFor( "git" ) ) ).toBeFalse();
+			} );
+
+			it( "makes a sign in entry for an app of the admin's own only once the admin has set it", function() {
+				var available = ConnectorSettings::resolve( {} ).available;
+				var none = ConnectorEndpoint::oauthEntries( available, name => "" ).map( e => e.name );
+
+				// nothing set: no sign in for slack, asana or x-ads, and the others have theirs
+				expect( none ).notToInclude( "slack" );
+				expect( none ).notToInclude( "asana" );
+				expect( none ).toInclude( "notion" );
+				expect( ConnectorEndpoint::oauthEntries( available ).map( e => e.name ) ).notToInclude( "slack" );
+
+				var set = { SLACK_CLIENT_ID : "id-1", SLACK_CLIENT_SECRET : "secret-1", X_ADS_CLIENT_ID : "native-id" };
+				var entries = ConnectorEndpoint::oauthEntries( available, name => set[ name ] ?: "" ).reduce( ( all, e ) => { all[ e.name ] = e; return all; }, {} );
+
+				expect( entries.slack.oauth.clientId ).toBe( "id-1" );
+				expect( entries.slack.oauth.clientSecret ).toBe( "secret-1" );
+				expect( entries.slack.oauth.scopes ).toInclude( "chat:write" );
+				// a public client has an id and no secret
+				expect( entries[ "x-ads" ].oauth.clientId ).toBe( "native-id" );
+				expect( entries[ "x-ads" ].oauth ).notToHaveKey( "clientSecret" );
+				expect( entries ).notToHaveKey( "asana" );
+				// what the catalog says about it holds the names of variables, not values
+				expect( ConnectorEndpoint::ownApp( entryFor( "slack" ) ).envVars ).toBe( { clientId : "SLACK_CLIENT_ID", clientSecret : "SLACK_CLIENT_SECRET" } );
+			} );
+
 			it( "applies an option that is only for one way in to that way alone", function() {
 				var stripe = entryFor( "stripe" );
 
@@ -59,7 +122,8 @@ class extends="testbox.system.BaseSpec" {
 				var entries = ConnectorEndpoint::oauthEntries( ConnectorSettings::resolve( {} ).available );
 				var names = entries.map( e => e.name );
 
-				expect( names ).toBe( new bxagents.models.connectors.ConnectorCatalog().all().filter( e => e.auth.some( m => m.type == "oauth" ) ).map( e => e.id ) );
+				// an app of the admin's own has no sign in until the admin has set it: those are left out here
+				expect( names ).toBe( new bxagents.models.connectors.ConnectorCatalog().all().filter( e => e.auth.some( m => m.type == "oauth" && ( m.app ?: "" ) != "own" ) ).map( e => e.id ) );
 				for ( var id in [ "atlassian", "cloudflare", "notion", "stripe", "supabase" ] ) {
 					expect( names ).toInclude( id );
 				}

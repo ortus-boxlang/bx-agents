@@ -4,6 +4,12 @@
  * An option's `target` says where its value goes: a `query` value is added to the address, a `header` value is sent as a
  * header, a `path` value is added as a path segment. A boolean that is true is sent as `true`; false, or an empty text, is
  * left out. An option with `onlyWith` applies only to that way in (Stripe's connected account is for a token only).
+ *
+ * A `host` option stands for the whole host of the address (`https://{site}/mcp`). Its value must be one of the hosts the
+ * connector lists as `choices`: a value that is not one of them is never used, the default is, so nobody can point a
+ * connector at a server of their own choosing.
+ *
+ * A token that is not an `Authorization: Bearer` one says in which header it goes (`header` and `prefix` of its method).
  */
 class {
 
@@ -12,13 +18,20 @@ class {
 	 * @values The option values to use: { key : value }. A key left out gets the option's default
 	 * @authType The way in the person uses: bearer or oauth
 	 *
-	 * @return { id, url, headers, timeout } where timeout is left out when the admin set none
+	 * @return { id, url, host, headers, tokenHeader, tokenPrefix, timeout } where timeout is left out when the admin set none, and tokenHeader is "" for a plain bearer token
 	 */
 	static struct function of( required struct entry, struct values = {}, string authType = "bearer" ) {
 		var query = []
 		var segments = []
 		var headers = {}
+		var address = arguments.entry.url
 		for ( var option in arguments.entry.options ) {
+			if ( option.target == "host" ) {
+				var picked = arguments.values.keyExists( option.key ) ? toString( arguments.values[ option.key ] ) : toString( option.default )
+				var allowed = ( option.choices ?: [] ).map( c => c.value )
+				address = address.replace( "{" & option.key & "}", allowed.contains( picked ) ? picked : toString( option.default ), "one" )
+				continue
+			}
 			if ( len( option.onlyWith ) && option.onlyWith != arguments.authType ) {
 				continue
 			}
@@ -35,15 +48,82 @@ class {
 				segments.append( urlEncodedFormat( text ).replace( "+", "%20", "all" ) )
 			}
 		}
+		var tokenMethod = ( arguments.entry.auth ?: [] ).filter( m => m.type == "bearer" )
 		var out = {
-			id      : arguments.entry.id,
-			url     : arguments.entry.url & ( segments.len() ? "/" & segments.toList( "/" ) : "" ) & ( query.len() ? "?" & query.toList( "&" ) : "" ),
-			headers : headers
+			id          : arguments.entry.id,
+			url         : address & ( segments.len() ? "/" & segments.toList( "/" ) : "" ) & ( query.len() ? "?" & query.toList( "&" ) : "" ),
+			host        : reReplace( address, "^https?://([^/:]+).*$", "\1" ),
+			headers     : headers,
+			tokenHeader : tokenMethod.len() ? ( tokenMethod[ 1 ].header ?: "" ) : "",
+			tokenPrefix : tokenMethod.len() ? ( tokenMethod[ 1 ].prefix ?: "Bearer " ) : "Bearer ",
+			open        : ConnectorEndpoint::isOpen( arguments.entry )
 		}
 		if ( ( arguments.entry.timeout ?: 0 ) > 0 ) {
 			out.timeout = arguments.entry.timeout
 		}
 		return out
+	}
+
+	/**
+	 * @entry The connector as offered
+	 *
+	 * @return True for a web connector that asks for no sign in and no token (a public server)
+	 */
+	static boolean function isOpen( required struct entry ) {
+		return ( arguments.entry.transport ?: "" ) == "http" && ( arguments.entry.auth ?: [] ).len() == 1 && arguments.entry.auth[ 1 ].type == "none"
+	}
+
+	/**
+	 * @entry The connector as offered
+	 *
+	 * @return The oauth method that is an app of the admin's own (`app: own`), or an empty struct
+	 */
+	static struct function ownApp( required struct entry ) {
+		var found = ( arguments.entry.auth ?: [] ).filter( m => m.type == "oauth" && ( m.app ?: "" ) == "own" )
+		return found.len() ? found[ 1 ] : {}
+	}
+
+	/**
+	 * The client id and secret of an own app, as the admin gave them: a secret of the agent in the vault, or an environment
+	 * variable of the same name. Nothing is cached, and the values are never written to a file or returned by the API.
+	 *
+	 * @method The oauth method with app: own
+	 * @credential A function ( name ) => value that reads one setting, "" when there is none
+	 *
+	 * @return { clientId, clientSecret } with "" for what is not set
+	 */
+	static struct function appCredentials( required struct method, required any credential ) {
+		var names = arguments.method.envVars ?: {}
+		var lookup = arguments.credential
+		var read = name => len( name ?: "" ) ? trim( toString( lookup( name ) ?: "" ) ) : ""
+		return { clientId : read( names.clientId ?: "" ), clientSecret : read( names.clientSecret ?: "" ) }
+	}
+
+	/**
+	 * Every host a connector may be reached at: the hosts of its host option, or the one in its address. A token is sealed for
+	 * all of them.
+	 *
+	 * @entry The connector as offered
+	 *
+	 * @return [ hosts ]
+	 */
+	static array function hostsOf( required struct entry ) {
+		for ( var option in ( arguments.entry.options ?: [] ) ) {
+			if ( option.target == "host" ) {
+				return ( option.choices ?: [] ).map( c => c.value )
+			}
+		}
+		return [ reReplace( arguments.entry.url, "^https?://([^/:]+).*$", "\1" ) ]
+	}
+
+	/**
+	 * @entry The connector as offered
+	 * @values The option values: { key : value }
+	 *
+	 * @return The host a person with those values reaches it at
+	 */
+	static string function hostFor( required struct entry, struct values = {} ) {
+		return ConnectorEndpoint::of( arguments.entry, arguments.values ).host
 	}
 
 	/**
@@ -110,10 +190,11 @@ class {
 	 * client is shared by everyone, so its address uses the admin's option values, never a person's.
 	 *
 	 * @available The offered connectors (ConnectorSettings::resolve().available)
+	 * @credential A function ( name ) => value for the client id and secret of an own app. Without one, an own app is left out
 	 *
 	 * @return [ { name, prefix, url, oauth, headers, timeout } ]
 	 */
-	static array function oauthEntries( required array available ) {
+	static array function oauthEntries( required array available, any credential = "" ) {
 		var out = []
 		for ( var entry in arguments.available ) {
 			var method = entry.auth.filter( m => m.type == "oauth" )
@@ -121,7 +202,25 @@ class {
 				continue
 			}
 			var where = ConnectorEndpoint::of( entry, {}, "oauth" )
-			var made = { name : entry.id, prefix : entry.id, url : where.url, oauth : method[ 1 ].scopes.len() ? { scopes : method[ 1 ].scopes } : true }
+			var scopes = ( method[ 1 ].scopes ?: [] )
+			var oauth = scopes.len() ? { scopes : scopes } : true
+			if ( ( method[ 1 ].app ?: "" ) == "own" ) {
+				// an app of the admin's own: the client id and secret are theirs, read here and held in memory only. Until they are
+				// set there is no sign in for this connector.
+				if ( isSimpleValue( arguments.credential ) ) {
+					continue
+				}
+				var app = ConnectorEndpoint::appCredentials( method[ 1 ], arguments.credential )
+				if ( !len( app.clientId ) ) {
+					continue
+				}
+				oauth = scopes.len() ? { scopes : scopes } : {}
+				oauth.clientId = app.clientId
+				if ( len( app.clientSecret ) ) {
+					oauth.clientSecret = app.clientSecret
+				}
+			}
+			var made = { name : entry.id, prefix : entry.id, url : where.url, oauth : oauth }
 			if ( where.headers.count() ) {
 				made.headers = where.headers
 			}

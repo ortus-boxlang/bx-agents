@@ -157,12 +157,20 @@ class {
 		var store = arguments.options.store ?: new "models.vault.VaultWiring@bxagents"().storeFor()
 		var vault = arguments.options.vault ?: new "models.vault.VaultWiring@bxagents"().serviceFor( store )
 		var settings = new "models.connectors.ConnectorSettingsStore@bxagents"( store )
+		// the app of a sign in that needs one of the admin's own: read here when the agent starts, held in memory, never written
+		var credential = name => adminSetting( vault, name )
+		var available = arguments.policy.available ?: []
+		var appReady = id => {
+			var match = available.filter( c => c.id == id )
+			var method = match.len() ? ConnectorEndpoint::ownApp( match[ 1 ] ) : {}
+			return !method.count() || len( ConnectorEndpoint::appCredentials( method, credential ).clientId ) > 0
+		}
 		var oauth = new "models.connect.ConnectionService@bxagents"(
-			ConnectorEndpoint::oauthEntries( arguments.policy.available ?: [] ),
+			ConnectorEndpoint::oauthEntries( available, credential ),
 			{ apiPath : arguments.options.apiPath ?: "/__bxagents", agent : arguments.agent }
 		)
 		var signedIn = ( id, person ) => oauth.list( person ).some( s => s.name == id && s.connected )
-		var deps = { vault : vault, signedIn : signedIn }
+		var deps = { vault : vault, signedIn : signedIn, appReady : appReady }
 		if ( arguments.options.keyExists( "programExists" ) ) {
 			deps.programExists = arguments.options.programExists
 		}
@@ -170,7 +178,7 @@ class {
 		var holder = {}
 		var theAgent = arguments.agent
 		var clients = new "models.connectors.ConnectorClients@bxagents"(
-			( id, person ) => tokenOf( vault, service, id, person ),
+			( id, person ) => tokenOf( vault, service, id, person, holder.tools.endpointFor( id, person ).host ),
 			1800,
 			{ endpointFor : ( id, person ) => holder.tools.endpointFor( id, person ), toolGate : ( id, person, tool ) => holder.tools.gate( id, person, tool ), onRefused : ( id, person, reason ) => settings.markRefused( person, id, reason ) }
 		)
@@ -187,24 +195,40 @@ class {
 	}
 
 	/**
+	 * One setting of the admin: a secret of the agent in the vault, or an environment variable of the same name.
+	 *
+	 * @vault A VaultService
+	 * @name The name of the secret or variable
+	 *
+	 * @return The value, or an empty string
+	 */
+	private string function adminSetting( required any vault, required string name ) {
+		try {
+			return arguments.vault.resolve( arguments.name, { via : "connectors" } )
+		} catch ( any e ) {
+			return trim( getSystemSetting( arguments.name, "" ) )
+		}
+	}
+
+	/**
 	 * A person's own token for a connector, locked to the connector's host. Empty when they have none.
 	 *
 	 * @vault A VaultService
 	 * @service The ConnectorService
 	 * @id The connector
 	 * @person The person
+	 * @host The host the call goes to for this person, which the token must be sealed for
 	 *
 	 * @return The token, or an empty string
 	 */
-	private string function tokenOf( required any vault, required any service, required string id, required string person ) {
+	private string function tokenOf( required any vault, required any service, required string id, required string person, required string host ) {
 		var entry = arguments.service.entryOf( arguments.id )
 		var method = ( entry.auth ?: [] ).filter( m => m.type == "bearer" )
 		if ( !method.len() || ( entry.transport ?: "" ) != "http" ) {
 			return ""
 		}
-		var host = reReplace( entry.url, "^https?://([^/:]+).*$", "\1" )
 		try {
-			return arguments.vault.resolve( method[ 1 ].envVar, { user : arguments.person, host : host, via : "connectors", ownOnly : true } )
+			return arguments.vault.resolve( method[ 1 ].envVar, { user : arguments.person, host : arguments.host, via : "connectors", ownOnly : true } )
 		} catch ( any e ) {
 			return ""
 		}

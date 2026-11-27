@@ -16,6 +16,8 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 |---|---|---|---|
 | [Cloudflare](#cloudflare) | sign in or token | high | The Cloudflare API: DNS, Workers, rules and more |
 | [Context7](#context7) | token | low | Up-to-date documentation and code examples for libraries |
+| [Datadog](#datadog) | sign in or token | medium | Search logs, metrics, traces, monitors and dashboards in Datadog |
+| [Excalidraw](#excalidraw) | no sign in | low | Draw hand-drawn style diagrams and sketches |
 | [Git](#git) | a local program (an admin) | medium | Read, search and change local Git repositories |
 | [GitHub](#github) | token | high | Repositories, issues, pull requests, Actions and code search |
 | [Netlify](#netlify) | sign in | high | Create, deploy and manage Netlify sites from an agent |
@@ -26,8 +28,11 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 
 | Connector | Connects with | Risk | What it does |
 |---|---|---|---|
+| [Asana](#asana) | sign in (your own app) | medium | Search, read, create and update tasks, projects and comments in Asana |
 | [Atlassian (Jira and Confluence)](#atlassian-jira-and-confluence) | sign in or token | medium | Jira work items, Confluence pages, Bitbucket |
+| [Box](#box) | sign in (your own app) | medium | Search and read files and folders, ask Box AI, create folders and comments |
 | [Calendly](#calendly) | sign in | high | List event types and meetings, create scheduling links and bookings, read meeting notes |
+| [Canva](#canva) | sign in (your own app) | medium | Create, find, edit, comment on and export Canva designs and assets |
 | [ClickUp](#clickup) | sign in | high | Search, create and update tasks, documents and chat messages |
 | [Gamma](#gamma) | sign in | medium | Create, search, edit and export presentations, documents and webpages |
 | [HyperFrames by HeyGen](#hyperframes-by-heygen) | sign in | medium | Create, revise and render videos from a text description |
@@ -35,14 +40,22 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 | [Notion](#notion) | sign in or token | medium | Search, read, create and update pages and databases |
 | [RingCentral Chat](#ringcentral-chat) | sign in | high | Team messaging chats, direct conversations, teams and posts in RingEX |
 | [RingCentral Phone](#ringcentral-phone) | sign in | high | Call logs, contacts, messages, presence and SMS in RingEX |
-| [Slack](#slack) | token | high | Search channels and people, read threads, send messages, canvases, files and lists |
+| [Slack](#slack) | sign in (your own app) or token | high | Search channels and people, read threads, send messages, canvases, files and lists |
 | [Whop](#whop) | sign in | high | Search the Whop docs and read or change live Whop data |
+
+## Sales
+
+| Connector | Connects with | Risk | What it does |
+|---|---|---|---|
+| [HubSpot](#hubspot) | sign in (your own app) | high | Search and update CRM records, activities, content and campaigns in HubSpot |
+| [Meltwater](#meltwater) | sign in or token | low | Media and social mentions, saved searches and insights from Meltwater |
 
 ## Finance
 
 | Connector | Connects with | Risk | What it does |
 |---|---|---|---|
-| [Daloopa](#daloopa) | sign in | low | Company financials, KPIs, filings and earnings transcripts |
+| [Bigdata.com](#bigdatacom) | token | low | Search financial news, filings, earnings transcripts and analyst research |
+| [Daloopa](#daloopa) | sign in or token | low | Company financials, KPIs, filings and earnings transcripts |
 | [S&P Global](#sp-global) | sign in | low | Financial data and company research from the Kensho LLM-ready API |
 | [Stripe](#stripe) | sign in or token | high | Customers, invoices, subscriptions, refunds and documentation search |
 
@@ -50,20 +63,26 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 
 | Connector | Connects with | Risk | What it does |
 |---|---|---|---|
-| [Mixpanel](#mixpanel) | sign in | medium | Run reports on events, funnels and retention, and browse dashboards (US data region) |
+| [Mixpanel](#mixpanel) | sign in | medium | Run reports on events, funnels and retention, and browse dashboards |
 
 ## Social Media
 
 | Connector | Connects with | Risk | What it does |
 |---|---|---|---|
 | [Buffer](#buffer) | sign in or token | high | Read channels and queue, schedule and edit posts, capture ideas and pull post analytics |
-| [Metricool](#metricool) | sign in | high | Manage brands, read social analytics and schedule posts |
+| [Metricool](#metricool) | sign in or token | high | Manage brands, read social analytics and schedule posts |
+
+## Advertising
+
+| Connector | Connects with | Risk | What it does |
+|---|---|---|---|
+| [X Ads](#x-ads) | sign in (your own app) | high | Read X Ads accounts and analytics, and create and manage campaigns |
 
 ## Apps
 
 | Connector | Connects with | Risk | What it does |
 |---|---|---|---|
-| [Wix](#wix) | sign in | high | Search Wix documentation and make API calls on your Wix sites |
+| [Wix](#wix) | sign in or token | high | Search Wix documentation and make API calls on your Wix sites |
 | [Zapier](#zapier) | sign in or token | high | Run actions in the apps connected to your Zapier account |
 
 ## Details
@@ -76,7 +95,7 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 - **Risk:** high. Three tools (search, execute and docs) reach more than 2,500 endpoints, so turning tools on or off does not limit it. Only the scopes of the sign in or the permissions of the token do. It can change DNS, Workers and rules and create billable resources.
 - **Address:** `https://mcp.cloudflare.com/mcp`
 - **Sign in:** OAuth with the scopes `user:read`, `account:read`.
-- **Token:** sealed in the vault as `CLOUDFLARE_API_TOKEN`, only for mcp.cloudflare.com. A Cloudflare API token, user or account. Scope it to the accounts and zones the agent should touch.
+- **Token:** sealed in the vault as `CLOUDFLARE_API_TOKEN`, only for `mcp.cloudflare.com`. A Cloudflare API token, user or account. Scope it to the accounts and zones the agent should touch.
 
 [Documentation](https://developers.cloudflare.com/agents/model-context-protocol/mcp-servers-for-cloudflare/). Checked on 2026-11-14.
 
@@ -87,9 +106,36 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 - **Connects with:** token.
 - **Risk:** low. Reads public library documentation. The library name and the question the agent asks are sent to Context7's servers.
 - **Address:** `https://mcp.context7.com/mcp`
-- **Token:** sealed in the vault as `CONTEXT7_API_KEY`, only for mcp.context7.com. A Context7 API key (starts with ctx7sk), made on the dashboard at context7.com. The server also answers without one, at much lower rate limits.
+- **Token:** sealed in the vault as `CONTEXT7_API_KEY`, only for `mcp.context7.com`. A Context7 API key (starts with ctx7sk), made on the dashboard at context7.com. The server also answers without one, at much lower rate limits.
 
 [Documentation](https://context7.com/docs/resources/all-clients). Checked on 2026-11-26.
+
+### Datadog
+
+`datadog`. Search logs, metrics, traces, monitors and dashboards in Datadog. Listed under Developer.
+
+- **Connects with:** sign in or token.
+- **Risk:** medium. Reads logs, metrics, traces and other observability data, and some tools can change things such as dashboards, notebooks and monitors in the person's organization. Access follows the person's Datadog permissions.
+- **Address:** `https://{site}/v1/mcp` (the host is one of 7, see the option below)
+- **Sign in:** OAuth.
+- **Token:** sealed in the vault as `DATADOG_MCP_TOKEN`, only for `mcp.datadoghq.com`, `mcp.us3.datadoghq.com`, `mcp.us5.datadoghq.com`, `mcp.datadoghq.eu`, `mcp.ap1.datadoghq.com`, `mcp.ap2.datadoghq.com`, `mcp.uk1.datadoghq.com`. A Personal Access Token or Service Access Token made in Datadog. It is sent as a bearer token.
+
+| Option | What it does | Goes to | For |
+|---|---|---|---|
+| `site` | The MCP address for the site where your Datadog organization is hosted. Check the address you use to sign in to Datadog. One of: `mcp.datadoghq.com` (US1), `mcp.us3.datadoghq.com` (US3), `mcp.us5.datadoghq.com` (US5), `mcp.datadoghq.eu` (EU1), `mcp.ap1.datadoghq.com` (AP1), `mcp.ap2.datadoghq.com` (AP2), `mcp.uk1.datadoghq.com` (UK1). | host `site` | every way in |
+
+[Documentation](https://docs.datadoghq.com/mcp_server/setup/). Checked on 2026-11-27.
+
+### Excalidraw
+
+`excalidraw`. Draw hand-drawn style diagrams and sketches. Listed under Developer.
+
+- **Connects with:** no sign in.
+- **Risk:** low. A public server run by a third party with no account. Whatever the agent sends to draw a diagram goes to that server. It does not reach the person's own data.
+- **Address:** `https://mcp.excalidraw.com/mcp`
+- **Sign in:** none. A person switches it on for themselves, and no secret is stored.
+
+[Documentation](https://github.com/excalidraw/excalidraw-mcp). Checked on 2026-11-27.
 
 ### Git
 
@@ -98,6 +144,7 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 - **Connects with:** a local program (an admin).
 - **Risk:** medium. Can add, reset, commit, merge and switch branches. Described by its authors as in early development. Without a repository set it can reach every repository the process can.
 - **Runs:** `uvx mcp-server-git==2026.11.11` on the machine the agent runs on. It needs `uvx` on the PATH. Install uv (https://docs.astral.sh/uv/) so the agent can start this server. It runs on the machine the agent runs on, in the folder you start the agent from.
+- **Sign in:** none. A person switches it on for themselves, and no secret is stored.
 
 | Option | What it does | Goes to | For |
 |---|---|---|---|
@@ -112,7 +159,7 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 - **Connects with:** token.
 - **Risk:** high. Can create pull requests, push files, merge, delete files and trigger Actions. Prefer a fine-grained token with read access first.
 - **Address:** `https://api.githubcopilot.com/mcp/`
-- **Token:** sealed in the vault as `GITHUB_PERSONAL_ACCESS_TOKEN`, only for api.githubcopilot.com. A personal access token. Give it only the repositories and permissions the agent needs.
+- **Token:** sealed in the vault as `GITHUB_PERSONAL_ACCESS_TOKEN`, only for `api.githubcopilot.com`. A personal access token. Give it only the repositories and permissions the agent needs.
 
 | Option | What it does | Goes to | For |
 |---|---|---|---|
@@ -140,7 +187,7 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 - **Risk:** high. Runs SQL and migrations and can create paid projects. Read only is on by default; add a project to limit it to one. Table data can carry prompt injection, so never give it to end users.
 - **Address:** `https://mcp.supabase.com/mcp`
 - **Sign in:** OAuth.
-- **Token:** sealed in the vault as `SUPABASE_ACCESS_TOKEN`, only for mcp.supabase.com. A personal access token.
+- **Token:** sealed in the vault as `SUPABASE_ACCESS_TOKEN`, only for `mcp.supabase.com`. A personal access token.
 
 | Option | What it does | Goes to | For |
 |---|---|---|---|
@@ -161,6 +208,17 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 
 [Documentation](https://vercel.com/docs/mcp/vercel-mcp). Checked on 2026-11-26.
 
+### Asana
+
+`asana`. Search, read, create and update tasks, projects and comments in Asana. Listed under Productivity.
+
+- **Connects with:** sign in (your own app).
+- **Risk:** medium. Can create and change tasks, projects and comments in the workspaces the person can reach.
+- **Address:** `https://mcp.asana.com/v2/mcp`
+- **Sign in, with your own app:** the service takes no dynamic client registration, so an admin registers an app and sets `ASANA_CLIENT_ID` and `ASANA_CLIENT_SECRET` in the agent's vault or environment. In the Asana developer console create a new app of type MCP app, add the redirect address (the public address of this app followed by /__bxagents/connect/callback) on its OAuth page, and under Manage distribution allow the workspaces that will use it. Asana does not accept dynamic client registration. Scopes: `default`.
+
+[Documentation](https://developers.asana.com/docs/integrating-with-asanas-mcp-server). Checked on 2026-11-27.
+
 ### Atlassian (Jira and Confluence)
 
 `atlassian`. Jira work items, Confluence pages, Bitbucket. Listed under Productivity.
@@ -169,9 +227,20 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 - **Risk:** medium. Creates and updates work items and pages and posts comments.
 - **Address:** `https://mcp.atlassian.com/v2/mcp`
 - **Sign in:** OAuth.
-- **Token:** sealed in the vault as `ATLASSIAN_API_TOKEN`, only for mcp.atlassian.com. A service account API key, sent as a Bearer token. An organization admin must allow API token sign in first. Personal API tokens use Basic authentication and are not supported here. Tokens are not tied to one site and some tools are missing.
+- **Token:** sealed in the vault as `ATLASSIAN_API_TOKEN`, only for `mcp.atlassian.com`. A service account API key, sent as a Bearer token. An organization admin must allow API token sign in first. Personal API tokens use Basic authentication and are not supported here. Tokens are not tied to one site and some tools are missing.
 
 [Documentation](https://support.atlassian.com/atlassian-rovo-mcp-server/docs/getting-started-with-the-atlassian-remote-mcp-server/). Checked on 2026-11-14.
+
+### Box
+
+`box`. Search and read files and folders, ask Box AI, create folders and comments. Listed under Productivity.
+
+- **Connects with:** sign in (your own app).
+- **Risk:** medium. Can create folders, comments and new file versions, and some tools can change file properties or create shared links. Tools that write are off by default in Box. People can only reach content they already have access to.
+- **Address:** `https://mcp.box.com`
+- **Sign in, with your own app:** the service takes no dynamic client registration, so an admin registers an app and sets `BOX_CLIENT_ID` and `BOX_CLIENT_SECRET` in the agent's vault or environment. A Box admin opens Integrations in the Admin Console, configures the Box MCP server, adds Integration Credentials, copies the client id and secret, enters the redirect address (the public address of this app followed by /__bxagents/connect/callback) and selects the access scopes. Box also lists docgen.readwrite, which needs an Enterprise Advanced license. Scopes: `root_readwrite`, `ai.readwrite`.
+
+[Documentation](https://developer.box.com/guides/box-mcp/remote/). Checked on 2026-11-27.
 
 ### Calendly
 
@@ -183,6 +252,17 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 - **Sign in:** OAuth with the scopes `mcp:scheduling:read`, `mcp:scheduling:write`.
 
 [Documentation](https://developer.calendly.com/docs/mcp/calendly-mcp-server). Checked on 2026-11-26.
+
+### Canva
+
+`canva`. Create, find, edit, comment on and export Canva designs and assets. Listed under Productivity.
+
+- **Connects with:** sign in (your own app).
+- **Risk:** medium. Can create and edit designs, upload assets, add comments and move items between folders in the person's own Canva account.
+- **Address:** `https://api.canva.com/connect/v1/mcp`
+- **Sign in, with your own app:** the service takes no dynamic client registration, so an admin registers an app and sets `CANVA_CLIENT_ID` and `CANVA_CLIENT_SECRET` in the agent's vault or environment. In the Canva Developer Portal create an app, open Outside Canva, turn on Canva MCP under Integration methods, copy the client id, generate a client secret, and add the redirect address (the public address of this app followed by /__bxagents/connect/callback) under Redirect URLs. Each person signs in with their own Canva account. Scopes: `profile:read`, `design:meta:read`, `design:content:read`, `design:content:write`, `folder:read`, `folder:write`, `brandtemplate:meta:read`, `brandtemplate:content:read`, `brandtemplate:content:write`, `comment:read`, `comment:write`, `asset:read`, `asset:write`, `brandkit:read`, `help:answers:read`, `help:answers:write`.
+
+[Documentation](https://www.canva.dev/blog/developers/canva-mcp-ga/). Checked on 2026-11-27.
 
 ### ClickUp
 
@@ -225,7 +305,7 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 - **Risk:** medium. Can create and change issues, projects, documents and comments in the workspace. Use a read-only key to limit it.
 - **Address:** `https://mcp.linear.app/mcp`
 - **Sign in:** OAuth with the scopes `read`, `write`.
-- **Token:** sealed in the vault as `LINEAR_API_KEY`, only for mcp.linear.app. A Linear API key, or an OAuth access token from your own Linear OAuth app. A key with only the Read permission gives read-only access.
+- **Token:** sealed in the vault as `LINEAR_API_KEY`, only for `mcp.linear.app`. A Linear API key, or an OAuth access token from your own Linear OAuth app. A key with only the Read permission gives read-only access.
 
 [Documentation](https://linear.app/docs/mcp). Checked on 2026-11-26.
 
@@ -237,7 +317,7 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 - **Risk:** medium. Can edit and delete pages and databases.
 - **Address:** `https://mcp.notion.com/mcp`
 - **Sign in:** OAuth.
-- **Token:** sealed in the vault as `NOTION_MCP_TOKEN`, only for mcp.notion.com. A token made by a workspace owner under New MCP token in the developer portal. Business and Enterprise plans only.
+- **Token:** sealed in the vault as `NOTION_MCP_TOKEN`, only for `mcp.notion.com`. A token made by a workspace owner under New MCP token in the developer portal. Business and Enterprise plans only.
 
 [Documentation](https://developers.notion.com/guides/mcp/get-started-with-mcp). Checked on 2026-11-14.
 
@@ -267,12 +347,13 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 
 `slack`. Search channels and people, read threads, send messages, canvases, files and lists. Listed under Productivity.
 
-- **Connects with:** token.
+- **Connects with:** sign in (your own app) or token.
 - **Risk:** high. Can send and schedule messages as the person, add reactions, create channels and canvases, upload files and read private channels and direct messages the token reaches. Use a test workspace first, and give the token read scopes only to start with.
 - **Address:** `https://mcp.slack.com/mcp`
-- **Token:** sealed in the vault as `SLACK_MCP_TOKEN`, only for mcp.slack.com. A Slack user token (xoxp-...) of a Slack app that is internal to your workspace or published in the Slack Marketplace, with only the scopes the agent needs (docs.slack.dev lists the scopes of each tool). Slack does not accept dynamic client registration, so there is no sign in, and an app that is neither internal nor published is refused. (not verified yet)
+- **Sign in, with your own app:** the service takes no dynamic client registration, so an admin registers an app and sets `SLACK_CLIENT_ID` and `SLACK_CLIENT_SECRET` in the agent's vault or environment. Register a Slack app at api.slack.com/apps that is internal to your workspace or published in the Slack Marketplace (Slack refuses MCP for other apps, and does not accept dynamic client registration). Add the user scopes listed, and add the app public address followed by /__bxagents/connect/callback as a redirect URL. Scopes: `search:read.public`, `search:read.private`, `search:read.mpim`, `search:read.im`, `search:read.files`, `search:read.users`, `files:read`, `files:write`, `emoji:read`, `chat:write`, `channels:history`, `groups:history`, `mpim:history`, `im:history`, `channels:read`, `groups:read`, `im:read`, `mpim:read`, `channels:write`, `groups:write`, `im:write`, `mpim:write`, `reactions:read`, `reactions:write`, `canvases:read`, `canvases:write`, `users:read`, `users:read.email`, `lists:read`, `lists:write`.
+- **Token:** sealed in the vault as `SLACK_MCP_TOKEN`, only for `mcp.slack.com`. A Slack user token (xoxp-...) of a Slack app that is internal to your workspace or published in the Slack Marketplace, with only the scopes the agent needs (docs.slack.dev lists the scopes of each tool). Slack does not accept dynamic client registration, so there is no sign in, and an app that is neither internal nor published is refused. (not verified yet)
 
-[Documentation](https://docs.slack.dev/ai/slack-mcp-server). Checked on 2026-11-26.
+[Documentation](https://docs.slack.dev/ai/slack-mcp-server). Checked on 2026-11-27.
 
 ### Whop
 
@@ -285,16 +366,51 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 
 [Documentation](https://docs.whop.com/developer/guides/ai_and_mcp.md). Checked on 2026-11-26.
 
+### HubSpot
+
+`hubspot`. Search and update CRM records, activities, content and campaigns in HubSpot. Listed under Sales.
+
+- **Connects with:** sign in (your own app).
+- **Risk:** high. Can create and change CRM records, publish landing pages and blog posts, and create or schedule social posts. Use read access only to start with.
+- **Address:** `https://mcp.hubspot.com`
+- **Sign in, with your own app:** the service takes no dynamic client registration, so an admin registers an app and sets `HUBSPOT_CLIENT_ID` and `HUBSPOT_CLIENT_SECRET` in the agent's vault or environment. In HubSpot go to Development, then MCP Connectors, and create an MCP connector with the redirect address (the public address of this app followed by /__bxagents/connect/callback). Copy its client id and client secret. The account must be on the HubSpot developer platform, and an admin connects first. Scopes come from what the person grants at install.
+
+[Documentation](https://developers.hubspot.com/docs/apps/developer-platform/build-apps/integrate-with-the-remote-hubspot-mcp-server). Checked on 2026-11-27.
+
+### Meltwater
+
+`meltwater`. Media and social mentions, saved searches and insights from Meltwater. Listed under Sales.
+
+- **Connects with:** sign in or token.
+- **Risk:** low. Reads your saved searches, tags and media and social data. Which tools you get depends on your Meltwater package.
+- **Address:** `https://api.meltwater.com/v2/mcp`
+- **Sign in:** OAuth with the scopes `tools:read`, `tools:call`.
+- **Token:** sealed in the vault as `MELTWATER_API_KEY`, only for `api.meltwater.com`. It is sent in the `apikey` header. Make an API token in the Meltwater app (see API Credentials in the Meltwater developer portal) and paste it here. Your plan must include Meltwater MCP.
+
+[Documentation](https://developer.meltwater.com/guides/meltwater-mcp/connectors/custom/). Checked on 2026-11-27.
+
+### Bigdata.com
+
+`bigdata`. Search financial news, filings, earnings transcripts and analyst research. Listed under Finance.
+
+- **Connects with:** token.
+- **Risk:** low. Reads financial documents and market data. It cannot change anything. You need a Bigdata.com account.
+- **Address:** `https://mcp.bigdata.com/`
+- **Token:** sealed in the vault as `BIGDATA_API_KEY`, only for `mcp.bigdata.com`. It is sent in the `x-api-key` header. Make an API key in the Bigdata.com Developer Platform under API Keys (platform.bigdata.com/api-keys) and paste it here.
+
+[Documentation](https://docs.bigdata.com/mcp-reference/api-integrations/mcp-api-integration.md). Checked on 2026-11-27.
+
 ### Daloopa
 
 `daloopa`. Company financials, KPIs, filings and earnings transcripts. Listed under Finance.
 
-- **Connects with:** sign in.
+- **Connects with:** sign in or token.
 - **Risk:** low. Reads financial data, filings and stock prices. It cannot change anything. You need a Daloopa account.
 - **Address:** `https://mcp.daloopa.com/server/mcp`
 - **Sign in:** OAuth.
+- **Token:** sealed in the vault as `DALOOPA_API_KEY`, only for `mcp.daloopa.com`. It is sent in the `X-API-KEY` header. Use your Daloopa API key. Daloopa sales or support gives you one. The key is sent as is, with no token step.
 
-[Documentation](https://docs.daloopa.com/docs/daloopa-mcp). Checked on 2026-11-26.
+[Documentation](https://docs.daloopa.com/docs/mcp-authentication.md). Checked on 2026-11-27.
 
 ### S&P Global
 
@@ -315,7 +431,7 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 - **Risk:** high. Moves money. Its write tool covers POST, PATCH, PUT and DELETE. Stripe asks for human confirmation on refunds and outbound payments.
 - **Address:** `https://mcp.stripe.com`
 - **Sign in:** OAuth with the scopes `mcp`.
-- **Token:** sealed in the vault as `STRIPE_AGENT_API_KEY`, only for mcp.stripe.com. An agent API key with the smallest set of permissions. Use a sandbox account first. Stripe stops accepting full-access secret keys and restricted keys without the Agent tag on 2026-11-30.
+- **Token:** sealed in the vault as `STRIPE_AGENT_API_KEY`, only for `mcp.stripe.com`. An agent API key with the smallest set of permissions. Use a sandbox account first. Stripe stops accepting full-access secret keys and restricted keys without the Agent tag on 2026-11-30.
 
 | Option | What it does | Goes to | For |
 |---|---|---|---|
@@ -325,14 +441,18 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 
 ### Mixpanel
 
-`mixpanel`. Run reports on events, funnels and retention, and browse dashboards (US data region). Listed under Analytics.
+`mixpanel`. Run reports on events, funnels and retention, and browse dashboards. Listed under Analytics.
 
 - **Connects with:** sign in.
-- **Risk:** medium. Reads analytics data, and can also create, edit and delete dashboards, tags and event definitions in the person's project. This address is for projects in the US region; Mixpanel lists other addresses for the EU and India.
-- **Address:** `https://mcp.mixpanel.com/mcp`
+- **Risk:** medium. Reads analytics data, and can also create, edit and delete dashboards, tags and event definitions in the person's project. The admin picks the region that matches the project.
+- **Address:** `https://{region}/mcp` (the host is one of 3, see the option below)
 - **Sign in:** OAuth.
 
-[Documentation](https://docs.mixpanel.com/docs/mcp). Checked on 2026-11-26.
+| Option | What it does | Goes to | For |
+|---|---|---|---|
+| `region` | The region where your Mixpanel project stores its data. One of: `mcp.mixpanel.com` (US), `mcp-eu.mixpanel.com` (EU), `mcp-in.mixpanel.com` (India). | host `region` | every way in |
+
+[Documentation](https://docs.mixpanel.com/docs/mcp). Checked on 2026-11-27.
 
 ### Buffer
 
@@ -342,7 +462,7 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 - **Risk:** high. Can schedule, edit and delete posts that go out to the connected social channels. Use a test channel first.
 - **Address:** `https://mcp.buffer.com/mcp`
 - **Sign in:** OAuth.
-- **Token:** sealed in the vault as `BUFFER_API_KEY`, only for mcp.buffer.com. A Buffer API key made in Settings, API at publish.buffer.com/settings/api. It reaches every organization and channel in the account.
+- **Token:** sealed in the vault as `BUFFER_API_KEY`, only for `mcp.buffer.com`. A Buffer API key made in Settings, API at publish.buffer.com/settings/api. It reaches every organization and channel in the account.
 
 [Documentation](https://developers.buffer.com/guides/integrations/mcp.md). Checked on 2026-11-26.
 
@@ -350,23 +470,40 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 
 `metricool`. Manage brands, read social analytics and schedule posts. Listed under Social Media.
 
-- **Connects with:** sign in.
+- **Connects with:** sign in or token.
 - **Risk:** high. Can schedule and publish posts to the connected social accounts and change brand settings. Plan limits still apply.
 - **Address:** `https://ai.metricool.com/mcp`
 - **Sign in:** OAuth with the scopes `mcp:read`, `mcp:write`.
+- **Token:** sealed in the vault as `METRICOOL_API_KEY`, only for `ai.metricool.com`. It is sent in the `X-Mc-Auth` header. Copy your Metricool API key from Account Settings, then API (app.metricool.com/user-settings/api) and paste it here.
 
-[Documentation](https://help.metricool.com/how-to-connect-metricools-mcp-with-claude-0l84v.md). Checked on 2026-11-26.
+[Documentation](https://help.metricool.com/how-to-connect-metricools-mcp-with-claude-0l84v.md). Checked on 2026-11-27.
+
+### X Ads
+
+`x-ads`. Read X Ads accounts and analytics, and create and manage campaigns. Listed under Advertising.
+
+- **Connects with:** sign in (your own app).
+- **Risk:** high. Can create and change campaigns, line items, audiences and creatives, and activate campaigns that spend money. New campaigns start paused.
+- **Address:** `https://ads-api.x.com/mcp`
+- **Sign in, with your own app:** the service takes no dynamic client registration, so an admin registers an app and sets `X_ADS_CLIENT_ID` (a public client has no secret) in the agent's vault or environment. In the X Developer Console create or reuse an app with Read and Write permission, type Native App (public client, PKCE, no secret), and add the redirect address (the public address of this app followed by /__bxagents/connect/callback). Enable Ads API access under Project Access, and copy the OAuth 2.0 client id. Scopes: `ads.read`, `ads.write`, `offline.access`.
+
+[Documentation](https://docs.x.com/x-ads-api/mcp). Checked on 2026-11-27.
 
 ### Wix
 
 `wix`. Search Wix documentation and make API calls on your Wix sites. Listed under Apps.
 
-- **Connects with:** sign in.
+- **Connects with:** sign in or token.
 - **Risk:** high. Can change site content, store data and other settings through the Wix APIs, including on a live site.
 - **Address:** `https://mcp.wix.com/mcp`
 - **Sign in:** OAuth with the scopes `offline_access`.
+- **Token:** sealed in the vault as `WIX_API_KEY`, only for `mcp.wix.com`. It is sent alone in the `Authorization` header. Make an API key in your Wix account (API Keys page in the Wix developer docs) and paste it here. The key is sent alone, without Bearer. Also fill in your Wix account ID below.
 
-[Documentation](https://dev.wix.com/docs/sdk/articles/use-the-wix-mcp/about-the-wix-mcp.md). Checked on 2026-11-26.
+| Option | What it does | Goes to | For |
+|---|---|---|---|
+| `wix_account_id` | The ID of your Wix account. Needed with an API key. | header `wix-account-id` | a token |
+
+[Documentation](https://dev.wix.com/docs/sdk/articles/use-the-wix-mcp/about-the-wix-mcp.md). Checked on 2026-11-27.
 
 ### Zapier
 
@@ -376,6 +513,6 @@ This page is written from the connector files in `src/main/bx/catalog/connectors
 - **Risk:** high. Can run any action you enable in Zapier, such as sending email and messages or changing records in other apps. Enable only the actions you need.
 - **Address:** `https://mcp.zapier.com/api/v1/connect`
 - **Sign in:** OAuth.
-- **Token:** sealed in the vault as `ZAPIER_MCP_TOKEN`, only for mcp.zapier.com. A connection token. Create a server at mcp.zapier.com, then generate its token. It is shown once and stays valid until you regenerate it.
+- **Token:** sealed in the vault as `ZAPIER_MCP_TOKEN`, only for `mcp.zapier.com`. A connection token. Create a server at mcp.zapier.com, then generate its token. It is shown once and stays valid until you regenerate it.
 
 [Documentation](https://docs.zapier.com/mcp/overview/how-connections-work.md). Checked on 2026-11-26.

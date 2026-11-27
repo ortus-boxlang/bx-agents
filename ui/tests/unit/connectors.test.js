@@ -73,4 +73,21 @@ describe( "connector helpers", () => {
 		expect( connectorGroups( [], [ "Developer" ] ) ).toEqual( [] );
 	} );
 
+
+	it( "lets a person switch a public server on for themselves, and shows a sign in that waits for an admin's app", () => {
+		const open = { transport: "http", ways: [ "none" ], state: "available" };
+		expect( connectorChips( { risk: "low", ways: [ "none" ] } ).map( c => c.text ) ).toEqual( [
+			"Low risk",
+			"No sign in"
+		] );
+		expect( connectorActions( open, false ).connect ).toBe( "Switch on" );
+		expect( connectorActions( { ...open, state: "connected" }, false ).disconnect ).toBe( "Switch off" );
+		expect( connectorWho( { id: "x", connectedWith: "open" }, {}, false ) ).toBe( "You switched it on" );
+
+		const waiting = { transport: "http", ways: [], needsApp: true, appHelp: "Register an app.", state: "available" };
+		expect( connectorActions( waiting, false ).connect ).toBe( "" );
+		expect( connectorWho( waiting, {}, false ) ).toContain( "An admin has to set up an app" );
+		expect( connectorWho( waiting, {}, false ) ).toContain( "Register an app." );
+	} );
+
 } );

@@ -48,7 +48,8 @@ class {
 		sweepWhenDue()
 		var key = keyOf( arguments.connector.id, arguments.personId )
 		var token = toString( variables.credentialFor( arguments.connector.id, arguments.personId ) ?: "" )
-		if ( !len( token ) ) {
+		var open = arguments.connector.open ?: false
+		if ( !len( token ) && !open ) {
 			// no credential: any client held for them is out of date
 			forget( key )
 			return nullValue()
@@ -65,7 +66,10 @@ class {
 				closeQuietly( held.mcpClient )
 				variables.entries.remove( key )
 			}
-			var made = new bxModules.bxai.models.mcp.MCPHttpClient( arguments.connector.url ).withBearerToken( token ).withHandshake( true )
+			var made = new bxModules.bxai.models.mcp.MCPHttpClient( arguments.connector.url ).withHandshake( true )
+			if ( !open ) {
+				withToken( made, arguments.connector, token )
+			}
 			if ( arguments.connector.keyExists( "timeout" ) ) {
 				made.withTimeout( arguments.connector.timeout )
 			}
@@ -100,7 +104,7 @@ class {
 	 * @return { ok, refused : the server said no to this token, reason }
 	 */
 	struct function probe( required struct connector, required string token ) {
-		var trial = new bxModules.bxai.models.mcp.MCPHttpClient( arguments.connector.url ).withBearerToken( arguments.token ).withHandshake( true )
+		var trial = withToken( new bxModules.bxai.models.mcp.MCPHttpClient( arguments.connector.url ), arguments.connector, arguments.token ).withHandshake( true )
 		if ( arguments.connector.keyExists( "timeout" ) ) {
 			trial.withTimeout( arguments.connector.timeout )
 		}
@@ -117,6 +121,25 @@ class {
 		} finally {
 			closeQuietly( trial )
 		}
+	}
+
+	/**
+	 * Puts the token on a client: as `Authorization: Bearer <token>`, or in the header the connector names (`x-api-key: <token>`),
+	 * with the prefix it names (none, to send the token alone).
+	 *
+	 * @client An MCPHttpClient
+	 * @connector { tokenHeader, tokenPrefix } the connector as ConnectorEndpoint::of made it
+	 * @token The token
+	 *
+	 * @return The client
+	 */
+	private any function withToken( required any client, required struct connector, required string token ) {
+		var header = arguments.connector.tokenHeader ?: ""
+		var prefix = arguments.connector.tokenPrefix ?: "Bearer "
+		if ( !len( header ) || ( header.lcase() == "authorization" && prefix == "Bearer " ) ) {
+			return arguments.client.withBearerToken( arguments.token )
+		}
+		return arguments.client.withHeaders( { "#header#" : prefix & arguments.token } )
 	}
 
 	/**
