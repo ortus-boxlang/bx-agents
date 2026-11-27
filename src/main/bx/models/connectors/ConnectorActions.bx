@@ -42,7 +42,10 @@ class {
 	struct function connect( required string id, required string person, struct asked = {} ) {
 		var row = rowOf( arguments.id, arguments.person )
 		var method = lCase( arguments.asked.method ?: "" )
-		var ways = row.transport == "stdio" ? [ "program" ] : row.ways.map( w => w == "bearer" ? "token" : w )
+		var ways = row.transport == "stdio" ? [ "program" ] : row.ways.map( w => w == "bearer" ? "token" : ( w == "none" ? "open" : w ) )
+		if ( row.needsApp && !ways.contains( method ) && method == "oauth" ) {
+			throw( type = "BxAgents.AppNotSet", message = "#row.name# needs an app of your own before anyone can sign in. An admin has to set it up: #row.appHelp#" )
+		}
 		if ( !ways.contains( method ) ) {
 			throw( type = "BxAgents.BadConnectRequest", message = "#row.name# can be connected with: #ways.toList( ', ' )#. Say which with method." )
 		}
@@ -54,6 +57,8 @@ class {
 				return connectToken( row, arguments.person, arguments.asked )
 			case "oauth":
 				return connectOAuth( row, arguments.person, arguments.asked )
+			case "open":
+				return connectOpen( row, arguments.person, arguments.asked )
 			default:
 				return switchOn( row, arguments.person, arguments.asked )
 		}
@@ -78,6 +83,9 @@ class {
 		} else if ( row.connectedWith == "oauth" ) {
 			variables.oauth.disconnect( arguments.id, arguments.person )
 			variables.settings.remove( arguments.person, arguments.id, "status" )
+		} else if ( row.connectedWith == "open" ) {
+			variables.settings.remove( arguments.person, arguments.id, "enabled" )
+			dropClient( arguments.id, arguments.person )
 		} else {
 			adminOnly( row, arguments.asked, "switch off" )
 			variables.settings.remove( "*", arguments.id, "enabled" )
@@ -154,7 +162,7 @@ class {
 		variables.vault.set( row.tokenName, token, {
 			scope       : "user",
 			owner       : arguments.person,
-			hosts       : [ row.host ],
+			hosts       : ConnectorEndpoint::hostsOf( entry ),
 			description : "#row.name# token, connected by #arguments.person#",
 			actor       : arguments.person,
 			via         : "connect"
@@ -183,6 +191,27 @@ class {
 		}
 		var started = variables.oauth.start( arguments.row.id, arguments.person )
 		return { connected : false, authorizationUrl : started.authorizationUrl, row : arguments.row }
+	}
+
+	/**
+	 * A public server that asks for nothing: a person switches it on for themselves, and no secret is stored.
+	 *
+	 * @row The connector's row
+	 * @person The person
+	 * @asked The connect request
+	 *
+	 * @return { connected : true, row }
+	 */
+	private struct function connectOpen( required struct row, required string person, required struct asked ) {
+		if ( arguments.row.options.len() ) {
+			variables.settings.set( arguments.person, arguments.row.id, "options", checkedOptions( arguments.row, arguments.asked.options ?: {} ) )
+		}
+		var on = { on : true, by : arguments.person, at : dateTimeFormat( now(), "yyyy-MM-dd HH:mm:ss" ) }
+		variables.settings.set( arguments.person, arguments.row.id, "enabled", on )
+		// who switched it on last: after a restart the agent lists its tools through that person's client
+		variables.settings.set( "*", arguments.row.id, "lastOpen", on )
+		dropClient( arguments.row.id, arguments.person )
+		return { connected : true, row : variables.service.get( arguments.row.id, arguments.person ) }
 	}
 
 	/**
@@ -250,6 +279,10 @@ class {
 				// one line of printable text: a control character in a header or an argument is how one value becomes two
 				if ( !isSimpleValue( value ) || len( toString( value ) ) > 500 || reFind( "[\x00-\x1f\x7f]", toString( value ) ) ) {
 					throw( type = "BxAgents.BadConnectRequest", message = "The option [#key#] must be one line of text of at most 500 characters." )
+				}
+				// a host is one of the hosts the connector lists, never a name somebody typed
+				if ( known[ key ].target == "host" && !( known[ key ].choices ?: [] ).some( c => c.value == toString( value ) ) ) {
+					throw( type = "BxAgents.BadConnectRequest", message = "The option [#key#] must be one of: #( known[ key ].choices ?: [] ).map( c => c.value ).toList( ', ' )#." )
 				}
 				// a value that starts with a dash would be read as a flag of the program, not as the path or name it is for
 				if ( known[ key ].target == "arg" && left( toString( value ), 1 ) == "-" ) {

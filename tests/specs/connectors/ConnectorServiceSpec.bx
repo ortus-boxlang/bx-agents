@@ -7,18 +7,18 @@ import bxagents.models.connectors.ConnectorSettings;
 class extends="testbox.system.BaseSpec" {
 
 	/**
-	 * @config The agent's config, for the connectors key
-	 * @deps More dependencies of the service
-	 *
-	 * @return A ConnectorService over the shared database of this spec
-	 */
-	/**
 	 * @return The ids of every connector the catalog ships, in order. The specs read it so a new connector does not break them.
 	 */
 	private array function catalogIds() {
 		return new bxagents.models.connectors.ConnectorCatalog().ids()
 	}
 
+	/**
+	 * @config The agent's config, for the connectors key
+	 * @deps More dependencies of the service
+	 *
+	 * @return A ConnectorService over the shared database of this spec
+	 */
 	private any function serviceFor( struct config = {}, struct deps = {} ) {
 		var all = { vault : variables.vault, signedIn : ( id, person ) => false, programExists : program => false };
 		all.append( arguments.deps );
@@ -65,6 +65,49 @@ class extends="testbox.system.BaseSpec" {
 					expect( row.state ).toBe( "available" );
 					expect( row.connectedWith ).toBe( "" );
 				}
+			} );
+
+			it( "marks a sign in that needs an app of the admin's own, and offers it only once the admin has set the app", function() {
+				var notSet = serviceFor( {}, { appReady : id => false } ).list( "ada" );
+				var asana = rowOf( notSet, "asana" );
+
+				expect( asana.needsApp ).toBeTrue();
+				expect( asana.ways ).toBeEmpty();
+				expect( asana.appHelp ).toInclude( "MCP app" );
+				// a connector with another way in keeps it
+				expect( rowOf( notSet, "slack" ).ways ).toBe( [ "bearer" ] );
+				expect( rowOf( notSet, "notion" ).needsApp ).toBeFalse();
+
+				var ready = rowOf( serviceFor().list( "ada" ), "asana" );
+				expect( ready.needsApp ).toBeFalse();
+				expect( ready.ways ).toBe( [ "oauth" ] );
+				expect( jsonSerialize( ready ) ).notToInclude( "ASANA_CLIENT_SECRET=" );
+			} );
+
+			it( "shows a public server as switched on for the person who switched it on, and for nobody else", function() {
+				var service = serviceFor();
+
+				expect( rowOf( service.list( "ada" ), "excalidraw" ).ways ).toBe( [ "none" ] );
+				expect( rowOf( service.list( "ada" ), "excalidraw" ).state ).toBe( "available" );
+				expect( service.connectedMap( "ada" ).excalidraw ).toBeFalse();
+
+				settings.set( "ada", "excalidraw", "enabled", { on : true } );
+
+				var ada = rowOf( service.list( "ada" ), "excalidraw" );
+				expect( ada.state ).toBe( "connected" );
+				expect( ada.connectedWith ).toBe( "open" );
+				expect( service.connectedMap( "ada" ).excalidraw ).toBeTrue();
+				expect( rowOf( service.list( "grace" ), "excalidraw" ).state ).toBe( "available" );
+			} );
+
+			it( "says the host each person reaches a connector at, from their own choice", function() {
+				var service = serviceFor();
+				settings.set( "ada", "datadog", "options", { site : "mcp.datadoghq.eu" } );
+
+				expect( rowOf( service.list( "ada" ), "datadog" ).host ).toBe( "mcp.datadoghq.eu" );
+				expect( rowOf( service.list( "grace" ), "datadog" ).host ).toBe( "mcp.datadoghq.com" );
+				expect( rowOf( service.list( "grace" ), "bigdata" ).tokenHeader ).toBe( "x-api-key" );
+				expect( rowOf( service.list( "grace" ), "github" ).tokenHeader ).toBe( "" );
 			} );
 
 			it( "lists only what only, exclude and none leave", function() {

@@ -6,6 +6,14 @@ summary: Search channels and people, read threads, send messages, canvases, file
 transport: http
 url: https://mcp.slack.com/mcp
 auth:
+  - type: oauth
+    app: own
+    scopes: [search:read.public, search:read.private, search:read.mpim, search:read.im, search:read.files, search:read.users, files:read, files:write, emoji:read, chat:write, channels:history, groups:history, mpim:history, im:history, channels:read, groups:read, im:read, mpim:read, channels:write, groups:write, im:write, mpim:write, reactions:read, reactions:write, canvases:read, canvases:write, users:read, users:read.email, lists:read, lists:write]
+    envVars:
+      clientId: SLACK_CLIENT_ID
+      clientSecret: SLACK_CLIENT_SECRET
+    help: Register a Slack app at api.slack.com/apps that is internal to your workspace or published in the Slack Marketplace (Slack refuses MCP for other apps, and does not accept dynamic client registration). Add the user scopes listed, and add the app public address followed by /__bxagents/connect/callback as a redirect URL.
+    verified: true
   - type: bearer
     envVar: SLACK_MCP_TOKEN
     help: A Slack user token (xoxp-...) of a Slack app that is internal to your workspace or published in the Slack Marketplace, with only the scopes the agent needs (docs.slack.dev lists the scopes of each tool). Slack does not accept dynamic client registration, so there is no sign in, and an app that is neither internal nor published is refused.
@@ -14,4 +22,4 @@ auth:
 risk: high
 riskNote: Can send and schedule messages as the person, add reactions, create channels and canvases, upload files and read private channels and direct messages the token reaches. Use a test workspace first, and give the token read scopes only to start with.
 docs: https://docs.slack.dev/ai/slack-mcp-server
-verifiedOn: 2026-11-26
+verifiedOn: 2026-11-27

@@ -53,8 +53,8 @@ class extends="testbox.system.BaseSpec" {
 				for ( var entry in catalog.all() ) {
 					var types = entry.auth.map( m => m.type );
 					if ( entry.transport == "http" ) {
-						// a web connector has a sign in or a token, or both
-						expect( types.some( t => [ "oauth", "bearer" ].contains( t ) ) ).toBeTrue();
+						// a web connector has a sign in or a token, or both, or says it is a public server and nothing else
+						expect( types.some( t => [ "oauth", "bearer" ].contains( t ) ) || types == [ "none" ] ).toBeTrue();
 					} else {
 						expect( types ).toBe( [ "none" ] );
 					}
@@ -248,12 +248,12 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "refuses a sign in or token on a program, and no way in on a web connector", function() {
 				put( "tool.yml", program().replace( "- type: none", "- type: bearer" & char( 10 ) & "    envVar: TOOL_KEY" ) );
-				put( "demo.yml", web().replace( "- type: bearer", "- type: none" ).replace( "    envVar: DEMO_TOKEN" & char( 10 ), "" ) );
+				put( "demo.yml", web().replace( "  - type: bearer", "  - type: none" & char( 10 ) & "    verified: true" & char( 10 ) & "  - type: bearer" ) );
 
 				var messages = errors().map( e => e.message ).toList( " " );
 
 				expect( messages ).toMatch( "stdio connector has no sign in or token" );
-				expect( messages ).toMatch( "web connector must say how a person gets in" );
+				expect( messages ).toMatch( "says so alone" );
 			} );
 
 			it( "requires a bearer method to name an environment variable", function() {
@@ -296,6 +296,95 @@ class extends="testbox.system.BaseSpec" {
 				put( "demo.yml", web().replace( "category: Developer" & char( 10 ), "" ) );
 
 				expect( errors().map( e => e.field ) ).toInclude( "category" );
+			} );
+
+			it( "lets a token name the header it goes in, and refuses a header that belongs to the connection", function() {
+				put( "demo.yml", web().replace( "    envVar: DEMO_TOKEN", "    envVar: DEMO_TOKEN" & char( 10 ) & "    header: x-api-key" & char( 10 ) & "    prefix: """"" ) );
+				expect( errors() ).toBeEmpty();
+
+				put( "demo.yml", web().replace( "    envVar: DEMO_TOKEN", "    envVar: DEMO_TOKEN" & char( 10 ) & "    header: Host" ) );
+				expect( errors()[ 1 ].message ).toMatch( "belongs to the connection" );
+
+				put( "demo.yml", web().replace( "    envVar: DEMO_TOKEN", "    envVar: DEMO_TOKEN" & char( 10 ) & "    header: bad header" ) );
+				expect( errors()[ 1 ].message ).toMatch( "not a valid header name" );
+
+				put( "demo.yml", web().replace( "    envVar: DEMO_TOKEN", "    envVar: DEMO_TOKEN" & char( 10 ) & "    prefix: a-prefix-that-is-far-too-long" ) );
+				expect( errors()[ 1 ].field ).toBe( "auth.prefix" );
+			} );
+
+			it( "takes a host from a fixed list: one {key} for the whole host, an option with the choices, and a default among them", function() {
+				var host = web().replace( "https://example.com/mcp", "https://{site}/mcp" ).replace( "risk: low", [
+					"options:",
+					"  - key: site",
+					"    label: Site",
+					"    type: text",
+					"    target: host",
+					"    choices:",
+					"      - { value: mcp.example.com, label: US }",
+					"      - { value: mcp.example.eu, label: EU }",
+					"    default: mcp.example.com",
+					"risk: low"
+				].toList( char( 10 ) ) );
+				put( "demo.yml", host );
+				expect( errors() ).toBeEmpty();
+
+				// a default that is not one of the choices
+				put( "demo.yml", host.replace( "default: mcp.example.com", "default: mcp.other.com" ) );
+				expect( errors().map( e => e.field ) ).toInclude( "options.site.default" );
+
+				// a host written with a path or a port is not a host
+				put( "demo.yml", host.replace( "value: mcp.example.eu", "value: mcp.example.eu/path" ) );
+				expect( errors().map( e => e.field ) ).toInclude( "options.site.choices" );
+
+				// one choice is not a choice
+				put( "demo.yml", host.replace( "      - { value: mcp.example.eu, label: EU }" & char( 10 ), "" ) );
+				expect( errors().map( e => e.field ) ).toInclude( "options.site.choices" );
+
+				// a {key} with no option, and a {key} that is not the whole host
+				put( "demo.yml", web().replace( "https://example.com/mcp", "https://{site}/mcp" ) );
+				expect( errors()[ 1 ].message ).toMatch( "no option with that key" );
+				put( "demo.yml", host.replace( "https://{site}/mcp", "https://api.{site}/mcp" ) );
+				expect( errors().map( e => e.field ) ).toInclude( "url" );
+			} );
+
+			it( "lets a public web connector say it asks for nothing, alone, and no other way in", function() {
+				put( "demo.yml", web().replace( "  - type: bearer" & char( 10 ) & "    envVar: DEMO_TOKEN" & char( 10 ) & "    help: A token.", "  - type: none" ) );
+				expect( errors() ).toBeEmpty();
+
+				put( "demo.yml", web().replace( "  - type: bearer", "  - type: none" & char( 10 ) & "    verified: true" & char( 10 ) & "  - type: bearer" ) );
+				expect( errors().map( e => e.field ) ).toInclude( "auth.type" );
+			} );
+
+			it( "takes a sign in through the admin's own app: names of the variables, never values, and how to register it", function() {
+				var own = web().replace( "  - type: bearer" & char( 10 ) & "    envVar: DEMO_TOKEN" & char( 10 ) & "    help: A token.", [
+					"  - type: oauth",
+					"    app: own",
+					"    scopes: [ read ]",
+					"    envVars:",
+					"      clientId: DEMO_CLIENT_ID",
+					"      clientSecret: DEMO_CLIENT_SECRET",
+					"    help: Register an app and give it the redirect address."
+				].toList( char( 10 ) ) );
+				put( "demo.yml", own );
+				expect( errors() ).toBeEmpty();
+
+				// the secret is optional (a public client), the id is not
+				put( "demo.yml", own.replace( "      clientSecret: DEMO_CLIENT_SECRET" & char( 10 ), "" ) );
+				expect( errors() ).toBeEmpty();
+				put( "demo.yml", own.replace( "      clientId: DEMO_CLIENT_ID" & char( 10 ), "" ) );
+				expect( errors().map( e => e.field ) ).toInclude( "auth.envVars" );
+
+				// a value where the name of a variable belongs
+				put( "demo.yml", own.replace( "DEMO_CLIENT_SECRET", "not a name" ) );
+				expect( errors().map( e => e.field ) ).toInclude( "auth.envVars" );
+
+				// no help on how to register it
+				put( "demo.yml", own.replace( "    help: Register an app and give it the redirect address." & char( 10 ), "" ) );
+				expect( errors().map( e => e.field ) ).toInclude( "auth.help" );
+
+				// app: own is for a sign in only
+				put( "demo.yml", web().replace( "    envVar: DEMO_TOKEN", "    envVar: DEMO_TOKEN" & char( 10 ) & "    app: own" ) );
+				expect( errors().map( e => e.field ) ).toInclude( "auth.app" );
 			} );
 
 			it( "refuses a docs link that is not https and a date that is not a date", function() {

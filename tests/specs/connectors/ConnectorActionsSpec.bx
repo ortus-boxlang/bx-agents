@@ -144,6 +144,56 @@ class extends="testbox.system.BaseSpec" {
 				expect( vault.list( "ada", { scope : "user" } ) ).toBeEmpty();
 			} );
 
+			it( "sends a token in the header its connector names, and as a bearer token otherwise", function() {
+				// the fake server takes only Authorization: Bearer, so a token in another header is a call with none
+				var keyed = clients.probe( { id : "x", url : fake.mcpUrl(), headers : {}, tokenHeader : "x-api-key", tokenPrefix : "" }, "key-1" );
+				var plain = clients.probe( { id : "x", url : fake.mcpUrl(), headers : {}, tokenHeader : "", tokenPrefix : "Bearer " }, "key-1" );
+
+				expect( keyed.refused ).toBeTrue();
+				expect( plain.ok ).toBeTrue();
+			} );
+
+			it( "switches a public server on for one person with nothing stored, and off again", function() {
+				var made = build( [ offered( "excalidraw" ) ] );
+
+				var result = made.actions.connect( "excalidraw", "slack:U01ADA", { method : "open" } );
+
+				expect( result.connected ).toBeTrue();
+				expect( result.row.connectedWith ).toBe( "open" );
+				expect( vault.list( "slack:U01ADA", { scope : "user" } ) ).toBeEmpty();
+				expect( made.service.get( "excalidraw", "slack:U01GRACE" ).state ).toBe( "available" );
+
+				var off = made.actions.disconnect( "excalidraw", "slack:U01ADA" );
+				expect( off.row.state ).toBe( "available" );
+				expect( () => made.actions.connect( "excalidraw", "ada", { method : "token", token : "x" } ) ).toThrow( "BxAgents.BadConnectRequest" );
+			} );
+
+			it( "refuses a sign in that needs an app of the admin's own until the admin has set it, and says what to do", function() {
+				var started = [];
+				var oauth = { start : ( id, person ) => { started.append( id ); return { authorizationUrl : "https://auth.example.com/authorize", state : "s" }; }, disconnect : ( id, person ) => {} };
+				var asana = offered( "asana" );
+
+				var notSet = build( [ asana ], { oauth : oauth, appReady : id => false } );
+				expect( () => notSet.actions.connect( "asana", "ada", { method : "oauth", confirm : true } ) ).toThrow( "BxAgents.AppNotSet" );
+				expect( started ).toBeEmpty();
+
+				var ready = build( [ asana ], { oauth : oauth, appReady : id => true } );
+				expect( ready.actions.connect( "asana", "ada", { method : "oauth", confirm : true } ).authorizationUrl ).toBe( "https://auth.example.com/authorize" );
+				expect( started ).toBe( [ "asana" ] );
+			} );
+
+			it( "takes only a host from the connector's own list when a person chooses where it is", function() {
+				var datadog = ConnectorSettings::resolve( {} ).available.filter( c => c.id == "datadog" )[ 1 ];
+				var made = build( [ datadog ] );
+
+				expect( () => made.actions.setOptions( "datadog", "ada", { site : "evil.example.com" } ) ).toThrow( "BxAgents.BadConnectRequest" );
+				expect( made.service.get( "datadog", "ada" ).host ).toBe( "mcp.datadoghq.com" );
+
+				made.actions.setOptions( "datadog", "ada", { site : "mcp.datadoghq.eu" } );
+				expect( made.service.get( "datadog", "ada" ).host ).toBe( "mcp.datadoghq.eu" );
+				expect( made.service.get( "datadog", "grace" ).host ).toBe( "mcp.datadoghq.com" );
+			} );
+
 			it( "refuses an empty token or one with spaces, before asking any server", function() {
 				var made = build( [ offered( "github" ) ] );
 

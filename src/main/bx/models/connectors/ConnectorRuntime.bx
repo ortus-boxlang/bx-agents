@@ -63,7 +63,7 @@ class {
 				return false
 			}
 			var added = false
-			if ( row.connectedWith == "token" ) {
+			if ( row.connectedWith == "token" || row.connectedWith == "open" ) {
 				added = attachToken( entry, arguments.person )
 			} else if ( row.connectedWith == "program" ) {
 				added = attachProgram( entry )
@@ -103,7 +103,7 @@ class {
 	 * @return True when the agent now has the connector's tools
 	 */
 	private boolean function attachToken( required struct entry, required string person ) {
-		var base = { id : arguments.entry.id, url : arguments.entry.url }
+		var base = ConnectorEndpoint::of( arguments.entry )
 		// the client first, so the router has somebody to list the tools as
 		var made = variables.clients.forPerson( variables.clients.endpointOf( base, arguments.person ), arguments.person )
 		if ( isNull( made ) ) {
@@ -243,6 +243,9 @@ class {
 	private string function lastConnector( required struct entry ) {
 		if ( arguments.entry.transport == "stdio" ) {
 			return isObject( variables.settings ) && ( variables.settings.get( "*", arguments.entry.id, "enabled" ).on ?: false ) ? ( variables.settings.get( "*", arguments.entry.id, "enabled" ).by ?: "" ) : ""
+		}
+		if ( ConnectorEndpoint::isOpen( arguments.entry ) ) {
+			return isObject( variables.settings ) && ( variables.settings.get( "*", arguments.entry.id, "lastOpen" ).on ?: false ) ? ( variables.settings.get( "*", arguments.entry.id, "lastOpen" ).by ?: "" ) : ""
 		}
 		var methods = arguments.entry.auth.filter( m => m.type == "bearer" )
 		if ( !methods.len() || !isObject( variables.vault ) ) {

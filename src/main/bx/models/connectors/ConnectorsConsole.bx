@@ -123,7 +123,10 @@ class {
 	 */
 	private string function lineOf( required struct row, required struct summary ) {
 		var words = { available : "available", connected : "connected", needs_attention : "needs attention", needs_program : "needs " & arguments.row.program }
-		var how = arguments.row.transport == "stdio" ? "local program" : ( arguments.row.ways ?: [] ).map( w => w == "bearer" ? "token" : "sign in" ).toList( " or " )
+		var how = arguments.row.transport == "stdio" ? "local program" : ( arguments.row.ways ?: [] ).map( w => w == "bearer" ? "token" : ( w == "none" ? "no sign in" : "sign in" ) ).toList( " or " )
+		if ( arguments.row.needsApp ?: false ) {
+			how = len( how ) ? how & ", sign in needs an app set up by an admin" : "needs an app set up by an admin"
+		}
 		var on = ( arguments.summary.byConnector ?: {} )[ arguments.row.id ] ?: nullValue()
 		var line = "#arguments.row.id#  #words[ arguments.row.state ] ?: arguments.row.state#  #how#  #arguments.row.risk# risk"
 		if ( !isNull( on ) ) {

@@ -14,7 +14,7 @@ export const CONNECTOR_STATES = {
 	"needs_program"   : { word: "Needs a program", kind: "warn", icon: "warning" }
 };
 export const CONNECTOR_RISK = { low: "Low risk", medium: "Medium risk", high: "High risk" };
-const WAYS = { bearer: { label: "Token", icon: "key" }, oauth: { label: "Sign in", icon: "user" } };
+const WAYS = { bearer: { label: "Token", icon: "key" }, oauth: { label: "Sign in", icon: "user" }, none: { label: "No sign in", icon: "plug" } };
 
 /**
  * @param {string} address An address a server answered
@@ -65,6 +65,12 @@ export function connectorWho( row, summary, admin ) {
 	if ( row.connectedWith === "program" ) {
 		return "Switched on for everyone who uses this agent" + tools;
 	}
+	if ( row.connectedWith === "open" ) {
+		return "You switched it on" + tools;
+	}
+	if ( row.needsApp && !( row.ways || [] ).length ) {
+		return "An admin has to set up an app before anyone can sign in. " + ( row.appHelp || "" );
+	}
 	if ( row.transport === "stdio" ) {
 		return admin ? "Runs on the machine the agent runs on, in its folder." : "Not switched on. An admin switches it on for everyone who uses this agent.";
 	}
@@ -80,16 +86,18 @@ export function connectorWho( row, summary, admin ) {
  */
 export function connectorActions( row, admin ) {
 	const program = row.transport === "stdio";
+	const open = ( row.ways || [] ).includes( "none" );
 	const on = row.state === "connected" || row.state === "needs_attention";
 	const memberOfProgram = program && !admin;
+	const noWay = !program && !!row.needsApp && !( row.ways || [] ).length;
 	if ( row.state === "needs_program" ) {
 		return { install: !!row.docs, connect: "", tools: false, disconnect: "" };
 	}
 	return {
 		install    : false,
-		connect    : ( !on || row.state === "needs_attention" ) && !memberOfProgram ? ( row.state === "needs_attention" ? "Reconnect" : program ? "Switch on" : "Connect" ) : "",
+		connect    : ( !on || row.state === "needs_attention" ) && !memberOfProgram && !noWay ? ( row.state === "needs_attention" ? "Reconnect" : program || open ? "Switch on" : "Connect" ) : "",
 		tools      : row.state === "connected",
-		disconnect : on && !memberOfProgram ? ( program ? "Switch off" : "Disconnect" ) : ""
+		disconnect : on && !memberOfProgram ? ( program || open ? "Switch off" : "Disconnect" ) : ""
 	};
 }
 
@@ -331,17 +339,17 @@ export function connectorsPage() {
 		 */
 		openConnect( row ) {
 			const program = row.transport === "stdio";
-			const ways = program ? [ "program" ] : ( row.ways || [] ).map( w => w === "bearer" ? "token" : w );
+			const ways = program ? [ "program" ] : ( row.ways || [] ).map( w => w === "bearer" ? "token" : w === "none" ? "open" : w );
 			this.connect = { open: true, row, method: ways[ 0 ], ways, token: "", options: [], values: {}, confirmed: false, error: "", busy: false, waiting: "" };
 			this.pickWay( ways[ 0 ] );
 		},
 
 		/**
-		 * @param {string} method token | oauth | program
+		 * @param {string} method token | oauth | open | program
 		 */
 		pickWay( method ) {
 			const row = this.connect.row;
-			const wanted = method === "token" ? "bearer" : method;
+			const wanted = method === "token" ? "bearer" : method === "open" ? "none" : method;
 			this.connect.method = method;
 			this.connect.error = "";
 			this.connect.options = method === "oauth" ? [] : ( row.options || [] ).filter( o => !o.onlyWith || o.onlyWith === wanted );
@@ -358,7 +366,7 @@ export function connectorsPage() {
 			if ( !row ) {
 				return "";
 			}
-			return ( row.state === "needs_attention" ? "Reconnect " : row.transport === "stdio" ? "Switch on " : "Connect " ) + row.name;
+			return ( row.state === "needs_attention" ? "Reconnect " : row.transport === "stdio" || this.connect.method === "open" ? "Switch on " : "Connect " ) + row.name;
 		},
 
 		/** @returns {string} The word on the connect button */
@@ -367,7 +375,7 @@ export function connectorsPage() {
 			if ( !row ) {
 				return "";
 			}
-			return this.connect.method === "oauth" ? "Continue to " + row.host : row.transport === "stdio" ? "Switch on" : "Connect";
+			return this.connect.method === "oauth" ? "Continue to " + row.host : row.transport === "stdio" || this.connect.method === "open" ? "Switch on" : "Connect";
 		},
 
 		/** @returns {boolean} True when the person must say they read the risk first */
