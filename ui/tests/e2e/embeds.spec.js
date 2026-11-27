@@ -147,7 +147,7 @@ test.describe( "The Embeds page", () => {
 		const item = page.locator( "tbody tr" ).filter( { hasText: name } );
 		await expect( item ).toContainText( "On" );
 		// saving a new embed keeps the drawer open, now as the edit of the embed it made
-		const drawer = page.getByRole( "dialog" );
+		const drawer = page.locator( "dialog.drawer" );
 		await expect( drawer.getByRole( "heading", { name: "Edit " + name } ) ).toBeVisible();
 
 		// the snippets are for this embed, with a note each, and Copy puts the text on the clipboard
@@ -261,7 +261,7 @@ test.describe( "The Embeds page", () => {
 
 			// Edit opens the drawer on that embed, and the change is saved
 			await row( tag + " alpha" ).getByRole( "button", { name: "Edit " + tag + " alpha" } ).click();
-			const drawer = page.getByRole( "dialog" );
+			const drawer = page.locator( "dialog.drawer" );
 			await expect( drawer.getByRole( "heading", { name: "Edit " + tag + " alpha" } ) ).toBeVisible();
 			await page.locator( "#embedTitle" ).fill( "Changed title" );
 			await page.locator( "#saveEmbed" ).click();
