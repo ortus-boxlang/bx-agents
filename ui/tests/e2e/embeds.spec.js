@@ -245,12 +245,15 @@ test.describe( "The Embeds page", () => {
 			await page.getByRole( "button", { name: /^All/ } ).click();
 
 			// the switch turns one off and on at once, and the server has it
-			const alphaSwitch = page.getByRole( "switch", { name: tag + " alpha is on" } );
-			await alphaSwitch.click();
+			// (the checkbox is drawn as a track, so the track is what is clicked)
+			const flip = name => row( name ).locator( ".switch" ).click();
+			await expect( page.getByRole( "switch", { name: tag + " alpha is on" } ) ).toBeChecked();
+			await flip( tag + " alpha" );
 			await expect( page.locator( ".toast" ).filter( { hasText: tag + " alpha is off" } ) ).toBeVisible();
 			await expect( row( tag + " alpha" ) ).toContainText( "Off" );
 			expect( ( await ( await request.get( API + "/embeds/get?id=" + alpha.id, { headers: JSON_HEADERS } ) ).json() ).enabled ).toBe( false );
-			await page.getByRole( "switch", { name: tag + " alpha is off" } ).click();
+			await expect( page.getByRole( "switch", { name: tag + " alpha is off" } ) ).not.toBeChecked();
+			await flip( tag + " alpha" );
 			await expect( row( tag + " alpha" ) ).toContainText( "On" );
 			expect( ( await ( await request.get( API + "/embeds/get?id=" + alpha.id, { headers: JSON_HEADERS } ) ).json() ).enabled ).toBe( true );
 
