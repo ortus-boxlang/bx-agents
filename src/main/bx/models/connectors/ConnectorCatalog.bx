@@ -27,8 +27,8 @@ class {
 		// Headers a token may not be sent in: they belong to the connection, not to the sign in
 		FORBIDDEN_HEADERS = [ "host", "content-length", "content-type", "accept", "connection", "transfer-encoding", "cookie", "set-cookie", "upgrade", "te", "trailer", "expect", "mcp-session-id", "mcp-protocol-version", "origin", "referer", "user-agent" ]
 		REQUIRED = [ "id", "name", "icon", "category", "summary", "transport", "auth", "risk", "riskNote", "docs", "verifiedOn" ]
-		ALLOWED = [ "id", "name", "icon", "category", "summary", "transport", "url", "command", "requires", "auth", "options", "risk", "riskNote", "docs", "verifiedOn" ]
-		AUTH_ALLOWED = [ "type", "scopes", "envVar", "header", "prefix", "app", "envVars", "help", "verified", "unverifiedNote" ]
+		ALLOWED = [ "id", "name", "icon", "category", "summary", "transport", "url", "command", "requires", "auth", "options", "risk", "riskNote", "docs", "onDisconnect", "verifiedOn" ]
+		AUTH_ALLOWED = [ "type", "scopes", "envVar", "header", "prefix", "app", "envVars", "endpoints", "params", "help", "verified", "unverifiedNote" ]
 		OPTION_ALLOWED = [ "key", "label", "help", "type", "target", "name", "default", "onlyWith", "choices" ]
 
 		// What a secret looks like when somebody pastes one into a file. The message never repeats the value.
@@ -334,6 +334,9 @@ class {
 		if ( !reFind( "^[a-z][a-z0-9-]*$", toString( entry.icon ) ) ) {
 			problems.append( problem( file, "icon", "The icon must be the name of a Phosphor icon, such as git-branch." ) )
 		}
+		if ( entry.keyExists( "onDisconnect" ) && toString( entry.onDisconnect ) != "purge" ) {
+			problems.append( problem( file, "onDisconnect", "onDisconnect is purge, or left out: purge deletes the saved answers of the person that used this connector when they disconnect it." ) )
+		}
 		if ( !static.CATEGORIES.find( toString( entry.category ) ) ) {
 			problems.append( problem( file, "category", "The category [#entry.category#] must be one of: #static.CATEGORIES.toList( ', ' )#." ) )
 		}
@@ -464,6 +467,9 @@ class {
 					}
 				}
 			}
+			if ( ( method.keyExists( "endpoints" ) || method.keyExists( "params" ) ) && ( type != "oauth" || toString( method.app ?: "" ) != "own" ) ) {
+				arguments.problems.append( problem( file, "auth.endpoints", "endpoints and params belong to an oauth method with app: own." ) )
+			}
 			if ( method.keyExists( "app" ) || method.keyExists( "envVars" ) ) {
 				if ( type != "oauth" || toString( method.app ?: "" ) != "own" ) {
 					arguments.problems.append( problem( file, "auth.app", "app: own, with envVars, belongs to an oauth method." ) )
@@ -483,6 +489,7 @@ class {
 					if ( !len( toString( method.help ?: "" ) ) ) {
 						arguments.problems.append( problem( file, "auth.help", "An oauth method with app: own says in help how an admin registers the app and which redirect address to give it." ) )
 					}
+					checkEndpoints( method, file, arguments.problems )
 				}
 			}
 			if ( type == "bearer" && !reFind( "^[A-Z][A-Z0-9_]*$", toString( method.envVar ?: "" ) ) ) {
@@ -562,6 +569,45 @@ class {
 			}
 			if ( option.keyExists( "onlyWith" ) && !authTypes.findNoCase( toString( option.onlyWith ) ) ) {
 				arguments.problems.append( problem( file, "options.#name#.onlyWith", "onlyWith [#option.onlyWith#] must be one of the auth types this connector lists." ) )
+			}
+		}
+	}
+
+	/**
+	 * The addresses of a sign in BxAgents does itself, for a service whose metadata does not fit what an MCP client discovers.
+	 *
+	 * @method The oauth method
+	 * @file Its file
+	 * @problems Filled with what is wrong
+	 */
+	private void function checkEndpoints( required struct method, required string file, required array problems ) {
+		if ( !arguments.method.keyExists( "endpoints" ) && !arguments.method.keyExists( "params" ) ) {
+			return
+		}
+		var ends = isStruct( arguments.method.endpoints ?: "" ) ? arguments.method.endpoints : {}
+		for ( var key in [ "authorize", "token" ] ) {
+			if ( !reFind( "^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[^\s?##]*)?$", toString( ends[ key ] ?: "" ) ) ) {
+				arguments.problems.append( problem( arguments.file, "auth.endpoints", "endpoints.#key# is an https address with no query or fragment." ) )
+			}
+		}
+		if ( ends.keyExists( "revoke" ) && !reFind( "^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[^\s?##]*)?$", toString( ends.revoke ) ) ) {
+			arguments.problems.append( problem( arguments.file, "auth.endpoints", "endpoints.revoke is an https address with no query or fragment." ) )
+		}
+		for ( var key in ends.keyArray() ) {
+			if ( ![ "authorize", "token", "revoke" ].contains( key ) ) {
+				arguments.problems.append( problem( arguments.file, "auth.endpoints", "[#key#] is not one of endpoints: authorize, token, revoke." ) )
+			}
+		}
+		if ( arguments.method.keyExists( "params" ) ) {
+			var extra = isStruct( arguments.method.params ) ? arguments.method.params : {}
+			if ( !isStruct( arguments.method.params ) || extra.keyArray().some( k => !isSimpleValue( extra[ k ] ) || !reFind( "^[a-z_]+$", k ) ) ) {
+				arguments.problems.append( problem( arguments.file, "auth.params", "params is a mapping of query parameter names (lower case and underscores) to text, such as access_type: offline." ) )
+			}
+			// these are the sign in's own: a file cannot change where the person comes back to, what is asked for, or the proof key
+			for ( var reserved in [ "response_type", "client_id", "redirect_uri", "state", "code_challenge", "code_challenge_method", "scope" ] ) {
+				if ( extra.keyExists( reserved ) ) {
+					arguments.problems.append( problem( arguments.file, "auth.params", "params cannot set [#reserved#]: the sign in sets it." ) )
+				}
 			}
 		}
 	}

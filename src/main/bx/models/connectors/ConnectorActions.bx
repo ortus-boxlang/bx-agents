@@ -29,6 +29,8 @@ class {
 		variables.clients = arguments.deps.clients ?: ""
 		variables.oauth = arguments.deps.oauth ?: ""
 		variables.served = arguments.deps.served ?: false
+		// ( id, person ) => { purged, pending }: takes out what the agent saved from a connector that does not keep its data
+		variables.purge = arguments.deps.purge ?: ( ( id, person ) => { purged : 0, pending : 0 } )
 		return this
 	}
 
@@ -83,6 +85,8 @@ class {
 		} else if ( row.connectedWith == "oauth" ) {
 			variables.oauth.disconnect( arguments.id, arguments.person )
 			variables.settings.remove( arguments.person, arguments.id, "status" )
+			// a sign in BxAgents does itself has a client of the person's own, made with the token that was just revoked
+			dropClient( arguments.id, arguments.person )
 		} else if ( row.connectedWith == "open" ) {
 			variables.settings.remove( arguments.person, arguments.id, "enabled" )
 			dropClient( arguments.id, arguments.person )
@@ -90,7 +94,13 @@ class {
 			adminOnly( row, arguments.asked, "switch off" )
 			variables.settings.remove( "*", arguments.id, "enabled" )
 		}
-		return { connected : false, row : variables.service.get( arguments.id, arguments.person ) }
+		var cleaned = { purged : 0, pending : 0 }
+		try {
+			cleaned = variables.purge( arguments.id, arguments.person )
+		} catch ( any e ) {
+			writeLog( text = "Could not take the saved answers of [#arguments.id#] out: #e.message#", type = "warning", log = "ai" )
+		}
+		return { connected : false, row : variables.service.get( arguments.id, arguments.person ), purged : cleaned.purged ?: 0 }
 	}
 
 	/**

@@ -20,6 +20,7 @@ class implements="java:com.sun.net.httpserver.HttpHandler" {
 		variables.sessions = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).init()
 		variables.log = createObject( "java", "java.util.concurrent.CopyOnWriteArrayList" ).init()
 		variables.refused = createObject( "java", "java.util.concurrent.ConcurrentHashMap" ).newKeySet()
+		variables.openMode = false
 		variables.tools = [ { "name" : "whoami", "description" : "Says which token and session the call used", "inputSchema" : { "type" : "object", "properties" : {} } } ]
 		return this
 	}
@@ -48,6 +49,18 @@ class implements="java:com.sun.net.httpserver.HttpHandler" {
 			variables.httpServer.stop( 0 )
 			variables.httpServer = ""
 		}
+	}
+
+	/**
+	 * Makes it a public server: a call with no token is answered like any other.
+	 *
+	 * @on True for public
+	 *
+	 * @return This
+	 */
+	function open( required boolean on ) {
+		variables.openMode = arguments.on
+		return this
 	}
 
 	/**
@@ -107,7 +120,7 @@ class implements="java:com.sun.net.httpserver.HttpHandler" {
 		try {
 			var auth = arguments.exchange.getRequestHeaders().getFirst( "Authorization" ) ?: ""
 			var token = left( auth, 7 ) == "Bearer " ? mid( auth, 8, len( auth ) ) : ""
-			if ( !len( token ) || variables.refused.contains( token ) ) {
+			if ( !variables.openMode && ( !len( token ) || variables.refused.contains( token ) ) ) {
 				return reply( arguments.exchange, 401, { "error" : "unauthorized" } )
 			}
 			var session = arguments.exchange.getRequestHeaders().getFirst( "Mcp-Session-Id" ) ?: ""
