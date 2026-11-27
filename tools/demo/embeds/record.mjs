@@ -159,6 +159,9 @@ await scene( "define", async() => {
 	await page.keyboard.press( "Enter" );
 	await page.locator( "#embedColor" ).fill( "#7c3aed" );
 	await pause( 400 );
+	// typing scrolled the panel down: the picture starts at its heading
+	await page.locator( "dialog.drawer" ).evaluate( el => el.scrollTo( 0, 0 ) );
+	await pause( 300 );
 	await shot( "editor-with-live-preview" );
 } );
 
