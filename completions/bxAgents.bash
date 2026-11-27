@@ -56,7 +56,7 @@ _bxagents_complete() {
 			"new --destination") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"new --files") COMPREPLY=($(compgen -W "read all" -- "$part")) ;;
 			"new --guard") COMPREPLY=($(compgen -W "off flag block" -- "$part")) ;;
-			"new --mcp") COMPREPLY=($(compgen -W "atlassian cloudflare git github notion stripe supabase" -- "$part")) ;;
+			"new --mcp") COMPREPLY=($(compgen -W "atlassian cloudflare context7 git github notion slack stripe supabase" -- "$part")) ;;
 			"new --memory") COMPREPLY=($(compgen -W "cache file" -- "$part")) ;;
 			"new --projectRoot") COMPREPLY=($(compgen -d -- "$part")); compopt -o filenames 2>/dev/null ;;
 			"new --search") COMPREPLY=($(compgen -W "http brave tavily exa google" -- "$part")) ;;
