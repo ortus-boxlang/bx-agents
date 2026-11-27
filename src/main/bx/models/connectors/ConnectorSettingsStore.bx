@@ -14,7 +14,7 @@
 class {
 
 	static {
-		KEYS = [ "options", "tools", "status", "enabled", "lastOpen" ]
+		KEYS = [ "options", "tools", "status", "enabled", "lastOpen", "marks" ]
 		// the owner of what belongs to the agent and not to a person
 		AGENT_OWNER = "*"
 	}
@@ -45,6 +45,20 @@ class {
 		}
 		var parsed = jsonDeserialize( found[ 1 ].value )
 		return isStruct( parsed ) ? parsed : {}
+	}
+
+	/**
+	 * @connector The connector's id
+	 * @key The setting
+	 *
+	 * @return The owners that have that setting for that connector (a person, or * for the agent)
+	 */
+	array function owners( required string connector, required string key ) {
+		checkedKey( arguments.key )
+		return variables.store.rows(
+			"SELECT owner FROM connector_settings WHERE connector = :connector AND settingKey = :key",
+			{ connector : arguments.connector, key : arguments.key }
+		).map( row => row.owner )
 	}
 
 	/**

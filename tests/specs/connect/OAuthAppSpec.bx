@@ -1,0 +1,240 @@
+/**
+ * A sign in whose addresses are in the connector file (Google's): the address the person is sent to, the single use state, the
+ * PKCE proof, the code traded for tokens that are sealed per person, the refresh and the revoke. A fake OAuth server takes the
+ * calls, so what goes over HTTP is the real form.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * @fake The FakeOAuthServer
+	 *
+	 * @return The oauth struct of a connector with its own endpoints, pointed at the fake
+	 */
+	private struct function oauthFor( required any fake ) {
+		return {
+			endpoints   : { authorize : "https://accounts.example.com/auth", token : arguments.fake.tokenUrl(), revoke : arguments.fake.revokeUrl() },
+			params      : { access_type : "offline", prompt : "consent" },
+			scopes      : [ "https://example.com/auth/mail.read", "https://example.com/auth/mail.send" ],
+			clientId    : "client-1",
+			clientSecret: "secret-1",
+			redirectUri : "https://app.example.com/__bxagents/connect/callback"
+		};
+	}
+
+	/**
+	 * @return The query of an address as a struct, decoded
+	 */
+	private struct function queryOf( required string address ) {
+		var out = {};
+		for ( var pair in listToArray( listRest( arguments.address, "?" ), "&" ) ) {
+			out[ urlDecode( listFirst( pair, "=" ) ) ] = urlDecode( listRest( pair, "=" ) );
+		}
+		return out;
+	}
+
+	function run() {
+		describe( "OAuthApp", function() {
+
+			beforeEach( function() {
+				variables.fake = new tests.support.FakeOAuthServer().start();
+				variables.dir = getTempDirectory() & "bxa-oauthapp-" & createUUID();
+				directoryCreate( dir, true );
+				variables.vault = new bxagents.models.vault.VaultWiring().service( dir & "/chat.db" );
+				variables.clock = { now : 1000000 };
+				variables.app = new bxagents.models.connect.OAuthApp( "gmail", oauthFor( fake ), vault, { now : () => clock.now, apiAddress : "https://gmailmcp.example.com/mcp" } );
+			} );
+
+			afterEach( function() {
+				fake.stop();
+				if ( directoryExists( dir ) ) {
+					directoryDelete( dir, true );
+				}
+			} );
+
+			it( "sends the person to the service with the client, the scopes, the parameters it names and a PKCE challenge", function() {
+				var started = app.startAuthorization( "ada" );
+				var query = queryOf( started.authorizationUrl );
+
+				expect( started.authorizationUrl ).toInclude( "https://accounts.example.com/auth?" );
+				expect( query.response_type ).toBe( "code" );
+				expect( query.client_id ).toBe( "client-1" );
+				expect( query.redirect_uri ).toBe( "https://app.example.com/__bxagents/connect/callback" );
+				expect( query.scope ).toBe( "https://example.com/auth/mail.read https://example.com/auth/mail.send" );
+				expect( query.access_type ).toBe( "offline" );
+				expect( query.prompt ).toBe( "consent" );
+				expect( query.code_challenge_method ).toBe( "S256" );
+				expect( len( query.code_challenge ) ).toBeGTE( 43 );
+				expect( query.state ).toBe( started.state );
+				// the person is not in the address, and nor is the secret
+				expect( started.authorizationUrl ).notToInclude( "ada" );
+				expect( started.authorizationUrl ).notToInclude( "secret-1" );
+			} );
+
+			it( "refuses to start without an address to come back to, and says how to set it", function() {
+				var bare = new bxagents.models.connect.OAuthApp( "gmail", { endpoints : oauthFor( fake ).endpoints, clientId : "c" }, vault );
+
+				expect( () => bare.startAuthorization( "ada" ) ).toThrow( "MCPOAuthMissingRedirectUri" );
+				try {
+					bare.startAuthorization( "ada" );
+				} catch ( any e ) {
+					expect( e.message ).toInclude( "BXAGENTS_PUBLIC_URL" );
+				}
+			} );
+
+			it( "trades the code for tokens with the verifier of that sign in, and seals them for the person", function() {
+				var started = app.startAuthorization( "ada" );
+				fake.expectChallenge( queryOf( started.authorizationUrl ).code_challenge );
+
+				var done = app.completeAuthorization( "good-code", started.state, "" );
+
+				expect( done.subject ).toBe( "ada" );
+				expect( done.scope ).toBe( "a b" );
+				var form = fake.requests()[ 1 ].form;
+				expect( form.grant_type ).toBe( "authorization_code" );
+				expect( form.client_id ).toBe( "client-1" );
+				expect( form.client_secret ).toBe( "secret-1" );
+				expect( form.redirect_uri ).toBe( "https://app.example.com/__bxagents/connect/callback" );
+				expect( app.isAuthorized( "ada" ) ).toBeTrue();
+				expect( app.isAuthorized( "grace" ) ).toBeFalse();
+				expect( app.accessToken( "ada" ) ).toBe( "access-1" );
+				// sealed in the vault, as the person's own, and only for the hosts of the service
+				var kept = vault.list( "ada", { scope : "user" } )[ 1 ];
+				expect( kept.name ).toBe( "OAUTH_GMAIL_TOKENS" );
+				expect( kept.hosts ).toInclude( "127.0.0.1" );
+				expect( kept.hosts ).toInclude( "gmailmcp.example.com" );
+				expect( jsonSerialize( done ) ).notToInclude( "access-1" );
+				expect( jsonSerialize( kept ) ).notToInclude( "refresh-1" );
+			} );
+
+			it( "uses a state once, and finds nothing for one it does not know", function() {
+				var started = app.startAuthorization( "ada" );
+				app.completeAuthorization( "good-code", started.state, "" );
+
+				expect( () => app.completeAuthorization( "good-code", started.state, "" ) ).toThrow( "MCPOAuthInvalidState" );
+				expect( () => app.completeAuthorization( "good-code", "made-up", "" ) ).toThrow( "MCPOAuthInvalidState" );
+				expect( () => app.completeAuthorization( "good-code", "", "" ) ).toThrow( "MCPOAuthInvalidState" );
+			} );
+
+			it( "refuses a code the service did not accept, in the service's own words and without a secret", function() {
+				var started = app.startAuthorization( "ada" );
+				var thrown = "";
+				try {
+					app.completeAuthorization( "bad-code", started.state, "" );
+				} catch ( any e ) {
+					thrown = e;
+				}
+
+				expect( thrown.type ).toBe( "BxAgents.OAuthRefused" );
+				expect( thrown.message ).toInclude( "invalid_grant" );
+				expect( thrown.message ).notToInclude( "secret-1" );
+				expect( app.isAuthorized( "ada" ) ).toBeFalse();
+			} );
+
+			it( "keeps one person's tokens apart from another's", function() {
+				var one = app.startAuthorization( "ada" );
+				app.completeAuthorization( "good-code", one.state, "" );
+				var two = app.startAuthorization( "grace" );
+				app.completeAuthorization( "good-code", two.state, "" );
+
+				expect( app.accessToken( "ada" ) ).toBe( "access-1" );
+				expect( app.accessToken( "grace" ) ).toBe( "access-2" );
+			} );
+
+			it( "renews an access token that is about to run out, keeps the refresh token when the service sends no new one, and stores the renewal", function() {
+				var started = app.startAuthorization( "ada" );
+				app.completeAuthorization( "good-code", started.state, "" );
+				expect( app.accessToken( "ada" ) ).toBe( "access-1" );
+
+				// inside the last minute of its life it is renewed
+				clock.now += 3550;
+				expect( app.accessToken( "ada" ) ).toBe( "access-2" );
+				var refresh = fake.requests().filter( r => r.form.grant_type == "refresh_token" );
+				expect( refresh ).toHaveLength( 1 );
+				expect( refresh[ 1 ].form.refresh_token ).toBe( "refresh-1" );
+				// asked again straight away, it is the new one and nothing more is asked of the service
+				expect( app.accessToken( "ada" ) ).toBe( "access-2" );
+				expect( fake.requests().filter( r => r.form.grant_type == "refresh_token" ) ).toHaveLength( 1 );
+
+				// a refresh token that rotates is replaced
+				fake.rotating( true );
+				clock.now += 3550;
+				expect( app.accessToken( "ada" ) ).toBe( "access-3" );
+				clock.now += 3550;
+				app.accessToken( "ada" );
+				expect( fake.requests().filter( r => r.form.grant_type == "refresh_token" ).last().form.refresh_token ).toBe( "refresh-3" );
+			} );
+
+			it( "asks for a new sign in when the service no longer accepts the refresh token, and says it could not be reached for any other trouble", function() {
+				var started = app.startAuthorization( "ada" );
+				app.completeAuthorization( "good-code", started.state, "" );
+				clock.now += 3600;
+
+				fake.failRefreshWith( "invalid_grant" );
+				expect( () => app.accessToken( "ada" ) ).toThrow( "BxAgents.OAuthReauthRequired" );
+
+				fake.failRefreshWith( "temporarily_unavailable" );
+				expect( () => app.accessToken( "ada" ) ).toThrow( "BxAgents.CouldNotReach" );
+				// the sign in is still there to try again
+				expect( app.isAuthorized( "ada" ) ).toBeTrue();
+			} );
+
+			it( "asks for a sign in from somebody who has none", function() {
+				expect( () => app.accessToken( "nobody" ) ).toThrow( "BxAgents.OAuthReauthRequired" );
+			} );
+
+			it( "revokes the grant at the service with the refresh token, and forgets the tokens even when the service cannot be reached", function() {
+				var started = app.startAuthorization( "ada" );
+				app.completeAuthorization( "good-code", started.state, "" );
+
+				app.revokeAuthorization( "ada" );
+
+				expect( fake.revoked() ).toBe( [ "refresh-1" ] );
+				expect( app.isAuthorized( "ada" ) ).toBeFalse();
+				expect( vault.list( "ada", { scope : "user" } ) ).toBeEmpty();
+
+				// the service is down: what is kept here still goes
+				var again = app.startAuthorization( "ada" );
+				app.completeAuthorization( "good-code", again.state, "" );
+				fake.stop();
+				app.revokeAuthorization( "ada" );
+				expect( app.isAuthorized( "ada" ) ).toBeFalse();
+			} );
+
+			it( "works through the ConnectionService the connect routes, the callback and the terminal already use", function() {
+				var entry = { name : "gmail", url : "https://gmailmcp.example.com/mcp", oauth : oauthFor( fake ) };
+				var service = new bxagents.models.connect.ConnectionService( [ entry ], { vault : vault, apiPath : "/__bxagents" } );
+
+				expect( service.list( "ada" ) ).toBe( [ { name : "gmail", url : "https://gmailmcp.example.com/mcp", connected : false, scope : "https://example.com/auth/mail.read https://example.com/auth/mail.send" } ] );
+				var started = service.start( "gmail", "ada" );
+				expect( started.authorizationUrl ).toInclude( "https://accounts.example.com/auth?" );
+				var done = service.complete( "good-code", started.state, "" );
+
+				expect( done.name ).toBe( "gmail" );
+				expect( done.subject ).toBe( "ada" );
+				expect( service.list( "ada" )[ 1 ].connected ).toBeTrue();
+				expect( service.list( "grace" )[ 1 ].connected ).toBeFalse();
+				expect( service.accessToken( "gmail", "ada" ) ).toBe( "access-1" );
+				// the tools of a sign in like this come with the person's own token, not through the sign in side
+				expect( service.refresh() ).toBe( 0 );
+				expect( () => service.tools( "gmail" ) ).toThrow( "BxAgents.NotConnected" );
+				// a state nobody here started is refused
+				expect( () => service.complete( "good-code", "unknown", "" ) ).toThrow( "MCPOAuthInvalidState" );
+
+				service.disconnect( "gmail", "ada" );
+				expect( service.list( "ada" )[ 1 ].connected ).toBeFalse();
+				expect( fake.revoked() ).toBe( [ "refresh-1" ] );
+			} );
+
+			it( "only sends a code or a token to an https address, or to the machine itself", function() {
+				var odd = oauthFor( fake );
+				odd.endpoints.token = "http://example.com/token";
+				var plain = new bxagents.models.connect.OAuthApp( "gmail", odd, vault );
+				var started = plain.startAuthorization( "ada" );
+
+				expect( () => plain.completeAuthorization( "good-code", started.state, "" ) ).toThrow( "BxAgents.OAuthRefused" );
+			} );
+
+		} );
+	}
+
+}

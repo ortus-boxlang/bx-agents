@@ -160,6 +160,10 @@ class {
 			have.append( listed.url )
 		}
 		for ( var entry in variables.entries ) {
+			// a sign in BxAgents does itself (addresses in the connector file): its token is used by the connector's own client
+			if ( ownEndpoints( entry ) ) {
+				continue
+			}
 			var resolved = resolve( entry )
 			if ( have.contains( resolved.url ) ) {
 				continue
@@ -194,12 +198,29 @@ class {
 	 * @throws BxAgents.CouldNotReach when the server did not answer
 	 */
 	array function tools( required string name ) {
+		for ( var entry in variables.entries ) {
+			if ( entry.name == arguments.name && ownEndpoints( entry ) ) {
+				throw( type = "BxAgents.NotConnected", message = "The tools of [#arguments.name#] are listed with the person's own sign in, by the connector." )
+			}
+		}
 		var answer = clientFor( arguments.name ).listTools()
 		if ( !answer.isSuccess() ) {
 			throw( type = "BxAgents.CouldNotReach", message = "Could not list the tools of [#arguments.name#]: #answer.getError()#" )
 		}
 		var data = answer.getData()
 		return isArray( data ) ? data : ( data.tools ?: [] )
+	}
+
+	/**
+	 * A token that works now, for a sign in BxAgents does itself (refreshed first when it must be).
+	 *
+	 * @name The server's name
+	 * @subject The person
+	 *
+	 * @return The access token
+	 */
+	string function accessToken( required string name, required string subject ) {
+		return clientFor( arguments.name ).accessToken( arguments.subject )
 	}
 
 	/**
@@ -219,6 +240,9 @@ class {
 	 * @subject The person who signed in
 	 */
 	private void function rememberForDiscovery( required struct entry, required string subject ) {
+		if ( ownEndpoints( arguments.entry ) ) {
+			return
+		}
 		var resolved = resolve( arguments.entry )
 		resolved.oauth.store.set( "discover:" & resolved.url, { "subject" : arguments.subject } )
 	}
@@ -248,12 +272,44 @@ class {
 			if ( wanted.isEmpty() ) {
 				throw( type = "BxAgents.UnknownConnection", message = "No server named [#arguments.name#] asks people to sign in. They are: #names().toList( ', ' )#." )
 			}
+			if ( ownEndpoints( wanted ) && !isClosure( variables.options.clientFactory ?: "" ) ) {
+				variables.clients[ arguments.name ] = ownClient( wanted )
+				return variables.clients[ arguments.name ]
+			}
 			var resolved = resolve( wanted )
 			variables.clients[ arguments.name ] = isClosure( variables.options.clientFactory ?: "" )
 				? variables.options.clientFactory( resolved )
 				: MCP( resolved.url ).withOAuth( resolved.oauth )
 		}
 		return variables.clients[ arguments.name ]
+	}
+
+	/**
+	 * @entry One entry
+	 *
+	 * @return True when its sign in uses addresses written in the entry (`oauth.endpoints`): BxAgents does that one itself
+	 */
+	private boolean function ownEndpoints( required struct entry ) {
+		return isStruct( arguments.entry.oauth ?: "" ) && isStruct( arguments.entry.oauth.endpoints ?: "" )
+	}
+
+	/**
+	 * @entry One entry that has its own endpoints
+	 *
+	 * @return The OAuthApp for it, with the address the service sends people back to
+	 */
+	private any function ownClient( required struct entry ) {
+		var oauth = duplicate( arguments.entry.oauth )
+		if ( !len( oauth.redirectUri ?: "" ) ) {
+			if ( len( variables.options.redirectUri ?: "" ) ) {
+				oauth[ "redirectUri" ] = variables.options.redirectUri
+			} else {
+				var base = trim( getSystemSetting( "BXAGENTS_PUBLIC_URL", "" ) ).reReplace( "/+$", "" )
+				oauth[ "redirectUri" ] = len( base ) ? base & ( variables.options.apiPath ?: "/__bxagents" ) & "/connect/callback" : ""
+			}
+		}
+		var vault = isObject( variables.options.vault ?: "" ) ? variables.options.vault : ( variables.options.keyExists( "wiring" ) ? variables.options.wiring.service() : new "models.vault.VaultWiring@bxagents"().service() )
+		return new "models.connect.OAuthApp@bxagents"( arguments.entry.name, oauth, vault, { apiAddress : arguments.entry.url ?: "" } )
 	}
 
 	/**

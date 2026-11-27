@@ -379,7 +379,8 @@ class {
 	 * @return A LoopbackSignIn over the sign in connectors, so a terminal can finish a sign in without a public address
 	 */
 	private any function loopbackSignIn( required struct stack ) {
-		var entries = bxModules.bxagents.models.connectors.ConnectorEndpoint::oauthEntries( arguments.stack.policy.available ?: [] )
+		var reader = bxModules.bxagents.models.connectors.ConnectorEndpoint::credentialReader( () => new "models.vault.VaultWiring@bxagents"().service() )
+		var entries = bxModules.bxagents.models.connectors.ConnectorEndpoint::oauthEntries( arguments.stack.policy.available ?: [], reader )
 		return new "models.connectors.LoopbackSignIn@bxagents"(
 			new "models.cli.chat.LocalConnections@bxagents"( entries, new "models.vault.VaultWiring@bxagents"(), variables.userId, { agent : variables.agent } )
 		)

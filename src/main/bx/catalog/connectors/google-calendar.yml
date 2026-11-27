@@ -1,0 +1,29 @@
+id: google-calendar
+name: Google Calendar
+icon: calendar-check
+category: Productivity
+summary: List and search events, check free time, create, update and answer events
+transport: http
+url: https://calendarmcp.googleapis.com/mcp/v1
+auth:
+  - type: oauth
+    app: own
+    endpoints:
+      authorize: https://accounts.google.com/o/oauth2/v2/auth
+      token: https://oauth2.googleapis.com/token
+      revoke: https://oauth2.googleapis.com/revoke
+    params:
+      access_type: offline
+      prompt: consent
+    scopes: [ https://www.googleapis.com/auth/calendar.calendarlist.readonly, https://www.googleapis.com/auth/calendar.events.freebusy, https://www.googleapis.com/auth/calendar.events.readonly, https://www.googleapis.com/auth/calendar.events ]
+    envVars:
+      clientId: GOOGLE_CLIENT_ID
+      clientSecret: GOOGLE_CLIENT_SECRET
+    help: In the Google Cloud console (Google Auth Platform, Clients) create an OAuth client with Use this client for an AI-powered agent ticked. For the web app make it a Web application client and add the app's public address followed by /__bxagents/connect/callback as an authorized redirect address; for the terminal make it a Desktop app client, which takes any loopback address. Gmail, Calendar and Drive share the one client. Enable the API and its MCP service in the project first. Then set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and restart the agent.
+    verified: false
+    unverifiedNote: BxAgents signs the person in with Google's documented OAuth flow (authorization code with PKCE, offline access) and calls Google's own MCP server with the token. Both are built from Google's documentation, but a real sign in with a Google account was not tried.
+risk: medium
+riskNote: Can create, change, answer and delete events on the person's calendars, which can send invitations to other people.
+docs: https://developers.google.com/workspace/calendar/api/guides/configure-mcp-server
+onDisconnect: purge
+verifiedOn: 2026-11-27

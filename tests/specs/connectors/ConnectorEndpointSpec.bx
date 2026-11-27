@@ -104,6 +104,28 @@ class extends="testbox.system.BaseSpec" {
 				expect( ConnectorEndpoint::ownApp( entryFor( "slack" ) ).envVars ).toBe( { clientId : "SLACK_CLIENT_ID", clientSecret : "SLACK_CLIENT_SECRET" } );
 			} );
 
+			it( "gives a Google connector the addresses of its sign in and what it asks for, once the admin has set the app", function() {
+				var available = ConnectorSettings::resolve( {} ).available;
+				var set = { GOOGLE_CLIENT_ID : "g-id", GOOGLE_CLIENT_SECRET : "g-secret" };
+				var entries = ConnectorEndpoint::oauthEntries( available, name => set[ name ] ?: "" ).reduce( ( all, e ) => { all[ e.name ] = e; return all; }, {} );
+
+				expect( entries.gmail.oauth.endpoints.token ).toBe( "https://oauth2.googleapis.com/token" );
+				expect( entries.gmail.oauth.endpoints.authorize ).toBe( "https://accounts.google.com/o/oauth2/v2/auth" );
+				expect( entries.gmail.oauth.params ).toBe( { access_type : "offline", prompt : "consent" } );
+				expect( entries.gmail.oauth.scopes ).toInclude( "https://www.googleapis.com/auth/gmail.readonly" );
+				expect( entries.gmail.oauth.clientId ).toBe( "g-id" );
+				expect( entries[ "google-drive" ].oauth.clientSecret ).toBe( "g-secret" );
+				expect( entries.gmail.url ).toBe( "https://gmailmcp.googleapis.com/mcp/v1" );
+				// the app is not set: none of the three has a sign in
+				var none = ConnectorEndpoint::oauthEntries( available, name => "" ).map( e => e.name );
+				expect( none ).notToInclude( "gmail" );
+				expect( none ).notToInclude( "google-calendar" );
+				// which connectors BxAgents signs in itself
+				expect( ConnectorEndpoint::hasOwnEndpoints( entryFor( "gmail" ) ) ).toBeTrue();
+				expect( ConnectorEndpoint::hasOwnEndpoints( entryFor( "slack" ) ) ).toBeFalse();
+				expect( ConnectorEndpoint::hasOwnEndpoints( entryFor( "notion" ) ) ).toBeFalse();
+			} );
+
 			it( "applies an option that is only for one way in to that way alone", function() {
 				var stripe = entryFor( "stripe" );
 

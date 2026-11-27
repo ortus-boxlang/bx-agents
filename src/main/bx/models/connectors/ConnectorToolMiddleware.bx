@@ -80,6 +80,14 @@ class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 				return AiMiddlewareResult.reject( "#id# is not connected for this person. Ask them to connect it." )
 			}
 			var why = variables.connectorTools.gate( id, who, mid( name, at + 2, len( name ) ) )
+			if ( !len( why ) ) {
+				// a connector whose data is not kept after a disconnect: remember which conversation used it
+				try {
+					variables.service.noteUse( id, who, toString( arguments.context.chatRequest.getConversationId() ?: "" ) )
+				} catch ( any e ) {
+					writeLog( text = "Could not note that a conversation used [#id#]: #e.message#", type = "warning", log = "ai" )
+				}
+			}
 			return len( why ) ? AiMiddlewareResult.reject( why ) : AiMiddlewareResult.continue()
 		} catch ( any e ) {
 			// when what a person may use cannot be read, no connector tool runs

@@ -1,0 +1,137 @@
+/**
+ * A fake OAuth server for specs that need the real HTTP of a sign in: a token endpoint (authorization code and refresh) and a
+ * revoke endpoint. Nothing here is a real service. It keeps a log of every form it took, and checks the PKCE proof: a code
+ * is only good with the verifier whose challenge was asked for.
+ *
+ *   POST /token    grant_type authorization_code: needs code, redirect_uri, client_id, code_verifier; answers an access token, a
+ *                  refresh token and `expires_in`. grant_type refresh_token: answers a new access token (and a new refresh
+ *                  token when `rotate` is on)
+ *   POST /revoke   remembers the token it was told to revoke
+ *
+ * `expectChallenge( text )` says which challenge the code was issued for; `failRefreshWith( error )` makes the next refreshes
+ * answer 400 with that OAuth error; `lifetime( seconds )` sets expires_in.
+ */
+class implements="java:com.sun.net.httpserver.HttpHandler" {
+
+	function init() {
+		variables.httpServer = ""
+		variables.boundPort = 0
+		variables.log = createObject( "java", "java.util.concurrent.CopyOnWriteArrayList" ).init()
+		variables.revoked = createObject( "java", "java.util.concurrent.CopyOnWriteArrayList" ).init()
+		variables.challenge = ""
+		variables.refreshError = ""
+		variables.expiresIn = 3600
+		variables.rotate = false
+		variables.counter = createObject( "java", "java.util.concurrent.atomic.AtomicInteger" ).init( 0 )
+		return this
+	}
+
+	function start() {
+		var address = createObject( "java", "java.net.InetSocketAddress" ).init( createObject( "java", "java.net.InetAddress" ).getByName( "127.0.0.1" ), 0 )
+		variables.httpServer = createObject( "java", "com.sun.net.httpserver.HttpServer" ).create( address, 0 )
+		variables.httpServer.createContext( "/", this )
+		variables.httpServer.start()
+		variables.boundPort = variables.httpServer.getAddress().getPort()
+		return this
+	}
+
+	void function stop() {
+		if ( isObject( variables.httpServer ) ) {
+			variables.httpServer.stop( 0 )
+			variables.httpServer = ""
+		}
+	}
+
+	/** @return The address of the token endpoint */
+	string function tokenUrl() {
+		return "http://127.0.0.1:#variables.boundPort#/token"
+	}
+
+	/** @return The address of the revoke endpoint */
+	string function revokeUrl() {
+		return "http://127.0.0.1:#variables.boundPort#/revoke"
+	}
+
+	/** @return This, after remembering the challenge the code is for */
+	function expectChallenge( required string challenge ) {
+		variables.challenge = arguments.challenge
+		return this
+	}
+
+	/** @return This, after making refreshes fail with that OAuth error */
+	function failRefreshWith( required string error ) {
+		variables.refreshError = arguments.error
+		return this
+	}
+
+	/** @return This, after setting how long a token lives, in seconds */
+	function lifetime( required numeric seconds ) {
+		variables.expiresIn = arguments.seconds
+		return this
+	}
+
+	/** @return This, after making a refresh hand out a new refresh token too */
+	function rotating( required boolean on ) {
+		variables.rotate = arguments.on
+		return this
+	}
+
+	/** @return [ { path, form } ] every request, in order */
+	array function requests() {
+		return variables.log.toArray().map( entry => duplicate( entry ) )
+	}
+
+	/** @return [ tokens ] what it was told to revoke */
+	array function revoked() {
+		return variables.revoked.toArray().map( token => token )
+	}
+
+	void function handle( required any exchange ) {
+		try {
+			var path = arguments.exchange.getRequestURI().getPath()
+			var form = {}
+			var raw = createObject( "java", "java.lang.String" ).init( arguments.exchange.getRequestBody().readAllBytes(), "UTF-8" )
+			for ( var pair in listToArray( raw, "&" ) ) {
+				form[ urlDecode( listFirst( pair, "=" ) ) ] = urlDecode( listRest( pair, "=" ) )
+			}
+			variables.log.add( { path : path, form : form } )
+			if ( path == "/revoke" ) {
+				variables.revoked.add( form.token ?: "" )
+				return reply( arguments.exchange, 200, {} )
+			}
+			if ( form.grant_type == "authorization_code" ) {
+				var proof = createObject( "java", "java.util.Base64" ).getUrlEncoder().withoutPadding().encodeToString(
+					createObject( "java", "java.security.MessageDigest" ).getInstance( "SHA-256" ).digest( ( form.code_verifier ?: "" ).getBytes( "UTF-8" ) )
+				)
+				if ( form.code != "good-code" || ( len( variables.challenge ) && proof != variables.challenge ) ) {
+					return reply( arguments.exchange, 400, { "error" : "invalid_grant", "error_description" : "Bad code or verifier" } )
+				}
+				var n = variables.counter.incrementAndGet()
+				return reply( arguments.exchange, 200, { "access_token" : "access-#n#", "refresh_token" : "refresh-1", "expires_in" : variables.expiresIn, "scope" : "a b", "token_type" : "Bearer" } )
+			}
+			if ( form.grant_type == "refresh_token" ) {
+				if ( len( variables.refreshError ) ) {
+					return reply( arguments.exchange, 400, { "error" : variables.refreshError } )
+				}
+				var n = variables.counter.incrementAndGet()
+				var answer = { "access_token" : "access-#n#", "expires_in" : variables.expiresIn, "token_type" : "Bearer" }
+				if ( variables.rotate ) {
+					answer[ "refresh_token" ] = "refresh-#n#"
+				}
+				return reply( arguments.exchange, 200, answer )
+			}
+			reply( arguments.exchange, 400, { "error" : "unsupported_grant_type" } )
+		} catch ( any e ) {
+			reply( arguments.exchange, 500, { "error" : e.message } )
+		}
+	}
+
+	private void function reply( required any exchange, required numeric status, required struct body ) {
+		var bytes = jsonSerialize( arguments.body ).getBytes( "UTF-8" )
+		arguments.exchange.getResponseHeaders().set( "Content-Type", "application/json" )
+		arguments.exchange.sendResponseHeaders( arguments.status, bytes.len() )
+		arguments.exchange.getResponseBody().write( bytes )
+		arguments.exchange.close()
+	}
+
+}
