@@ -51,6 +51,14 @@ class {
 	}
 
 	/**
+	 * @return The seconds until the day the daily counters are kept by turns over (the server's own midnight), at least 1
+	 */
+	private numeric function secondsToTomorrow() {
+		var today = createDate( year( now() ), month( now() ), day( now() ) )
+		return max( 1, dateDiff( "s", now(), dateAdd( "d", 1, today ) ) )
+	}
+
+	/**
 	 * Starts a visitor's session.
 	 *
 	 * @address The visitor's network address, only to limit how often sessions are asked for
@@ -64,7 +72,7 @@ class {
 		}
 		if ( !variables.limiter.allow( "session:#arguments.embedId#:#arguments.address#", static.SESSIONS_PER_MINUTE ) ) {
 			variables.embeds.count( arguments.embedId, "limited" )
-			return Outcome::failed( "rate_limited", "Too many sessions were asked for. Try again in a minute." )
+			return Outcome::failed( "rate_limited", "Too many sessions were asked for. Try again in a minute.", 60 )
 		}
 		var made = variables.session.issue( arguments.embedId, variables.embeds.signingKey( arguments.embedId ), newVisitor(), arguments.origin )
 		return Outcome::done( { "token" : made.token, "expiresAt" : made.expiresAt, "expiresIn" : made.expiresIn } )
@@ -94,11 +102,11 @@ class {
 		}
 		if ( !variables.limiter.allow( "msg:#embed.id#:#visitor.id()#", embed.limits.perVisitorPerMinute ) ) {
 			variables.embeds.count( embed.id, "limited" )
-			return Outcome::failed( "rate_limited", "You are sending messages too fast. Wait a moment." )
+			return Outcome::failed( "rate_limited", "You are sending messages too fast. Wait a moment.", 60 )
 		}
 		if ( variables.embeds.messagesToday( embed.id ) >= embed.limits.dailyMessages ) {
 			variables.embeds.count( embed.id, "limited" )
-			return Outcome::failed( "rate_limited", "This chat has reached its limit for today." )
+			return Outcome::failed( "rate_limited", "This chat has reached its limit for today.", secondsToTomorrow() )
 		}
 		var checked = variables.service.checkAgent( embed.target.agent )
 		if ( !checked.succeeded() ) {

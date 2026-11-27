@@ -13,12 +13,18 @@ import bxModules.bxai.models.middleware.AiMiddlewareResult;
  *  - `beforeToolCall` refuses a call to a tool that is not on the list, so a model that names one anyway (from its training or
  *    an earlier turn) gets a refusal and the tool does not run. Hiding alone is not a guard.
  *
- * It fails closed: an embed that cannot be read, is off, expired or gone allows no tool at all.
+ * It fails closed: an embed that cannot be read, is off, expired or gone allows no tool at all, and so does a request whose
+ * usage metadata cannot be read (a request object that cannot say what it is cannot be told not to be an embed turn).
  *
  * A tool is compared by its name without a `@module` suffix, since the model is told `now` for a tool the agent lists as
  * `now@bxai`.
  */
 class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
+
+	static {
+		// the "embed" of a request whose usage metadata cannot be read: not a valid embed id, so no embed is live under it
+		UNREADABLE = "?unreadable"
+	}
 
 	/**
 	 * @embeds An EmbedService; when omitted it is made on first use from the app's shared chat database
@@ -66,8 +72,10 @@ class extends="bxModules.bxai.models.middleware.BaseAiMiddleware" {
 			var meta = arguments.chatRequest.getUsageMetadata()
 			return isStruct( meta ) ? toString( meta.embedId ?: "" ) : ""
 		} catch ( any e ) {
-			// a request type that carries no usage metadata is not an embed turn
-			return ""
+			// `usageMetadata` is a property of every bx-ai request, so a request object that cannot answer is not one this filter can
+			// vouch for: an id no embed has, so isLive() says no and no tool is allowed. Something that is not a request object at
+			// all (no request in the context) is not an embed turn.
+			return isObject( arguments.chatRequest ) ? static.UNREADABLE : ""
 		}
 	}
 

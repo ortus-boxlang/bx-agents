@@ -1,5 +1,6 @@
-<!--- Embeds (admin): the agent on other websites, for anonymous visitors. State and actions: embedsPage
-      (resources/assets/js/components/admin/EmbedsPage.js). --->
+<!--- Embeds (admin): the agent on other websites, for anonymous visitors. The page is the list, with a search, a state filter, a
+      switch per embed and Edit and Delete; making or changing one happens in a drawer (embeds/_editor), which stays open after a new
+      embed is saved, now as the edit of it. State and actions: embedsPage (resources/assets/js/components/admin/EmbedsPage.js). --->
 <bx:output>
 <div class="pg embeds" x-data="embedsPage">
 	#view( view = "_components/ui/page-head", module = "bxagentsui", args = {
@@ -9,22 +10,62 @@
 	} )#
 	<p class="pg-note" x-show="loading">Loading...</p>
 	<p class="pg-error" role="alert" x-show="failed" x-text="failed" x-cloak></p>
-	<div x-show="!loading && !failed && !embeds.length && !form" x-cloak>
+
+	<div x-show="!loading && !failed && !embeds.length" x-cloak>
 		#view( view = "_components/ui/empty", module = "bxagentsui", args = { icon : "chat-teardrop-text", title : "No embeds yet", text : "Make one, then paste its snippet on your documentation site." } )#
 	</div>
-	<ul class="plain-list embeds-list" aria-label="Embeds" x-show="embeds.length" x-cloak>
-		<template x-for="embed in embeds" :key="embed.id">
-			<li class="card embeds-item" :class="{ 'is-open': form && form.id === embed.id }">
-				<button type="button" class="embeds-pick" @click="select( embed )" :aria-current="form && form.id === embed.id ? 'true' : null">
-					<strong x-text="embed.name"></strong>
-					<span class="chip" :class="stateOf( embed ).kind" x-text="stateOf( embed ).label"></span>
-					<span class="pg-note" x-text="embed.limits.allowedOrigins.join( ', ' )"></span>
-				</button>
-			</li>
-		</template>
-	</ul>
-	<template x-if="form">
-		<div>#view( view = "embeds/_editor", module = "bxagentsui" )#</div>
-	</template>
+
+	<div x-show="embeds.length" x-cloak>
+		<div class="embeds-toolbar" role="search">
+			<input type="search" id="embedSearch" placeholder="Search by name or website" aria-label="Search the embeds" x-model="query">
+			<div class="pg-actions" role="group" aria-label="Show embeds that are">
+				<template x-for="f in stateFilters" :key="f.id">
+					<button type="button" class="btn" :class="{ primary: stateFilter === f.id }" :aria-pressed="stateFilter === f.id ? 'true' : 'false'"
+						@click="stateFilter = f.id"><span x-text="f.label"></span> <span class="embeds-count" x-text="countOf( f.id )"></span></button>
+				</template>
+			</div>
+		</div>
+		<p class="pg-note" role="status" aria-live="polite" x-show="filtered" x-text="'Showing ' + shown.length + ' of ' + embeds.length + '.'"></p>
+
+		<div class="tbl-wrap" x-show="shown.length">
+			<table>
+				<caption class="visually-hidden">Embeds</caption>
+				<thead><tr><th scope="col">Embed</th><th scope="col">State</th><th scope="col">On</th><th scope="col">Actions</th></tr></thead>
+				<tbody>
+					<template x-for="embed in shown" :key="embed.id">
+						<tr :class="{ 'is-open': form && form.id === embed.id }">
+							<td>
+								<a href="##" class="row-link" @click.prevent="select( embed )" x-text="embed.name"></a>
+								<div class="pg-note embeds-origins" x-text="embed.limits.allowedOrigins.join( ', ' )"></div>
+							</td>
+							<td><span class="chip" :class="stateOf( embed ).kind" x-text="stateOf( embed ).label"></span></td>
+							<td>
+								<span class="switch"><input type="checkbox" role="switch" :checked="!!embed.enabled" :disabled="busyId === embed.id"
+									:aria-label="embed.name + ' is ' + ( embed.enabled ? 'on' : 'off' )" @change="toggleRow( embed, $event )"><span class="switch-track" aria-hidden="true"></span></span>
+							</td>
+							<td>
+								<div class="pg-actions nowrap">
+									<button type="button" class="btn icon" title="Edit" :aria-label="'Edit ' + embed.name" @click="select( embed )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "pencil-simple" } )#</button>
+									<button type="button" class="btn icon danger" title="Delete" :aria-label="'Delete ' + embed.name" :disabled="busyId === embed.id" @click="remove( embed )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "trash" } )#</button>
+								</div>
+							</td>
+						</tr>
+					</template>
+				</tbody>
+			</table>
+		</div>
+		<div x-show="!shown.length" x-cloak>
+			#view( view = "_components/ui/empty", module = "bxagentsui", args = { icon : "magnifying-glass", title : "No embeds match", text : "Nothing has that name or website in this state." } )#
+			<p><button type="button" class="btn" id="clearEmbedFilter" @click="clearFilter()">Show every embed</button></p>
+		</div>
+	</div>
+
+	#view( view = "_components/ui/drawer", module = "bxagentsui", args = {
+		title           : "Embed",
+		titleExpression : "form ? ( form.id ? 'Edit ' + ( form.name || 'embed' ) : 'New embed' ) : 'Embed'",
+		open            : "panelOpen",
+		cancel          : "close()",
+		contentView     : "embeds/_editor"
+	} )#
 </div>
 </bx:output>

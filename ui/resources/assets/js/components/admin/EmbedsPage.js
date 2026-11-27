@@ -180,6 +180,47 @@ export function noVisits( usage ) {
 	return !usage || ( !usage.messages && !usage.blockedOrigin && !usage.limited );
 }
 
+/** The states the list can be filtered by (stateOfEmbed gives an embed's own). */
+export const STATE_FILTERS = [
+	{ id: "all", label: "All" },
+	{ id: "on", label: "On" },
+	{ id: "off", label: "Off" },
+	{ id: "expired", label: "Expired" }
+];
+
+/**
+ * @param {{ enabled: boolean, expires?: string }} embed An embed
+ * @param {number} [nowMs] The time to judge expiry by, for a test
+ * @returns {{ id: string, kind: string, label: string }} Its state: off, expired (on, but past its date) or on
+ */
+export function stateOfEmbed( embed, nowMs = Date.now() ) {
+	if ( !embed.enabled ) {
+		return { id: "off", kind: "", label: "Off" };
+	}
+	if ( embed.expires && new Date( embed.expires ).getTime() <= nowMs ) {
+		return { id: "expired", kind: "warn", label: "Expired" };
+	}
+	return { id: "on", kind: "ok", label: "On" };
+}
+
+/**
+ * @param {Array<object>} embeds The embeds
+ * @param {string} query Words to look for in the name and the allowed websites, any case; blank for every embed
+ * @param {string} state "all", "on", "off" or "expired"
+ * @param {number} [nowMs] The time to judge expiry by, for a test
+ * @returns {Array<object>} The embeds that match both, in their own order
+ */
+export function filterEmbeds( embeds, query, state, nowMs = Date.now() ) {
+	const words = String( query || "" ).toLowerCase().split( /\s+/ ).filter( Boolean );
+	return embeds.filter( embed => {
+		if ( state && state !== "all" && stateOfEmbed( embed, nowMs ).id !== state ) {
+			return false;
+		}
+		const haystack = ( embed.name + " " + ( ( embed.limits || {} ).allowedOrigins || [] ).join( " " ) ).toLowerCase();
+		return words.every( word => haystack.includes( word ) );
+	} );
+}
+
 /**
  * @returns {object} Alpine component state and actions
  */
@@ -195,10 +236,20 @@ export function embedsPage() {
 		embeds          : [],
 		/** @type {Array<string>} The names of the tools the agent has: what an embed may list */
 		tools           : [],
+		/** @type {Array<{ id: string, label: string }>} The state filter */
+		stateFilters    : STATE_FILTERS,
+		/** @type {string} The words the list is narrowed to (name and websites) */
+		query           : "",
+		/** @type {string} The state the list is narrowed to */
+		stateFilter     : "all",
+		/** @type {string} The embed a switch or a delete is working on, so it cannot be hit twice */
+		busyId          : "",
 		/** @type {object|null} The embed being edited (a form), or null when none is open */
 		form            : null,
 		/** @type {string} The form as it was last saved, to tell what changed */
 		savedJson       : "",
+		/** @type {boolean} True while close() is asking about unsaved changes */
+		closing         : false,
 		/** @type {boolean} True while Save is going */
 		saving          : false,
 		/** @type {Array<{ field: string, text: string }>} What the page or the server refused */
@@ -252,6 +303,42 @@ export function embedsPage() {
 			this.tools = result.data.tools || [];
 		},
 
+		/** @returns {boolean} True while the panel (the drawer with the editor) is open: it is open for as long as there is a form */
+		get panelOpen() {
+			return !!this.form;
+		},
+
+		/** The drawer's own close (its X, its Esc) comes here: it closes through close(), which asks about unsaved changes. */
+		set panelOpen( open ) {
+			if ( !open ) {
+				this.close();
+			}
+		},
+
+		/** @returns {Array<object>} The embeds that match the search and the state filter */
+		get shown() {
+			return filterEmbeds( this.embeds, this.query, this.stateFilter );
+		},
+
+		/** @returns {boolean} True when the list is narrowed by a search or a state */
+		get filtered() {
+			return !!this.query.trim() || this.stateFilter !== "all";
+		},
+
+		/**
+		 * @param {string} state A state filter id
+		 * @returns {number} How many embeds are in it, whatever the search says
+		 */
+		countOf( state ) {
+			return state === "all" ? this.embeds.length : this.embeds.filter( e => stateOfEmbed( e ).id === state ).length;
+		},
+
+		/** Shows every embed again. */
+		clearFilter() {
+			this.query = "";
+			this.stateFilter = "all";
+		},
+
 		/** @returns {boolean} True when the form has changes that are not saved */
 		get dirty() {
 			return !!this.form && JSON.stringify( this.form ) !== this.savedJson;
@@ -289,13 +376,7 @@ export function embedsPage() {
 		 * @returns {{ kind: string, label: string }} Its state chip
 		 */
 		stateOf( embed ) {
-			if ( !embed.enabled ) {
-				return { kind: "", label: "Off" };
-			}
-			if ( embed.expires && new Date( embed.expires ).getTime() <= Date.now() ) {
-				return { kind: "warn", label: "Expired" };
-			}
-			return { kind: "ok", label: "On" };
+			return stateOfEmbed( embed );
 		},
 
 		/** Opens an empty form for a new embed. */
@@ -330,12 +411,74 @@ export function embedsPage() {
 			] );
 		},
 
-		/** Closes the editor. */
+		/** Closes the editor, after asking when there are changes that are not saved. A second request while it asks is ignored. */
 		async close() {
-			if ( this.dirty && !await this.$confirm( { title: "Leave without saving?", body: "Your changes are not saved.", yes: "Leave", danger: true } ) ) {
+			if ( !this.form || this.closing ) {
 				return;
 			}
-			this.form = null;
+			this.closing = true;
+			try {
+				if ( this.dirty && !await this.$confirm( { title: "Leave without saving?", body: "Your changes are not saved.", yes: "Leave", danger: true } ) ) {
+					return;
+				}
+				this.form = null;
+			} finally {
+				this.closing = false;
+			}
+		},
+
+		/**
+		 * The switch of a row: turns the embed on or off at once. A visitor of an embed that is off is answered as if it did not exist.
+		 *
+		 * @param {object} embed An embed of the list
+		 * @param {Event} event The switch's change event: the state it was moved to, and the box to put back when it did not work
+		 */
+		async toggleRow( embed, event ) {
+			const on = event.target.checked;
+			this.busyId = embed.id;
+			const result = await this.$api.post( "/embeds/update", { id: embed.id, enabled: on } );
+			this.busyId = "";
+			if ( !result.ok ) {
+				event.target.checked = !!embed.enabled;
+				this.$toast.error( result.error || "That did not work." );
+				return;
+			}
+			embed.enabled = on;
+			if ( this.form && this.form.id === embed.id ) {
+				const wasClean = !this.dirty;
+				this.form.enabled = on;
+				this.markSaved( wasClean );
+			}
+			this.$toast.success( on ? embed.name + " is on." : embed.name + " is off. Visitors get no chat until you turn it on." );
+		},
+
+		/**
+		 * Deletes an embed for good, after asking. Its key and its counters go with it, and the chat on the other website
+		 * shows nothing. Turning it off is the way to keep it.
+		 *
+		 * @param {object} embed An embed of the list
+		 */
+		async remove( embed ) {
+			if ( !await this.$confirm( {
+				title  : "Delete " + embed.name + "?",
+				body   : "It is removed for good, with its key and its counters, and the chat on your website shows nothing. To keep it and only stop it, turn it off instead.",
+				yes    : "Delete",
+				danger : true
+			} ) ) {
+				return;
+			}
+			this.busyId = embed.id;
+			const result = await this.$api.post( "/embeds/delete", { id: embed.id } );
+			this.busyId = "";
+			if ( !result.ok ) {
+				this.$toast.error( result.error || "The embed was not deleted." );
+				return;
+			}
+			if ( this.form && this.form.id === embed.id ) {
+				this.form = null;
+			}
+			this.$toast.success( "Deleted " + embed.name + "." );
+			await this.load();
 		},
 
 		/** Reads the snippets of the open embed, written for this agent's own address. */
@@ -447,10 +590,12 @@ export function embedsPage() {
 				return;
 			}
 			this.$toast.success( ( isNew ? "Made " : "Saved " ) + result.data.name + "." );
-			await this.load();
+			// the form becomes the saved embed (a new one is now an edit of itself) BEFORE the list is read again: the other way
+			// round, whatever was typed while the list loaded was thrown away when the form was set from the answer
 			this.form = formOf( result.data );
 			this.savedJson = JSON.stringify( this.form );
 			this.problems = [];
+			await this.load();
 			await Promise.all( [
 				this.loadSnippets(),
 				this.loadUsage()

@@ -181,6 +181,10 @@ class {
 	 */
 	private void function answer( required any event, required any outcome ) {
 		var edge = new "models.api.ApiEdge@bxagents"()
+		var wait = edge.retryAfterOf( arguments.outcome )
+		if ( wait > 0 ) {
+			arguments.event.setHTTPHeader( name = "Retry-After", value = toString( wait ) )
+		}
 		arguments.event.renderData( type : "json", statusCode : edge.statusFor( arguments.outcome ), data : edge.bodyFor( arguments.outcome ) )
 	}
 
@@ -1495,6 +1499,12 @@ class {
 	function rotateEmbed( event, rc, prc ) {
 		var body = bodyOf( event )
 		embedAction( event, ( kept, who ) => kept.rotate( who, toString( body.id ?: "" ) ) )
+	}
+
+	/** Removes an embed for good, with its counters. Body: { id } */
+	function deleteEmbed( event, rc, prc ) {
+		var body = bodyOf( event )
+		embedAction( event, ( kept, who ) => kept.delete( who, toString( body.id ?: "" ) ) )
 	}
 
 	/** What to paste on the other website. Query: id, base (the address the agent is reached at, an origin) */

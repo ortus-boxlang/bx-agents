@@ -109,6 +109,24 @@ class {
 	}
 
 	/**
+	 * Removes an embed for good: its record (and with it the signing key, so every open visitor session stops working and the widget on
+	 * the other website shows nothing) and its counters. There is no undo; turning it off (`enabled: false`) is the reversible way.
+	 *
+	 * @id The embed's id
+	 *
+	 * @return { id }; throws BxAgents.EmbedNotFound when there is none
+	 */
+	struct function delete( required string id ) {
+		var current = get( arguments.id )
+		if ( current.isEmpty() ) {
+			throw( type = "BxAgents.EmbedNotFound", message = "There is no embed [#arguments.id#]" )
+		}
+		variables.store.exec( "DELETE FROM embed_usage WHERE embedId = :id", { id : current.id } )
+		variables.store.exec( "DELETE FROM embeds WHERE id = :id", { id : current.id } )
+		return { id : current.id }
+	}
+
+	/**
 	 * @return The embed without its key, or an empty struct when there is none. An id in the wrong shape is none, without a query.
 	 */
 	struct function get( required string id ) {
@@ -190,7 +208,7 @@ class {
 	 * @return True when the text has the shape of an embed id, which is also the only shape that is ever put in a query
 	 */
 	boolean function isId( required string id ) {
-		return reFind( "^emb_[A-Za-z0-9]{10}$", arguments.id ) > 0
+		return reFind( "^emb_[A-Za-z0-9]{10}\z", arguments.id ) > 0
 	}
 
 	/**
@@ -201,11 +219,19 @@ class {
 	 */
 	string function originOf( required string text ) {
 		var value = trim( arguments.text )
-		if ( !reFind( "^https?://[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?(:[0-9]{1,5})?$", value ) ) {
+		if ( !reFind( "^https?://[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?(:[0-9]{1,5})?\z", value ) ) {
 			return ""
 		}
-		var port = reFind( ":[0-9]{1,5}$", value ) ? val( listLast( value, ":" ) ) : 1
-		return port >= 1 && port <= 65535 && !value.find( ".." ) ? lCase( value ) : ""
+		var port = reFind( ":[0-9]{1,5}\z", value ) ? val( listLast( value, ":" ) ) : 1
+		if ( port < 1 || port > 65535 || value.find( ".." ) ) {
+			return ""
+		}
+		value = lCase( value )
+		// a browser leaves the port out when it is the scheme's own, so an origin written with it would never match one
+		if ( ( value.startsWith( "https://" ) && value.endsWith( ":443" ) ) || ( value.startsWith( "http://" ) && value.endsWith( ":80" ) ) ) {
+			value = value.left( value.len() - len( listLast( value, ":" ) ) - 1 )
+		}
+		return value
 	}
 
 	// ----------------------------------------------------------------------------------
@@ -230,30 +256,40 @@ class {
 			enabled = true
 		}
 		var expires = f.keyExists( "expires" ) ? f.expires : ( old.expires ?: "" )
-		if ( isSimpleValue( expires ) && len( trim( expires ) ) && !isDate( expires ) ) {
+		if ( !isSimpleValue( expires ) || ( len( trim( expires ) ) && !isDate( expires ) ) ) {
 			problems.append( "expires is a date, or blank for never" )
 			expires = ""
 		}
 
 		var target = { agent : "", profile : "" }
-		var givenTarget = isStruct( f.target ?: "" ) ? f.target : ( old.target ?: {} )
+		var givenTarget = isStruct( f.target ?: "" ) ? mergedOver( old.target ?: {}, f.target ) : ( old.target ?: {} )
 		for ( var key in [ "agent", "profile" ] ) {
 			var text = trim( toString( givenTarget[ key ] ?: "" ) )
-			if ( !reFind( "^[A-Za-z0-9._-]{0,64}$", text ) ) {
+			if ( !reFind( "^[A-Za-z0-9._-]{0,64}\z", text ) ) {
 				problems.append( "target.#key# is up to 64 letters, digits, dots, dashes or underscores" )
 				text = ""
 			}
 			target[ key ] = text
 		}
 
-		var look = lookOf( isStruct( f.look ?: "" ) ? f.look : ( old.look ?: {} ), name, problems )
+		var look = lookOf( isStruct( f.look ?: "" ) ? mergedOver( old.look ?: {}, f.look ) : ( old.look ?: {} ), name, problems )
 		var tools = toolsOf( f.tools ?: old.tools ?: [], arguments.knownTools ?: nullValue(), problems )
-		var limits = limitsOf( isStruct( f.limits ?: "" ) ? f.limits : ( old.limits ?: {} ), problems )
+		var limits = limitsOf( isStruct( f.limits ?: "" ) ? mergedOver( old.limits ?: {}, f.limits ) : ( old.limits ?: {} ), problems )
 
 		if ( problems.len() ) {
 			throw( type = "BxAgents.InvalidEmbed", message = "The embed is not valid: " & problems.toList( "; " ) & "." )
 		}
 		return { name : name, enabled : ( enabled ? true : false ), expires : isDate( expires ) ? parseDateTime( expires ) : "", target : target, look : look, tools : tools, limits : limits }
+	}
+
+	/**
+	 * What an update sends, over what the embed has: a field of look, limits or target that is not sent keeps its value, as the
+	 * top-level fields do. Without it, sending `look: { color }` alone reset the title, the welcome text and the suggestions.
+	 */
+	private struct function mergedOver( required any base, required struct given ) {
+		var merged = isStruct( arguments.base ) ? duplicate( arguments.base ) : {}
+		merged.append( arguments.given )
+		return merged
 	}
 
 	private struct function lookOf( required struct given, required string name, required array problems ) {
@@ -279,7 +315,7 @@ class {
 			}
 		}
 		if ( arguments.given.keyExists( "color" ) ) {
-			if ( !reFind( "^##[0-9a-fA-F]{6}$", toString( arguments.given.color ) ) ) {
+			if ( !reFind( "^##[0-9a-fA-F]{6}\z", toString( arguments.given.color ) ) ) {
 				arguments.problems.append( "look.color is a color like ##2563eb" )
 			} else {
 				look.color = lCase( arguments.given.color )
@@ -298,7 +334,7 @@ class {
 	}
 
 	private array function toolsOf( required any given, any known, required array problems ) {
-		if ( !isArray( arguments.given ) || arguments.given.some( t => !isSimpleValue( t ) || !reFind( "^[A-Za-z0-9_.@-]{1,100}$", t ) ) ) {
+		if ( !isArray( arguments.given ) || arguments.given.some( t => !isSimpleValue( t ) || !reFind( "^[A-Za-z0-9_.@-]{1,100}\z", t ) ) ) {
 			arguments.problems.append( "tools is a list of tool names" )
 			return []
 		}

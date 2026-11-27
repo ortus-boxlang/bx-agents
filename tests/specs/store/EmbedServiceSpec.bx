@@ -98,6 +98,65 @@ class extends="testbox.system.BaseSpec" {
 				expect( () => embeds.update( "emb_0000000000", good ) ).toThrow( "BxAgents.EmbedNotFound" );
 			} );
 
+			it( "keeps what an update does not send, inside look, limits and target too", function() {
+				var made = embeds.create( { name : "Docs", look : { title : "Ask the docs", welcome : "Hi", suggestions : [ "How?" ], color : "##112233" }, tools : [ "docs_search" ], limits : { allowedOrigins : [ "https://a.example.com" ], dailyMessages : 50 } } );
+
+				// one field of look, one of limits: the rest stays
+				var changed = embeds.update( made.id, { look : { color : "##445566" }, limits : { perVisitorPerMinute : 4 } } );
+
+				expect( changed.look.color ).toBe( "##445566" );
+				expect( changed.look.title ).toBe( "Ask the docs" );
+				expect( changed.look.welcome ).toBe( "Hi" );
+				expect( changed.look.suggestions ).toBe( [ "How?" ] );
+				expect( changed.limits.perVisitorPerMinute ).toBe( 4 );
+				expect( changed.limits.dailyMessages ).toBe( 50 );
+				expect( changed.limits.allowedOrigins ).toBe( [ "https://a.example.com" ] );
+				// what is sent still wins, an empty list of suggestions included
+				expect( embeds.update( made.id, { look : { suggestions : [] } } ).look.suggestions ).toBe( [] );
+			} );
+
+			it( "refuses a date that is a list or a struct instead of reading it as never", function() {
+				var made = embeds.create( good );
+
+				expect( () => embeds.update( made.id, { expires : [ 1 ] } ) ).toThrow( "BxAgents.InvalidEmbed" );
+				expect( () => embeds.update( made.id, { expires : { a : 1 } } ) ).toThrow( "BxAgents.InvalidEmbed" );
+			} );
+
+			it( "does not let a line break after a value slip through a pattern that ends in $", function() {
+				var color = duplicate( good );
+				color.look = { color : "##aabbcc" & char( 10 ) };
+				expect( () => embeds.create( color ) ).toThrow( "BxAgents.InvalidEmbed" );
+				var tool = duplicate( good );
+				tool.tools = [ "docs_search" & char( 10 ) ];
+				expect( () => embeds.create( tool ) ).toThrow( "BxAgents.InvalidEmbed" );
+				expect( embeds.isId( "emb_abcdefghij" & char( 10 ) ) ).toBeFalse();
+			} );
+
+			it( "writes an origin without the port the browser leaves out, since it would never match", function() {
+				expect( embeds.originOf( "https://Docs.Example.com:443" ) ).toBe( "https://docs.example.com" );
+				expect( embeds.originOf( "http://docs.example.com:80" ) ).toBe( "http://docs.example.com" );
+				// a port that is not the scheme's own stays
+				expect( embeds.originOf( "https://docs.example.com:8443" ) ).toBe( "https://docs.example.com:8443" );
+				expect( embeds.originOf( "http://docs.example.com:443" ) ).toBe( "http://docs.example.com:443" );
+			} );
+
+			it( "deletes an embed for good, with its counters, and says so for one that is not there", function() {
+				var made = embeds.create( good );
+				var other = embeds.create( good );
+				embeds.count( made.id, "messages", 3 );
+				embeds.count( other.id, "messages", 1 );
+
+				expect( embeds.delete( made.id ).id ).toBe( made.id );
+
+				expect( embeds.get( made.id ) ).toBeEmpty();
+				expect( embeds.isLive( made.id ) ).toBeFalse();
+				expect( embeds.list() ).toHaveLength( 1 );
+				// its counters went with it, the other embed's did not
+				expect( store.rows( "SELECT embedId FROM embed_usage" ).map( r => r.embedId ) ).toBe( [ other.id ] );
+				expect( () => embeds.delete( made.id ) ).toThrow( "BxAgents.EmbedNotFound" );
+				expect( () => embeds.delete( "nope" ) ).toThrow( "BxAgents.EmbedNotFound" );
+			} );
+
 			it( "treats an off, an expired and an unknown embed the same: not live", function() {
 				var made = embeds.create( good );
 				expect( embeds.isLive( made.id ) ).toBeTrue();

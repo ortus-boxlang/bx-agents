@@ -10,15 +10,20 @@
         open        : string - the component variable that opens it (Alpine; written by the developer, never data)
         contentView : string - the view inside, in this module (required)
         contentArgs : struct - its args (default: {})
+        cancel      : string - an Alpine expression run instead of closing when the person presses Esc, for a drawer that asks before it
+                      closes (default: "", Esc just closes it). It is run from the Esc key itself, and again from the dialog's
+                      own cancel event: a browser lets a page refuse a close request only once without an action of the person in
+                      between, so relying on that event alone failed the second time
 --->
 <bx:param name="args.title" default=""/>
 <bx:param name="args.titleExpression" default=""/>
 <bx:param name="args.open" default="open"/>
 <bx:param name="args.contentView" default=""/>
 <bx:param name="args.contentArgs" default="#{}#"/>
+<bx:param name="args.cancel" default=""/>
 <bx:script>id = "drw-" & lCase( left( hash( args.open & args.title ), 8 ) )</bx:script>
 <bx:output>
-<dialog class="drawer pg" aria-labelledby="#id#-title" x-effect="#args.open# ? ( $el.open || $el.showModal() ) : ( $el.open && $el.close() )" @close="#args.open# = false">
+<dialog class="drawer pg" aria-labelledby="#id#-title" x-effect="#args.open# ? ( $el.open || $el.showModal() ) : ( $el.open && $el.close() )" @close="#args.open# = false"<bx:if len( args.cancel )> @keydown.escape.prevent.stop="#args.cancel#" @cancel.prevent="#args.cancel#"</bx:if>>
 	<div class="drawer-body">
 		<div class="dlg-head">
 			<h2 id="#id#-title"<bx:if len( args.titleExpression )> x-text="#args.titleExpression#"</bx:if>>#encodeForHTML( args.title )#</h2>

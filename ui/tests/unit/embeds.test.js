@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { ICONS, blankEmbed, bodyOf, formOf, formProblems, noVisits, normalizeOrigin, originProblem } from "../../resources/assets/js/components/admin/EmbedsPage.js";
+import { ICONS, STATE_FILTERS, blankEmbed, filterEmbeds, stateOfEmbed, bodyOf, formOf, formProblems, noVisits, normalizeOrigin, originProblem } from "../../resources/assets/js/components/admin/EmbedsPage.js";
 
 describe( "embed origins", () => {
 	it( "accepts exactly scheme, host and an optional port", () => {
@@ -145,5 +145,82 @@ describe( "embed icons", () => {
 		for ( const icon of ICONS ) {
 			expect( widget, icon.name ).toContain( icon.svg );
 		}
+	} );
+} );
+
+describe( "the embeds list filter", () => {
+	const now = Date.parse( "2026-11-26T12:00:00Z" );
+	const embeds = [
+		{ id: "emb_a", name: "Docs helper", enabled: true, limits: { allowedOrigins: [ "https://docs.example.com" ] } },
+		{
+			id      : "emb_b",
+			name    : "Shop chat",
+			enabled : false,
+			limits  : {
+				allowedOrigins : [
+					"https://shop.example.com",
+					"https://www.shop.example.com"
+				]
+			}
+		},
+		{ id: "emb_c", name: "Launch page", enabled: true, expires: "2026-11-01T00:00:00Z", limits: { allowedOrigins: [ "https://launch.example.org" ] } },
+		{ id: "emb_d", name: "Old docs", enabled: true, expires: "2027-01-01T00:00:00Z", limits: { allowedOrigins: [ "https://old.example.com" ] } }
+	];
+	const ids = list => list.map( e => e.id );
+
+	it( "says on, off or expired: expired is on with a date that has passed", () => {
+		expect( stateOfEmbed( embeds[ 0 ], now ).id ).toBe( "on" );
+		expect( stateOfEmbed( embeds[ 1 ], now ).id ).toBe( "off" );
+		expect( stateOfEmbed( embeds[ 2 ], now ).id ).toBe( "expired" );
+		expect( stateOfEmbed( embeds[ 3 ], now ).id ).toBe( "on" );
+		// an embed that is off stays off, whatever its date says
+		expect( stateOfEmbed( { enabled: false, expires: "2026-01-01T00:00:00Z" }, now ).id ).toBe( "off" );
+		expect( STATE_FILTERS.map( f => f.id ) ).toEqual( [
+			"all",
+			"on",
+			"off",
+			"expired"
+		] );
+	} );
+
+	it( "shows every embed, in its own order, with no search and no state", () => {
+		expect( ids( filterEmbeds( embeds, "", "all", now ) ) ).toEqual( [
+			"emb_a",
+			"emb_b",
+			"emb_c",
+			"emb_d"
+		] );
+		expect( ids( filterEmbeds( embeds, "   ", undefined, now ) ) ).toHaveLength( 4 );
+	} );
+
+	it( "narrows by state", () => {
+		expect( ids( filterEmbeds( embeds, "", "on", now ) ) ).toEqual( [
+			"emb_a",
+			"emb_d"
+		] );
+		expect( ids( filterEmbeds( embeds, "", "off", now ) ) ).toEqual( [ "emb_b" ] );
+		expect( ids( filterEmbeds( embeds, "", "expired", now ) ) ).toEqual( [ "emb_c" ] );
+	} );
+
+	it( "searches the name and the websites, any case, every word having to match", () => {
+		expect( ids( filterEmbeds( embeds, "DOCS", "all", now ) ) ).toEqual( [
+			"emb_a",
+			"emb_d"
+		] );
+		expect( ids( filterEmbeds( embeds, "shop.example", "all", now ) ) ).toEqual( [ "emb_b" ] );
+		expect( ids( filterEmbeds( embeds, "docs old", "all", now ) ) ).toEqual( [ "emb_d" ] );
+		expect( ids( filterEmbeds( embeds, "nothing like it", "all", now ) ) ).toEqual( [] );
+	} );
+
+	it( "puts a search and a state together", () => {
+		expect( ids( filterEmbeds( embeds, "docs", "on", now ) ) ).toEqual( [
+			"emb_a",
+			"emb_d"
+		] );
+		expect( ids( filterEmbeds( embeds, "shop", "on", now ) ) ).toEqual( [] );
+	} );
+
+	it( "copes with an embed that has no websites listed", () => {
+		expect( ids( filterEmbeds( [ { id: "x", name: "Bare", enabled: true } ], "bare", "all", now ) ) ).toEqual( [ "x" ] );
 	} );
 } );
