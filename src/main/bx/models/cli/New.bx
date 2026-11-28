@@ -54,6 +54,58 @@ import bxModules.bxagents.models.util.Strings;
 class {
 
 	/**
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
+	 */
+	struct function meta() {
+		return {
+			name : "new",
+			group : "GET STARTED",
+			position : 1,
+			description : "Create an agent project",
+			usage : "<directory> [options]",
+			options : [
+				{ name : "model", display : "--model=<provider/model>", description : "Model to use; omit to open the wizard.", takesValue : true },
+				{ name : "template", display : "--template=<name>", description : "Starter template. Default: minimal.", takesValue : true },
+				{ name : "name", display : "--name=<name>", description : "Agent name. Defaults to the directory name.", takesValue : true },
+				{ name : "description", display : "--description=<text>", description : "What the agent does.", takesValue : true },
+				{ name : "repo", display : "--repo=<owner/repo>", description : "Start from a GitHub repository.", takesValue : true },
+				{ name : "forgebox", display : "--forgebox=<slug>", description : "Start from a ForgeBox package.", takesValue : true },
+				{ name : "class", description : "Use Agent.bx instead of Agent.yml." },
+				{ name : "skipInstall", description : "Skip fetching TestBox with CommandBox." },
+				{ name : "no-tui", description : "Use plain terminal prompts." },
+				{ name : "base-url", takesValue : true, hidden : true },
+				{ name : "temperature", takesValue : true, hidden : true },
+				{ name : "max-tokens", takesValue : true, hidden : true },
+				{ name : "timeout", takesValue : true, hidden : true },
+				{ name : "with", takesValue : true, hidden : true },
+				{ name : "search", takesValue : true, hidden : true },
+				{ name : "files", takesValue : true, hidden : true },
+				{ name : "files-dir", takesValue : true, hidden : true },
+				{ name : "memory", takesValue : true, hidden : true },
+				{ name : "mcp", takesValue : true, hidden : true },
+				{ name : "connectors", takesValue : true, hidden : true },
+				{ name : "channels", takesValue : true, hidden : true },
+				{ name : "web-auth", takesValue : true, hidden : true },
+				{ name : "guard", takesValue : true, hidden : true },
+				{ name : "prompt", takesValue : true, hidden : true },
+				{ name : "widgets", takesValue : true, hidden : true },
+				{ name : "widgets-bottom", takesValue : true, hidden : true },
+				{ name : "deploy", takesValue : true, hidden : true },
+				{ name : "registry", takesValue : true, hidden : true },
+				{ name : "app", takesValue : true, hidden : true },
+				{ name : "region", takesValue : true, hidden : true },
+				{ name : "host", takesValue : true, hidden : true },
+				{ name : "user", takesValue : true, hidden : true },
+				{ name : "remote-path", takesValue : true, hidden : true },
+				{ name : "destination", takesValue : true, hidden : true }
+			],
+			optionsHeading : "COMMON OPTIONS",
+			examples : [ "new my-agent", "new my-agent --model=mock/mock-model" ]
+		}
+	}
+
+
+	/**
 	 * @options { wizard (optional boolean, false = never ask, true = ask even with a model), yes (optional boolean - never ask), tui (optional boolean, false = numbered questions instead of the full-screen UI), with/search/files/files-dir/memory/mcp/channels/web-auth/guard/deploy/registry/app/region/host/user/remote-path/destination (optional - see ProjectPlan.fromFlags), projectRoot (required, absolute path), name, model (required only with --template/no source flag), description, template (optional, one of ProjectScaffolder.TEMPLATES - default "minimal"), class (optional boolean - write a class-based Agent.bx instead of the default Agent.yml; only applies to --template), repo (optional - clone this GitHub repo instead of scaffolding), forgebox (optional - install this ForgeBox slug instead of scaffolding), skipInstall (optional boolean - skip the tests/ `box install` convenience step; only applies to --template) }
 	 */
 	struct function run( struct options = {} ) {

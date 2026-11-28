@@ -19,6 +19,36 @@ import bxModules.bxagents.models.api.Caller;
 
 class {
 
+	/**
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
+	 */
+	struct function meta() {
+		return {
+			name : "vault",
+			group : "SECURITY & ACCESS",
+			position : 4,
+			description : "Manage sealed runtime secrets",
+			usage : "<action> [options]",
+			actions : [ { name : "list" }, { name : "add" }, { name : "edit" }, { name : "remove" }, { name : "status" }, { name : "audit" }, { name : "key" } ],
+			options : [
+				{ name : "name", display : "--name=<name>", description : "Secret to add, edit, or remove.", takesValue : true },
+				{ name : "scope", display : "--scope=<agent|user|all>", description : "Which secrets to list.", takesValue : true },
+				{ name : "user", display : "--user=<name>", description : "Owner of a user-scoped secret.", takesValue : true },
+				{ name : "description", display : "--description=<text>", description : "What the secret is for.", takesValue : true },
+				{ name : "hosts", display : "--hosts=<patterns>", description : "Allowed hosts, comma separated.", takesValue : true },
+				{ name : "stdin", description : "Read the secret value from standard input." },
+				{ name : "value", description : "Replace a secret's value while editing." },
+				{ name : "yes", description : "Confirm removal." },
+				{ name : "limit", display : "--limit=<number>", description : "Limit audit entries.", takesValue : true },
+				{ name : "json", description : "Print results as JSON." }
+			],
+			examples : [ "vault list", "vault add --name=API_KEY", "vault status" ],
+			note : "Secret values are entered hidden or piped with --stdin, never passed as flags.",
+			subcommand : true
+		}
+	}
+
+
 	static {
 		ACTIONS = [ "list", "add", "edit", "remove", "status", "audit", "key" ]
 	}

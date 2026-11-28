@@ -1,4 +1,4 @@
-import bxagents.ModuleConfig;
+import bxagents.models.cli.BaseVerb;
 
 /**
  * The whole command line surface in one snapshot: the verbs, what each one says it does, the flags that take a value, the
@@ -28,36 +28,36 @@ class extends="testbox.system.BaseSpec" {
 			} );
 
 			it( "has the same verbs, each backed by the same class", function() {
-				expect( ModuleConfig::verbs.keyArray().sort( "text" ) ).toBe( golden.verbs.keyArray().sort( "text" ) )
+				expect( BaseVerb::verbNames().sort( "text" ) ).toBe( golden.verbs.keyArray().sort( "text" ) )
 				for ( var name in golden.verbs ) {
-					expect( ModuleConfig::verbs[ name ] ).toBe( golden.verbs[ name ] )
+					expect( BaseVerb::classOf( name ) ).toBe( golden.verbs[ name ] )
 				}
 			} );
 
 			it( "says the same thing about each verb", function() {
 				for ( var name in golden.descriptions ) {
-					expect( ModuleConfig::verbDescriptions[ name ] ).toBe( golden.descriptions[ name ] )
+					expect( BaseVerb::definitionOf( name ).description ).toBe( golden.descriptions[ name ] )
 				}
-				expect( ModuleConfig::verbDescriptions.keyArray().sort( "text" ) ).toBe( golden.descriptions.keyArray().sort( "text" ) )
+				expect( BaseVerb::descriptions().keyArray().sort( "text" ) ).toBe( golden.descriptions.keyArray().sort( "text" ) )
 			} );
 
 			it( "asks for a value on the same flags", function() {
 				for ( var name in golden.valueOptions ) {
-					expect( ( ModuleConfig::valueOptions[ name ] ?: [] ).sort( "text" ) ).toBe( golden.valueOptions[ name ].sort( "text" ), "value flags of #name#" )
+					expect( BaseVerb::valueOptionsOf( name ).filter( flag => flag != "projectRoot" ).sort( "text" ) ).toBe( golden.valueOptions[ name ].sort( "text" ), "value flags of #name#" )
 				}
 			} );
 
 			it( "takes an action as the first word for the same verbs", function() {
-				expect( ModuleConfig::subcommandVerbs.sort( "text" ) ).toBe( golden.subcommandVerbs.sort( "text" ) )
+				expect( BaseVerb::subcommandVerbs().sort( "text" ) ).toBe( golden.subcommandVerbs.sort( "text" ) )
 			} );
 
 			it( "prints the same overview", function() {
-				expect( help.overview( ModuleConfig::verbDescriptions ) ).toBe( golden.overview )
+				expect( help.overview( BaseVerb::allDefinitions() ) ).toBe( golden.overview )
 			} );
 
 			it( "prints the same help page for every verb", function() {
 				for ( var name in golden.help ) {
-					expect( help.command( name, ModuleConfig::verbDescriptions[ name ] ) ).toBe( golden.help[ name ], "help of #name#" )
+					expect( help.command( BaseVerb::definitionOf( name ) ) ).toBe( golden.help[ name ], "help of #name#" )
 				}
 			} );
 		} );

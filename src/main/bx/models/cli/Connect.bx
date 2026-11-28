@@ -24,6 +24,34 @@ import bxModules.bxagents.models.connectors.ConnectorSettings;
 class {
 
 	/**
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
+	 */
+	struct function meta() {
+		return {
+			name : "connect",
+			group : "CONNECT & EXTEND",
+			position : 1,
+			description : "Connect services and sign in to MCP servers",
+			usage : "[id] [tools|off|options] [options]",
+			options : [
+				{ name : "token-env", display : "--token-env=<NAME>", description : "Environment variable holding a connector token.", takesValue : true },
+				{ name : "stdin", description : "Read a token from standard input." },
+				{ name : "confirm", description : "Approve the connector's stated capabilities." },
+				{ name : "remove", description : "Forget a saved sign-in." },
+				{ name : "port", display : "--port=<number>", description : "Local OAuth callback port; otherwise a free port.", takesValue : true },
+				{ name : "no-open", description : "Print the sign-in URL without opening a browser." },
+				{ name : "timeout", display : "--timeout=<seconds>", description : "Sign-in wait time. Default: 300.", takesValue : true },
+				{ name : "user", display : "--user=<name>", description : "Whose connection to use. Default: local.", takesValue : true },
+				{ name : "json", description : "Print connection status as JSON." }
+			],
+			examples : [ "connect", "connect github --token-env=GITHUB_TOKEN --confirm" ],
+			note : "Without an id, lists available services and connection status. Secrets are sealed in the chat database.",
+			subcommand : true
+		}
+	}
+
+
+	/**
 	 * @options { projectRoot (required), _positional (the server's name), remove, port, user, timeout, json, noOpen;
 	 *            _receive ( redirectUri, authorizationUrl ) => { code, state, iss } and _clientFactory replace the browser and bx-ai for tests }
 	 *

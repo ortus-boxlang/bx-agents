@@ -1,0 +1,385 @@
+/**
+ * What every command line verb shares. A verb is a small controller: it says what it is in `meta()`, and does its work in
+ * `handle()`, or in `handle<Action>()` when the first word after the verb picks an action (`token create`).
+ *
+ *   class extends="BaseVerb" {
+ *       function meta() { return { name : "backup", group : "OPERATE & SHIP", description : "...", ... } }
+ *       function handle() { return done( "Backed up" ) }
+ *   }
+ *
+ * What the base does so the verb does not:
+ *
+ * - the project root is checked, with the same words every verb used before, unless `meta()` says `projectRoot: false`;
+ * - the action is read from the first word, checked against `meta().actions` and sent to `handle<Action>()`;
+ * - `--json` is answered once, by `asJson()`, so a verb only writes the text form;
+ * - help, completions and the reference page are built from `meta()`, so a flag is described once, next to the code that
+ *   reads it.
+ *
+ * Static state lives here, not in the verbs: a static scope is not inherited, so the definitions are read through
+ * `BaseVerb::definitionOf( name )`, which asks a verb for its `meta()` once and keeps the answer.
+ *
+ * `meta()` keys: name, group, position (in its group), description, usage, actions ([ { name, description } ]),
+ * actionsHeading, options ([ { name, display, description, takesValue, hidden } ]), optionsHeading, examples, note,
+ * reference (the page anchor when it is not the name), subcommand (the first word is not a project folder),
+ * projectRoot (default true).
+ */
+class {
+
+	static {
+		// the order the overview shows its groups in
+		GROUPS = [ "GET STARTED", "BUILD & RUN", "MANAGE YOUR AGENT", "CONNECT & EXTEND", "SECURITY & ACCESS", "OPERATE & SHIP" ]
+		// the verbs, in the order the overview lists them; a verb's class is models.cli.<Name in capitals>
+		NAMES = [
+			"new", "add", "doctor", "inspect",
+			"build", "chat", "invoke", "serve", "test", "clean",
+			"models", "sessions", "notes", "routines",
+			"connect", "connectors", "skills", "extensions",
+			"users", "token", "embed", "vault", "hash-password",
+			"logs", "stats", "data", "backup", "restore", "package", "deploy"
+		]
+		// what every verb accepts besides its own options, described once for the help page
+		SHARED_OPTIONS = [
+			{ name : "projectRoot", takesValue : true, hidden : true }
+		]
+		definitions = {}
+		keys = [ "name", "group", "position", "description", "usage", "actions", "actionsHeading", "options", "optionsHeading", "examples", "note", "reference", "subcommand", "projectRoot" ]
+		optionKeys = [ "name", "display", "description", "takesValue", "hidden" ]
+	}
+
+	// ----------------------------------------------------------------------------------
+	// What the verbs are: read by the dispatcher, the help, the completions and the reference page
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return The names of the verbs, in the order the overview lists them
+	 */
+	static array function verbNames() {
+		return duplicate( static.NAMES )
+	}
+
+	/**
+	 * @name A verb name
+	 *
+	 * @return Whether it is one of the verbs
+	 */
+	static boolean function isVerb( required string name ) {
+		return static.NAMES.contains( arguments.name )
+	}
+
+	/**
+	 * @name A verb name
+	 *
+	 * @return The path of its class, relative to the module
+	 */
+	static string function classOf( required string name ) {
+		return "models.cli." & arguments.name.listToArray( "-" ).map( word => uCase( left( word, 1 ) ) & mid( word, 2, len( word ) ) ).toList( "" )
+	}
+
+	/**
+	 * Asks the verb what it is, the first time, and keeps the answer.
+	 *
+	 * @name A verb name
+	 *
+	 * @return Its meta(), with the defaults filled in
+	 */
+	static struct function definitionOf( required string name ) {
+		if ( !static.definitions.keyExists( arguments.name ) ) {
+			if ( !static.NAMES.contains( arguments.name ) ) {
+				throw( type = "BxAgents.UnknownVerb", message = "There is no verb [#arguments.name#]." )
+			}
+			var verb = new "#static.classOf( arguments.name )#@bxagents"()
+			var found = verb.meta()
+			var problems = static.problemsOf( found )
+			if ( problems.len() ) {
+				throw( type = "BxAgents.BadVerbDefinition", message = "The definition of [#arguments.name#] is wrong: #problems.toList( '; ' )#" )
+			}
+			static.definitions[ arguments.name ] = static.withDefaults( found )
+		}
+		return static.definitions[ arguments.name ]
+	}
+
+	/**
+	 * @return Every definition, in the order of verbNames()
+	 */
+	static array function allDefinitions() {
+		return static.NAMES.map( name => static.definitionOf( name ) )
+	}
+
+	/**
+	 * @return { verb name : its description }
+	 */
+	static struct function descriptions() {
+		var out = {}
+		for ( var definition in static.allDefinitions() ) {
+			out[ definition.name ] = definition.description
+		}
+		return out
+	}
+
+	/**
+	 * @name A verb name
+	 *
+	 * @return The flags of the verb that need a value written as --flag=value, the shared ones first
+	 */
+	static array function valueOptionsOf( required string name ) {
+		var wanted = static.SHARED_OPTIONS.filter( option => option.takesValue ).map( option => option.name )
+		for ( var option in static.definitionOf( arguments.name ).options ) {
+			if ( option.takesValue && !wanted.contains( option.name ) ) {
+				wanted.append( option.name )
+			}
+		}
+		return wanted
+	}
+
+	/**
+	 * @return The names of the verbs whose first word is an action, an id or a name, and not a project folder
+	 */
+	static array function subcommandVerbs() {
+		return static.NAMES.filter( name => static.definitionOf( name ).subcommand )
+	}
+
+	/**
+	 * @definition What a verb says it is
+	 *
+	 * @return Sentences about what is wrong with it; empty when it is fine
+	 */
+	static array function problemsOf( required struct definition ) {
+		var found = []
+		var definition = arguments.definition
+		for ( var key in definition.keyArray() ) {
+			if ( !static.keys.findNoCase( key ) ) {
+				found.append( "unknown key [#key#]" )
+			}
+		}
+		for ( var key in [ "name", "group", "description", "usage" ] ) {
+			if ( !len( definition[ key ] ?: "" ) ) {
+				found.append( "[#key#] is missing" )
+			}
+		}
+		if ( len( definition.group ?: "" ) && !static.GROUPS.contains( definition.group ) ) {
+			found.append( "the group [#definition.group#] is not one of: #static.GROUPS.toList( ', ' )#" )
+		}
+		var names = []
+		for ( var option in definition.options ?: [] ) {
+			for ( var key in option.keyArray() ) {
+				if ( !static.optionKeys.findNoCase( key ) ) {
+					found.append( "option [#option.name ?: '?'#] has an unknown key [#key#]" )
+				}
+			}
+			if ( !len( option.name ?: "" ) ) {
+				found.append( "an option has no name" )
+			} else if ( names.contains( option.name ) ) {
+				found.append( "option [#option.name#] is listed twice" )
+			} else {
+				names.append( option.name )
+			}
+			if ( !( option.hidden ?: false ) && !len( option.description ?: "" ) ) {
+				found.append( "option [#option.name ?: '?'#] has no description" )
+			}
+		}
+		for ( var action in definition.actions ?: [] ) {
+			if ( !len( action.name ?: "" ) ) {
+				found.append( "an action has no name" )
+			}
+		}
+		if ( !isArray( definition.examples ?: [] ) || !( definition.examples ?: [] ).len() ) {
+			found.append( "it has no examples" )
+		}
+		return found
+	}
+
+	/**
+	 * @definition What a verb says it is
+	 *
+	 * @return The same, with what it left out filled in
+	 */
+	private static struct function withDefaults( required struct definition ) {
+		var out = duplicate( arguments.definition )
+		out.position = out.position ?: 0
+		out.actions = ( out.actions ?: [] ).map( action => { name : action.name, description : action.description ?: "" } )
+		out.actionsHeading = out.actionsHeading ?: "ACTIONS"
+		out.options = ( out.options ?: [] ).map( option => {
+			name        : option.name,
+			display     : option.display ?: "--" & option.name,
+			description : option.description ?: "",
+			takesValue  : option.takesValue ?: false,
+			hidden      : option.hidden ?: false
+		} )
+		out.optionsHeading = out.optionsHeading ?: "OPTIONS"
+		out.examples = out.examples ?: []
+		out.note = out.note ?: ""
+		out.reference = out.reference ?: out.name
+		out.subcommand = out.subcommand ?: false
+		out.projectRoot = out.projectRoot ?: true
+		return out
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Running a verb
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @return What this verb is: see the key list above
+	 */
+	struct function meta() {
+		throw( type = "BxAgents.VerbWithoutMeta", message = "[#getMetadata( this ).name#] has to say what it is in meta()." )
+	}
+
+	/**
+	 * Runs the verb.
+	 *
+	 * @options What was typed: { projectRoot, _positional, and each flag }
+	 *
+	 * @return { exitCode, message }
+	 */
+	struct function run( struct options = {} ) {
+		variables.options = arguments.options
+		var definition = meta()
+		if ( definition.projectRoot ?: true ) {
+			variables.projectFolder = trim( arguments.options.projectRoot ?: "" )
+			if ( !len( variables.projectFolder ) ) {
+				throw( type = "BxAgents.MissingProjectRoot", message = "`#definition.name#` requires a project root" )
+			}
+		}
+		if ( !( definition.actions ?: [] ).len() ) {
+			return handle()
+		}
+		var action = lCase( trim( arguments.options._positional ?: "" ) )
+		var known = definition.actions.map( entry => entry.name )
+		if ( !len( action ) || !known.contains( action ) ) {
+			return unknownAction( action )
+		}
+		return invoke( this, "handle" & uCase( left( action, 1 ) ) & mid( action, 2, len( action ) ) )
+	}
+
+	/**
+	 * What a verb does when it has no actions.
+	 *
+	 * @return { exitCode, message }
+	 */
+	struct function handle() {
+		throw( type = "BxAgents.VerbWithoutHandler", message = "[#getMetadata( this ).name#] has no handle()." )
+	}
+
+	/**
+	 * What happens when the first word is not one of the actions. A verb whose words are different overrides it.
+	 *
+	 * @action What was typed, or an empty string
+	 */
+	struct function unknownAction( required string action ) {
+		var definition = meta()
+		var names = definition.actions.map( entry => entry.name )
+		var example = definition.examples[ 1 ]
+		throw(
+			type    = "BxAgents.Unknown" & uCase( left( definition.name, 1 ) ) & mid( definition.name, 2, len( definition.name ) ) & "Action",
+			message = "`#definition.name#` needs one of: #names.toList( ', ' )# - for example `bxAgents #example#`."
+		)
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Reading what was typed
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @name A flag, without the dashes
+	 * @default What to give when it was not typed
+	 *
+	 * @return What was typed, as the parser gave it
+	 */
+	any function option( required string name, any default = "" ) {
+		return variables.options[ arguments.name ] ?: arguments.default
+	}
+
+	/**
+	 * @name A flag, without the dashes
+	 *
+	 * @return Whether it was typed as an on switch, such as --json
+	 */
+	boolean function isOptionSet( required string name ) {
+		return ( variables.options[ arguments.name ] ?: false ) == true
+	}
+
+	/**
+	 * @name A flag, without the dashes
+	 * @errorType The error type to throw when it is missing
+	 * @message What to say when it is missing
+	 *
+	 * @return What was typed, trimmed
+	 */
+	string function requiredOption( required string name, required string errorType, required string message ) {
+		var value = trim( variables.options[ arguments.name ] ?: "" )
+		if ( !len( value ) ) {
+			throw( type = arguments.errorType, message = arguments.message )
+		}
+		return value
+	}
+
+	/**
+	 * @return The first word after the verb, trimmed: an action, a name or a file
+	 */
+	string function firstArgument() {
+		return trim( variables.options._positional ?: "" )
+	}
+
+	/**
+	 * @return The project folder the verb runs in, without a trailing slash
+	 */
+	string function projectRoot() {
+		return ( variables.projectFolder ?: trim( variables.options.projectRoot ?: "" ) ).reReplace( "[\/]+$", "" )
+	}
+
+	// ----------------------------------------------------------------------------------
+	// Answering
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * @message What to print; nothing when empty
+	 *
+	 * @return A result that succeeded
+	 */
+	struct function done( string message = "" ) {
+		return { exitCode : 0, message : arguments.message }
+	}
+
+	/**
+	 * @message What to print
+	 * @exitCode What the command exits with
+	 *
+	 * @return A result that failed
+	 */
+	struct function fail( required string message, numeric exitCode = 1 ) {
+		return { exitCode : arguments.exitCode, message : arguments.message }
+	}
+
+	/**
+	 * @lines The lines to print
+	 *
+	 * @return A result that succeeded and prints them
+	 */
+	struct function lines( required array lines ) {
+		return done( arguments.lines.toList( char( 10 ) ) )
+	}
+
+	/**
+	 * Answers with the data when --json was typed, else with the text.
+	 *
+	 * @data What --json prints
+	 * @text The text form: a string, or a function that gives one
+	 *
+	 * @return A result that succeeded
+	 */
+	struct function asJson( required any data, required any text ) {
+		if ( isOptionSet( "json" ) ) {
+			return done( jsonSerialize( arguments.data ) )
+		}
+		return done( isCustomFunction( arguments.text ) || isClosure( arguments.text ) ? arguments.text() : arguments.text )
+	}
+
+	/**
+	 * @return A fresh output builder: the same header, ok, warn, table and labelValue every verb prints with
+	 */
+	any function output() {
+		return new "models.cli.support.CliOutput@bxagents"()
+	}
+
+}

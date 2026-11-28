@@ -17,6 +17,41 @@
 class {
 
 	/**
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
+	 */
+	struct function meta() {
+		return {
+			name : "embed",
+			group : "SECURITY & ACCESS",
+			position : 3,
+			description : "Manage the agent as an embed on other websites",
+			usage : "<action> [options]",
+			actions : [ { name : "create" }, { name : "list" }, { name : "show" }, { name : "disable" }, { name : "rotate" } ],
+			options : [
+				{ name : "name", display : "--name=<text>", description : "What to call the embed (create).", takesValue : true },
+				{ name : "id", display : "--id=<emb_...>", description : "The embed to show, disable or rotate.", takesValue : true },
+				{ name : "origin", display : "--origin=<urls>", description : "Websites that may show it, comma separated: scheme, host, optional port.", takesValue : true },
+				{ name : "tools", display : "--tools=<names>", description : "Tools a visitor's turn may use, comma separated.", takesValue : true },
+				{ name : "per-minute", display : "--per-minute=<n>", description : "Messages per visitor per minute (default 10).", takesValue : true },
+				{ name : "daily", display : "--daily=<n>", description : "Messages per day for the embed (default 200).", takesValue : true },
+				{ name : "max-chars", display : "--max-chars=<n>", description : "Longest message (default 2000).", takesValue : true },
+				{ name : "json", description : "Print results as JSON." },
+				{ name : "agent", takesValue : true, hidden : true },
+				{ name : "profile", takesValue : true, hidden : true },
+				{ name : "title", takesValue : true, hidden : true },
+				{ name : "welcome", takesValue : true, hidden : true },
+				{ name : "placeholder", takesValue : true, hidden : true },
+				{ name : "color", takesValue : true, hidden : true },
+				{ name : "position", takesValue : true, hidden : true },
+				{ name : "theme", takesValue : true, hidden : true }
+			],
+			examples : [ "embed create --name=""Docs helper"" --origin=https://docs.example.com", "embed list", "embed rotate --id=emb_..." ],
+			subcommand : true
+		}
+	}
+
+
+	/**
 	 * @options { projectRoot (required), _positional (create, list, show, disable or rotate), id, name, origin, tools, ... }
 	 */
 	struct function run( struct options = {} ) {

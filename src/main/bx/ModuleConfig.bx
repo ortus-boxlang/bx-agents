@@ -1,3 +1,5 @@
+import bxModules.bxagents.models.cli.BaseVerb;
+
 /**
  * This is the module descriptor and entry point for your module in the runtime.
  * The unique name of the moduel is the name of the directory on the modules folder.
@@ -61,135 +63,6 @@ class {
 	 * The module dependencies that this module needs to be activated before this module is activated
 	 */
 	this.dependencies = [];
-
-	static {
-		subcommandVerbs = [
-			"add",
-			"connect",
-			"connectors",
-			"embed",
-			"extensions",
-			"logs",
-			"models",
-			"notes",
-			"restore",
-			"routines",
-			"sessions",
-			"skills",
-			"token",
-			"users",
-			"vault"
-		]
-
-		verbs = {
-			"add"     : "models.cli.Add",
-			"backup"  : "models.cli.Backup",
-			"build"   : "models.cli.Build",
-			"chat"    : "models.cli.Chat",
-			"clean"   : "models.cli.Clean",
-			"connect" : "models.cli.Connect",
-			"connectors" : "models.cli.Connectors",
-			"data"    : "models.cli.Data",
-			"deploy"  : "models.cli.Deploy",
-			"doctor"  : "models.cli.Doctor",
-			"embed"   : "models.cli.Embed",
-			"extensions" : "models.cli.Extensions",
-			"hash-password" : "models.cli.HashPassword",
-			"inspect" : "models.cli.Inspect",
-			"invoke"  : "models.cli.Invoke",
-			"logs"    : "models.cli.Logs",
-			"models"  : "models.cli.Models",
-			"new"     : "models.cli.New",
-			"notes"   : "models.cli.Notes",
-			"package" : "models.cli.Package",
-			"restore" : "models.cli.Restore",
-			"routines": "models.cli.Routines",
-			"serve"   : "models.cli.Serve",
-			"sessions": "models.cli.Sessions",
-			"skills"  : "models.cli.Skills",
-			"stats"   : "models.cli.Stats",
-			"test"    : "models.cli.Test",
-			"token"   : "models.cli.Token",
-			"users"   : "models.cli.Users",
-			"vault"   : "models.cli.Vault"
-		}
-
-		verbDescriptions = {
-			"new"     : "Create an agent project",
-			"build"   : "Build the application",
-			"test"    : "Run project tests",
-			"serve"   : "Start the HTTP server",
-			"chat"    : "Chat with an agent in your terminal",
-			"invoke"  : "Send one message and print the reply",
-			"package" : "Package the application as a .bxa",
-			"deploy"  : "Deploy to a local or remote target",
-			"inspect" : "Explore the agent's tools and configuration",
-			"clean"   : "Remove build and distribution output",
-			"hash-password" : "Hash a password for web sign-in",
-			"token"   : "Manage API access tokens",
-			"embed"   : "Manage the agent as an embed on other websites",
-			"users"   : "Manage web users and admin roles",
-			"notes"   : "Manage saved notes",
-			"connect" : "Connect services and sign in to MCP servers",
-			"connectors" : "Browse and check the connector catalog",
-			"vault"   : "Manage sealed runtime secrets",
-			"stats"   : "View model calls and token usage",
-			"sessions": "Manage conversations and transcripts",
-			"routines": "Manage scheduled work and reports",
-			"models"  : "List and test models",
-			"doctor"  : "Check your environment and project",
-			"add"     : "Add a tool, skill, gateway, or other component",
-			"skills"  : "Find and install skills from the registry",
-			"data"    : "Locate the data home and its volumes",
-			"logs"    : "Read, follow, or browse agent logs",
-			"backup"  : "Back up the agent's database, files, and skills",
-			"restore" : "Restore a data-home backup",
-			"extensions" : "Install and manage CLI and chat extensions"
-		}
-
-		// Per verb, the flags that REQUIRE a value - `--projectRoot` is
-		// universal and appended to every verb's own list below. See this
-		// method's docblock for why a valueless one is a hard error rather
-		// than a silent boolean `true`.
-		valueOptions = {
-			"new"     : [
-					"model", "base-url", "temperature", "max-tokens", "timeout", "name", "description", "template", "repo", "forgebox",
-					"with", "search", "files", "files-dir", "memory", "mcp", "connectors", "channels", "web-auth", "guard", "prompt", "widgets", "widgets-bottom",
-					"deploy", "registry", "app", "region", "host", "user", "remote-path", "destination"
-				],
-			"build"   : [ "environment", "generatorVersion" ],
-			"test"    : [],
-			"serve"   : [ "port", "host" ],
-			"package" : [ "version" ],
-			"deploy"  : [ "name", "target", "destination" ],
-			"inspect" : [ "section", "environment" ],
-			// `server` is a boolean flag, so it is NOT listed here - only
-			// flags that REQUIRE a value belong in this map.
-			"chat"    : [ "connect", "port", "token", "user", "session", "api-path", "agent" ],
-			"invoke"  : [ "message", "port" ],
-			"clean"   : [],
-			"hash-password" : [ "password" ],
-			"token"   : [ "name", "scope", "expires" ],
-			"embed"   : [ "id", "name", "origin", "tools", "agent", "profile", "title", "welcome", "placeholder", "color", "position", "theme", "per-minute", "daily", "max-chars" ],
-			"users"   : [ "name" ],
-			"notes"   : [ "scope", "user", "text", "id", "file" ],
-			"vault"   : [ "name", "scope", "user", "description", "hosts", "limit" ],
-			"connect" : [ "port", "user", "timeout", "token-env" ],
-			"connectors" : [ "dir" ],
-			"sessions": [ "session", "name", "user", "file", "agent", "q" ],
-			"routines": [ "name", "schedule", "prompt", "destination", "chat", "older-than" ],
-			"stats"   : [ "days", "by", "user" ],
-			"models"  : [ "profile" ],
-			"doctor"  : [],
-			"extensions" : [ "name" ],
-			"add"     : [ "name", "agent", "function", "description", "args", "scope", "points", "when", "prompt", "server", "url", "auth", "header", "user", "env", "timeout", "version", "cors", "tools", "path", "direction", "provider", "model", "format", "temperature", "max-tokens", "api-key-env", "voice", "size", "quality", "style", "instructions", "users", "policy", "type", "parent", "profile", "profiles", "with", "search", "files", "files-dir", "memory", "mcp", "guard", "layout" ],
-			"skills"  : [ "registry", "limit" ],
-			"data"    : [],
-			"logs"    : [ "tail", "level", "grep", "connect", "token", "api-path" ],
-			"backup"  : [ "to" ],
-			"restore" : [ "home" ]
-		}
-	}
 
 	/**
 	 * --------------------------------------------------------------------------
@@ -373,8 +246,8 @@ class {
 		// Anywhere in argv, not just first: `bxAgents clean --help` must print
 		// usage, NOT delete the project's build directories.
 		if ( firstToken == "help" || hasHelpFlag( arguments.args ) ) {
-			var command = static.verbs.keyExists( firstToken ) ? firstToken : ""
-			if ( firstToken == "help" && arguments.args.len() > 1 && static.verbs.keyExists( arguments.args[ 2 ] ) ) {
+			var command = BaseVerb::isVerb( firstToken ) ? firstToken : ""
+			if ( firstToken == "help" && arguments.args.len() > 1 && BaseVerb::isVerb( arguments.args[ 2 ] ) ) {
 				command = arguments.args[ 2 ]
 			}
 			printUsage( command, parseCliOptions( arguments.args ) )
@@ -391,7 +264,7 @@ class {
 		var verbName = firstToken
 
 		// Check if the verb exists in the module's known verbs. If not, attempt to run it as an extension verb.
-		if ( !static.verbs.keyExists( verbName ) ) {
+		if ( !BaseVerb::isVerb( verbName ) ) {
 			// a verb an extension adds: the extensions are loaded only now, for a verb the module does not have
 			var fromExtension = runExtensionVerb( verbName, arguments.args )
 			if ( fromExtension.found ) {
@@ -412,8 +285,7 @@ class {
 		// Parse the raw verb arguments into structured CLI options.
 		var options = parseCliOptions( rawVerbArgs )
 		// Determine which flags require values for this verb.
-		var requiredValueFlags = [ "projectRoot" ]
-		requiredValueFlags.append( static.valueOptions[ verbName ] ?: [], true )
+		var requiredValueFlags = BaseVerb::valueOptionsOf( verbName )
 		// Check if any required flags are missing their values.
 		for ( var flag in requiredValueFlags ) {
 			if ( options._valuelessFlags.keyExists( flag ) ) {
@@ -426,7 +298,7 @@ class {
 		// Remove the internal _valuelessFlags key from the options before passing them to the verb.
 		options.delete( "_valuelessFlags" )
 		// These verbs use their first positional as an action, area or name, not a project path.
-		if ( static.subcommandVerbs.contains( verbName ) ) {
+		if ( BaseVerb::definitionOf( verbName ).subcommand ) {
 			options.projectRoot = resolveProjectRoot( options, false )
 		} else {
 			options.projectRoot = resolveProjectRoot( options )
@@ -438,7 +310,7 @@ class {
 		}
 
 		try {
-			var verbClass = new "#static.verbs[ verbName ]#"()
+			var verbClass = new "#BaseVerb::classOf( verbName )#"()
 			var result = verbClass.run( options )
 			if ( len( result.message ?: "" ) ) {
 				println( result.message )
@@ -476,7 +348,7 @@ class {
 			return { found : false, exitCode : 1 }
 		}
 		try {
-			var verbs = new models.extensions.ExtensionVerbs( root, static.verbs.keyArray(), service )
+			var verbs = new models.extensions.ExtensionVerbs( root, BaseVerb::verbNames(), service )
 			var verb = verbs.find( arguments.verbName )
 			if ( isNull( verb ) ) {
 				return { found : false, exitCode : 1 }
@@ -513,7 +385,7 @@ class {
 		try {
 			var service = new models.extensions.ExtensionService( projectRoot : resolveProjectRoot( {} ), transport : "tui" )
 			if ( service.mayHaveExtensions() ) {
-				var verbs = new models.extensions.ExtensionVerbs( resolveProjectRoot( {} ), static.verbs.keyArray(), service )
+				var verbs = new models.extensions.ExtensionVerbs( resolveProjectRoot( {} ), BaseVerb::verbNames(), service )
 				lines = verbs.verbs().map( v => { name : v.name(), description : "#v.hint()# (extension #v.extensionName()#)" } )
 				service.unload()
 			}
@@ -532,7 +404,7 @@ class {
 	private void function printUsage( string command = "", struct options = {} ) {
 		var help = new models.cli.support.Help@bxagents( options = arguments.options )
 		if ( len( arguments.command ) ) {
-			println( help.command( arguments.command, static.verbDescriptions[ arguments.command ] ) )
+			println( help.command( BaseVerb::definitionOf( arguments.command ) ) )
 		} else {
 			var banner = new models.cli.support.Banner@bxagents()
 			if ( banner.show( arguments.options, "v#this.version#" ) ) {
@@ -541,7 +413,7 @@ class {
 				println( "bxAgents v#this.version#" )
 			}
 			println( "" )
-			println( help.overview( static.verbDescriptions, extensionHelp() ) )
+			println( help.overview( BaseVerb::allDefinitions(), extensionHelp() ) )
 		}
 	}
 

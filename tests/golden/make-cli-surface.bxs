@@ -3,22 +3,22 @@
  *
  *   java -cp "build/classes/java/main:src/test/resources/libs/*" ortus.boxlang.runtime.BoxRunner --bx-config boxlang.json tests/golden/make-cli-surface.bxs
  */
-import bxagents.ModuleConfig;
+import bxagents.models.cli.BaseVerb;
 
 help = new bxagents.models.cli.support.Help( { color : false }, 80 )
 snapshot = {
 	verbs : {},
 	descriptions : {},
 	valueOptions : {},
-	subcommandVerbs : ModuleConfig::subcommandVerbs.sort( "text" ),
+	subcommandVerbs : BaseVerb::subcommandVerbs().sort( "text" ),
 	help : {},
-	overview : help.overview( ModuleConfig::verbDescriptions )
+	overview : help.overview( BaseVerb::allDefinitions() )
 }
-for ( name in ModuleConfig::verbs.keyArray().sort( "text" ) ) {
-	snapshot.verbs[ name ] = ModuleConfig::verbs[ name ]
-	snapshot.descriptions[ name ] = ModuleConfig::verbDescriptions[ name ]
-	snapshot.valueOptions[ name ] = ModuleConfig::valueOptions[ name ] ?: []
-	snapshot.help[ name ] = help.command( name, ModuleConfig::verbDescriptions[ name ] )
+for ( name in BaseVerb::verbNames().sort( "text" ) ) {
+	snapshot.verbs[ name ] = BaseVerb::classOf( name )
+	snapshot.descriptions[ name ] = BaseVerb::definitionOf( name ).description
+	snapshot.valueOptions[ name ] = BaseVerb::valueOptionsOf( name ).filter( flag => flag != "projectRoot" )
+	snapshot.help[ name ] = help.command( BaseVerb::definitionOf( name ) )
 }
 fileWrite( expandPath( "/tests/golden/cli-surface.json" ), jsonSerialize( snapshot, true ) )
 println( "wrote the snapshot of " & snapshot.verbs.count() & " verbs" )

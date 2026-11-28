@@ -16,6 +16,36 @@ import bxModules.bxagents.models.logs.Logger;
 
 class {
 
+	/**
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
+	 */
+	struct function meta() {
+		return {
+			name : "logs",
+			group : "OPERATE & SHIP",
+			position : 1,
+			description : "Read, follow, or browse agent logs",
+			usage : "[area] [options]",
+			actions : [ { name : "agent" }, { name : "gateways" }, { name : "routines" }, { name : "heartbeat" }, { name : "api" } ],
+			actionsHeading : "AREAS",
+			options : [
+				{ name : "tail", display : "--tail=<number>", description : "Lines to show. Default: 100, or 20 with --follow.", takesValue : true },
+				{ name : "level", display : "--level=<level>", description : "Minimum severity, such as warn or error.", takesValue : true },
+				{ name : "grep", display : "--grep=<text>", description : "Show only matching lines.", takesValue : true },
+				{ name : "follow", description : "Keep printing new log lines." },
+				{ name : "ui", description : "Open the full-screen log viewer." },
+				{ name : "connect", display : "--connect=<url>", description : "Read logs from a served agent.", takesValue : true },
+				{ name : "token", display : "--token=<token>", description : "Admin API token for a remote agent.", takesValue : true },
+				{ name : "api-path", display : "--api-path=<path>", description : "Custom remote API path.", takesValue : true },
+				{ name : "json", description : "Print results as JSON." }
+			],
+			examples : [ "logs", "logs gateways --follow", "logs --ui" ],
+			note : "Without an area, lists the available log files.",
+			subcommand : true
+		}
+	}
+
+
 	static {
 		DEFAULT_TAIL = 100
 		// how many lines the viewer keeps, and how often it looks for new ones (ms)

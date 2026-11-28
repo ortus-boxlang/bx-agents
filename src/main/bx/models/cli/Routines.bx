@@ -16,6 +16,35 @@
  */
 class {
 
+	/**
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
+	 */
+	struct function meta() {
+		return {
+			name : "routines",
+			group : "MANAGE YOUR AGENT",
+			position : 4,
+			description : "Manage scheduled work and reports",
+			usage : "<action> [name] [options]",
+			actions : [ { name : "list" }, { name : "show" }, { name : "add" }, { name : "edit" }, { name : "pause" }, { name : "resume" }, { name : "run" }, { name : "delete" }, { name : "reports" }, { name : "report" }, { name : "clean" } ],
+			options : [
+				{ name : "name", display : "--name=<name>", description : "Name of a new routine.", takesValue : true },
+				{ name : "schedule", display : "--schedule=<cron-or-interval>", description : "When the routine runs.", takesValue : true },
+				{ name : "prompt", display : "--prompt=<text>", description : "Message to send to the agent.", takesValue : true },
+				{ name : "destination", display : "--destination=<target>", description : "routine or gateway:<name>.", takesValue : true },
+				{ name : "chat", display : "--chat=<id>", description : "Gateway chat to deliver to.", takesValue : true },
+				{ name : "older-than", display : "--older-than=<age>", description : "Report age for clean, such as 30d.", takesValue : true },
+				{ name : "all", description : "List every owner's routines, or clean all reports." },
+				{ name : "yes", description : "Confirm deleting a routine or cleaning reports." },
+				{ name : "json", description : "Print results as JSON." }
+			],
+			examples : [ "routines list", "routines show daily", "routines clean daily --older-than=30d" ],
+			note : "Requires routines.enabled: true. clean previews removals unless --yes is given.",
+			subcommand : true
+		}
+	}
+
+
 	static {
 		ACTIONS = [ "list", "show", "add", "edit", "pause", "resume", "run", "delete", "reports", "report", "clean" ]
 	}

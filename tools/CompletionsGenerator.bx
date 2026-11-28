@@ -1,3 +1,4 @@
+import bxagents.models.cli.BaseVerb;
 import bxagents.ModuleConfig;
 import bxagents.models.build.ProjectScaffolder;
 import bxagents.models.cli.Deploy;
@@ -88,10 +89,9 @@ class {
 	 */
 	static function buildModel(){
 		var model = [];
-		for( var name in ModuleConfig::verbs.keyArray().sort( "text" ) ){
+		for( var name in BaseVerb::verbNames().sort( "text" ) ){
 			var options = [];
-			var valueFlags = [ "projectRoot" ];
-			valueFlags.append( ModuleConfig::valueOptions[ name ] ?: [], true );
+			var valueFlags = BaseVerb::valueOptionsOf( name );
 			for( var flag in valueFlags ){
 				options.append( static.option( flag, true, static.choicesFor( name, flag ) ) );
 			}
@@ -100,7 +100,7 @@ class {
 			}
 			model.append( {
 				"name" : name,
-				"help" : static.shortHelp( ModuleConfig::verbDescriptions[ name ] ),
+				"help" : static.shortHelp( BaseVerb::definitionOf( name ).description ),
 				"options" : options.sort( ( a, b ) => compare( a.name, b.name ) ),
 				"positional" : static.NO_POSITIONAL.contains( name ) ? "" : "dir"
 			} );

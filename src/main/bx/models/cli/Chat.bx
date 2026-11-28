@@ -41,6 +41,36 @@ import bxModules.bxagents.models.util.Terminal;
 class {
 
 	/**
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
+	 */
+	struct function meta() {
+		return {
+			name : "chat",
+			group : "BUILD & RUN",
+			position : 2,
+			description : "Chat with an agent in your terminal",
+			usage : "[options]",
+			options : [
+				{ name : "server", description : "Start a temporary server for the full application." },
+				{ name : "connect", display : "--connect=<url>", description : "Chat with an already-running server.", takesValue : true },
+				{ name : "token", display : "--token=<token>", description : "API access token for a protected server.", takesValue : true },
+				{ name : "api-path", display : "--api-path=<path>", description : "Custom API path. Default: /__bxagents.", takesValue : true },
+				{ name : "port", display : "--port=<number>", description : "Port for the temporary server.", takesValue : true },
+				{ name : "agent", display : "--agent=<name>", description : "Chat with a named agent.", takesValue : true },
+				{ name : "user", display : "--user=<name>", description : "Conversation owner. Default: local.", takesValue : true },
+				{ name : "continue", description : "Resume the most recent conversation." },
+				{ name : "session", display : "--session=<number-or-id>", description : "Resume a particular conversation.", takesValue : true },
+				{ name : "record", display : "--record[=<file>]", description : "Record the terminal session." },
+				{ name : "inline", display : "--inline / --fullscreen", description : "Choose the terminal layout." },
+				{ name : "no-tui", description : "Use the plain line-by-line chat." }
+			],
+			examples : [ "chat", "chat --server", "chat --connect=http://127.0.0.1:8080" ],
+			note : "Requires a prior build. Type / inside chat to discover slash commands."
+		}
+	}
+
+
+	/**
 	 * Runs the chat command, either in-process, over HTTP to a throwaway server, or connecting to an existing server.
 	 * @options { projectRoot (required, absolute path), server (optional boolean - boot a throwaway miniserver and chat over real HTTP), connect (optional - the base URL of an already-running server, e.g. "http://127.0.0.1:8080"), token (optional - the access token for a server that wants one; BXAGENTS_TOKEN in the environment does the same), api-path (optional - where the server serves its API when it is not the default) }
 	 */

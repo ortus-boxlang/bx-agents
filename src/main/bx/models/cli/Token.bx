@@ -13,6 +13,29 @@
 class {
 
 	/**
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
+	 */
+	struct function meta() {
+		return {
+			name : "token",
+			group : "SECURITY & ACCESS",
+			position : 2,
+			description : "Manage API access tokens",
+			usage : "<action> [options]",
+			actions : [ { name : "create" }, { name : "list" }, { name : "revoke" } ],
+			options : [
+				{ name : "name", display : "--name=<name>", description : "Token to create or revoke.", takesValue : true },
+				{ name : "scope", display : "--scope=<chat|admin>", description : "Access granted by the token.", takesValue : true },
+				{ name : "expires", display : "--expires=<duration>", description : "Token lifetime, such as 90d.", takesValue : true },
+				{ name : "json", description : "Print results as JSON." }
+			],
+			examples : [ "token create --name=laptop", "token list", "token revoke --name=laptop" ],
+			subcommand : true
+		}
+	}
+
+
+	/**
 	 * @options { projectRoot (required), _positional (create, list or revoke), name, scope, expires, json }
 	 */
 	struct function run( struct options = {} ) {

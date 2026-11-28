@@ -1,3 +1,4 @@
+import bxagents.models.cli.BaseVerb;
 import bxagents.ModuleConfig;
 import tools.CompletionsGenerator;
 
@@ -43,9 +44,9 @@ class extends="testbox.system.BaseSpec" {
 			it( "lists every verb, every value flag and every template and target in every script", function() {
 				for ( var shell in CompletionsGenerator::shells() ) {
 					var script = fileRead( root & "/completions/" & CompletionsGenerator::fileName( shell ) );
-					for ( var verb in ModuleConfig::verbs.keyArray() ) {
+					for ( var verb in BaseVerb::verbNames() ) {
 						expect( script ).toInclude( verb, "#shell# is missing the verb #verb#" );
-						for ( var flag in ModuleConfig::valueOptions[ verb ] ) {
+						for ( var flag in BaseVerb::valueOptionsOf( verb ) ) {
 							expect( script ).toInclude( flag, "#shell# is missing --#flag# of #verb#" );
 						}
 					}
