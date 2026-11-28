@@ -1,0 +1,120 @@
+import bxagents.models.cli.BaseVerb;
+
+/**
+ * Writes the usage, actions and options of every verb into `docs/cli-reference.md`, from what each verb says it is in
+ * `meta()`, so the page cannot disagree with the command line. The prose around them stays hand written: a block sits between
+ * `<!-- cli:<verb> -->` and `<!-- /cli:<verb> -->`, and `tools/generate-cli-reference.bxs` makes it, or replaces it, at the end
+ * of the verb's section (before its first sub heading). A spec fails when the page is out of date.
+ */
+class {
+
+	/**
+	 * @name A verb
+	 *
+	 * @return The generated block of the verb, markers included
+	 */
+	static string function block( required string name ) {
+		var definition = BaseVerb::definitionOf( arguments.name )
+		var out = []
+		out.append( "<!-- cli:#arguments.name# -->" )
+		out.append( "**Usage:** `bxAgents #definition.name# #definition.usage#`" )
+		out.append( "" )
+		if ( definition.actions.len() ) {
+			var described = definition.actions.filter( action => len( action.description ) )
+			if ( described.len() ) {
+				out.append( "| #definition.actionsHeading.lCase().replace( 'actions', 'Action' ).replace( 'kinds', 'Kind' ).replace( 'areas', 'Area' )# | What it does |" )
+				out.append( "|---|---|" )
+				for ( var action in definition.actions ) {
+					out.append( "| `#action.name#` | #cell( action.description )# |" )
+				}
+			} else {
+				out.append( "**#definition.actionsHeading.lCase().replace( 'actions', 'Actions' ).replace( 'kinds', 'Kinds' ).replace( 'areas', 'Areas' )#:** " & definition.actions.map( action => "`#action.name#`" ).toList( ", " ) )
+			}
+			out.append( "" )
+		}
+		var shown = definition.options.filter( option => !option.hidden )
+		if ( shown.len() ) {
+			out.append( "| Option | What it does |" )
+			out.append( "|---|---|" )
+			for ( var option in shown ) {
+				out.append( "| `#cell( option.display )#` | #cell( option.description )# |" )
+			}
+			out.append( "" )
+		}
+		if ( definition.examples.len() ) {
+			out.append( "**Examples:** " & definition.examples.map( example => "`bxAgents #cell( example )#`" ).toList( ", " ) )
+			out.append( "" )
+		}
+		if ( len( definition.note ) ) {
+			out.append( definition.note )
+			out.append( "" )
+		}
+		out.append( "<!-- /cli:#arguments.name# -->" )
+		return out.toList( char( 10 ) )
+	}
+
+	/**
+	 * @page The text of the reference page
+	 *
+	 * @return The page with every verb's block made or replaced
+	 */
+	static string function apply( required string page ) {
+		var text = arguments.page.replace( char( 13 ), "", "all" )
+		for ( var name in BaseVerb::verbNames() ) {
+			text = static.place( text, name, static.block( name ) )
+		}
+		return text
+	}
+
+	/**
+	 * @page The text of the page
+	 * @name A verb
+	 * @block Its block
+	 *
+	 * @return The page with the block in place of the one that was there, or at the end of the verb's section
+	 */
+	private static string function place( required string page, required string name, required string block ) {
+		var open = "<!-- cli:#arguments.name# -->"
+		var close = "<!-- /cli:#arguments.name# -->"
+		var start = arguments.page.find( open )
+		if ( start ) {
+			var finish = arguments.page.find( close, start )
+			if ( !finish ) {
+				throw( type = "CliReferenceBroken", message = "#open# has no closing marker" )
+			}
+			return left( arguments.page, start - 1 ) & arguments.block & mid( arguments.page, finish + len( close ), len( arguments.page ) )
+		}
+		var heading = static.headingOf( arguments.name )
+		var at = arguments.page.find( char( 10 ) & heading & char( 10 ) )
+		if ( !at ) {
+			throw( type = "CliReferenceBroken", message = "The page has no section [#heading#] for the verb [#arguments.name#]" )
+		}
+		var from = at + len( heading ) + 1
+		var nextHeading = reFind( "\n" & repeatString( char( 35 ), 3 ) & "+ ", arguments.page, from )
+		var insertAt = nextHeading ? nextHeading : len( arguments.page ) + 1
+		var before = rtrim( left( arguments.page, insertAt - 1 ) )
+		return before & char( 10 ) & char( 10 ) & arguments.block & char( 10 ) & mid( arguments.page, insertAt, len( arguments.page ) )
+	}
+
+	/**
+	 * @name A verb
+	 *
+	 * @return The line of the page that starts the verb's section
+	 */
+	private static string function headingOf( required string name ) {
+		if ( [ "data", "backup", "restore" ].contains( arguments.name ) ) {
+			return repeatString( char( 35 ), 3 ) & " `data`, `backup` and `restore`"
+		}
+		return repeatString( char( 35 ), 3 ) & " `#arguments.name#`"
+	}
+
+	/**
+	 * @text Text for a table cell
+	 *
+	 * @return The text, safe in a table
+	 */
+	private static string function cell( required string text ) {
+		return arguments.text.replace( "|", "\|", "all" )
+	}
+
+}

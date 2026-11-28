@@ -1,0 +1,49 @@
+import tools.CliReferenceGenerator;
+import bxagents.models.cli.BaseVerb;
+
+/**
+ * The usage, actions and options in docs/cli-reference.md come from what each verb says it is.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * @return The reference page, as text
+	 */
+	private string function page() {
+		var root = getDirectoryFromPath( getCurrentTemplatePath() ).reReplace( "[\\/]tests[\\/]specs[\\/]cli[\\/]?$", "" )
+		return fileRead( root & "/docs/cli-reference.md" ).replace( char( 13 ), "", "all" )
+	}
+
+	/**
+	 * The specs.
+	 */
+	function run() {
+		describe( "the CLI reference page", function() {
+
+			it( "matches what the verbs say they are (run tools/generate-cli-reference.bxs)", function() {
+				var current = page()
+				expect( CliReferenceGenerator::apply( current ) ).toBe( current )
+			} );
+
+			it( "has a generated block for every verb", function() {
+				var current = page()
+				for ( var name in BaseVerb::verbNames() ) {
+					expect( current ).toInclude( "<!-- cli:#name# -->" )
+					expect( current ).toInclude( "<!-- /cli:#name# -->" )
+				}
+			} );
+
+			it( "puts a changed option into the block of its verb and leaves the prose around it", function() {
+				var current = page()
+				var edited = current.replace( "| `--timeout=<seconds>` | Sign-in wait time. Default: 120. |", "| `--timeout=<seconds>` | stale |" )
+				expect( edited ).notToBe( current )
+				expect( CliReferenceGenerator::apply( edited ) ).toBe( current )
+			} );
+
+			it( "says where a block is missing from the section of its verb", function() {
+				expect( () => CliReferenceGenerator::apply( "no sections here" ) ).toThrow( type = "CliReferenceBroken" )
+			} );
+		} );
+	}
+
+}

@@ -1,0 +1,24 @@
+import tools.CliReferenceGenerator;
+
+/**
+ * Writes the usage, actions and options of every verb into docs/cli-reference.md.
+ *
+ *   java -cp <boxlang.jar> ortus.boxlang.runtime.BoxRunner --bx-config boxlang.json tools/generate-cli-reference.bxs           write the page
+ *   java -cp <boxlang.jar> ortus.boxlang.runtime.BoxRunner --bx-config boxlang.json tools/generate-cli-reference.bxs --check   fail if the page is out of date
+ *
+ * Run it after changing what a verb says it is in its meta().
+ */
+root = getDirectoryFromPath( getCurrentTemplatePath() ).reReplace( "[\\\/]tools[\\\/]?$", "" );
+path = root & "/docs/cli-reference.md";
+current = fileRead( path ).replace( char( 13 ), "", "all" );
+updated = CliReferenceGenerator::apply( current );
+
+if( server.cli.parsed.options.keyExists( "check" ) ){
+	if( updated != current ){
+		println( "Out of date: " & path & ". Run tools/generate-cli-reference.bxs." );
+		throw( type = "CliReferenceStale", message = "The CLI reference is out of date" );
+	}
+} else {
+	fileWrite( path, updated );
+	println( "Wrote " & path );
+}
