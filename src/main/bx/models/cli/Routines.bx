@@ -14,55 +14,74 @@
  * A routine runs only in a served app: its heartbeat starts what is due. `run` makes a routine due, and says so. `clean` only shows what it
  * would remove unless --yes is given; `delete` asks for --yes too, and keeps the routine's reports.
  */
-class {
+class extends="BaseVerb" {
 
-	static {
-		ACTIONS = [ "list", "show", "add", "edit", "pause", "resume", "run", "delete", "reports", "report", "clean" ]
+	/**
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
+	 */
+	struct function meta() {
+		return {
+			name : "routines",
+			group : "MANAGE YOUR AGENT",
+			position : 4,
+			description : "Manage scheduled work and reports",
+			usage : "<action> [name] [options]",
+			actions : [ { name : "list" }, { name : "show" }, { name : "add" }, { name : "edit" }, { name : "pause" }, { name : "resume" }, { name : "run" }, { name : "delete" }, { name : "reports" }, { name : "report" }, { name : "clean" } ],
+			options : [
+				{ name : "name", display : "--name=<name>", description : "Name of a new routine.", takesValue : true },
+				{ name : "schedule", display : "--schedule=<cron-or-interval>", description : "When the routine runs.", takesValue : true },
+				{ name : "prompt", display : "--prompt=<text>", description : "Message to send to the agent.", takesValue : true },
+				{ name : "destination", display : "--destination=<target>", description : "routine or gateway:<name>.", takesValue : true },
+				{ name : "chat", display : "--chat=<id>", description : "Gateway chat to deliver to.", takesValue : true },
+				{ name : "older-than", display : "--older-than=<age>", description : "Report age for clean, such as 30d.", takesValue : true },
+				{ name : "all", description : "List every owner's routines, or clean all reports." },
+				{ name : "yes", description : "Confirm deleting a routine or cleaning reports." },
+				{ name : "json", description : "Print results as JSON." }
+			],
+			examples : [ "routines list", "routines show daily", "routines clean daily --older-than=30d" ],
+			note : "Requires routines.enabled: true. clean previews removals unless --yes is given.",
+			subcommand : true,
+			// the first word is in _positionals with the routine's name and file, and the project root is only needed
+			// when no manager was handed in
+			dispatch : false,
+			projectRoot : false
+		}
 	}
 
 	/**
-	 * @options { projectRoot (required), _positionals ([ action, name, file ]), all, json, yes, name, schedule, prompt, destination, chat, older-than,
+	 * @options { _positionals ([ action, name, file ]), all, json, yes, name, schedule, prompt, destination, chat, older-than,
 	 *            _manager (test seam: a RoutineManager) }
-	 *
-	 * @return { exitCode, message }
 	 */
-	struct function run( struct options = {} ) {
-		var args = arguments.options._positionals ?: []
-		if ( !args.len() || !static.ACTIONS.contains( lCase( args[ 1 ] ) ) ) {
-			throw( type = "BxAgents.UnknownRoutinesCommand", message = "Say what to do: bxAgents routines <#static.ACTIONS.toList( '|' )#> ..." )
+	function handle() {
+		var words = option( "_positionals", [] )
+		var actions = meta().actions.map( entry => entry.name )
+		if ( !words.len() || !actions.contains( lCase( words[ 1 ] ) ) ) {
+			throw( type = "BxAgents.UnknownRoutinesCommand", message = "Say what to do: bxAgents routines <#actions.toList( '|' )#> ..." )
 		}
-		var action = lCase( args[ 1 ] )
-		var rest = args.slice( 2 )
-		var manager = arguments.options._manager ?: nullValue()
-		if ( isNull( manager ) ) {
-			var root = trim( arguments.options.projectRoot ?: "" )
-			if ( !len( root ) || !new "models.build.AgentDefinitionLocator@bxagents"().exists( root ) ) {
-				throw( type = "BxAgents.NotAnAgentProject", message = "No Agent.yml or Agent.bx found at [#root#] - run `routines` inside a BX Agents project, or pass --projectRoot" )
-			}
-			manager = new "models.routines.ProjectRoutines@bxagents"().managerFor( root )
-			if ( isNull( manager ) ) {
-				return { exitCode : 1, message : "Routines are not turned on for this project. Add `routines: { enabled: true }` to Agent.yml." }
-			}
+		var action = lCase( words[ 1 ] )
+		var rest = words.slice( 2 )
+		var manager = managerOfProject()
+		if ( !isObject( manager ) ) {
+			return fail( "Routines are not turned on for this project. Add `routines: { enabled: true }` to Agent.yml." )
 		}
 		var who = new "models.api.Caller@bxagents"( id = "local", scope = "admin", source = "terminal" )
-		var options = arguments.options
-		var ref = trim( rest.len() ? rest[ 1 ] : ( options.name ?: "" ) )
+		var ref = trim( rest.len() ? rest[ 1 ] : option( "name" ) )
 		if ( !len( ref ) && ![ "list", "add" ].contains( action ) ) {
 			throw( type = "BxAgents.MissingRoutineName", message = "Say which routine: bxAgents routines #action# <name>" )
 		}
 
 		switch ( action ) {
 			case "list":
-				return listing( manager.list( who, options.all ?: false ), options )
+				return listing( manager.list( who, isOptionSet( "all" ) ) )
 			case "show":
 				return showing( manager.get( who, ref ) )
 			case "add":
-				return changed( manager.create( who, options.name ?: "", options.schedule ?: "", options.prompt ?: "", options.destination ?: "", options.chat ?: "" ), "Made" )
+				return changed( manager.create( who, option( "name" ), option( "schedule" ), option( "prompt" ), option( "destination" ), option( "chat" ) ), "Made" )
 			case "edit":
 				var fields = {}
 				for ( var key in [ "schedule", "prompt", "destination", "chat" ] ) {
-					if ( options.keyExists( key ) ) {
-						fields[ key ] = options[ key ]
+					if ( hasOption( key ) ) {
+						fields[ key ] = variables.options[ key ]
 					}
 				}
 				return changed( manager.update( who, ref, fields ), "Changed" )
@@ -71,15 +90,14 @@ class {
 			case "resume":
 				return changed( manager.resume( who, ref ), "Resumed" )
 			case "run":
-				var ran = manager.run( who, ref )
-				var out = changed( ran, "Marked due" )
-				if ( out.exitCode == 0 ) {
-					out.message &= char( 10 ) & "It starts at the next minute of a served app, not from this command."
+				var outcome = changed( manager.run( who, ref ), "Marked due" )
+				if ( outcome.exitCode == 0 ) {
+					outcome.message &= char( 10 ) & "It starts at the next minute of a served app, not from this command."
 				}
-				return out
+				return outcome
 			case "delete":
-				if ( !( options.yes ?: false ) ) {
-					return { exitCode : 1, message : "This removes the routine and keeps its reports. Add --yes to go ahead: bxAgents routines delete #ref# --yes" }
+				if ( !isOptionSet( "yes" ) ) {
+					return fail( "This removes the routine and keeps its reports. Add --yes to go ahead: bxAgents routines delete #ref# --yes" )
 				}
 				return changed( manager.delete( who, ref ), "Deleted" )
 			case "reports":
@@ -90,30 +108,43 @@ class {
 					throw( type = "BxAgents.MissingReportFile", message = "Say which file: bxAgents routines report #ref# <file>" )
 				}
 				var read = manager.report( who, ref, file )
-				return read.succeeded() ? { exitCode : 0, message : read.data().text & ( read.data().cut ? char( 10 ) & "(cut: the file is longer)" : "" ) } : failed( read )
+				return read.succeeded() ? done( read.data().text & ( read.data().cut ? char( 10 ) & "(cut: the file is longer)" : "" ) ) : failed( read )
 			default:
-				return cleaning( manager, who, ref, options )
+				return cleaning( manager, who, ref )
 		}
 	}
 
 	// ----------------------------------------------------------------------------------
 
-	private struct function listing( required any found, required struct options ) {
+	/**
+	 * @return The manager handed in by a test, else the one of the project's routines; null when they are not turned on
+	 */
+	private any function managerOfProject() {
+		var given = option( "_manager", "" )
+		if ( isObject( given ) ) {
+			return given
+		}
+		var root = projectRoot()
+		if ( !len( root ) || !new "models.build.AgentDefinitionLocator@bxagents"().exists( root ) ) {
+			throw( type = "BxAgents.NotAnAgentProject", message = "No Agent.yml or Agent.bx found at [#root#] - run `routines` inside a BX Agents project, or pass --projectRoot" )
+		}
+		return new "models.routines.ProjectRoutines@bxagents"().managerFor( root )
+	}
+
+	private struct function listing( required any found ) {
 		if ( !arguments.found.succeeded() ) {
 			return failed( arguments.found )
 		}
 		var rows = arguments.found.data().routines
-		if ( arguments.options.json ?: false ) {
-			return { exitCode : 0, message : jsonSerialize( rows ) }
+		return asJson( rows, () => listText( rows ) )
+	}
+
+	private string function listText( required array rows ) {
+		if ( !arguments.rows.len() ) {
+			return "No routines yet. Ask the agent to schedule one, or use: bxAgents routines add --name=... --schedule=... --prompt=..."
 		}
-		if ( !rows.len() ) {
-			return { exitCode : 0, message : "No routines yet. Ask the agent to schedule one, or use: bxAgents routines add --name=... --schedule=... --prompt=..." }
-		}
-		var withOwner = arguments.options.all ?: false
-		var lines = rows.map( function( r ) {
-			return ( withOwner ? left( r.ownerId & repeatString( " ", 14 ), 14 ) : "" ) & left( r.name & repeatString( " ", 22 ), 22 ) & left( r.scheduleText & repeatString( " ", 26 ), 26 ) & left( r.statusText & repeatString( " ", 22 ), 22 ) & ( len( r.nextRunText ) ? "next " & r.nextRunText : "no next run" )
-		} )
-		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+		var withOwner = isOptionSet( "all" )
+		return arguments.rows.map( r => ( withOwner ? padRight( r.ownerId, 14 ) : "" ) & padRight( r.name, 22 ) & padRight( r.scheduleText, 26 ) & padRight( r.statusText, 22 ) & ( len( r.nextRunText ) ? "next " & r.nextRunText : "no next run" ) ).toList( char( 10 ) )
 	}
 
 	private struct function showing( required any found ) {
@@ -121,7 +152,7 @@ class {
 			return failed( arguments.found )
 		}
 		var r = arguments.found.data().routine
-		var lines = [
+		var report = [
 			"Name:      " & r.name,
 			"Schedule:  " & r.scheduleText & " (" & r.schedule & ")",
 			"Status:    " & r.statusText,
@@ -130,11 +161,11 @@ class {
 			"Answers:   " & ( r.destination == "routine" ? "its own conversation (" & r.conversationId & ")" : r.destination & " " & r.destinationChat )
 		]
 		if ( len( r.lastError ) ) {
-			lines.append( "Last error: " & r.lastError )
+			report.append( "Last error: " & r.lastError )
 		}
-		lines.append( "" )
-		lines.append( r.prompt ?: r.promptPreview )
-		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+		report.append( "" )
+		report.append( r.prompt ?: r.promptPreview )
+		return lines( report )
 	}
 
 	private struct function changed( required any outcome, required string verb ) {
@@ -142,7 +173,7 @@ class {
 			return failed( arguments.outcome )
 		}
 		var r = arguments.outcome.data().routine ?: {}
-		return { exitCode : 0, message : arguments.verb & " routine" & ( r.keyExists( "name" ) ? " " & r.name : "" ) & "." & ( len( r.nextRunText ?: "" ) ? " Next run " & r.nextRunText & "." : "" ) }
+		return done( arguments.verb & " routine" & ( r.keyExists( "name" ) ? " " & r.name : "" ) & "." & ( len( r.nextRunText ?: "" ) ? " Next run " & r.nextRunText & "." : "" ) )
 	}
 
 	private struct function reportsOf( required any found ) {
@@ -151,37 +182,38 @@ class {
 		}
 		var files = arguments.found.data().files
 		if ( !files.len() ) {
-			return { exitCode : 0, message : "No reports saved yet." }
+			return done( "No reports saved yet." )
 		}
-		return { exitCode : 0, message : files.map( f => left( f.file & repeatString( " ", 40 ), 40 ) & left( f.bytes & " bytes" & repeatString( " ", 14 ), 14 ) & dateTimeFormat( f.savedAt, "yyyy-MM-dd HH:mm" ) ).toList( char( 10 ) ) }
+		return done( files.map( f => padRight( f.file, 40 ) & padRight( f.bytes & " bytes", 14 ) & dateTimeFormat( f.savedAt, "yyyy-MM-dd HH:mm" ) ).toList( char( 10 ) ) )
 	}
 
-	private struct function cleaning( required any manager, required any who, required string ref, required struct options ) {
-		var all = arguments.options.all ?: false
+	private struct function cleaning( required any manager, required any who, required string ref ) {
+		var all = isOptionSet( "all" )
 		var days = 0
 		if ( !all ) {
-			var m = reFindNoCase( "^(\d+)d?$", trim( arguments.options[ "older-than" ] ?: "" ), 1, true )
-			if ( m.pos.len() < 2 || m.pos[ 2 ] == 0 ) {
+			var olderThan = option( "older-than" )
+			var match = reFindNoCase( "^(\d+)d?$", trim( olderThan ), 1, true )
+			if ( match.pos.len() < 2 || match.pos[ 2 ] == 0 ) {
 				throw( type = "BxAgents.MissingCleanRule", message = "Say which reports: --older-than=30d, or --all" )
 			}
-			days = int( mid( arguments.options[ "older-than" ], m.pos[ 2 ], m.len[ 2 ] ) )
+			days = int( mid( olderThan, match.pos[ 2 ], match.len[ 2 ] ) )
 		}
-		var apply = arguments.options.yes ?: false
-		var done = arguments.manager.cleanReports( arguments.who, arguments.ref, days, all, apply )
-		if ( !done.succeeded() ) {
-			return failed( done )
+		var apply = isOptionSet( "yes" )
+		var cleaned = arguments.manager.cleanReports( arguments.who, arguments.ref, days, all, apply )
+		if ( !cleaned.succeeded() ) {
+			return failed( cleaned )
 		}
-		var d = done.data()
-		if ( !d.count ) {
-			return { exitCode : 0, message : "Nothing to clean." }
+		var removed = cleaned.data()
+		if ( !removed.count ) {
+			return done( "Nothing to clean." )
 		}
-		return { exitCode : 0, message : apply
-			? "Removed #d.count# report(s), #d.bytes# bytes."
-			: "Would remove #d.count# report(s), #d.bytes# bytes: " & d.files.map( f => f.file ).toList( ", " ) & char( 10 ) & "Add --yes to remove them." }
+		return done( apply
+			? "Removed #removed.count# report(s), #removed.bytes# bytes."
+			: "Would remove #removed.count# report(s), #removed.bytes# bytes: " & removed.files.map( f => f.file ).toList( ", " ) & char( 10 ) & "Add --yes to remove them." )
 	}
 
 	private struct function failed( required any outcome ) {
-		return { exitCode : 1, message : arguments.outcome.reason() }
+		return fail( arguments.outcome.reason() )
 	}
 
 }

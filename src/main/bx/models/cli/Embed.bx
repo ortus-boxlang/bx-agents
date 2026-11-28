@@ -15,76 +15,70 @@
  * Run it where the agent's database is. The tools are not checked against the agent here (the web app's Embeds page does that);
  * a name the agent does not have is simply never run. The signing key is never printed.
  */
-class {
+class extends="BaseVerb" {
 
 	/**
-	 * @options { projectRoot (required), _positional (create, list, show, disable, rotate or delete), id, name, origin, tools, ... }
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
 	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`embed` requires a project root" )
-		}
-		var action = lCase( trim( arguments.options._positional ?: "" ) )
-		if ( !len( action ) || ![ "create", "list", "show", "disable", "rotate", "delete" ].contains( action ) ) {
-			throw( type = "BxAgents.UnknownEmbedAction", message = "`embed` needs one of: create, list, show, disable, rotate, delete - for example `bxAgents embed list`." )
-		}
-
-		var file = new "models.store.ChatStorePath@bxagents"().forProject( projectRoot )
-		directoryCreate( getDirectoryFromPath( file ), true, true )
-		var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
-		store.migrate()
-		var embeds = new "models.store.EmbedService@bxagents"( store )
-
-		switch ( action ) {
-			case "create":
-				return create( embeds, arguments.options )
-			case "list":
-				return list( embeds, arguments.options )
-			case "show":
-				return show( embeds, arguments.options )
-			case "disable":
-				return disable( embeds, arguments.options )
-			case "rotate":
-				return rotate( embeds, arguments.options )
-			case "delete":
-				return remove( embeds, arguments.options )
+	struct function meta() {
+		return {
+			name : "embed",
+			group : "SECURITY & ACCESS",
+			position : 3,
+			description : "Manage the agent as an embed on other websites",
+			usage : "<action> [options]",
+			actions : [ { name : "create" }, { name : "list" }, { name : "show" }, { name : "disable" }, { name : "rotate" }, { name : "delete" } ],
+			options : [
+				{ name : "name", display : "--name=<text>", description : "What to call the embed (create).", takesValue : true },
+				{ name : "id", display : "--id=<emb_...>", description : "The embed to show, disable, rotate or delete.", takesValue : true },
+				{ name : "origin", display : "--origin=<urls>", description : "Websites that may show it, comma separated: scheme, host, optional port.", takesValue : true },
+				{ name : "tools", display : "--tools=<names>", description : "Tools a visitor's turn may use, comma separated.", takesValue : true },
+				{ name : "per-minute", display : "--per-minute=<n>", description : "Messages per visitor per minute (default 10).", takesValue : true },
+				{ name : "daily", display : "--daily=<n>", description : "Messages per day for the embed (default 200).", takesValue : true },
+				{ name : "max-chars", display : "--max-chars=<n>", description : "Longest message (default 2000).", takesValue : true },
+				{ name : "json", description : "Print results as JSON." },
+				{ name : "agent", takesValue : true, hidden : true },
+				{ name : "profile", takesValue : true, hidden : true },
+				{ name : "title", takesValue : true, hidden : true },
+				{ name : "welcome", takesValue : true, hidden : true },
+				{ name : "placeholder", takesValue : true, hidden : true },
+				{ name : "color", takesValue : true, hidden : true },
+				{ name : "position", takesValue : true, hidden : true },
+				{ name : "theme", takesValue : true, hidden : true }
+			],
+			examples : [ "embed create --name=""Docs helper"" --origin=https://docs.example.com", "embed list", "embed rotate --id=emb_...", "embed delete --id=emb_..." ],
+			subcommand : true
 		}
 	}
 
-	// ----------------------------------------------------------------------------------
-
-	private struct function create( required any embeds, required struct options ) {
-		var o = arguments.options
-		if ( !len( trim( o.name ?: "" ) ) ) {
-			throw( type = "BxAgents.MissingEmbedName", message = "`embed create` requires --name=<what to call it>, for example --name=""Docs helper""" )
-		}
+	function handleCreate() {
+		var name = requiredOption( "name", "BxAgents.MissingEmbedName", "`embed create` requires --name=<what to call it>, for example --name=""Docs helper""" )
 		var fields = {
-			name   : trim( o.name ),
-			target : { agent : trim( o.agent ?: "" ), profile : trim( o.profile ?: "" ) },
-			tools  : listToArray( o.tools ?: "", "," ).map( t => trim( t ) ).filter( t => len( t ) ),
+			name   : name,
+			target : { agent : trim( option( "agent" ) ), profile : trim( option( "profile" ) ) },
+			tools  : commaList( option( "tools" ) ),
 			look   : {},
-			limits : { allowedOrigins : listToArray( o.origin ?: "", "," ).map( t => trim( t ) ).filter( t => len( t ) ) }
+			limits : { allowedOrigins : commaList( option( "origin" ) ) }
 		}
 		for ( var key in [ "title", "welcome", "placeholder", "color", "position", "theme" ] ) {
-			if ( len( o[ key ] ?: "" ) ) {
-				fields.look[ key ] = o[ key ]
+			if ( len( option( key ) ) ) {
+				fields.look[ key ] = option( key )
 			}
 		}
 		for ( var pair in [ { flag : "per-minute", field : "perVisitorPerMinute" }, { flag : "daily", field : "dailyMessages" }, { flag : "max-chars", field : "maxMessageChars" } ] ) {
-			if ( len( o[ pair.flag ] ?: "" ) ) {
-				fields.limits[ pair.field ] = isNumeric( o[ pair.flag ] ) ? val( o[ pair.flag ] ) : o[ pair.flag ]
+			if ( len( option( pair.flag ) ) ) {
+				fields.limits[ pair.field ] = isNumeric( option( pair.flag ) ) ? val( option( pair.flag ) ) : option( pair.flag )
 			}
 		}
 		try {
-			var made = arguments.embeds.create( fields )
+			var made = embeds().create( fields )
 		} catch ( any e ) {
 			if ( e.type == "BxAgents.InvalidEmbed" ) {
-				return { exitCode : 1, message : e.message }
+				return fail( e.message )
 			}
 			rethrow
 		}
-		var lines = [
+		return lines( [
 			"Embed [#made.name#] made: #made.id#",
 			"",
 			"  websites:  #made.limits.allowedOrigins.toList( ', ' )#",
@@ -92,58 +86,75 @@ class {
 			"  limits:    #made.limits.perVisitorPerMinute# a minute per visitor, #made.limits.dailyMessages# a day, #made.limits.maxMessageChars# characters a message",
 			"",
 			"The snippet to paste is on the web app's Embeds page. The id is not a secret; the signing key stays on the server."
-		]
-		return { exitCode : 0, message : lines.toList( char( 10 ) ), id : made.id }
+		], { id : made.id } )
 	}
 
-	private struct function list( required any embeds, required struct options ) {
-		var rows = arguments.embeds.list()
-		if ( arguments.options.json ?: false ) {
-			return { exitCode : 0, message : jsonSerialize( rows.map( e => plain( e ) ) ) }
-		}
-		if ( !rows.len() ) {
-			return { exitCode : 0, message : "No embeds yet. Make one with `bxAgents embed create --name=""Docs helper"" --origin=https://docs.example.com`." }
-		}
-		var lines = [ pad( "ID", 16 ) & pad( "NAME", 28 ) & pad( "STATE", 10 ) & "WEBSITES" ]
-		for ( var e in rows ) {
-			lines.append( pad( e.id, 16 ) & pad( e.name, 28 ) & pad( state( e ), 10 ) & e.limits.allowedOrigins.toList( ", " ) )
-		}
-		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+	function handleList() {
+		var rows = embeds().list()
+		return asJson( rows.map( e => plain( e ) ), () => listText( rows ) )
 	}
 
-	private struct function show( required any embeds, required struct options ) {
-		var found = arguments.embeds.get( trim( arguments.options.id ?: "" ) )
+	function handleShow() {
+		var id = trim( option( "id" ) )
+		var found = embeds().get( id )
 		if ( found.isEmpty() ) {
-			return { exitCode : 1, message : "There is no embed [#trim( arguments.options.id ?: '' )#]. See `bxAgents embed list`." }
+			return fail( "There is no embed [#id#]. See `bxAgents embed list`." )
 		}
-		return { exitCode : 0, message : jsonSerialize( plain( found ) ) }
+		return done( jsonSerialize( plain( found ) ) )
 	}
 
-	private struct function disable( required any embeds, required struct options ) {
-		var id = trim( arguments.options.id ?: "" )
-		if ( arguments.embeds.get( id ).isEmpty() ) {
-			return { exitCode : 1, message : "There is no embed [#id#]. See `bxAgents embed list`." }
+	function handleDisable() {
+		var id = trim( option( "id" ) )
+		if ( embeds().get( id ).isEmpty() ) {
+			return fail( "There is no embed [#id#]. See `bxAgents embed list`." )
 		}
-		arguments.embeds.update( id, { enabled : false } )
-		return { exitCode : 0, message : "Embed #id# is off. Visitors are answered as if it did not exist." }
+		embeds().update( id, { enabled : false } )
+		return done( "Embed #id# is off. Visitors are answered as if it did not exist." )
 	}
 
-	private struct function rotate( required any embeds, required struct options ) {
-		var id = trim( arguments.options.id ?: "" )
-		if ( arguments.embeds.get( id ).isEmpty() ) {
-			return { exitCode : 1, message : "There is no embed [#id#]. See `bxAgents embed list`." }
+	function handleDelete() {
+		var id = trim( option( "id" ) )
+		if ( embeds().get( id ).isEmpty() ) {
+			return fail( "There is no embed [#id#]. See `bxAgents embed list`." )
 		}
-		var rotated = arguments.embeds.rotate( id )
-		return { exitCode : 0, message : "Embed #id# has a new signing key (version #rotated.keyVersion#). Every open visitor session stopped working; the snippet on your website needs no change." }
+		embeds().delete( id )
+		return done( "Embed #id# is deleted, with its signing key and its counters. The widget on your website now shows nothing; to turn an embed off and keep it, use `embed disable`." )
 	}
 
-	private struct function remove( required any embeds, required struct options ) {
-		var id = trim( arguments.options.id ?: "" )
-		if ( arguments.embeds.get( id ).isEmpty() ) {
-			return { exitCode : 1, message : "There is no embed [#id#]. See `bxAgents embed list`." }
+	function handleRotate() {
+		var id = trim( option( "id" ) )
+		if ( embeds().get( id ).isEmpty() ) {
+			return fail( "There is no embed [#id#]. See `bxAgents embed list`." )
 		}
-		arguments.embeds.delete( id )
-		return { exitCode : 0, message : "Embed #id# is deleted, with its signing key and its counters. The widget on your website now shows nothing; to turn an embed off and keep it, use `embed disable`." }
+		var rotated = embeds().rotate( id )
+		return done( "Embed #id# has a new signing key (version #rotated.keyVersion#). Every open visitor session stopped working; the snippet on your website needs no change." )
+	}
+
+	/**
+	 * @return The embeds of this project
+	 */
+	private any function embeds() {
+		return new "models.store.EmbedService@bxagents"( chatStore() )
+	}
+
+	/**
+	 * @text A comma separated list typed on the command line
+	 *
+	 * @return Its trimmed, non-empty items
+	 */
+	private array function commaList( required string text ) {
+		return listToArray( arguments.text, "," ).map( item => trim( item ) ).filter( item => len( item ) )
+	}
+
+	private string function listText( required array rows ) {
+		if ( !arguments.rows.len() ) {
+			return "No embeds yet. Make one with `bxAgents embed create --name=""Docs helper"" --origin=https://docs.example.com`."
+		}
+		var report = [ padRight( "ID", 16 ) & padRight( "NAME", 28 ) & padRight( "STATE", 10 ) & "WEBSITES" ]
+		for ( var e in arguments.rows ) {
+			report.append( padRight( e.id, 16 ) & padRight( e.name, 28 ) & padRight( state( e ), 10 ) & e.limits.allowedOrigins.toList( ", " ) )
+		}
+		return report.toList( char( 10 ) )
 	}
 
 	private string function state( required struct embed ) {
@@ -161,10 +172,6 @@ class {
 		}
 		out.state = state( arguments.embed )
 		return out
-	}
-
-	private string function pad( required string text, required numeric width ) {
-		return left( arguments.text & repeatString( " ", arguments.width ), arguments.width )
 	}
 
 }

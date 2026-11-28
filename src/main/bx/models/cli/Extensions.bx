@@ -17,10 +17,33 @@
  *
  * The user layer (~/.bxagents/extensions) is included in what is listed: it is what the terminal chat on this machine loads.
  */
-class {
+class extends="BaseVerb" {
 
-	static {
-		SUBCOMMANDS = [ "list", "install", "update", "remove", "link", "unlink" ]
+	/**
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
+	 */
+	struct function meta() {
+		return {
+			name : "extensions",
+			group : "CONNECT & EXTEND",
+			position : 4,
+			description : "Install and manage CLI and chat extensions",
+			usage : "[action] [source-or-name] [options]",
+			actions : [ { name : "list" }, { name : "install" }, { name : "update" }, { name : "remove" }, { name : "link" }, { name : "unlink" } ],
+			options : [
+				{ name : "name", display : "--name=<name>", description : "Name for an installed or linked extension.", takesValue : true },
+				{ name : "installed", description : "List installed extension packages." },
+				{ name : "system", description : "Manage system-wide extension packages." },
+				{ name : "force", description : "Allow replacement or removal when needed." },
+				{ name : "yes", description : "Approve installation or update without prompting." },
+				{ name : "json", description : "Print results as JSON." }
+			],
+			examples : [ "extensions", "extensions list --installed", "extensions link ./my-extension" ],
+			note : "Sources can be a folder, ZIP, GitHub repository, URL, or ForgeBox slug.",
+			subcommand : true,
+			// the first word is an action, or else the folder of a project (how this verb used to be pointed at one)
+			dispatch : false
+		}
 	}
 
 	/**
@@ -29,140 +52,152 @@ class {
 	 *   _interactive / _prompter / _fetcher / _userConfig (test seams)
 	 * }
 	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`extensions` requires a project root" )
-		}
-		projectRoot = projectRoot.reReplace( "[\\/]+$", "" )
-		var args = arguments.options._positionals ?: []
-		var sub = args.len() ? lCase( args[ 1 ] ) : ""
-		if ( len( sub ) && !static.SUBCOMMANDS.contains( sub ) ) {
+	function handle() {
+		var folder = projectRoot()
+		var words = option( "_positionals", [] )
+		var actions = meta().actions.map( entry => entry.name )
+		var action = words.len() ? lCase( words[ 1 ] ) : ""
+		if ( len( action ) && !actions.contains( action ) ) {
 			// `extensions <path>` is how this verb used to be pointed at a project
-			if ( !directoryExists( args[ 1 ] ) ) {
-				throw( type = "BxAgents.UnknownSubcommand", message = "Unknown subcommand [#sub#]. Use: #static.SUBCOMMANDS.toList( ', ' )#, or none to see what is loaded." )
+			if ( !directoryExists( words[ 1 ] ) ) {
+				throw( type = "BxAgents.UnknownSubcommand", message = "Unknown subcommand [#action#]. Use: #actions.toList( ', ' )#, or none to see what is loaded." )
 			}
-			projectRoot = args[ 1 ].reReplace( "[\\/]+$", "" )
-			sub = ""
+			folder = words[ 1 ].reReplace( "[\\/]+$", "" )
+			action = ""
 		}
-		switch ( sub ) {
+		switch ( action ) {
 			case "install":
-				return doInstall( projectRoot, args.slice( 2 ), arguments.options )
+				return installExtensions( folder, words.slice( 2 ) )
 			case "update":
-				return doUpdate( projectRoot, args.slice( 2 ), arguments.options )
+				return updateExtensions( folder, words.slice( 2 ) )
 			case "remove":
-				return doRemove( projectRoot, args.slice( 2 ), arguments.options )
+				return removeExtension( folder, words.slice( 2 ) )
 			case "link":
-				return doLink( args.slice( 2 ), arguments.options )
+				return linkExtension( words.slice( 2 ) )
 			case "unlink":
-				return doUnlink( args.slice( 2 ), arguments.options )
+				return unlinkExtension( words.slice( 2 ) )
 			case "list":
-				if ( arguments.options.installed ?: false ) {
-					return doInstalled( projectRoot, arguments.options )
+				if ( isOptionSet( "installed" ) ) {
+					return listInstalled( folder )
 				}
 		}
-		return doList( projectRoot, arguments.options )
+		return listLoaded( folder )
 	}
 
 	// ----------------------------------------------------------------------------------
 	// What is loaded
 	// ----------------------------------------------------------------------------------
 
-	private struct function doList( required string projectRoot, required struct options ) {
-		var service = new "models.extensions.ExtensionService@bxagents"( projectRoot : arguments.projectRoot )
+	private struct function listLoaded( required string folder ) {
+		var service = new "models.extensions.ExtensionService@bxagents"( projectRoot : arguments.folder )
 		service.install( new "models.chat.commands.CommandCatalog@bxagents"().standard() )
 		var report = service.report()
 		try {
-			if ( arguments.options.json ?: false ) {
-				return { exitCode : 0, message : jsonSerialize( { extensions : report, problems : service.problems() } ) }
-			}
-			return { exitCode : 0, message : render( report, service.problems() ) }
+			return asJson( { extensions : report, problems : service.problems() }, () => loadedText( report, service.problems() ) )
 		} finally {
 			service.unload()
 		}
 	}
 
-	private string function render( required array report, required array problems ) {
+	private string function loadedText( required array report, required array problems ) {
 		if ( !arguments.report.len() ) {
 			return "No extensions. Add one as a file or folder in extensions/ (or ~/.bxagents/extensions for yourself)."
 		}
-		var lines = []
+		var text = []
 		for ( var extension in arguments.report ) {
-			lines.append( "#extension.name# (#extension.layer#, #extension.state#)" & ( len( extension.description ) ? " - #extension.description#" : "" ) )
+			text.append( "#extension.name# (#extension.layer#, #extension.state#)" & ( len( extension.description ) ? " - #extension.description#" : "" ) )
 			if ( extension.commands.len() ) {
-				lines.append( "    commands:   #extension.commands.toList( ', ' )#" )
+				text.append( "    commands:   #extension.commands.toList( ', ' )#" )
 			}
 			if ( extension.keys.len() ) {
-				lines.append( "    keys:       #extension.keys.toList( ', ' )#" )
+				text.append( "    keys:       #extension.keys.toList( ', ' )#" )
 			}
 			if ( extension.status.len() ) {
-				lines.append( "    status:     #extension.status.toList( ', ' )#" )
+				text.append( "    status:     #extension.status.toList( ', ' )#" )
 			}
 			if ( extension.prefixes.len() ) {
-				lines.append( "    prefixes:   #extension.prefixes.toList( ', ' )#" )
+				text.append( "    prefixes:   #extension.prefixes.toList( ', ' )#" )
 			}
 			if ( extension.sources.len() ) {
-				lines.append( "    sources:    #extension.sources.map( n => '@' & n & ':' ).toList( ', ' )#" )
+				text.append( "    sources:    #extension.sources.map( n => '@' & n & ':' ).toList( ', ' )#" )
 			}
 			if ( extension.verbs.len() ) {
-				lines.append( "    verbs:      #extension.verbs.toList( ', ' )#" )
+				text.append( "    verbs:      #extension.verbs.toList( ', ' )#" )
 			}
 			if ( extension.slots.len() ) {
-				lines.append( "    slots:      #extension.slots.toList( ', ' )#" )
+				text.append( "    slots:      #extension.slots.toList( ', ' )#" )
 			}
 			if ( extension.web ) {
-				lines.append( "    web files:  web/" )
+				text.append( "    web files:  web/" )
 			}
 			if ( extension.listens.len() ) {
-				lines.append( "    listens to: #extension.listens.toList( ', ' )#" )
+				text.append( "    listens to: #extension.listens.toList( ', ' )#" )
 			}
 			if ( extension.schedulers.len() ) {
-				lines.append( "    schedulers: #extension.schedulers.toList( ', ' )#" )
+				text.append( "    schedulers: #extension.schedulers.toList( ', ' )#" )
 			}
 			for ( var problem in extension.problems ) {
-				lines.append( "    ! #problem#" )
+				text.append( "    ! #problem#" )
 			}
 		}
 		for ( var problem in arguments.problems ) {
-			lines.append( "! #problem#" )
+			text.append( "! #problem#" )
 		}
-		return lines.toList( char( 10 ) )
+		return text.toList( char( 10 ) )
+	}
+
+	private struct function listInstalled( required string folder ) {
+		var found = installerFor( arguments.folder ).installed()
+		var links = isOptionSet( "system" ) ? linker().linked() : []
+		return asJson( { installed : found, linked : links }, () => {
+			var text = found.map( e => "#e.name# (#e.state#) - #e.source#" & ( len( e.resolved ) ? " #e.resolved#" : "" ) )
+			text.append( links.map( l => "#l.name# (#l.state#) - #l.target#" ), true )
+			return text.len() ? text.toList( char( 10 ) ) : "Nothing was installed with bxAgents extensions install."
+		} )
 	}
 
 	// ----------------------------------------------------------------------------------
 	// Installing
 	// ----------------------------------------------------------------------------------
 
-	private any function installerFor( required string projectRoot, required struct options ) {
-		var scope = arguments.options.system ?: false ? "system" : "project"
-		var userConfig = arguments.options._userConfig ?: new "models.cli.UserConfig@bxagents"()
-		if ( isNull( arguments.options._fetcher ) ) {
-			return new "models.extensions.ExtensionInstaller@bxagents"( projectRoot : arguments.projectRoot, scope : scope, userConfig : userConfig, workingDirectory : getSystemSetting( "user.dir", arguments.projectRoot ) )
+	private any function installerFor( required string folder ) {
+		var scope = isOptionSet( "system" ) ? "system" : "project"
+		var userConfig = option( "_userConfig", "" )
+		if ( !isObject( userConfig ) ) {
+			userConfig = new "models.cli.UserConfig@bxagents"()
 		}
-		return new "models.extensions.ExtensionInstaller@bxagents"( projectRoot : arguments.projectRoot, scope : scope, userConfig : userConfig, fetcher : arguments.options._fetcher, workingDirectory : getSystemSetting( "user.dir", arguments.projectRoot ) )
+		var workingDirectory = getSystemSetting( "user.dir", arguments.folder )
+		var fetcher = option( "_fetcher", "" )
+		if ( isSimpleValue( fetcher ) && !len( fetcher ) ) {
+			return new "models.extensions.ExtensionInstaller@bxagents"( projectRoot : arguments.folder, scope : scope, userConfig : userConfig, workingDirectory : workingDirectory )
+		}
+		return new "models.extensions.ExtensionInstaller@bxagents"( projectRoot : arguments.folder, scope : scope, userConfig : userConfig, fetcher : fetcher, workingDirectory : workingDirectory )
 	}
 
 	/**
 	 * @return { confirm : function( preview ), close : function() }: asks at a terminal, says yes for --yes, and refuses without either
 	 */
-	private struct function asker( required struct options ) {
+	private struct function asker() {
 		var factory = new "models.wizard.prompters.PrompterFactory@bxagents"()
-		var yes = arguments.options.yes ?: false
-		var interactive = arguments.options._interactive ?: factory.isTerminal()
-		var prompter = !yes && interactive ? ( arguments.options._prompter ?: factory.create( arguments.options, "extensions" ) ) : ""
+		var yes = isOptionSet( "yes" )
+		var interactive = hasOption( "_interactive" ) ? variables.options._interactive : factory.isTerminal()
+		var prompter = ""
+		if ( !yes && interactive ) {
+			prompter = hasOption( "_prompter" ) ? variables.options._prompter : factory.create( variables.options, "extensions" )
+		}
 		var shown = []
 		return {
 			shown   : shown,
 			confirm : ( preview ) => {
-				var lines = previewLines( preview )
+				var text = previewLines( preview )
 				if ( isObject( prompter ) ) {
-					prompter.note( preview.update ? "Update #preview.name#" : "Install #preview.name#", lines )
+					prompter.note( preview.update ? "Update #preview.name#" : "Install #preview.name#", text )
 					return prompter.confirm( preview.update ? "Replace #preview.name# with this?" : "Install it?", "", false )
 				}
 				if ( !yes ) {
-					throw( type = "BxAgents.ConfirmationNeeded", message = "An extension is code that runs when the chat starts, so this asks first, and there is no terminal to ask in. Look at what it adds below, and run it again with --yes if that is fine." & char( 10 ) & lines.toList( char( 10 ) ) )
+					throw( type = "BxAgents.ConfirmationNeeded", message = "An extension is code that runs when the chat starts, so this asks first, and there is no terminal to ask in. Look at what it adds below, and run it again with --yes if that is fine." & char( 10 ) & text.toList( char( 10 ) ) )
 				}
-				shown.append( lines, true )
+				shown.append( text, true )
 				return true
 			},
 			close   : () => {
@@ -174,107 +209,94 @@ class {
 	}
 
 	private array function previewLines( required struct preview ) {
-		var lines = [
+		var text = [
 			( preview.update ? "Update " : "Install " ) & preview.name & " from " & preview.source & ( len( preview.resolved ) ? " (#preview.resolved#)" : "" ),
 			"Into: #preview.into# (#preview.scope# scope)#preview.replaces ? ', replacing what is there' : ''#",
 			"#preview.files# file#preview.files == 1 ? '' : 's'#, #numberFormat( preview.bytes / 1024, '0.0' )# KB"
 		]
 		if ( preview.adds.len() ) {
-			lines.append( "It adds:" )
-			lines.append( preview.adds.map( a => "  - " & a ), true )
+			text.append( "It adds:" )
+			text.append( preview.adds.map( a => "  - " & a ), true )
 		} else {
-			lines.append( "Nothing it adds could be read from its files (it may add things in code)." )
+			text.append( "Nothing it adds could be read from its files (it may add things in code)." )
 		}
 		if ( preview.mentions.len() ) {
-			lines.append( "Its code mentions: #preview.mentions.toList( ', ' )# (a quick look at the text, not a review)." )
+			text.append( "Its code mentions: #preview.mentions.toList( ', ' )# (a quick look at the text, not a review)." )
 		}
-		lines.append( "An extension is code: it runs when the chat or the app starts." )
-		return lines
+		text.append( "An extension is code: it runs when the chat or the app starts." )
+		return text
 	}
 
-	private struct function doInstall( required string projectRoot, required array args, required struct options ) {
-		var installer = installerFor( arguments.projectRoot, arguments.options )
-		if ( !arguments.args.len() ) {
+	private struct function installExtensions( required string folder, required array words ) {
+		var installer = installerFor( arguments.folder )
+		if ( !arguments.words.len() ) {
 			var restored = installer.restore()
-			var lines = restored.restored.map( n => "Restored #n#" )
-			lines.append( restored.failed.map( f => "Could not restore #f.name#: #f.reason#" ), true )
-			if ( !lines.len() ) {
-				lines = [ "Nothing to restore: everything in #getFileFromPath( installer.lockFile() )# is in place." ]
+			var report = restored.restored.map( n => "Restored #n#" )
+			report.append( restored.failed.map( f => "Could not restore #f.name#: #f.reason#" ), true )
+			if ( !report.len() ) {
+				report = [ "Nothing to restore: everything in #getFileFromPath( installer.lockFile() )# is in place." ]
 			}
-			return { exitCode : restored.failed.len() ? 1 : 0, message : lines.toList( char( 10 ) ) }
+			return exitWith( restored.failed.len() ? 1 : 0, report.toList( char( 10 ) ) )
 		}
-		var ask = asker( arguments.options )
+		var ask = asker()
 		try {
-			var result = installer.install( arguments.args[ 1 ], { name : arguments.options.name ?: "", force : arguments.options.force ?: false, confirm : ask.confirm } )
+			var result = installer.install( arguments.words[ 1 ], { name : option( "name" ), force : option( "force", false ), confirm : ask.confirm } )
 		} finally {
 			ask.close()
 		}
 		if ( !result.installed ) {
-			return { exitCode : 1, message : "Cancelled. Nothing was installed." }
+			return fail( "Cancelled. Nothing was installed." )
 		}
 		var preview = ask.shown.len() ? ask.shown.toList( char( 10 ) ) & char( 10 ) : ""
-		return { exitCode : 0, message : preview & "Installed #result.name# into #result.preview.into#. Use /reload in a chat, or start it again, to load it." }
+		return done( preview & "Installed #result.name# into #result.preview.into#. Use /reload in a chat, or start it again, to load it." )
 	}
 
-	private struct function doUpdate( required string projectRoot, required array args, required struct options ) {
-		var installer = installerFor( arguments.projectRoot, arguments.options )
-		var ask = asker( arguments.options )
+	private struct function updateExtensions( required string folder, required array words ) {
+		var installer = installerFor( arguments.folder )
+		var ask = asker()
 		try {
-			var results = installer.update( arguments.args, ask.confirm )
+			var results = installer.update( arguments.words, ask.confirm )
 		} finally {
 			ask.close()
 		}
 		if ( !results.len() ) {
-			return { exitCode : 0, message : "Nothing is installed." }
+			return done( "Nothing is installed." )
 		}
-		var lines = results.map( r => r.name & ": " & r.outcome & ( len( r.reason ) ? " (#r.reason#)" : "" ) )
-		return { exitCode : results.filter( r => r.outcome == "failed" ).len() ? 1 : 0, message : lines.toList( char( 10 ) ) }
+		var report = results.map( r => r.name & ": " & r.outcome & ( len( r.reason ) ? " (#r.reason#)" : "" ) )
+		return exitWith( results.filter( r => r.outcome == "failed" ).len() ? 1 : 0, report.toList( char( 10 ) ) )
 	}
 
-	private struct function doRemove( required string projectRoot, required array args, required struct options ) {
-		if ( !arguments.args.len() ) {
+	private struct function removeExtension( required string folder, required array words ) {
+		if ( !arguments.words.len() ) {
 			throw( type = "BxAgents.MissingName", message = "Say which one: bxAgents extensions remove <name>" )
 		}
-		installerFor( arguments.projectRoot, arguments.options ).remove( arguments.args[ 1 ], arguments.options.force ?: false )
-		return { exitCode : 0, message : "Removed #arguments.args[ 1 ]#." }
+		installerFor( arguments.folder ).remove( arguments.words[ 1 ], option( "force", false ) )
+		return done( "Removed #arguments.words[ 1 ]#." )
 	}
 
 	// ----------------------------------------------------------------------------------
 	// Linking, for the extension you are working on
 	// ----------------------------------------------------------------------------------
 
-	private any function linkerFor( required struct options ) {
-		return new "models.extensions.ExtensionLinker@bxagents"( userConfig : arguments.options._userConfig ?: new "models.cli.UserConfig@bxagents"() )
+	private any function linker() {
+		var userConfig = option( "_userConfig", "" )
+		return new "models.extensions.ExtensionLinker@bxagents"( userConfig : isObject( userConfig ) ? userConfig : new "models.cli.UserConfig@bxagents"() )
 	}
 
-	private struct function doLink( required array args, required struct options ) {
-		if ( !arguments.args.len() ) {
+	private struct function linkExtension( required array words ) {
+		if ( !arguments.words.len() ) {
 			throw( type = "BxAgents.MissingSource", message = "Say what to link: bxAgents extensions link <folder-or-.bx file>" )
 		}
-		var made = linkerFor( arguments.options ).link( arguments.args[ 1 ], arguments.options.name ?: "", arguments.options.force ?: false )
-		return { exitCode : 0, message : "Linked #made.name#: #made.link# -> #made.target#. It loads in the terminal chat on this machine; use /reload after an edit." }
+		var made = linker().link( arguments.words[ 1 ], option( "name" ), option( "force", false ) )
+		return done( "Linked #made.name#: #made.link# -> #made.target#. It loads in the terminal chat on this machine; use /reload after an edit." )
 	}
 
-	private struct function doUnlink( required array args, required struct options ) {
-		if ( !arguments.args.len() ) {
+	private struct function unlinkExtension( required array words ) {
+		if ( !arguments.words.len() ) {
 			throw( type = "BxAgents.MissingName", message = "Say which one: bxAgents extensions unlink <name>" )
 		}
-		linkerFor( arguments.options ).unlink( arguments.args[ 1 ] )
-		return { exitCode : 0, message : "Unlinked #arguments.args[ 1 ]#. What it pointed at is untouched." }
-	}
-
-	private struct function doInstalled( required string projectRoot, required struct options ) {
-		var found = installerFor( arguments.projectRoot, arguments.options ).installed()
-		var links = arguments.options.system ?: false ? linkerFor( arguments.options ).linked() : []
-		if ( arguments.options.json ?: false ) {
-			return { exitCode : 0, message : jsonSerialize( { installed : found, linked : links } ) }
-		}
-		var lines = found.map( e => "#e.name# (#e.state#) - #e.source#" & ( len( e.resolved ) ? " #e.resolved#" : "" ) )
-		lines.append( links.map( l => "#l.name# (#l.state#) - #l.target#" ), true )
-		if ( !lines.len() ) {
-			return { exitCode : 0, message : "Nothing was installed with bxAgents extensions install." }
-		}
-		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+		linker().unlink( arguments.words[ 1 ] )
+		return done( "Unlinked #arguments.words[ 1 ]#. What it pointed at is untouched." )
 	}
 
 }

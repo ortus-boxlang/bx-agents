@@ -1,344 +1,11 @@
 import bxModules.bxagents.models.util.Terminal;
+import bxModules.bxagents.models.cli.BaseVerb;
 
 /**
  * The CLI's grouped overview and focused command help. Wrap plain text before applying
  * the shared terminal palette so ANSI escapes never count toward the column width.
  */
 class {
-
-	static {
-		GROUPS = [
-			{ title : "GET STARTED", commands : [ "new", "add", "doctor", "inspect" ] },
-			{ title : "BUILD & RUN", commands : [ "build", "chat", "invoke", "serve", "test", "clean" ] },
-			{ title : "MANAGE YOUR AGENT", commands : [ "models", "sessions", "notes", "routines" ] },
-			{ title : "CONNECT & EXTEND", commands : [ "connect", "connectors", "skills", "extensions" ] },
-			{ title : "SECURITY & ACCESS", commands : [ "users", "token", "embed", "vault", "hash-password" ] },
-			{ title : "OPERATE & SHIP", commands : [ "logs", "stats", "data", "backup", "restore", "package", "deploy" ] }
-		]
-		COMMANDS = {
-			"new" : {
-				usage : "<directory> [options]",
-				options : [
-					[ "--model=<provider/model>", "Model to use; omit to open the wizard." ],
-					[ "--template=<name>", "Starter template. Default: minimal." ],
-					[ "--name=<name>", "Agent name. Defaults to the directory name." ],
-					[ "--description=<text>", "What the agent does." ],
-					[ "--repo=<owner/repo>", "Start from a GitHub repository." ],
-					[ "--forgebox=<slug>", "Start from a ForgeBox package." ],
-					[ "--class", "Use Agent.bx instead of Agent.yml." ],
-					[ "--skipInstall", "Skip fetching TestBox with CommandBox." ],
-					[ "--no-tui", "Use plain terminal prompts." ]
-				],
-				examples : [ "new my-agent", "new my-agent --model=mock/mock-model" ]
-			},
-			"add" : {
-				usage : "[kind] [name] [options]",
-				actions : "tool, skill, gateway, subagent, schedule, mcp, interceptor, profile, provider, capability, extension",
-				options : [
-					[ "--agent=<name>", "Add to a subagent rather than the root agent." ],
-					[ "--dry-run", "Preview files without writing them." ],
-					[ "--force", "Allow replacing an existing file." ],
-					[ "--yes", "Use defaults without prompting." ]
-				],
-				examples : [ "add", "add tool Greeter --dry-run", "add gateway web" ],
-				note : "Each kind has its own settings; see the full reference below."
-			},
-			"doctor" : {
-				usage : "[options]", options : [ [ "--json", "Print checks as JSON." ] ],
-				examples : [ "doctor", "doctor --json" ],
-				note : "Read-only: checks the runtime, project, and required environment variables."
-			},
-			"inspect" : {
-				usage : "[options]",
-				options : [
-					[ "--section=<names>", "Show selected sections, comma separated." ],
-					[ "--environment=<name>", "Inspect an environment override." ],
-					[ "--json", "Print the full report as JSON." ],
-					[ "--md[=<file>]", "Print Markdown, or write it to a file." ],
-					[ "--ascii", "Use plain characters instead of symbols." ]
-				],
-				examples : [ "inspect", "inspect --section=tools,env" ],
-				note : "Reads project source; no build is needed."
-			},
-			"build" : {
-				usage : "[options]",
-				options : [
-					[ "--environment=<name>", "Apply the named environment override." ],
-					[ "--verbose", "Show build phases as they run." ],
-					[ "--generatorVersion=<version>", "Override the generator version in the manifest." ]
-				],
-				examples : [ "build", "build --environment=production" ],
-				note : "Writes the application into .build/. Rebuild after changing project source."
-			},
-			"chat" : {
-				usage : "[options]",
-				options : [
-					[ "--server", "Start a temporary server for the full application." ],
-					[ "--connect=<url>", "Chat with an already-running server." ],
-					[ "--token=<token>", "API access token for a protected server." ],
-					[ "--api-path=<path>", "Custom API path. Default: /__bxagents." ],
-					[ "--port=<number>", "Port for the temporary server." ],
-					[ "--agent=<name>", "Chat with a named agent." ],
-					[ "--user=<name>", "Conversation owner. Default: local." ],
-					[ "--continue", "Resume the most recent conversation." ],
-					[ "--session=<number-or-id>", "Resume a particular conversation." ],
-					[ "--record[=<file>]", "Record the terminal session." ],
-					[ "--inline / --fullscreen", "Choose the terminal layout." ],
-					[ "--no-tui", "Use the plain line-by-line chat." ]
-				],
-				examples : [ "chat", "chat --server", "chat --connect=http://127.0.0.1:8080" ],
-				note : "Requires a prior build. Type / inside chat to discover slash commands."
-			},
-			"invoke" : {
-				usage : "--message=<text> [options]",
-				options : [
-					[ "--message=<text>", "Message to send. Required." ],
-					[ "--json", "Print the result as JSON." ],
-					[ "--server", "Invoke through a temporary HTTP server." ],
-					[ "--port=<number>", "Port for the temporary server." ]
-				],
-				examples : [ "invoke --message=hello", "invoke --message=hello --server --json" ],
-				note : "Requires a prior build."
-			},
-			"serve" : {
-				usage : "[options]",
-				options : [
-					[ "--port=<number>", "Listening port, 1-65535. Default: 8080." ],
-					[ "--host=<address>", "Bind address. Default: 127.0.0.1." ]
-				],
-				examples : [ "serve", "serve --port=9000" ],
-				note : "Requires a prior build and boxlang-miniserver on PATH. Use --host=0.0.0.0 deliberately to expose the server beyond this machine."
-			},
-			"test" : {
-				usage : "[options]", options : [], examples : [ "test" ],
-				note : "Runs tests/specs with TestBox against a temporary build. Install TestBox with box install first."
-			},
-			"clean" : {
-				usage : "[options]",
-				options : [ [ "--force", "Skip the check that this is a BxAgents project." ] ],
-				examples : [ "clean" ],
-				note : "Deletes only .build/ and dist/. Project source is kept."
-			},
-			"models" : {
-				usage : "<action> [options]", actions : "list, test",
-				options : [
-					[ "--profile=<name>", "Test one named model profile." ],
-					[ "--all", "Test the default model and every profile." ],
-					[ "--json", "Print results as JSON." ]
-				],
-				examples : [ "models list", "models test --all" ],
-				note : "Uses the last build. Testing models makes real provider calls."
-			},
-			"sessions" : {
-				usage : "<action> [options]", actions : "list, rename, fork, delete, clear, export, import",
-				options : [
-					[ "--session=<number-or-id>", "Conversation to act on." ],
-					[ "--name=<name>", "New conversation title." ],
-					[ "--user=<name>", "Conversation owner. Default: local." ],
-					[ "--file=<path>", "Transcript file to export or import." ],
-					[ "--md", "Export a Markdown transcript instead of JSON." ],
-					[ "--force", "Allow replacing an export file." ],
-					[ "--json", "Print results as JSON." ]
-				],
-				examples : [ "sessions list", "sessions export --session=1 --file=chat.json" ]
-			},
-			"notes" : {
-				usage : "<action> [options]", actions : "list, add, edit, remove, clear, stats, export, import",
-				options : [
-					[ "--text=<text>", "Note text for add or edit." ],
-					[ "--id=<id>", "Note to edit or remove." ],
-					[ "--scope=<user|agent>", "Which notes to manage." ],
-					[ "--user=<name>", "User whose notes to manage." ],
-					[ "--file=<path>", "File to export or import." ],
-					[ "--json", "Print results as JSON." ]
-				],
-				examples : [ "notes list", "notes export --file=notes.json" ]
-			},
-			"routines" : {
-				usage : "<action> [name] [options]",
-				actions : "list, show, add, edit, pause, resume, run, delete, reports, report, clean",
-				options : [
-					[ "--name=<name>", "Name of a new routine." ],
-					[ "--schedule=<cron-or-interval>", "When the routine runs." ],
-					[ "--prompt=<text>", "Message to send to the agent." ],
-					[ "--destination=<target>", "routine or gateway:<name>." ],
-					[ "--chat=<id>", "Gateway chat to deliver to." ],
-					[ "--older-than=<age>", "Report age for clean, such as 30d." ],
-					[ "--all", "List every owner's routines, or clean all reports." ],
-					[ "--yes", "Confirm deleting a routine or cleaning reports." ],
-					[ "--json", "Print results as JSON." ]
-				],
-				examples : [ "routines list", "routines show daily", "routines clean daily --older-than=30d" ],
-				note : "Requires routines.enabled: true. clean previews removals unless --yes is given."
-			},
-			"connect" : {
-				usage : "[id] [tools|off|options] [options]",
-				options : [
-					[ "--token-env=<NAME>", "Environment variable holding a connector token." ],
-					[ "--stdin", "Read a token from standard input." ],
-					[ "--confirm", "Approve the connector's stated capabilities." ],
-					[ "--remove", "Forget a saved sign-in." ],
-					[ "--port=<number>", "Local OAuth callback port; otherwise a free port." ],
-					[ "--no-open", "Print the sign-in URL without opening a browser." ],
-					[ "--timeout=<seconds>", "Sign-in wait time. Default: 120." ],
-					[ "--user=<name>", "Whose connection to use. Default: local." ],
-					[ "--json", "Print connection status as JSON." ]
-				],
-				examples : [ "connect", "connect github --token-env=GITHUB_TOKEN --confirm" ],
-				note : "Without an id, lists available services and connection status. Secrets are sealed in the chat database."
-			},
-			"connectors" : {
-				usage : "[list|show <id>|check] [options]",
-				options : [
-					[ "--dir=<path>", "Check a custom connector catalog directory." ],
-					[ "--json", "Print catalog entries as JSON." ]
-				],
-				examples : [ "connectors", "connectors show github", "connectors check" ],
-				note : "Only reads the catalog; use connect to sign in."
-			},
-			"skills" : {
-				usage : "<action> [name-or-source] [options]", actions : "find, install, list, show, update, remove",
-				options : [
-					[ "--registry=<url>", "Use another skill registry." ],
-					[ "--limit=<number>", "Limit search results." ],
-					[ "--dry-run", "Preview changes without applying them." ],
-					[ "--json", "Print results as JSON." ]
-				],
-				examples : [ "skills find release", "skills list", "skills install" ],
-				note : "install without a source restores the skills listed in the project's lock file."
-			},
-			"extensions" : {
-				usage : "[action] [source-or-name] [options]", actions : "list, install, update, remove, link, unlink",
-				options : [
-					[ "--name=<name>", "Name for an installed or linked extension." ],
-					[ "--installed", "List installed extension packages." ],
-					[ "--system", "Manage system-wide extension packages." ],
-					[ "--force", "Allow replacement or removal when needed." ],
-					[ "--yes", "Approve installation or update without prompting." ],
-					[ "--json", "Print results as JSON." ]
-				],
-				examples : [ "extensions", "extensions list --installed", "extensions link ./my-extension" ],
-				note : "Sources can be a folder, ZIP, GitHub repository, URL, or ForgeBox slug."
-			},
-			"users" : {
-				usage : "<action> [options]", actions : "list, admin, member",
-				options : [
-					[ "--name=<name>", "User whose role to change." ],
-					[ "--json", "Print users as JSON." ]
-				],
-				examples : [ "users list", "users admin --name=ada" ]
-			},
-			"token" : {
-				usage : "<action> [options]", actions : "create, list, revoke",
-				options : [
-					[ "--name=<name>", "Token to create or revoke." ],
-					[ "--scope=<chat|admin>", "Access granted by the token." ],
-					[ "--expires=<duration>", "Token lifetime, such as 90d." ],
-					[ "--json", "Print results as JSON." ]
-				],
-				examples : [ "token create --name=laptop", "token list", "token revoke --name=laptop" ]
-			},
-			"embed" : {
-				usage : "<action> [options]", actions : "create, list, show, disable, rotate, delete",
-				options : [
-					[ "--name=<text>", "What to call the embed (create)." ],
-					[ "--id=<emb_...>", "The embed to show, disable, rotate or delete." ],
-					[ "--origin=<urls>", "Websites that may show it, comma separated: scheme, host, optional port." ],
-					[ "--tools=<names>", "Tools a visitor's turn may use, comma separated." ],
-					[ "--per-minute=<n>", "Messages per visitor per minute (default 10)." ],
-					[ "--daily=<n>", "Messages per day for the embed (default 200)." ],
-					[ "--max-chars=<n>", "Longest message (default 2000)." ],
-					[ "--json", "Print results as JSON." ]
-				],
-				examples : [ "embed create --name=""Docs helper"" --origin=https://docs.example.com", "embed list", "embed rotate --id=emb_...", "embed delete --id=emb_..." ]
-			},
-			"vault" : {
-				usage : "<action> [options]", actions : "list, add, edit, remove, status, audit, key",
-				options : [
-					[ "--name=<name>", "Secret to add, edit, or remove." ],
-					[ "--scope=<agent|user|all>", "Which secrets to list." ],
-					[ "--user=<name>", "Owner of a user-scoped secret." ],
-					[ "--description=<text>", "What the secret is for." ],
-					[ "--hosts=<patterns>", "Allowed hosts, comma separated." ],
-					[ "--stdin", "Read the secret value from standard input." ],
-					[ "--value", "Replace a secret's value while editing." ],
-					[ "--yes", "Confirm removal." ],
-					[ "--limit=<number>", "Limit audit entries." ],
-					[ "--json", "Print results as JSON." ]
-				],
-				examples : [ "vault list", "vault add --name=API_KEY", "vault status" ],
-				note : "Secret values are entered hidden or piped with --stdin, never passed as flags."
-			},
-			"hash-password" : {
-				usage : "--password=<value>",
-				options : [ [ "--password=<value>", "Password to hash. Required." ] ],
-				examples : [ "hash-password --password=<value>" ],
-				note : "Prints a hash for a web sign-in account. Shell arguments can appear in history and process listings."
-			},
-			"logs" : {
-				usage : "[area] [options]",
-				actions : "agent, gateways, routines, heartbeat, api",
-				options : [
-					[ "--tail=<number>", "Lines to show. Default: 100, or 20 with --follow." ],
-					[ "--level=<level>", "Minimum severity, such as warn or error." ],
-					[ "--grep=<text>", "Show only matching lines." ],
-					[ "--follow", "Keep printing new log lines." ],
-					[ "--ui", "Open the full-screen log viewer." ],
-					[ "--connect=<url>", "Read logs from a served agent." ],
-					[ "--token=<token>", "Admin API token for a remote agent." ],
-					[ "--api-path=<path>", "Custom remote API path." ],
-					[ "--json", "Print results as JSON." ]
-				],
-				examples : [ "logs", "logs gateways --follow", "logs --ui" ],
-				note : "Without an area, lists the available log files."
-			},
-			"stats" : {
-				usage : "[options]",
-				options : [
-					[ "--days=<number>", "How many days to report. Default: 30." ],
-					[ "--by=<group>", "Group by model, provider, day, or user." ],
-					[ "--user=<name>", "Limit the report to one user." ],
-					[ "--enable", "Enable usage recording in Agent.yml." ],
-					[ "--json", "Print the report as JSON." ]
-				],
-				examples : [ "stats", "stats --by=provider --days=7" ],
-				note : "Recording is off by default. After --enable, rebuild and restart the served app."
-			},
-			"data" : {
-				usage : "[options]", options : [ [ "--json", "Print data-home details as JSON." ] ],
-				examples : [ "data" ]
-			},
-			"backup" : {
-				usage : "[options]", options : [ [ "--to=<file>", "Write the backup ZIP to this path." ] ],
-				examples : [ "backup", "backup --to=agent-backup.zip" ],
-				note : "Includes the chat database, files, and skills. Mounted volumes are not included."
-			},
-			"restore" : {
-				usage : "<file> [options]",
-				options : [
-					[ "--home=<directory>", "Restore into a different data home." ],
-					[ "--force", "Allow replacing an existing data home." ]
-				],
-				examples : [ "restore agent-backup.zip" ],
-				note : "Existing data is kept as .before-restore."
-			},
-			"package" : {
-				usage : "[options]", options : [ [ "--version=<version>", "Version of the packaged application." ] ],
-				examples : [ "package --version=1.0.0" ],
-				note : "Requires a prior build. Writes a portable .bxa archive and checksum into dist/."
-			},
-			"deploy" : {
-				usage : "[options]",
-				options : [
-					[ "--name=<name>", "Use the named deploy/ configuration." ],
-					[ "--target=<type>", "Deployment target. Default: local." ],
-					[ "--destination=<path>", "Destination for an ad-hoc deployment." ]
-				],
-				examples : [ "deploy --name=production", "deploy --destination=/srv/my-agent" ],
-				note : "Local and file-transfer targets use a packaged .bxa; Docker and DigitalOcean use the built application."
-			}
-		}
-	}
 
 	/**
 	 * @options Parsed CLI presentation flags, including color
@@ -358,17 +25,18 @@ class {
 	}
 
 	/**
-	 * @descriptions Built-in command names and their short summaries
+	 * @definitions What each built-in verb says it is: its meta()
 	 * @extensions Installed extension commands as {name, description} entries
 	 * @return The grouped overview, examples, and global flags
 	 */
-	string function overview( required struct descriptions, array extensions = [] ) {
+	string function overview( required array definitions, array extensions = [] ) {
 		var out = []
 		paragraph( out, "Usage: bxAgents <command> [options]", "bold" )
-		var nameWidth = arguments.descriptions.keyArray().reduce( ( w, name ) => max( w, len( name ) ), 0 )
-		for ( var group in static.GROUPS ) {
-			heading( out, group.title )
-			rows( out, group.commands.map( name => [ name, descriptions[ name ] ] ), nameWidth )
+		var nameWidth = arguments.definitions.reduce( ( width, definition ) => max( width, len( definition.name ) ), 0 )
+		for ( var title in BaseVerb::GROUPS ) {
+			var inGroup = arguments.definitions.filter( definition => definition.group == title ).sort( ( a, b ) => a.position - b.position )
+			heading( out, title )
+			rows( out, inGroup.map( definition => [ definition.name, definition.description ] ), nameWidth )
 		}
 		if ( arguments.extensions.len() ) {
 			heading( out, "FROM EXTENSIONS" )
@@ -387,26 +55,26 @@ class {
 	}
 
 	/**
-	 * @name A built-in command name
-	 * @description Its short summary
+	 * @definition What the verb says it is: its meta()
 	 * @return Focused usage, options, examples, and reference link
 	 */
-	string function command( required string name, required string description ) {
-		var entry = static.COMMANDS[ arguments.name ]
+	string function command( required struct definition ) {
+		var entry = arguments.definition
 		var out = []
-		paragraph( out, "bxAgents " & arguments.name, "bold" )
-		paragraph( out, arguments.description )
+		paragraph( out, "bxAgents " & entry.name, "bold" )
+		paragraph( out, entry.description )
 		heading( out, "USAGE" )
-		paragraph( out, "bxAgents #arguments.name# #entry.usage#", "bold", 2 )
-		if ( len( entry.actions ?: "" ) ) {
-			heading( out, arguments.name == "add" ? "KINDS" : ( arguments.name == "logs" ? "AREAS" : "ACTIONS" ) )
-			paragraph( out, entry.actions, "plain", 2 )
+		paragraph( out, "bxAgents #entry.name# #entry.usage#", "bold", 2 )
+		if ( entry.actions.len() ) {
+			heading( out, entry.actionsHeading )
+			paragraph( out, entry.actions.map( action => action.name ).toList( ", " ), "plain", 2 )
 		}
-		if ( entry.options.len() ) {
-			heading( out, [ "new", "add" ].contains( arguments.name ) ? "COMMON OPTIONS" : "OPTIONS" )
-			rows( out, entry.options )
+		var shown = entry.options.filter( option => !option.hidden ).map( option => [ option.display, option.description ] )
+		if ( shown.len() ) {
+			heading( out, entry.optionsHeading )
+			rows( out, shown )
 		}
-		if ( len( entry.note ?: "" ) ) {
+		if ( len( entry.note ) ) {
 			out.append( "" )
 			paragraph( out, entry.note, "plain", 2 )
 		}
@@ -415,9 +83,8 @@ class {
 			paragraph( out, "bxAgents " & example, "bold", 2 )
 		}
 		globalOptions( out, false )
-		var anchor = [ "data", "backup", "restore" ].contains( arguments.name ) ? "data-backup-and-restore" : arguments.name
 		heading( out, "FULL REFERENCE" )
-		paragraph( out, "https://bxagents.ai/cli-reference###anchor#", "muted", 2 )
+		paragraph( out, "https://bxagents.ai/cli-reference###entry.reference#", "muted", 2 )
 		paragraph( out, "bxAgents --help lists all commands.", "muted", 2 )
 		return out.toList( char( 10 ) )
 	}

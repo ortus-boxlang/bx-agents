@@ -7,19 +7,31 @@
  */
 import bxModules.bxagents.models.util.ByteSize;
 
-class {
+class extends="BaseVerb" {
 
 	/**
-	 * @options { projectRoot (required), to }
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
 	 */
-	struct function run( struct options = {} ) {
-		var root = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( root ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`backup` requires a project root" )
+	struct function meta() {
+		return {
+			name : "backup",
+			group : "OPERATE & SHIP",
+			position : 4,
+			description : "Back up the agent's database, files, and skills",
+			usage : "[options]",
+			options : [
+				{ name : "to", display : "--to=<file>", description : "Write the backup ZIP to this path.", takesValue : true }
+			],
+			examples : [ "backup", "backup --to=agent-backup.zip" ],
+			note : "Includes the chat database, files, and skills. Mounted volumes are not included.",
+			reference : "data-backup-and-restore"
 		}
-		var home = new "models.data.ProjectData@bxagents"().of( root.reReplace( "[\/]+$", "" ) ).home
-		var made = new "models.data.DataBackup@bxagents"( home ).create( trim( arguments.options.to ?: "" ) )
-		return { exitCode : 0, message : "Backed up #made.entries# #made.entries == 1 ? 'file' : 'files'# (#ByteSize::format( made.bytes )#) to #made.file#" }
+	}
+
+	function handle() {
+		var home = new "models.data.ProjectData@bxagents"().of( projectRoot() ).home
+		var made = new "models.data.DataBackup@bxagents"( home ).create( trim( option( "to" ) ) )
+		return done( "Backed up #made.entries# #made.entries == 1 ? 'file' : 'files'# (#ByteSize::format( made.bytes )#) to #made.file#" )
 	}
 
 }

@@ -1,0 +1,250 @@
+import bxagents.models.cli.BaseVerb;
+
+/**
+ * What every verb gets from BaseVerb, and that every real verb describes itself in a way the help, the completions and the
+ * reference page can use.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * @return A definition that passes the checks, for a specs to change one thing in
+	 */
+	private struct function shape() {
+		return {
+			name        : "fake",
+			group       : "OPERATE & SHIP",
+			position    : 1,
+			description : "A verb for the specs",
+			usage       : "<action> [options]",
+			actions     : [ { name : "list" }, { name : "create" } ],
+			options     : [
+				{ name : "name", display : "--name=<name>", description : "What to call it.", takesValue : true },
+				{ name : "json", description : "Print results as JSON." },
+				{ name : "secret", takesValue : true, hidden : true }
+			],
+			examples    : [ "fake list", "fake create --name=laptop" ],
+			subcommand  : true
+		}
+	}
+
+	/**
+	 * @definition What the verb says it is
+	 * @options What was typed
+	 *
+	 * @return The verb, ready to run
+	 */
+	private any function verb( struct definition = shape() ) {
+		return new tests.support.FakeVerb( arguments.definition )
+	}
+
+	/**
+	 * The specs.
+	 */
+	function run() {
+		describe( "BaseVerb", function() {
+
+			describe( "running a verb", function() {
+
+				it( "asks for a project root in the same words every verb used", function() {
+					expect( () => verb().run( { _positional : "list" } ) ).toThrow( type = "BxAgents.MissingProjectRoot", regex = "`fake` requires a project root" )
+				} );
+
+				it( "does not ask for one when the verb says it has none", function() {
+					var definition = shape()
+					definition.projectRoot = false
+					var fake = verb( definition )
+					expect( fake.run( { _positional : "list" } ).message ).toBe( "two rows" )
+				} );
+
+				it( "sends the first word to the action it names, in any case", function() {
+					var fake = verb()
+					fake.run( { projectRoot : "/p", _positional : "LIST" } )
+					fake.run( { projectRoot : "/p", _positional : "create", name : "laptop" } )
+					expect( fake.called() ).toBe( [ "handleList", "handleCreate" ] )
+				} );
+
+				it( "says what the actions are when the first word is not one of them", function() {
+					expect( () => verb().run( { projectRoot : "/p", _positional : "dance" } ) ).toThrow( type = "BxAgents.UnknownFakeAction", regex = "`fake` needs one of: list, create - for example `bxAgents fake list`\." )
+					expect( () => verb().run( { projectRoot : "/p" } ) ).toThrow( type = "BxAgents.UnknownFakeAction" )
+				} );
+
+				it( "suggests the example the verb names when it names one", function() {
+					var definition = shape()
+					definition.actionExample = "fake create --name=ada"
+					expect( () => verb( definition ).run( { projectRoot : "/p", _positional : "x" } ) ).toThrow( regex = "for example `bxAgents fake create --name=ada`" )
+				} );
+
+				it( "lets a verb word its own unknown action error", function() {
+					var own = new tests.support.FakeVerbOwnWords( shape() )
+					expect( () => own.run( { projectRoot : "/p", _positional : "dance" } ) ).toThrow( type = "FakeVerb.Nope", regex = "not \[dance\]" )
+				} );
+
+				it( "calls handle() and leaves the first word alone when the verb reads its own words", function() {
+					var definition = shape()
+					definition.dispatch = false
+					var fake = verb( definition )
+					expect( fake.run( { projectRoot : "/p", _positional : "dance" } ).message ).toBe( "plain" )
+					expect( fake.called() ).toBe( [ "handle" ] )
+				} );
+
+				it( "calls handle() for a verb that has no actions", function() {
+					var definition = shape()
+					definition.actions = []
+					expect( verb( definition ).run( { projectRoot : "/p" } ).message ).toBe( "plain" )
+				} );
+
+				it( "passes along the extra keys of a result", function() {
+					var made = verb().run( { projectRoot : "/p", _positional : "create", name : "laptop" } )
+					expect( made ).toBe( { exitCode : 0, message : "made laptop", id : 7 } )
+				} );
+			} );
+
+			describe( "reading what was typed", function() {
+
+				beforeEach( function() {
+					variables.fake = verb()
+					fake.run( { projectRoot : "/p/", _positional : " list ", name : "ada", json : true, flag : "no" } )
+				} );
+
+				it( "reads an option with a default", function() {
+					expect( fake.help( "option", [ "name" ] ) ).toBe( "ada" )
+					expect( fake.help( "option", [ "missing", "fallback" ] ) ).toBe( "fallback" )
+					expect( fake.help( "option", [ "missing" ] ) ).toBe( "" )
+				} );
+
+				it( "knows a switch that was typed", function() {
+					expect( fake.help( "isOptionSet", [ "json" ] ) ).toBeTrue()
+					expect( fake.help( "isOptionSet", [ "flag" ] ) ).toBeFalse()
+					expect( fake.help( "isOptionSet", [ "missing" ] ) ).toBeFalse()
+				} );
+
+				it( "trims the first word and the project root", function() {
+					expect( fake.help( "firstArgument" ) ).toBe( "list" )
+					expect( fake.help( "projectRoot" ) ).toBe( "/p" )
+				} );
+
+				it( "refuses a missing required option with the error and words the verb gives", function() {
+					expect( () => verb().run( { projectRoot : "/p", _positional : "create" } ) ).toThrow( type = "FakeVerb.MissingName", regex = "`fake create` requires --name" )
+					expect( () => verb().run( { projectRoot : "/p", _positional : "create", name : "   " } ) ).toThrow( type = "FakeVerb.MissingName" )
+				} );
+			} );
+
+			describe( "answering", function() {
+
+				beforeEach( function() {
+					variables.fake = verb()
+				} );
+
+				it( "answers JSON when --json was typed and the text when it was not", function() {
+					expect( fake.run( { projectRoot : "/p", _positional : "list", json : true } ).message ).toBe( '{"rows":2}' )
+					expect( fake.run( { projectRoot : "/p", _positional : "list" } ).message ).toBe( "two rows" )
+				} );
+
+				it( "makes failures and results with their own exit code", function() {
+					fake.run( { projectRoot : "/p", _positional : "list" } )
+					expect( fake.help( "fail", [ "no" ] ) ).toBe( { exitCode : 1, message : "no" } )
+					expect( fake.help( "fail", [ "no", 3, { more : 1 } ] ) ).toBe( { exitCode : 3, message : "no", more : 1 } )
+					expect( fake.help( "exitWith", [ 0, "fine" ] ) ).toBe( { exitCode : 0, message : "fine" } )
+				} );
+
+				it( "joins lines with a newline", function() {
+					expect( fake.help( "lines", [ [ "a", "b" ] ] ).message ).toBe( "a" & char( 10 ) & "b" )
+				} );
+
+				it( "pads and cuts a column", function() {
+					expect( fake.help( "padRight", [ "ab", 5 ] ) ).toBe( "ab   " )
+					expect( fake.help( "padRight", [ "abcdefg", 5 ] ) ).toBe( "abcde" )
+				} );
+			} );
+
+			describe( "checking what a verb says it is", function() {
+
+				it( "accepts a complete definition", function() {
+					expect( BaseVerb::problemsOf( shape() ) ).toBe( [] )
+				} );
+
+				it( "names each thing that is wrong", function() {
+					var definition = shape()
+					definition.colour = "red"
+					definition.group = "NOWHERE"
+					definition.delete( "usage" )
+					definition.examples = []
+					definition.options.append( { name : "name", description : "twice" } )
+					definition.options.append( { name : "plain" } )
+					definition.options.append( { name : "odd", description : "x", extra : 1 } )
+					var found = BaseVerb::problemsOf( definition ).toList( "|" )
+					expect( found ).toInclude( "unknown key [colour]" )
+					expect( found ).toInclude( "the group [NOWHERE] is not one of" )
+					expect( found ).toInclude( "[usage] is missing" )
+					expect( found ).toInclude( "it has no examples" )
+					expect( found ).toInclude( "option [name] is listed twice" )
+					expect( found ).toInclude( "option [plain] has no description" )
+					expect( found ).toInclude( "option [odd] has an unknown key [extra]" )
+				} );
+
+				it( "refuses a verb that does not say what it is", function() {
+					var plain = new bxagents.models.cli.BaseVerb()
+					expect( () => plain.meta() ).toThrow( type = "BxAgents.VerbWithoutMeta" )
+				} );
+			} );
+
+			describe( "the verbs of the module", function() {
+
+				it( "lists each one once, and none is unknown to the dispatcher", function() {
+					var names = BaseVerb::verbNames()
+					expect( names ).toHaveLength( names.reduce( ( seen, name ) => seen.contains( name ) ? seen : seen.append( name ), [] ).len() )
+					expect( BaseVerb::isVerb( "token" ) ).toBeTrue()
+					expect( BaseVerb::isVerb( "nonsense" ) ).toBeFalse()
+					expect( () => BaseVerb::definitionOf( "nonsense" ) ).toThrow( type = "BxAgents.UnknownVerb" )
+				} );
+
+				it( "finds the class of a verb from its name", function() {
+					expect( BaseVerb::classOf( "token" ) ).toBe( "models.cli.Token" )
+					expect( BaseVerb::classOf( "hash-password" ) ).toBe( "models.cli.HashPassword" )
+				} );
+
+				it( "describes every verb in a way that passes the checks, with its own name and a place in the overview", function() {
+					var places = {}
+					for ( var name in BaseVerb::verbNames() ) {
+						var definition = BaseVerb::definitionOf( name )
+						expect( definition.name ).toBe( name )
+						expect( BaseVerb::problemsOf( definition ) ).toBe( [], "problems of #name#" )
+						var place = definition.group & "/" & definition.position
+						expect( places.keyExists( place ) ).toBeFalse( "#name# shares the place #place#" )
+						places[ place ] = name
+					}
+				} );
+
+				it( "sends every action of a verb to a method, and every action method is an action", function() {
+					for ( var name in BaseVerb::verbNames() ) {
+						var definition = BaseVerb::definitionOf( name )
+						var instance = new "#BaseVerb::classOf( name )#@bxagents"()
+						var methods = getMetadata( instance ).functions.map( f => f.name )
+						if ( !definition.actions.len() || !definition.dispatch ) {
+							continue
+						}
+						for ( var action in definition.actions ) {
+							var method = "handle" & uCase( left( action.name, 1 ) ) & mid( action.name, 2, len( action.name ) )
+							expect( methods.findNoCase( method ) > 0 ).toBeTrue( "#name# has no #method#" )
+						}
+						var listed = definition.actions.map( a => "handle" & uCase( left( a.name, 1 ) ) & mid( a.name, 2, len( a.name ) ) )
+						for ( var method in methods.filter( m => reFindNoCase( "^handle[A-Z]", m ) ) ) {
+							expect( listed.findNoCase( method ) > 0 ).toBeTrue( "#name# has #method# but does not list the action" )
+						}
+					}
+				} );
+
+				it( "asks for a value on each flag whose option says so, and on the project root", function() {
+					expect( BaseVerb::valueOptionsOf( "token" ) ).toBe( [ "projectRoot", "name", "scope", "expires" ] )
+					expect( BaseVerb::valueOptionsOf( "clean" ) ).toBe( [ "projectRoot" ] )
+				} );
+
+				it( "knows which verbs take an action or a name as the first word", function() {
+					expect( BaseVerb::subcommandVerbs() ).toInclude( "token" )
+					expect( BaseVerb::subcommandVerbs() ).notToInclude( "build" )
+				} );
+			} );
+		} );
+	}
+
+}

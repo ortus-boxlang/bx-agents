@@ -1,0 +1,24 @@
+/**
+ * Writes tests/golden/cli-surface.json from the command line surface as it is now.
+ *
+ *   java -cp "build/classes/java/main:src/test/resources/libs/*" ortus.boxlang.runtime.BoxRunner --bx-config boxlang.json tests/golden/make-cli-surface.bxs
+ */
+import bxagents.models.cli.BaseVerb;
+
+help = new bxagents.models.cli.support.Help( { color : false }, 80 )
+snapshot = {
+	verbs : {},
+	descriptions : {},
+	valueOptions : {},
+	subcommandVerbs : BaseVerb::subcommandVerbs().sort( "text" ),
+	help : {},
+	overview : help.overview( BaseVerb::allDefinitions() )
+}
+for ( name in BaseVerb::verbNames().sort( "text" ) ) {
+	snapshot.verbs[ name ] = BaseVerb::classOf( name )
+	snapshot.descriptions[ name ] = BaseVerb::definitionOf( name ).description
+	snapshot.valueOptions[ name ] = BaseVerb::valueOptionsOf( name ).filter( flag => flag != "projectRoot" )
+	snapshot.help[ name ] = help.command( BaseVerb::definitionOf( name ) )
+}
+fileWrite( expandPath( "/tests/golden/cli-surface.json" ), jsonSerialize( snapshot, true ) )
+println( "wrote the snapshot of " & snapshot.verbs.count() & " verbs" )

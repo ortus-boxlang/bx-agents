@@ -51,20 +51,75 @@
  */
 import bxModules.bxagents.models.util.Strings;
 
-class {
+class extends="BaseVerb" {
 
 	/**
-	 * @options { wizard (optional boolean, false = never ask, true = ask even with a model), yes (optional boolean - never ask), tui (optional boolean, false = numbered questions instead of the full-screen UI), with/search/files/files-dir/memory/mcp/channels/web-auth/guard/deploy/registry/app/region/host/user/remote-path/destination (optional - see ProjectPlan.fromFlags), projectRoot (required, absolute path), name, model (required only with --template/no source flag), description, template (optional, one of ProjectScaffolder.TEMPLATES - default "minimal"), class (optional boolean - write a class-based Agent.bx instead of the default Agent.yml; only applies to --template), repo (optional - clone this GitHub repo instead of scaffolding), forgebox (optional - install this ForgeBox slug instead of scaffolding), skipInstall (optional boolean - skip the tests/ `box install` convenience step; only applies to --template) }
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
 	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
+	struct function meta() {
+		return {
+			name : "new",
+			group : "GET STARTED",
+			position : 1,
+			description : "Create an agent project",
+			usage : "<directory> [options]",
+			options : [
+				{ name : "model", display : "--model=<provider/model>", description : "Model to use; omit to open the wizard.", takesValue : true },
+				{ name : "template", display : "--template=<name>", description : "Starter template. Default: minimal.", takesValue : true },
+				{ name : "name", display : "--name=<name>", description : "Agent name. Defaults to the directory name.", takesValue : true },
+				{ name : "description", display : "--description=<text>", description : "What the agent does.", takesValue : true },
+				{ name : "repo", display : "--repo=<owner/repo>", description : "Start from a GitHub repository.", takesValue : true },
+				{ name : "forgebox", display : "--forgebox=<slug>", description : "Start from a ForgeBox package.", takesValue : true },
+				{ name : "class", description : "Use Agent.bx instead of Agent.yml." },
+				{ name : "skipInstall", description : "Skip fetching TestBox with CommandBox." },
+				{ name : "no-tui", description : "Use plain terminal prompts." },
+				{ name : "base-url", takesValue : true, hidden : true },
+				{ name : "temperature", takesValue : true, hidden : true },
+				{ name : "max-tokens", takesValue : true, hidden : true },
+				{ name : "timeout", takesValue : true, hidden : true },
+				{ name : "with", takesValue : true, hidden : true },
+				{ name : "search", takesValue : true, hidden : true },
+				{ name : "files", takesValue : true, hidden : true },
+				{ name : "files-dir", takesValue : true, hidden : true },
+				{ name : "memory", takesValue : true, hidden : true },
+				{ name : "mcp", takesValue : true, hidden : true },
+				{ name : "connectors", takesValue : true, hidden : true },
+				{ name : "channels", takesValue : true, hidden : true },
+				{ name : "web-auth", takesValue : true, hidden : true },
+				{ name : "guard", takesValue : true, hidden : true },
+				{ name : "prompt", takesValue : true, hidden : true },
+				{ name : "widgets", takesValue : true, hidden : true },
+				{ name : "widgets-bottom", takesValue : true, hidden : true },
+				{ name : "deploy", takesValue : true, hidden : true },
+				{ name : "registry", takesValue : true, hidden : true },
+				{ name : "app", takesValue : true, hidden : true },
+				{ name : "region", takesValue : true, hidden : true },
+				{ name : "host", takesValue : true, hidden : true },
+				{ name : "user", takesValue : true, hidden : true },
+				{ name : "remote-path", takesValue : true, hidden : true },
+				{ name : "destination", takesValue : true, hidden : true }
+			],
+			optionsHeading : "COMMON OPTIONS",
+			examples : [ "new my-agent", "new my-agent --model=mock/mock-model" ],
+			projectRoot : false
+		}
+	}
+
+
+	/**
+	 * Reads: { wizard (optional boolean, false = never ask, true = ask even with a model), yes (optional boolean - never ask), tui (optional boolean, false = numbered questions instead of the full-screen UI), with/search/files/files-dir/memory/mcp/channels/web-auth/guard/deploy/registry/app/region/host/user/remote-path/destination (optional - see ProjectPlan.fromFlags), projectRoot (required, absolute path), name, model (required only with --template/no source flag), description, template (optional, one of ProjectScaffolder.TEMPLATES - default "minimal"), class (optional boolean - write a class-based Agent.bx instead of the default Agent.yml; only applies to --template), repo (optional - clone this GitHub repo instead of scaffolding), forgebox (optional - install this ForgeBox slug instead of scaffolding), skipInstall (optional boolean - skip the tests/ `box install` convenience step; only applies to --template) }
+	 */
+	function handle() {
+		var options = variables.options
+		// `new` makes the folder it is given, so it is the one verb that needs no project root: what it needs is a target
+		var projectRoot = trim( option( "projectRoot" ) )
 		if ( !len( projectRoot ) ) {
 			throw( type = "BxAgents.MissingProjectRoot", message = "`new` requires a target directory" )
 		}
 
-		var repo = trim( arguments.options.repo ?: "" )
-		var forgebox = trim( arguments.options.forgebox ?: "" )
-		var templateGiven = len( trim( arguments.options.template ?: "" ) ) > 0
+		var repo = trim( option( "repo" ) )
+		var forgebox = trim( option( "forgebox" ) )
+		var templateGiven = len( trim( option( "template" ) ) ) > 0
 
 		if ( len( repo ) && len( forgebox ) ) {
 			throw( type = "BxAgents.ConflictingProjectSource", message = "--repo and --forgebox are mutually exclusive - pick one" )
@@ -75,7 +130,7 @@ class {
 
 		var sourceWarning = ""
 		if ( len( repo ) || len( forgebox ) ) {
-			if ( len( trim( arguments.options.name ?: "" ) ) || len( trim( arguments.options.description ?: "" ) ) ) {
+			if ( len( trim( option( "name" ) ) ) || len( trim( option( "description" ) ) ) ) {
 				sourceWarning = char( 10 ) & "Note: --name/--description are ignored with --repo/--forgebox - the cloned/installed project defines its own."
 			}
 		}
@@ -99,16 +154,16 @@ class {
 			var prompter = ""
 			var rebuildCommand = ""
 
-			if ( shouldAskQuestions( arguments.options ) ) {
-				if ( arguments.options[ "class" ] ?: false ) {
+			if ( shouldAskQuestions( options ) ) {
+				if ( isOptionSet( "class" ) ) {
 					throw( type = "BxAgents.FeaturesNeedYaml", message = "--class cannot be combined with the wizard: its choices are written to Agent.yml. Pass --no-wizard to scaffold a class-based Agent.bx." )
 				}
-				prompter = arguments.options._prompter ?: newPrompter( arguments.options )
+				prompter = options._prompter ?: newPrompter( options )
 				try {
 					var asked = new "models.wizard.NewWizard@bxagents"( prompter ).run(
-						arguments.options,
+						options,
 						Strings::lastSegment( projectRoot ),
-						arguments.options._positional ?: ""
+						option( "_positional" )
 					)
 					plan = asked.plan
 					rebuildCommand = asked.command
@@ -121,12 +176,12 @@ class {
 				}
 				prompter.close()
 				// after the full-screen UI has closed: it repaints the whole screen, so a banner printed before it would be drawn over
-				new "models.cli.support.Banner@bxagents"().show( arguments.options, "AI agents in BoxLang" )
+				new "models.cli.support.Banner@bxagents"().show( options, "AI agents in BoxLang" )
 			} else {
-				if ( !len( trim( arguments.options.model ?: "" ) ) ) {
+				if ( !len( trim( option( "model" ) ) ) ) {
 					throw( type = "BxAgents.MissingModel", message = "`new` requires --model, e.g. --model=openai/gpt-5. Run it in a terminal without --model to be asked instead." )
 				}
-				plan = planner.fromFlags( arguments.options )
+				plan = planner.fromFlags( options )
 			}
 
 			if ( !len( plan.name ) ) {
@@ -141,27 +196,27 @@ class {
 				features = planner.toFeatures( plan, true )
 			}
 			var scaffolder = new "models.build.ProjectScaffolder@bxagents"()
-			var scaffoldResult = scaffolder.scaffold( projectRoot, plan.name, plan.model, plan.description, plan.template, arguments.options[ "class" ] ?: false, features )
+			var scaffoldResult = scaffolder.scaffold( projectRoot, plan.name, plan.model, plan.description, plan.template, isOptionSet( "class" ), features )
 			message = "Created new BX Agents project [#plan.name#] at #scaffoldResult.projectRoot#"
 			installTests = true
 
 			if ( features.count() || isObject( prompter ) ) {
 				var installNote = ""
-				if ( !( arguments.options.skipInstall ?: false ) ) {
+				if ( !isOptionSet( "skipInstall" ) ) {
 					installNote = installDependencies( projectRoot )
 					installTests = false
 				}
 				var colorize = isObject( prompter ) ? ( style, text ) => prompter.paint( style, text ) : ( style, text ) => text
 				return {
 					exitCode : 0,
-					message  : new "models.wizard.NextSteps@bxagents"().render( plan, features, scaffoldResult.projectRoot, installNote, colorize, arguments.options._positional ?: "", rebuildCommand )
+					message  : new "models.wizard.NextSteps@bxagents"().render( plan, features, scaffoldResult.projectRoot, installNote, colorize, option( "_positional" ), rebuildCommand )
 				}
 			}
 		}
 
 		message &= sourceWarning
 
-		if ( installTests && !( arguments.options.skipInstall ?: false ) ) {
+		if ( installTests && !isOptionSet( "skipInstall" ) ) {
 			message &= char( 10 ) & installDependencies( projectRoot )
 		}
 

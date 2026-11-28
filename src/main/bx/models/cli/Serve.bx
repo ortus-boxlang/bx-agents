@@ -64,7 +64,27 @@
  * therefore its home) was resolved before any of our BoxLang code ever got a chance to run. `BoxRuntime` is a
  * JVM-wide singleton; its home is fixed at first initialization.
  */
-class {
+class extends="BaseVerb" {
+
+	/**
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
+	 */
+	struct function meta() {
+		return {
+			name : "serve",
+			group : "BUILD & RUN",
+			position : 4,
+			description : "Start the HTTP server",
+			usage : "[options]",
+			options : [
+				{ name : "port", display : "--port=<number>", description : "Listening port, 1-65535. Default: 8080.", takesValue : true },
+				{ name : "host", display : "--host=<address>", description : "Bind address. Default: 127.0.0.1.", takesValue : true }
+			],
+			examples : [ "serve", "serve --port=9000" ],
+			note : "Requires a prior build and boxlang-miniserver on PATH. Use --host=0.0.0.0 deliberately to expose the server beyond this machine."
+		}
+	}
+
 
 	/**
 	 * Runs the serve verb, spawning a new server process with the specified options.
@@ -82,15 +102,10 @@ class {
 	 *   - serverHome: the BoxLang home directory for this project (`.build/runtime`)
 	 *   - warning: a warning when the server is exposed beyond loopback; otherwise blank
 	 *
-	 * @options { projectRoot (required, absolute path), port (optional, defaults to 8080 - must be a whole number 1-65535), host (optional, defaults to 127.0.0.1 - pass 0.0.0.0 to expose the agent on every network interface) }
+	 * Reads: { port (optional, defaults to 8080 - must be a whole number 1-65535), host (optional, defaults to 127.0.0.1 - pass 0.0.0.0 to expose the agent on every network interface) }
 	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`serve` requires a project root" )
-		}
-
-		var root = projectRoot.reReplace( "[\/]+$", "" )
+	function handle() {
+		var root = projectRoot()
 		var layout = new "models.build.layout.BuildLayout@bxagents"().of( root )
 		var appDir = layout.appDir
 
@@ -110,7 +125,7 @@ class {
 		// `_path` replaces the machine's PATH as the folders to search, for tests: a machine that has the miniserver installed, such as a
 		// CI runner, could never show the "not found" answer otherwise
 		var launcher = createObject( "java", "ortus.boxlang.bxagents.build.MiniServerLauncher" )
-		var executable = structKeyExists( arguments.options, "_path" ) ? launcher.findExecutable( arguments.options._path ) : launcher.findExecutable()
+		var executable = hasOption( "_path" ) ? launcher.findExecutable( variables.options._path ) : launcher.findExecutable()
 		if ( isNull( executable ) ) {
 			throw(
 				type    = "BxAgents.MiniServerNotFound",
@@ -118,16 +133,16 @@ class {
 			)
 		}
 
-		var port = resolvePort( arguments.options.port ?: 8080 )
+		var port = resolvePort( option( "port", 8080 ) )
 		// Loopback by DEFAULT - see the class docblock. `--host=0.0.0.0`
 		// still opts into every interface, deliberately and visibly.
-		var host = arguments.options.host ?: "127.0.0.1"
+		var host = option( "host", "127.0.0.1" )
 		var boundTo = host == "0.0.0.0" ? "ALL network interfaces" : "#host# only"
 		var serverHome = layout.runtimeDir
 
 		// The served app needs the bxagents module in its own runtime (and nothing else from the machine). The build put it
 		// there; this makes sure of it, which is a no-op while its stamp is unchanged.
-		var copied = new "models.build.layout.ModuleCopier@bxagents"().copy( new "models.build.layout.ModuleCopier@bxagents"().sourceDir( arguments.options.moduleDir ?: "" ), serverHome )
+		var copied = new "models.build.layout.ModuleCopier@bxagents"().copy( new "models.build.layout.ModuleCopier@bxagents"().sourceDir( option( "moduleDir" ) ), serverHome )
 		// the copy keeps the installed folder's name (`bx-agents` from `bx-module install`), so any folder there is the module
 		var installedCopies = directoryExists( serverHome & "/modules" ) ? directoryList( path = serverHome & "/modules", recurse = false, type = "dir" ) : []
 		if ( !installedCopies.len() ) {
@@ -148,8 +163,8 @@ class {
 		// environment this process inherited would otherwise be the home of every project served from here.
 		environment.put( "BOXLANG_HOME", javaCast( "string", serverHome ) )
 		// `_environment` adds variables to the child's, for a test that needs the server to see a different machine (see ServedLayoutSpec)
-		for ( var extra in ( arguments.options._environment ?: {} ) ) {
-			environment.put( javaCast( "string", extra ), javaCast( "string", arguments.options._environment[ extra ] ) )
+		for ( var extra in ( option( "_environment", {} ) ) ) {
+			environment.put( javaCast( "string", extra ), javaCast( "string", variables.options._environment[ extra ] ) )
 		}
 
 		// started in .build: the paths in miniserver.json are relative to it, and so is ${user-dir} in the engine config
@@ -158,19 +173,20 @@ class {
 		// an open API that other machines can reach is said out loud, once, at the start
 		var warning = new "models.api.ExposureWarning@bxagents"().of( appDir, host, port )
 
-		return {
-			exitCode   : 0,
-			message    : "Serving [#layout.publicDir#] (the app is in [#appDir#]) on http://#host#:#port# - bound to #boundTo#" & ( len( warning ) ? char( 10 ) & warning : "" ),
-			warning    : warning,
-			process    : process,
-			configPath : configPath,
-			host       : host,
-			port       : port,
-			serverHome : serverHome,
-			buildDir   : layout.buildDir,
-			publicDir  : layout.publicDir,
-			database   : databaseFile
-		}
+		return done(
+			"Serving [#layout.publicDir#] (the app is in [#appDir#]) on http://#host#:#port# - bound to #boundTo#" & ( len( warning ) ? char( 10 ) & warning : "" ),
+			{
+				warning    : warning,
+				process    : process,
+				configPath : configPath,
+				host       : host,
+				port       : port,
+				serverHome : serverHome,
+				buildDir   : layout.buildDir,
+				publicDir  : layout.publicDir,
+				database   : databaseFile
+			}
+		)
 	}
 
 	/**

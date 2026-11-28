@@ -38,22 +38,48 @@ import bxModules.bxagents.models.connect.OAuthServers;
 
 import bxModules.bxagents.models.util.Terminal;
 
-class {
+class extends="BaseVerb" {
+
+	/**
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
+	 */
+	struct function meta() {
+		return {
+			name : "chat",
+			group : "BUILD & RUN",
+			position : 2,
+			description : "Chat with an agent in your terminal",
+			usage : "[options]",
+			options : [
+				{ name : "server", description : "Start a temporary server for the full application." },
+				{ name : "connect", display : "--connect=<url>", description : "Chat with an already-running server.", takesValue : true },
+				{ name : "token", display : "--token=<token>", description : "API access token for a protected server.", takesValue : true },
+				{ name : "api-path", display : "--api-path=<path>", description : "Custom API path. Default: /__bxagents.", takesValue : true },
+				{ name : "port", display : "--port=<number>", description : "Port for the temporary server.", takesValue : true },
+				{ name : "agent", display : "--agent=<name>", description : "Chat with a named agent.", takesValue : true },
+				{ name : "user", display : "--user=<name>", description : "Conversation owner. Default: local.", takesValue : true },
+				{ name : "continue", description : "Resume the most recent conversation." },
+				{ name : "session", display : "--session=<number-or-id>", description : "Resume a particular conversation.", takesValue : true },
+				{ name : "record", display : "--record[=<file>]", description : "Record the terminal session." },
+				{ name : "inline", display : "--inline / --fullscreen", description : "Choose the terminal layout." },
+				{ name : "no-tui", description : "Use the plain line-by-line chat." }
+			],
+			examples : [ "chat", "chat --server", "chat --connect=http://127.0.0.1:8080" ],
+			note : "Requires a prior build. Type / inside chat to discover slash commands."
+		}
+	}
+
 
 	/**
 	 * Runs the chat command, either in-process, over HTTP to a throwaway server, or connecting to an existing server.
-	 * @options { projectRoot (required, absolute path), server (optional boolean - boot a throwaway miniserver and chat over real HTTP), connect (optional - the base URL of an already-running server, e.g. "http://127.0.0.1:8080"), token (optional - the access token for a server that wants one; BXAGENTS_TOKEN in the environment does the same), api-path (optional - where the server serves its API when it is not the default) }
+	 * Reads: { server (optional boolean - boot a throwaway miniserver and chat over real HTTP), connect (optional - the base URL of an already-running server, e.g. "http://127.0.0.1:8080"), token (optional - the access token for a server that wants one; BXAGENTS_TOKEN in the environment does the same), api-path (optional - where the server serves its API when it is not the default) }
 	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`chat` requires a project root" )
-		}
+	function handle() {
+		var options = variables.options
+		var root = projectRoot()
 
-		var root = projectRoot.reReplace( "[\/]+$", "" )
-
-		var useServer  = arguments.options.server ?: false
-		var connectUrl = trim( arguments.options.connect ?: "" )
+		var useServer  = isOptionSet( "server" )
+		var connectUrl = trim( option( "connect" ) )
 
 		// One says "start a server", the other "talk to one that already
 		// exists". Honoring either silently would mean ignoring what the
@@ -66,40 +92,40 @@ class {
 		}
 
 		if ( len( connectUrl ) ) {
-			return chatOverHttp( connectUrl, "", arguments.options )
+			return chatOverHttp( connectUrl, "", options )
 		}
 
 		requireBuild( root )
 
 		if ( useServer ) {
 			// `_client` replaces the real one, for tests
-			var client = arguments.options._client ?: new "models.cli.support.AgentClient@bxagents"()
-			var launched = client.startServer( root, arguments.options.port ?: nullValue() )
+			var client = options._client ?: new "models.cli.support.AgentClient@bxagents"()
+			var launched = client.startServer( root, options.port ?: nullValue() )
 			// The throwaway server belongs to this chat: it goes down when the chat ends, however it ends.
 			// (--connect never stops anything: that server is somebody else's.)
 			try {
-				return chatOverHttp( launched.baseUrl, "Started a throwaway server on #launched.baseUrl#", arguments.options )
+				return chatOverHttp( launched.baseUrl, "Started a throwaway server on #launched.baseUrl#", options )
 			} finally {
 				client.stopServer( launched.process ?: nullValue() )
 			}
 		}
 
-		if ( arguments.options.keyExists( "_rawArgs" ) ) {
-			var rawArgs = arguments.options._rawArgs
-			arguments.options.delete( "_rawArgs" )
+		if ( options.keyExists( "_rawArgs" ) ) {
+			var rawArgs = options._rawArgs
+			options.delete( "_rawArgs" )
 			if ( !isRuntimeChild() ) {
-				return chatInBoxLangProcess( root, rawArgs, arguments.options )
+				return chatInBoxLangProcess( root, rawArgs, options )
 			}
 		}
 
-		var startupSpinner = isRuntimeChild() && wantsScreen( arguments.options )
+		var startupSpinner = isRuntimeChild() && wantsScreen( options )
 			? createObject( "java", "ortus.boxlang.bxagents.tui.StartupSpinner" ).start( "loading your agent" )
 			: nullValue()
 		if ( !isNull( startupSpinner ) ) {
-			arguments.options._startupSpinner = startupSpinner
+			options._startupSpinner = startupSpinner
 		}
 		try {
-			return chatInProcess( root, arguments.options )
+			return chatInProcess( root, options )
 		} finally {
 			if ( !isNull( startupSpinner ) ) {
 				startupSpinner.close()
@@ -168,7 +194,7 @@ class {
 			true
 		)
 		try {
-			return { exitCode : process.waitFor(), message : "" }
+			return exitWith( process.waitFor(), "" )
 		} catch ( any e ) {
 			if ( process.isAlive() ) {
 				process.destroyForcibly()
@@ -257,10 +283,7 @@ class {
 			arguments.session.close()
 			extensions.unload()
 		}
-		return {
-			exitCode : 0,
-			message  : "Chat session ended" & ( len( saved ) ? ". Recording saved to #saved#" : "" )
-		}
+		return done( "Chat session ended" & ( len( saved ) ? ". Recording saved to #saved#" : "" ) )
 	}
 
 	/**
@@ -344,10 +367,7 @@ class {
 			}
 		}
 
-		return {
-			exitCode : 0,
-			message  : "Chat session ended"
-		}
+		return done( "Chat session ended" )
 	}
 
 	/**
@@ -472,10 +492,7 @@ class {
 			}
 		}
 
-		return {
-			exitCode : 0,
-			message  : "Chat session ended"
-		}
+		return done( "Chat session ended" )
 	}
 
 	/**

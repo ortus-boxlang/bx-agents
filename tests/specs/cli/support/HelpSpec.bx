@@ -9,15 +9,15 @@ class extends="testbox.system.BaseSpec" {
 	function run() {
 		describe( "CLI help", function() {
 			it( "lists every built-in once in task groups and keeps extension commands discoverable", function() {
-				var descriptions = bxagents.ModuleConfig::verbDescriptions;
-				var text = new bxagents.models.cli.support.Help().overview( descriptions, [
+				var definitions = bxagents.models.cli.BaseVerb::allDefinitions();
+				var text = new bxagents.models.cli.support.Help().overview( definitions, [
 					{ name : "my-extension", description : "An installed extension command" }
 				] );
 				expect( text ).toInclude( "GET STARTED" );
 				expect( text ).toInclude( "BUILD & RUN" );
 				expect( text ).toInclude( "FROM EXTENSIONS" );
 				expect( text ).toInclude( "my-extension" );
-				for ( var name in descriptions ) {
+				for ( var name in bxagents.models.cli.BaseVerb::verbNames() ) {
 					expect( reMatch( "(?m)^  " & name & "  +", text ) ).toHaveLength( 1 );
 				}
 				expect( text ).notToInclude( char( 27 ) );
@@ -25,14 +25,14 @@ class extends="testbox.system.BaseSpec" {
 
 			it( "renders meaningful focused help for every built-in", function() {
 				var renderer = new bxagents.models.cli.support.Help();
-				for ( var name in bxagents.ModuleConfig::verbs ) {
-					var text = renderer.command( name, bxagents.ModuleConfig::verbDescriptions[ name ] );
+				for ( var name in bxagents.models.cli.BaseVerb::verbNames() ) {
+					var text = renderer.command( bxagents.models.cli.BaseVerb::definitionOf( name ) );
 					expect( text ).toInclude( "bxAgents " & name );
 					expect( text ).toInclude( "USAGE" );
 					expect( text ).toInclude( "EXAMPLES" );
 					expect( text ).toInclude( "--help" );
 				}
-				var serve = renderer.command( "serve", "Start the HTTP server" );
+				var serve = renderer.command( bxagents.models.cli.BaseVerb::definitionOf( "serve" ) );
 				expect( serve ).toInclude( "--port=<number>" );
 				expect( serve ).toInclude( "Default: 8080." );
 				expect( serve ).notToInclude( "GET STARTED" );
@@ -42,9 +42,9 @@ class extends="testbox.system.BaseSpec" {
 				var paint = ( style, text ) => style == "bold" ? char( 27 ) & "[1m" & text & char( 27 ) & "[0m" : text;
 				for ( var width in [ 24, 40, 60, 80 ] ) {
 					var renderer = new bxagents.models.cli.support.Help( width = width, paint = paint );
-					var pages = [ renderer.overview( bxagents.ModuleConfig::verbDescriptions ) ];
-					for ( var name in bxagents.ModuleConfig::verbs ) {
-						pages.append( renderer.command( name, bxagents.ModuleConfig::verbDescriptions[ name ] ) );
+					var pages = [ renderer.overview( bxagents.models.cli.BaseVerb::allDefinitions() ) ];
+					for ( var name in bxagents.models.cli.BaseVerb::verbNames() ) {
+						pages.append( renderer.command( bxagents.models.cli.BaseVerb::definitionOf( name ) ) );
 					}
 					for ( var page in pages ) {
 						expect( page ).toInclude( char( 27 ) & "[1m" );

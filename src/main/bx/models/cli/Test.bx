@@ -4,44 +4,49 @@
  * at the project directly (see TestRunnerService.bx's docblock for why a
  * fresh process is required).
  */
-class {
+class extends="BaseVerb" {
 
 	/**
-	 * @options { projectRoot (required, absolute path) }
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
 	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`test` requires a project root" )
+	struct function meta() {
+		return {
+			name : "test",
+			group : "BUILD & RUN",
+			position : 5,
+			description : "Run project tests",
+			usage : "[options]",
+			options : [
+
+			],
+			examples : [ "test" ],
+			note : "Runs tests/specs with TestBox against a temporary build. Install TestBox with box install first."
 		}
+	}
 
+	function handle() {
 		var runner = new "models.build.TestRunnerService@bxagents"()
-		var result = runner.run( projectRoot, arguments.options.moduleDir ?: "" )
+		var result = runner.run( projectRoot(), option( "moduleDir" ) )
 
-		var lines = [
+		var report = [
 			"Bundles: #result.totalBundles# | Suites: #result.totalSuites# | Specs: #result.totalSpecs#",
 			"Pass: #result.totalPass# | Fail: #result.totalFail# | Error: #result.totalError# | Skipped: #result.totalSkipped#"
 		]
-
 		for ( var failure in result.failures ) {
-			lines.append( len( failure.suite ) ? "  [FAILED] #failure.bundle# > #failure.suite# > #failure.spec#: #failure.message#" : "  [FAILED] #failure.bundle# could not start: #failure.message#" )
+			report.append( len( failure.suite ) ? "  [FAILED] #failure.bundle# > #failure.suite# > #failure.spec#: #failure.message#" : "  [FAILED] #failure.bundle# could not start: #failure.message#" )
 		}
-		if ( result.failures.len() && !runner.hasTestEnvironment( projectRoot ) ) {
-			lines.append( "" )
-			lines.append( "This project has no `environments.test`. `bxAgents test` builds the agent against it, on the mock provider, so specs need no API key or network (docs/conventions/testing.md). Add it to Agent.yml:" )
-			lines.append( "" )
-			lines.append( "  environments:" )
-			lines.append( "    test:" )
-			lines.append( "      model: mock/mock-model" )
-			lines.append( "" )
-			lines.append( "or, in an Agent.bx, a `test()` method returning { model : ""mock/mock-model"" }." )
+		if ( result.failures.len() && !runner.hasTestEnvironment( projectRoot() ) ) {
+			report.append( "" )
+			report.append( "This project has no `environments.test`. `bxAgents test` builds the agent against it, on the mock provider, so specs need no API key or network (docs/conventions/testing.md). Add it to Agent.yml:" )
+			report.append( "" )
+			report.append( "  environments:" )
+			report.append( "    test:" )
+			report.append( "      model: mock/mock-model" )
+			report.append( "" )
+			report.append( "or, in an Agent.bx, a `test()` method returning { model : ""mock/mock-model"" }." )
 		}
 
-		return {
-			exitCode : result.exitCode,
-			message  : lines.toList( char( 10 ) ),
-			result   : result
-		}
+		return exitWith( result.exitCode, report.toList( char( 10 ) ), { result : result } )
 	}
 
 }

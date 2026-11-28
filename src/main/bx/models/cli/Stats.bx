@@ -9,45 +9,55 @@
  * `--enable` writes that line for you (then rebuild for it to take effect). It never needs a built project: it only
  * reads the database. Only calls whose provider reported usage are counted.
  */
-class {
+class extends="BaseVerb" {
 
 	/**
-	 * @options { projectRoot (required), days, by, user, json, enable }
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
 	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`stats` requires a project root" )
+	struct function meta() {
+		return {
+			name : "stats",
+			group : "OPERATE & SHIP",
+			position : 2,
+			description : "View model calls and token usage",
+			usage : "[options]",
+			options : [
+				{ name : "days", display : "--days=<number>", description : "How many days to report. Default: 30.", takesValue : true },
+				{ name : "by", display : "--by=<group>", description : "Group by model, provider, day, or user.", takesValue : true },
+				{ name : "user", display : "--user=<name>", description : "Limit the report to one user.", takesValue : true },
+				{ name : "enable", description : "Enable usage recording in Agent.yml." },
+				{ name : "json", description : "Print the report as JSON." }
+			],
+			examples : [ "stats", "stats --by=provider --days=7" ],
+			note : "Recording is off by default. After --enable, rebuild and restart the served app."
 		}
-		var root = projectRoot.reReplace( "[\/]+$", "" )
+	}
+
+	function handle() {
 		var usageSwitch = new "models.usage.UsageSwitch@bxagents"()
 
-		if ( arguments.options.enable ?: false ) {
-			var done = usageSwitch.enable( root )
-			return { exitCode : done.ok ? 0 : 1, message : done.message }
+		if ( isOptionSet( "enable" ) ) {
+			var switched = usageSwitch.enable( projectRoot() )
+			return exitWith( switched.ok ? 0 : 1, switched.message )
 		}
 
-		var days = val( arguments.options.days ?: 30 )
+		var days = val( option( "days", 30 ) )
 		if ( days < 1 || days > 3650 ) {
 			throw( type = "BxAgents.InvalidStatsDays", message = "`--days` needs a number from 1 to 3650." )
 		}
-		var file = new "models.store.ChatStorePath@bxagents"().forProject( root )
-		var on = usageSwitch.isOn( root )
-		var by = arguments.options.by ?: "model"
+		var on = usageSwitch.isOn( projectRoot() )
+		var by = option( "by", "model" )
 		var report = new "models.usage.UsageStore@bxagents"( "" ).emptyReport( days, by )
-		if ( fileExists( file ) ) {
-			var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
+		if ( fileExists( chatStoreFile() ) ) {
+			var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : chatStoreFile() } )
 			store.migrate()
-			report = new "models.usage.UsageStore@bxagents"( store ).report( days, by, arguments.options.user ?: "" )
+			report = new "models.usage.UsageStore@bxagents"( store ).report( days, by, option( "user" ) )
 		}
 
-		if ( arguments.options.json ?: false ) {
-			return { exitCode : 0, message : jsonSerialize( { enabled : on, report : report } ) }
+		if ( !isOptionSet( "json" ) && !on && !report.calls ) {
+			return done( usageSwitch.howToEnable( true ) & char( 10 ) & "Run `bxAgents stats --enable` to turn it on." )
 		}
-		if ( !on && !report.calls ) {
-			return { exitCode : 0, message : usageSwitch.howToEnable( true ) & char( 10 ) & "Run `bxAgents stats --enable` to turn it on." }
-		}
-		return { exitCode : 0, message : new "models.usage.UsageLines@bxagents"().render( report, on ) }
+		return asJson( { enabled : on, report : report }, () => new "models.usage.UsageLines@bxagents"().render( report, on ) )
 	}
 
 }

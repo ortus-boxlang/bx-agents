@@ -9,68 +9,71 @@
  * The roster itself (who exists, their passwords) comes from the `users` of the web gateway, at every boot. This verb
  * only changes the admin flag, which the database keeps from then on. The last admin cannot be demoted.
  */
-class {
+class extends="BaseVerb" {
 
 	/**
-	 * @options { projectRoot (required), _positional (list, admin or member), name, json }
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
 	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`users` requires a project root" )
+	struct function meta() {
+		return {
+			name : "users",
+			group : "SECURITY & ACCESS",
+			position : 1,
+			description : "Manage web users and admin roles",
+			usage : "<action> [options]",
+			actions : [ { name : "list" }, { name : "admin" }, { name : "member" } ],
+			options : [
+				{ name : "name", display : "--name=<name>", description : "User whose role to change.", takesValue : true },
+				{ name : "json", description : "Print users as JSON." }
+			],
+			examples : [ "users list", "users admin --name=ada" ],
+			subcommand : true,
+			actionExample : "users admin --name=ada"
 		}
-		var action = lCase( trim( arguments.options._positional ?: "" ) )
-		if ( ![ "list", "admin", "member" ].contains( action ) ) {
-			throw( type = "BxAgents.UnknownUsersAction", message = "`users` needs one of: list, admin, member - for example `bxAgents users admin --name=ada`." )
-		}
-
-		var file = new "models.store.ChatStorePath@bxagents"().forProject( projectRoot )
-		directoryCreate( getDirectoryFromPath( file ), true, true )
-		var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
-		store.migrate()
-		var accounts = new "models.store.AccountService@bxagents"( store )
-
-		if ( action == "list" ) {
-			return list( accounts, arguments.options )
-		}
-		return change( accounts, arguments.options, action == "admin" )
 	}
 
-	// ----------------------------------------------------------------------------------
-
-	private struct function list( required any accounts, required struct options ) {
-		var rows = arguments.accounts.list()
-		if ( arguments.options.json ?: false ) {
-			return { exitCode : 0, message : jsonSerialize( rows ) }
-		}
-		if ( !rows.len() ) {
-			return { exitCode : 0, message : "No accounts yet. They come from the `users` of the web gateway when the app starts." }
-		}
-		var lines = [ pad( "USERNAME", 24 ) & pad( "ROLE", 8 ) & pad( "STATUS", 10 ) & "NAME" ]
-		for ( var row in rows ) {
-			lines.append( pad( row.username, 24 ) & pad( row.admin ? "admin" : "member", 8 ) & pad( row.active ? "active" : "inactive", 10 ) & row.displayName )
-		}
-		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+	function handleList() {
+		var rows = accounts().list()
+		return asJson( rows, () => listText( rows ) )
 	}
 
-	private struct function change( required any accounts, required struct options, required boolean admin ) {
-		var name = trim( arguments.options.name ?: "" )
-		if ( !len( name ) ) {
-			throw( type = "BxAgents.MissingAccountName", message = "`users #arguments.admin ? 'admin' : 'member'#` requires --name=<the username>" )
+	function handleAdmin() {
+		return changeRole( true )
+	}
+
+	function handleMember() {
+		return changeRole( false )
+	}
+
+	/**
+	 * @return The accounts of this project
+	 */
+	private any function accounts() {
+		return new "models.store.AccountService@bxagents"( chatStore() )
+	}
+
+	private string function listText( required array rows ) {
+		if ( !arguments.rows.len() ) {
+			return "No accounts yet. They come from the `users` of the web gateway when the app starts."
 		}
+		var report = [ padRight( "USERNAME", 24 ) & padRight( "ROLE", 8 ) & padRight( "STATUS", 10 ) & "NAME" ]
+		for ( var row in arguments.rows ) {
+			report.append( padRight( row.username, 24 ) & padRight( row.admin ? "admin" : "member", 8 ) & padRight( row.active ? "active" : "inactive", 10 ) & row.displayName )
+		}
+		return report.toList( char( 10 ) )
+	}
+
+	private struct function changeRole( required boolean admin ) {
+		var name = requiredOption( "name", "BxAgents.MissingAccountName", "`users #arguments.admin ? 'admin' : 'member'#` requires --name=<the username>" )
 		try {
-			arguments.accounts.setAdmin( name, arguments.admin )
+			accounts().setAdmin( name, arguments.admin )
 		} catch ( any e ) {
 			if ( e.type == "BxAgents.NoSuchAccount" || e.type == "BxAgents.LastAdmin" ) {
-				return { exitCode : 1, message : e.message }
+				return fail( e.message )
 			}
 			rethrow
 		}
-		return { exitCode : 0, message : "[#name#] is now #arguments.admin ? 'an admin' : 'a member'#." }
-	}
-
-	private string function pad( required string text, required numeric width ) {
-		return left( arguments.text & repeatString( " ", arguments.width ), arguments.width )
+		return done( "[#name#] is now #arguments.admin ? 'an admin' : 'a member'#." )
 	}
 
 }

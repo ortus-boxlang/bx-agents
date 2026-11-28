@@ -231,6 +231,25 @@ bxAgents new my-agent --forgebox=some-package-slug
 - `--name`/`--description` are ignored (with a warning in the output) when `--repo`/`--forgebox` is used - the cloned/installed project defines its own.
 - The `box install` convenience step (and `--skipInstall`) only ever apply to `--template` mode - a cloned/installed project's own `box.json` (if it has one at all) is left untouched.
 
+<!-- cli:new -->
+**Usage:** `bxAgents new <directory> [options]`
+
+| Option | What it does |
+|---|---|
+| `--model=<provider/model>` | Model to use; omit to open the wizard. |
+| `--template=<name>` | Starter template. Default: minimal. |
+| `--name=<name>` | Agent name. Defaults to the directory name. |
+| `--description=<text>` | What the agent does. |
+| `--repo=<owner/repo>` | Start from a GitHub repository. |
+| `--forgebox=<slug>` | Start from a ForgeBox package. |
+| `--class` | Use Agent.bx instead of Agent.yml. |
+| `--skipInstall` | Skip fetching TestBox with CommandBox. |
+| `--no-tui` | Use plain terminal prompts. |
+
+**Examples:** `bxAgents new my-agent`, `bxAgents new my-agent --model=mock/mock-model`
+
+<!-- /cli:new -->
+
 ### `add`
 
 Add one thing to a project that already exists, asking the same questions `new` asks. Today that is a `tool`, an `interceptor`, a `schedule`, an `mcp` server, a `gateway`, a `subagent`, a `skill`, a `profile`, a `provider`, a `capability` or an `extension`.
@@ -248,6 +267,24 @@ bxAgents add tool Pinger --dry-run              # show the file, write nothing
 - Questions end on a review of the files that will be written. Cancelling, with Esc or Ctrl+C, changes nothing.
 - **Nothing is overwritten.** If a file already exists none are written and the error names it; `--force` replaces it. At a terminal the review offers to replace instead.
 - `--dry-run` prints each file with its text and writes nothing.
+
+<!-- cli:add -->
+**Usage:** `bxAgents add [kind] [name] [options]`
+
+**Kinds:** `tool`, `skill`, `gateway`, `subagent`, `schedule`, `mcp`, `interceptor`, `profile`, `provider`, `capability`, `extension`
+
+| Option | What it does |
+|---|---|
+| `--agent=<name>` | Add to a subagent rather than the root agent. |
+| `--dry-run` | Preview files without writing them. |
+| `--force` | Allow replacing an existing file. |
+| `--yes` | Use defaults without prompting. |
+
+**Examples:** `bxAgents add`, `bxAgents add tool Greeter --dry-run`, `bxAgents add gateway web`
+
+Each kind has its own settings; see the full reference below.
+
+<!-- /cli:add -->
 
 #### `add tool`
 
@@ -511,6 +548,24 @@ bxAgents skills remove <name>
 
 `--registry=<url>` (or the `BXAGENTS_SKILLS_URL` environment variable) points at another registry.
 
+<!-- cli:skills -->
+**Usage:** `bxAgents skills <action> [name-or-source] [options]`
+
+**Actions:** `find`, `install`, `list`, `show`, `update`, `remove`
+
+| Option | What it does |
+|---|---|
+| `--registry=<url>` | Use another skill registry. |
+| `--limit=<number>` | Limit search results. |
+| `--dry-run` | Preview changes without applying them. |
+| `--json` | Print results as JSON. |
+
+**Examples:** `bxAgents skills find release`, `bxAgents skills list`, `bxAgents skills install`
+
+install without a source restores the skills listed in the project's lock file.
+
+<!-- /cli:skills -->
+
 #### Where things live
 
 | Path | What | In source control |
@@ -541,6 +596,21 @@ Writes `.build/` (`app/`, `public/`, `lib/`, `runtime/`, `boxlang_modules/` and 
 - `--verbose` prints one line per build phase live as it runs - what got resolved/discovered/validated, per-phase counts (models, tools, gateways, warnings, etc.), which agents ended up registered in `config/WireBox.bx` and under which names, how many `schedules/*.bx` schedulers were found, and a final `Build completed in Xms` timing line. Useful for debugging a slow or unexpectedly-behaving build. Silent otherwise - `--verbose` costs nothing when not passed.
 - `--generatorVersion` overrides the string stamped into `manifest.json`'s `generator.version` (see [The Manifest](manifest.md)) - defaults to `"dev"` when omitted. Exists for tooling that builds against a specific released version of this module and wants that recorded in the manifest, rather than the local dev default.
 
+<!-- cli:build -->
+**Usage:** `bxAgents build [options]`
+
+| Option | What it does |
+|---|---|
+| `--environment=<name>` | Apply the named environment override. |
+| `--verbose` | Show build phases as they run. |
+| `--generatorVersion=<version>` | Override the generator version in the manifest. |
+
+**Examples:** `bxAgents build`, `bxAgents build --environment=production`
+
+Writes the application into .build/. Rebuild after changing project source.
+
+<!-- /cli:build -->
+
 ### `test`
 
 Run your project's own [`tests/specs`](conventions/testing.md) via TestBox.
@@ -552,6 +622,15 @@ bxAgents test
 - Requires TestBox installed in `lib/testbox` (`box install` in the project root; `tests/testbox` is also found).
 - Builds your agent against the `mock` provider by default (the `test` environment override in `Agent.yml`, or `test()` in a class-based `Agent.bx`) - no API key or network access needed.
 - Prints pass/fail/error/skipped counts plus one line per failure, and exits non-zero if anything failed.
+
+<!-- cli:test -->
+**Usage:** `bxAgents test [options]`
+
+**Examples:** `bxAgents test`
+
+Runs tests/specs with TestBox against a temporary build. Install TestBox with box install first.
+
+<!-- /cli:test -->
 
 ### `serve`
 
@@ -573,6 +652,20 @@ bxAgents serve [--port=8080] [--host=127.0.0.1]
 - Loads **only the `bx-agents` module** (internal alias `bxagents`, with the BoxLang modules bundled inside it, and the project's own `boxlang_modules/`): the module is copied into `.build/runtime/modules` under its installed folder name, and `runtime/` is the BoxLang home, so the modules installed on the machine are never loaded into the served app. `chat --server` and `invoke --server` get this too, since they reuse `serve` internally. `test` runs its child process with its own home in `.build/test-runtime`, loading the `bx-agents` module alone as well. Both are set through the child's environment when it starts, never by writing a file into the project root.
 - A project (or an unpacked app) under a path with a **space** does not start: the `boxlang-miniserver` launcher script does not quote `BOXLANG_HOME`.
 - **The scaffolded `.env` does not set `BOXLANG_HOME`.** Each project gets its own runtime home when bxAgents serves or runs it, so a project that runs under `boxlang module:bxagents ...` from its own root keeps working: the `boxlang` launcher reads the project `.env`, and a relative `BOXLANG_HOME` there points the launcher at an empty folder. `build`, `doctor`, `inspect` and the default `invoke` run inside the bxAgents process you started, and a runtime home cannot change mid-process, so they use your own home. Default `chat` starts an isolated BoxLang process with `.build/runtime/boxlang.json` and `.build/runtime` as its home. Per-project runtime state is kept in `.build/`; BoxLang's compiled-class cache in your home is named after each source file's full path, so two projects do not overwrite each other. `bxAgents doctor` warns when an older project's `.env` still has a relative `BOXLANG_HOME` line; delete it.
+
+<!-- cli:serve -->
+**Usage:** `bxAgents serve [options]`
+
+| Option | What it does |
+|---|---|
+| `--port=<number>` | Listening port, 1-65535. Default: 8080. |
+| `--host=<address>` | Bind address. Default: 127.0.0.1. |
+
+**Examples:** `bxAgents serve`, `bxAgents serve --port=9000`
+
+Requires a prior build and boxlang-miniserver on PATH. Use --host=0.0.0.0 deliberately to expose the server beyond this machine.
+
+<!-- /cli:serve -->
 
 ### `chat`
 
@@ -608,6 +701,30 @@ In the screen:
 | `?` alone, F1, Ctrl+/, or `/keys` | Open the shortcuts panel: the keys as they are bound now, with the action name of each, narrowed by typing |
 
 Type `/` for the commands: `/help`, `/new` (a fresh conversation), `/tools`, `/volumes` (the folders the agent may use), `/agent` (pick a sub-agent to talk to), `/skills` (the skills the agent can load, and from which level), `/copy` (the last answer to the clipboard, using the OSC 52 escape most terminals honor), `/export [file]` (the conversation as Markdown or HTML), `/name` and `/fork` (see below), `/keys` (which key does what), `/prompt` (how the message box looks, see below), `/sessions`, `/resume`, `/clear`, `/compact` and `/info` (see below), `/model`, `/profile` and `/default` (see below), `/remember <text>` and `/notes` (see below), `/record [file]` and `/record stop` (see below) and `/exit`.
+
+<!-- cli:chat -->
+**Usage:** `bxAgents chat [options]`
+
+| Option | What it does |
+|---|---|
+| `--server` | Start a temporary server for the full application. |
+| `--connect=<url>` | Chat with an already-running server. |
+| `--token=<token>` | API access token for a protected server. |
+| `--api-path=<path>` | Custom API path. Default: /__bxagents. |
+| `--port=<number>` | Port for the temporary server. |
+| `--agent=<name>` | Chat with a named agent. |
+| `--user=<name>` | Conversation owner. Default: local. |
+| `--continue` | Resume the most recent conversation. |
+| `--session=<number-or-id>` | Resume a particular conversation. |
+| `--record[=<file>]` | Record the terminal session. |
+| `--inline / --fullscreen` | Choose the terminal layout. |
+| `--no-tui` | Use the plain line-by-line chat. |
+
+**Examples:** `bxAgents chat`, `bxAgents chat --server`, `bxAgents chat --connect=http://127.0.0.1:8080`
+
+Requires a prior build. Type / inside chat to discover slash commands.
+
+<!-- /cli:chat -->
 
 #### The same commands in the web page and in gateways
 
@@ -806,6 +923,22 @@ bxAgents invoke --message="..." --server [--port=<port>]
 - **`--server`**: launches a real, throwaway `boxlang-miniserver` process (same as `serve`, so it needs the binary on `PATH`), sends the message as a real HTTP request to the project's [always-on `/__bxagents` route](conventions/agent-bx.md#the-always-on-agent-route), then shuts the server back down. Exercises the actual served path (ColdBox routing, interceptors, gateways) rather than the in-process shortcut. Needs no `gateways/*` entry of any kind - the reserved route is emitted on every build, so a freshly scaffolded project that exposes nothing publicly still works. `--port` defaults to a free ephemeral port so it never collides with an already-running `serve`.
 - `--json` prints `{"response": "..."}` instead of the plain-text response.
 
+<!-- cli:invoke -->
+**Usage:** `bxAgents invoke --message=<text> [options]`
+
+| Option | What it does |
+|---|---|
+| `--message=<text>` | Message to send. Required. |
+| `--json` | Print the result as JSON. |
+| `--server` | Invoke through a temporary HTTP server. |
+| `--port=<number>` | Port for the temporary server. |
+
+**Examples:** `bxAgents invoke --message=hello`, `bxAgents invoke --message=hello --server --json`
+
+Requires a prior build.
+
+<!-- /cli:invoke -->
+
 ### `package`
 
 Package a built project into a `.bxa`.
@@ -817,6 +950,19 @@ bxAgents package [--version=1.0.0]
 - Requires a prior `build` - reads `.build/manifest.json`; fails clearly if it's missing.
 - `--version` defaults to `1.0.0`.
 - Writes `dist/{agentName}-{version}.bxa` (the `app`, `lib`, `public`, `runtime`, `boxlang_modules` folders and `miniserver.json` of `.build`), a sibling `.sha256`, and a redacted `manifest.json` copy. See [Deployment & Secrets](deployment-and-secrets.md).
+
+<!-- cli:package -->
+**Usage:** `bxAgents package [options]`
+
+| Option | What it does |
+|---|---|
+| `--version=<version>` | Version of the packaged application. |
+
+**Examples:** `bxAgents package --version=1.0.0`
+
+Requires a prior build. Writes a portable .bxa archive and checksum into dist/.
+
+<!-- /cli:package -->
 
 ### `deploy`
 
@@ -833,6 +979,21 @@ bxAgents deploy --destination=/path/to/somewhere [--target=local]
 - `local`/`ssh`/`ftp`/`sftp` require a prior `package`; `docker`/`digitalocean` require a prior `build` (they build straight from `.build`; the Docker recipe is [unverified](conventions/deploy.md#docker)).
 - `ftp`/`sftp` use the [`bx-ftp`](https://github.com/ortus-boxlang/bx-ftp) module, which BxAgents bundles.
 
+<!-- cli:deploy -->
+**Usage:** `bxAgents deploy [options]`
+
+| Option | What it does |
+|---|---|
+| `--name=<name>` | Use the named deploy/ configuration. |
+| `--target=<type>` | Deployment target. Default: local. |
+| `--destination=<path>` | Destination for an ad-hoc deployment. |
+
+**Examples:** `bxAgents deploy --name=production`, `bxAgents deploy --destination=/srv/my-agent`
+
+Local and file-transfer targets use a packaged .bxa; Docker and DigitalOcean use the built application.
+
+<!-- /cli:deploy -->
+
 ### `hash-password`
 
 Turn a plaintext password into the `passwordHash` value a `webui` entry's [`users`](conventions/web-ui.md) block accepts.
@@ -844,6 +1005,19 @@ bxAgents hash-password --password="<your-password>"
 - `--password` is **required**.
 - Prints the hash to stdout - `pbkdf2$<iterations>$<salt>$<derivedKey>`, PBKDF2-HMAC-SHA256, salted per call. Safe to commit: it's one-way, and hashing the same password twice yields two different (both valid) hashes.
 - Kept deliberately identical to the hasher the generated web UI itself uses to verify a sign-in - a hash produced here always verifies there.
+
+<!-- cli:hash-password -->
+**Usage:** `bxAgents hash-password --password=<value>`
+
+| Option | What it does |
+|---|---|
+| `--password=<value>` | Password to hash. Required. |
+
+**Examples:** `bxAgents hash-password --password=<value>`
+
+Prints a hash for a web sign-in account. Shell arguments can appear in history and process listings.
+
+<!-- /cli:hash-password -->
 
 ### `token`
 
@@ -859,6 +1033,22 @@ bxAgents token revoke --name=laptop
 - `list` shows each token's name, scope, status (`active`, `expired` or `revoked`), when it was made, last used and expires. Never the token itself.
 - `revoke` stops a token working at once. The name stays taken, so it cannot be reused by accident.
 - Run it where the database is: on the server, or in the project before you pack it. On a deployed server, point `BXAGENTS_DB` at the file the app uses.
+
+<!-- cli:token -->
+**Usage:** `bxAgents token <action> [options]`
+
+**Actions:** `create`, `list`, `revoke`
+
+| Option | What it does |
+|---|---|
+| `--name=<name>` | Token to create or revoke. |
+| `--scope=<chat\|admin>` | Access granted by the token. |
+| `--expires=<duration>` | Token lifetime, such as 90d. |
+| `--json` | Print results as JSON. |
+
+**Examples:** `bxAgents token create --name=laptop`, `bxAgents token list`, `bxAgents token revoke --name=laptop`
+
+<!-- /cli:token -->
 
 ### `embed`
 
@@ -877,6 +1067,26 @@ bxAgents embed rotate --id=emb_...
 - `disable` turns the embed off: visitors are answered as if it did not exist. `rotate` gives it a new signing key and every open visitor session stops working. The signing key is never printed.
 - Run it where the database is, like [`token`](#token).
 
+<!-- cli:embed -->
+**Usage:** `bxAgents embed <action> [options]`
+
+**Actions:** `create`, `list`, `show`, `disable`, `rotate`, `delete`
+
+| Option | What it does |
+|---|---|
+| `--name=<text>` | What to call the embed (create). |
+| `--id=<emb_...>` | The embed to show, disable, rotate or delete. |
+| `--origin=<urls>` | Websites that may show it, comma separated: scheme, host, optional port. |
+| `--tools=<names>` | Tools a visitor's turn may use, comma separated. |
+| `--per-minute=<n>` | Messages per visitor per minute (default 10). |
+| `--daily=<n>` | Messages per day for the embed (default 200). |
+| `--max-chars=<n>` | Longest message (default 2000). |
+| `--json` | Print results as JSON. |
+
+**Examples:** `bxAgents embed create --name="Docs helper" --origin=https://docs.example.com`, `bxAgents embed list`, `bxAgents embed rotate --id=emb_...`, `bxAgents embed delete --id=emb_...`
+
+<!-- /cli:embed -->
+
 ### `users`
 
 The sign-in accounts of the web page, as the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) keeps them, and who among them is an admin.
@@ -891,6 +1101,20 @@ bxAgents users member --name=ada
 - `admin` makes an account an admin; `member` makes an admin a regular account again. The last admin cannot be demoted.
 - The roster itself comes from the `users` of the web gateway at every boot. This verb only changes the admin flag, which the database keeps from then on. See [Admins and members](conventions/web-ui.md#admins-and-members).
 - Run it where the database is, like [`token`](#token).
+
+<!-- cli:users -->
+**Usage:** `bxAgents users <action> [options]`
+
+**Actions:** `list`, `admin`, `member`
+
+| Option | What it does |
+|---|---|
+| `--name=<name>` | User whose role to change. |
+| `--json` | Print users as JSON. |
+
+**Examples:** `bxAgents users list`, `bxAgents users admin --name=ada`
+
+<!-- /cli:users -->
 
 ### `notes`
 
@@ -910,6 +1134,24 @@ bxAgents notes import --file=notes.json
 - `stats` shows how full each scope is and the rough size they add to the prompt (about four characters to a token; an estimate, not a count).
 - `export` writes the notes as JSON, to `--file` or to the screen. `import` adds the notes of such a file; a note already there is not added twice and one that does not fit the limit is reported (the command then exits `1`).
 - Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
+
+<!-- cli:notes -->
+**Usage:** `bxAgents notes <action> [options]`
+
+**Actions:** `list`, `add`, `edit`, `remove`, `clear`, `stats`, `export`, `import`
+
+| Option | What it does |
+|---|---|
+| `--text=<text>` | Note text for add or edit. |
+| `--id=<id>` | Note to edit or remove. |
+| `--scope=<user\|agent>` | Which notes to manage. |
+| `--user=<name>` | User whose notes to manage. |
+| `--file=<path>` | File to export or import. |
+| `--json` | Print results as JSON. |
+
+**Examples:** `bxAgents notes list`, `bxAgents notes export --file=notes.json`
+
+<!-- /cli:notes -->
 
 ### `vault`
 
@@ -931,6 +1173,30 @@ bxAgents vault key
 - `status` says where the key comes from and warns when it is the key file beside the database. `audit` lists who added, used, was refused and removed what, without values.
 - `key` prints a new random key to put in `BXAGENTS_VAULT_KEY`. It does not touch the database.
 
+<!-- cli:vault -->
+**Usage:** `bxAgents vault <action> [options]`
+
+**Actions:** `list`, `add`, `edit`, `remove`, `status`, `audit`, `key`
+
+| Option | What it does |
+|---|---|
+| `--name=<name>` | Secret to add, edit, or remove. |
+| `--scope=<agent\|user\|all>` | Which secrets to list. |
+| `--user=<name>` | Owner of a user-scoped secret. |
+| `--description=<text>` | What the secret is for. |
+| `--hosts=<patterns>` | Allowed hosts, comma separated. |
+| `--stdin` | Read the secret value from standard input. |
+| `--value` | Replace a secret's value while editing. |
+| `--yes` | Confirm removal. |
+| `--limit=<number>` | Limit audit entries. |
+| `--json` | Print results as JSON. |
+
+**Examples:** `bxAgents vault list`, `bxAgents vault add --name=API_KEY`, `bxAgents vault status`
+
+Secret values are entered hidden or piped with --stdin, never passed as flags.
+
+<!-- /cli:vault -->
+
 ### `data`, `backup` and `restore`
 
 Where the agent keeps everything, and backups of it. See [data and volumes](conventions/data.md).
@@ -944,6 +1210,44 @@ bxAgents restore FILE [--home=DIR] [--force]
 - `data` prints the data home and where it came from, the size of the database and each folder, and the volumes with their modes. It makes nothing.
 - `backup` zips the chat database (copied whole, so it is safe while a server runs), `files/` and `skills/`. Without `--to` the zip goes in the home's `backups/` folder. Volumes are not included.
 - `restore` puts a backup back and keeps what was there as `<name>.before-restore`. It stops when the database looks to be in use unless `--force` is given. `--home` restores into another data home.
+
+<!-- cli:data -->
+**Usage:** `bxAgents data [options]`
+
+| Option | What it does |
+|---|---|
+| `--json` | Print data-home details as JSON. |
+
+**Examples:** `bxAgents data`
+
+<!-- /cli:data -->
+
+<!-- cli:backup -->
+**Usage:** `bxAgents backup [options]`
+
+| Option | What it does |
+|---|---|
+| `--to=<file>` | Write the backup ZIP to this path. |
+
+**Examples:** `bxAgents backup`, `bxAgents backup --to=agent-backup.zip`
+
+Includes the chat database, files, and skills. Mounted volumes are not included.
+
+<!-- /cli:backup -->
+
+<!-- cli:restore -->
+**Usage:** `bxAgents restore <file> [options]`
+
+| Option | What it does |
+|---|---|
+| `--home=<directory>` | Restore into a different data home. |
+| `--force` | Allow replacing an existing data home. |
+
+**Examples:** `bxAgents restore agent-backup.zip`
+
+Existing data is kept as .before-restore.
+
+<!-- /cli:restore -->
 
 ### `connect`
 
@@ -969,6 +1273,27 @@ bxAgents connect github options repository=/path/to/repo      # connectors that 
 - `--remove` forgets your sign in. `--user` is whose: `local` by default, the one user an open server has.
 - Tokens are sealed in the project's chat database. Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
 
+<!-- cli:connect -->
+**Usage:** `bxAgents connect [id] [tools|off|options] [options]`
+
+| Option | What it does |
+|---|---|
+| `--token-env=<NAME>` | Environment variable holding a connector token. |
+| `--stdin` | Read a token from standard input. |
+| `--confirm` | Approve the connector's stated capabilities. |
+| `--remove` | Forget a saved sign-in. |
+| `--port=<number>` | Local OAuth callback port; otherwise a free port. |
+| `--no-open` | Print the sign-in URL without opening a browser. |
+| `--timeout=<seconds>` | Sign-in wait time. Default: 120. |
+| `--user=<name>` | Whose connection to use. Default: local. |
+| `--json` | Print connection status as JSON. |
+
+**Examples:** `bxAgents connect`, `bxAgents connect github --token-env=GITHUB_TOKEN --confirm`
+
+Without an id, lists available services and connection status. Secrets are sealed in the chat database.
+
+<!-- /cli:connect -->
+
 ### `connectors`
 
 The catalog of known connectors that ships with BX Agents: the remote MCP servers and local programs an agent can use, written as one YAML file each. This verb only reads those files; it never connects to anything. Signing in to one is [`connect`](#connect).
@@ -990,6 +1315,20 @@ git          Git                               no sign in          medium  2026-
 - `show <id>` prints one connector: its address or command, risk, each way in with the environment variable a token goes in, and its options.
 - `check` reads every file and names each mistake with its file and field. It exits `1` when one is wrong, so a script or CI can use it. `--dir` checks a folder of files instead of the shipped catalog, which is how a contributor checks a new file before a pull request.
 
+<!-- cli:connectors -->
+**Usage:** `bxAgents connectors [list|show <id>|check] [options]`
+
+| Option | What it does |
+|---|---|
+| `--dir=<path>` | Check a custom connector catalog directory. |
+| `--json` | Print catalog entries as JSON. |
+
+**Examples:** `bxAgents connectors`, `bxAgents connectors show github`, `bxAgents connectors check`
+
+Only reads the catalog; use connect to sign in.
+
+<!-- /cli:connectors -->
+
 ### `logs`
 
 The agent's logs, kept in the `logs/` folder of the [data home](conventions/data.md). See [logs](conventions/logs.md).
@@ -1010,6 +1349,29 @@ bxAgents logs [area] [--follow | --ui] --connect=URL [--token=TOKEN] [--api-path
 - In the web app an admin has the same logs on the [Logs page](conventions/web-ui.md#logs), with a **Live** switch that follows new lines.
 - Secrets are never in a log, and neither is what a person said.
 
+<!-- cli:logs -->
+**Usage:** `bxAgents logs [area] [options]`
+
+**Areas:** `agent`, `gateways`, `routines`, `heartbeat`, `api`
+
+| Option | What it does |
+|---|---|
+| `--tail=<number>` | Lines to show. Default: 100, or 20 with --follow. |
+| `--level=<level>` | Minimum severity, such as warn or error. |
+| `--grep=<text>` | Show only matching lines. |
+| `--follow` | Keep printing new log lines. |
+| `--ui` | Open the full-screen log viewer. |
+| `--connect=<url>` | Read logs from a served agent. |
+| `--token=<token>` | Admin API token for a remote agent. |
+| `--api-path=<path>` | Custom remote API path. |
+| `--json` | Print results as JSON. |
+
+**Examples:** `bxAgents logs`, `bxAgents logs gateways --follow`, `bxAgents logs --ui`
+
+Without an area, lists the available log files.
+
+<!-- /cli:logs -->
+
 ### `models`
 
 The models of a built project, and whether they answer.
@@ -1028,6 +1390,23 @@ planner       claude/claude-opus-4            context ?  images ?  key MISSING
 - `list` shows the default model and every [profile](conventions/models.md#profiles), with what the project says about each ([`contextWindow` and `vision`](conventions/models.md#what-the-project-knows-about-a-model), `?` when it does not) and whether the profile's key is set.
 - `test` sends each model one tiny question through bx-ai and reports `ok` with the time, or `FAILED` with the provider's own message. It tests the default model, one profile with `--profile`, or all of them with `--all`, and exits `1` when any does not answer, so it can gate a deploy. It spends a few tokens per model.
 - It uses the models the project was last built with: run `bxAgents build` first.
+
+<!-- cli:models -->
+**Usage:** `bxAgents models <action> [options]`
+
+**Actions:** `list`, `test`
+
+| Option | What it does |
+|---|---|
+| `--profile=<name>` | Test one named model profile. |
+| `--all` | Test the default model and every profile. |
+| `--json` | Print results as JSON. |
+
+**Examples:** `bxAgents models list`, `bxAgents models test --all`
+
+Uses the last build. Testing models makes real provider calls.
+
+<!-- /cli:models -->
 
 ### `routines`
 
@@ -1049,6 +1428,29 @@ bxAgents routines clean <name> [--older-than=30d | --all] [--yes]
 - `run` marks a routine due. It starts at the next minute of a served app, and the command says so.
 - `delete` asks for `--yes` and keeps the routine's reports. `clean` only lists what it would remove unless you add `--yes`.
 
+<!-- cli:routines -->
+**Usage:** `bxAgents routines <action> [name] [options]`
+
+**Actions:** `list`, `show`, `add`, `edit`, `pause`, `resume`, `run`, `delete`, `reports`, `report`, `clean`
+
+| Option | What it does |
+|---|---|
+| `--name=<name>` | Name of a new routine. |
+| `--schedule=<cron-or-interval>` | When the routine runs. |
+| `--prompt=<text>` | Message to send to the agent. |
+| `--destination=<target>` | routine or gateway:<name>. |
+| `--chat=<id>` | Gateway chat to deliver to. |
+| `--older-than=<age>` | Report age for clean, such as 30d. |
+| `--all` | List every owner's routines, or clean all reports. |
+| `--yes` | Confirm deleting a routine or cleaning reports. |
+| `--json` | Print results as JSON. |
+
+**Examples:** `bxAgents routines list`, `bxAgents routines show daily`, `bxAgents routines clean daily --older-than=30d`
+
+Requires routines.enabled: true. clean previews removals unless --yes is given.
+
+<!-- /cli:routines -->
+
 ### `sessions`
 
 The conversations in the project's [shared chat database](conventions/web-ui.md#the-sqlite-store) (`chat.db` in the [data home](conventions/data.md), or the file named by `BXAGENTS_DB`), the same list `chat` and the web page show.
@@ -1068,6 +1470,25 @@ bxAgents sessions import --file=chat.json [--name="New name"] [--user=NAME]
 - `export` writes one conversation to a JSON file named after its title (`--file` to choose, `--md` for a readable Markdown transcript instead) and never replaces a file unless you add `--force`. The file holds the conversation's details and its messages as the agent's memory holds them. It contains everything that was said, so keep it where you would keep the conversation.
 - `import` reads such a file and adds it to the user's list as a **new** conversation (a new id, never replacing one), with `--name` to retitle it. A file it does not recognise is refused before anything is written: it must be an exported conversation of a version this BxAgents reads, with at most 20,000 messages whose roles are `user`, `assistant`, `system` or `tool`. If it was exported from another agent, the message says so.
 - Both read and write the agent's memory, so they need a built project and a memory that outlives the process (`file` or `jdbc`; see the [memory](conventions/agent-yaml.md#settings) setting). With `cache` the memory is empty once the program has stopped, and `export` says so.
+
+<!-- cli:sessions -->
+**Usage:** `bxAgents sessions <action> [options]`
+
+**Actions:** `list`, `rename`, `fork`, `delete`, `clear`, `export`, `import`
+
+| Option | What it does |
+|---|---|
+| `--session=<number-or-id>` | Conversation to act on. |
+| `--name=<name>` | New conversation title. |
+| `--user=<name>` | Conversation owner. Default: local. |
+| `--file=<path>` | Transcript file to export or import. |
+| `--md` | Export a Markdown transcript instead of JSON. |
+| `--force` | Allow replacing an export file. |
+| `--json` | Print results as JSON. |
+
+**Examples:** `bxAgents sessions list`, `bxAgents sessions export --session=1 --file=chat.json`
+
+<!-- /cli:sessions -->
 
 ### `stats`
 
@@ -1094,6 +1515,23 @@ Counts only the calls whose provider reported usage.
 - `--by` groups the rows by model (the default), provider, day or user, with the biggest first (newest first for `day`). `--days` is how far back to look, counting today (1 to 3650). `--user` limits it to one user's calls. `--json` prints the report for a script.
 - It only reads the database, so it needs no build. Run it where the database is: in the project, or on a server with `BXAGENTS_DB` set.
 - Cost is not worked out. Prices change too often to ship a table.
+
+<!-- cli:stats -->
+**Usage:** `bxAgents stats [options]`
+
+| Option | What it does |
+|---|---|
+| `--days=<number>` | How many days to report. Default: 30. |
+| `--by=<group>` | Group by model, provider, day, or user. |
+| `--user=<name>` | Limit the report to one user. |
+| `--enable` | Enable usage recording in Agent.yml. |
+| `--json` | Print the report as JSON. |
+
+**Examples:** `bxAgents stats`, `bxAgents stats --by=provider --days=7`
+
+Recording is off by default. After --enable, rebuild and restart the served app.
+
+<!-- /cli:stats -->
 
 ### `inspect`
 
@@ -1153,6 +1591,23 @@ The report has these sections, in this order. `--section` takes any of the names
 - `--md=FILE` is the only thing `inspect` ever writes. A relative file is created inside the project.
 - A folder with no `Agent.yml` or `Agent.bx` is an error.
 
+<!-- cli:inspect -->
+**Usage:** `bxAgents inspect [options]`
+
+| Option | What it does |
+|---|---|
+| `--section=<names>` | Show selected sections, comma separated. |
+| `--environment=<name>` | Inspect an environment override. |
+| `--json` | Print the full report as JSON. |
+| `--md[=<file>]` | Print Markdown, or write it to a file. |
+| `--ascii` | Use plain characters instead of symbols. |
+
+**Examples:** `bxAgents inspect`, `bxAgents inspect --section=tools,env`
+
+Reads project source; no build is needed.
+
+<!-- /cli:inspect -->
+
 ### `extensions`
 
 List the [extensions](conventions/extensions.md) the terminal chat would load for this project: the project's `extensions/`, your own `~/.bxagents/extensions/`, and the `extensions/` of installed modules. It loads them the way `chat` does, so an extension that fails to load shows up here with the reason. It never needs a built project.
@@ -1176,6 +1631,26 @@ bxAgents extensions link <folder-or-.bx> [--name=<name>] [--force]   # for you, 
 bxAgents extensions unlink <name>
 ```
 
+<!-- cli:extensions -->
+**Usage:** `bxAgents extensions [action] [source-or-name] [options]`
+
+**Actions:** `list`, `install`, `update`, `remove`, `link`, `unlink`
+
+| Option | What it does |
+|---|---|
+| `--name=<name>` | Name for an installed or linked extension. |
+| `--installed` | List installed extension packages. |
+| `--system` | Manage system-wide extension packages. |
+| `--force` | Allow replacement or removal when needed. |
+| `--yes` | Approve installation or update without prompting. |
+| `--json` | Print results as JSON. |
+
+**Examples:** `bxAgents extensions`, `bxAgents extensions list --installed`, `bxAgents extensions link ./my-extension`
+
+Sources can be a folder, ZIP, GitHub repository, URL, or ForgeBox slug.
+
+<!-- /cli:extensions -->
+
 ### `clean`
 
 Remove a project's `.build/` and `dist/` output.
@@ -1188,6 +1663,19 @@ bxAgents clean [--force]
 - **Refuses to run unless the directory looks like a BxAgents project** (an `Agent.yml`, an `Agent.bx` or a `.build/manifest.json`). `dist/` is a common build-output name across the wider ecosystem, so this stops a `clean` in the wrong directory from deleting something unrelated. `--force` skips the check when you genuinely mean it.
 - Prints the absolute path of each directory before removing it.
 - Reports "Nothing to clean" if neither directory exists.
+
+<!-- cli:clean -->
+**Usage:** `bxAgents clean [options]`
+
+| Option | What it does |
+|---|---|
+| `--force` | Skip the check that this is a BxAgents project. |
+
+**Examples:** `bxAgents clean`
+
+Deletes only .build/ and dist/. Project source is kept.
+
+<!-- /cli:clean -->
 
 ### `doctor`
 
@@ -1208,3 +1696,16 @@ bxAgents doctor [--json]
 - Does not check for `qb`, `cbsecurity`, `cbauth` or `cbmailservices`: they ship inside BxAgents and are copied into every built app.
 - `--json` prints the raw findings as a JSON array (`[{ status, message }, ...]`) instead of the human-readable report - useful for scripting.
 - Exits `1` if any check failed, `0` otherwise - warnings alone don't fail it.
+
+<!-- cli:doctor -->
+**Usage:** `bxAgents doctor [options]`
+
+| Option | What it does |
+|---|---|
+| `--json` | Print checks as JSON. |
+
+**Examples:** `bxAgents doctor`, `bxAgents doctor --json`
+
+Read-only: checks the runtime, project, and required environment variables.
+
+<!-- /cli:doctor -->

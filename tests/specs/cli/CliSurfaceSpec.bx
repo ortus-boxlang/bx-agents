@@ -1,0 +1,66 @@
+import bxagents.models.cli.BaseVerb;
+
+/**
+ * The whole command line surface in one snapshot: the verbs, what each one says it does, the flags that take a value, the
+ * verbs that take an action, and every help page. A change here is a change a person sees, so it has to be on purpose:
+ * regenerate `tests/golden/cli-surface.json` with the script in its docblock, and read the diff.
+ *
+ * The snapshot is made by `tests/golden/make-cli-surface.bxs`.
+ */
+class extends="testbox.system.BaseSpec" {
+
+	/**
+	 * @return The snapshot as it was saved
+	 */
+	private struct function saved() {
+		return jsonDeserialize( fileRead( expandPath( "/tests/golden/cli-surface.json" ) ) )
+	}
+
+	/**
+	 * The specs.
+	 */
+	function run() {
+		describe( "the command line surface", function() {
+
+			beforeEach( function() {
+				variables.golden = saved()
+				variables.help = new bxagents.models.cli.support.Help( { color : false }, 80 )
+			} );
+
+			it( "has the same verbs, each backed by the same class", function() {
+				expect( BaseVerb::verbNames().sort( "text" ) ).toBe( golden.verbs.keyArray().sort( "text" ) )
+				for ( var name in golden.verbs ) {
+					expect( BaseVerb::classOf( name ) ).toBe( golden.verbs[ name ] )
+				}
+			} );
+
+			it( "says the same thing about each verb", function() {
+				for ( var name in golden.descriptions ) {
+					expect( BaseVerb::definitionOf( name ).description ).toBe( golden.descriptions[ name ] )
+				}
+				expect( BaseVerb::descriptions().keyArray().sort( "text" ) ).toBe( golden.descriptions.keyArray().sort( "text" ) )
+			} );
+
+			it( "asks for a value on the same flags", function() {
+				for ( var name in golden.valueOptions ) {
+					expect( BaseVerb::valueOptionsOf( name ).filter( flag => flag != "projectRoot" ).sort( "text" ) ).toBe( golden.valueOptions[ name ].sort( "text" ), "value flags of #name#" )
+				}
+			} );
+
+			it( "takes an action as the first word for the same verbs", function() {
+				expect( BaseVerb::subcommandVerbs().sort( "text" ) ).toBe( golden.subcommandVerbs.sort( "text" ) )
+			} );
+
+			it( "prints the same overview", function() {
+				expect( help.overview( BaseVerb::allDefinitions() ) ).toBe( golden.overview )
+			} );
+
+			it( "prints the same help page for every verb", function() {
+				for ( var name in golden.help ) {
+					expect( help.command( BaseVerb::definitionOf( name ) ) ).toBe( golden.help[ name ], "help of #name#" )
+				}
+			} );
+		} );
+	}
+
+}

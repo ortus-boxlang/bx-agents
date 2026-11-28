@@ -28,20 +28,32 @@
 import bxModules.bxagents.models.util.EntryConfigReader;
 import bxModules.bxagents.models.util.ProgramFinder;
 
-class {
+class extends="BaseVerb" {
 
 	/**
-	 * @options { projectRoot (required, absolute path), json (optional boolean - print findings as a JSON array instead of the human-readable report) }
-	 *
-	 * @return { exitCode (1 if any check failed, 0 otherwise), message }
+	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
 	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`doctor` requires a project root" )
+	struct function meta() {
+		return {
+			name : "doctor",
+			group : "GET STARTED",
+			position : 3,
+			description : "Check your environment and project",
+			usage : "[options]",
+			options : [
+				{ name : "json", description : "Print checks as JSON." }
+			],
+			examples : [ "doctor", "doctor --json" ],
+			note : "Read-only: checks the runtime, project, and required environment variables."
 		}
+	}
 
-		var root = projectRoot.reReplace( "[\/]+$", "" )
+
+	/**
+	 * @return { exitCode (1 if any check failed, 0 otherwise), message, checks }
+	 */
+	function handle() {
+		var root = projectRoot()
 		var checks = []
 
 		checkRuntime( checks )
@@ -53,7 +65,7 @@ class {
 				status  : "fail",
 				message : "No #locator.expected()# found at [#root#] - `doctor` expects to run inside a BX Agents project."
 			} )
-			return finish( checks, arguments.options.json ?: false )
+			return finish( checks )
 		}
 		checks.append( { status : "ok", message : "Agent definition found at [#root#]" } )
 
@@ -64,7 +76,7 @@ class {
 			config = new "models.build.AgentConfigResolver@bxagents"().resolve( projectRoot : root )
 		} catch ( any e ) {
 			checks.append( { status : "fail", message : "Could not resolve the agent definition: #e.message#" } )
-			return finish( checks, arguments.options.json ?: false )
+			return finish( checks )
 		}
 
 		checkProjectValidation( root, discovery, config, checks )
@@ -74,7 +86,7 @@ class {
 		checkDataHome( root, checks )
 		checkEnvRuntimeHome( root, checks )
 
-		return finish( checks, arguments.options.json ?: false )
+		return finish( checks )
 	}
 
 	// --------------------------------------------------------------------------
@@ -374,52 +386,37 @@ class {
 
 	/**
 	 * @checks Every finding gathered, in the order the checks ran
-	 * @asJson When true, render `message` as a JSON array of the raw findings instead of the human-readable report
 	 *
-	 * @return { exitCode (1 if any check is a fail, 0 otherwise), message, checks }
+	 * @return { exitCode (1 if any check is a fail, 0 otherwise), message, checks }; with --json the message is the raw findings
 	 */
-	private struct function finish( required array checks, boolean asJson = false ) {
-		var hasFail = false
-		for ( var check in arguments.checks ) {
-			if ( check.status == "fail" ) {
-				hasFail = true
-				break
-			}
-		}
-
-		if ( arguments.asJson ) {
-			return {
-				exitCode : hasFail ? 1 : 0,
-				message  : jsonSerialize( arguments.checks ),
-				checks   : arguments.checks
-			}
-		}
-
-		var lines = []
+	private struct function finish( required array checks ) {
 		var failCount = 0
 		var warnCount = 0
 		for ( var check in arguments.checks ) {
-			var label = check.status == "fail" ? "FAIL" : ( check.status == "warn" ? "WARN" : " OK " )
-			lines.append( "[#label#] #check.message#" )
 			if ( check.status == "fail" ) {
 				failCount++
 			} else if ( check.status == "warn" ) {
 				warnCount++
 			}
 		}
+		var checks = arguments.checks
+		var report = asJson( checks, () => reportText( checks, failCount, warnCount ), { checks : checks } )
+		return exitWith( failCount ? 1 : 0, report.message, { checks : checks } )
+	}
 
-		lines.append( "" )
-		if ( !failCount && !warnCount ) {
-			lines.append( "Everything checks out." )
+	private string function reportText( required array checks, required numeric failCount, required numeric warnCount ) {
+		var report = []
+		for ( var check in arguments.checks ) {
+			var label = check.status == "fail" ? "FAIL" : ( check.status == "warn" ? "WARN" : " OK " )
+			report.append( "[#label#] #check.message#" )
+		}
+		report.append( "" )
+		if ( !arguments.failCount && !arguments.warnCount ) {
+			report.append( "Everything checks out." )
 		} else {
-			lines.append( "#failCount# problem(s), #warnCount# warning(s)." )
+			report.append( "#arguments.failCount# problem(s), #arguments.warnCount# warning(s)." )
 		}
-
-		return {
-			exitCode : hasFail ? 1 : 0,
-			message  : lines.toList( char( 10 ) ),
-			checks   : arguments.checks
-		}
+		return report.toList( char( 10 ) )
 	}
 
 }

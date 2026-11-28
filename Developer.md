@@ -79,8 +79,13 @@ provider credentials.
 ## Extend and collaborate
 
 1. **Start from an existing feature.** For a CLI verb, follow a class in
-   [`models/cli/`](src/main/bx/models/cli/) and its registration in
-   [`ModuleConfig.bx`](src/main/bx/ModuleConfig.bx). For a new project
+   [`models/cli/`](src/main/bx/models/cli/): it extends
+   [`BaseVerb`](src/main/bx/models/cli/BaseVerb.bx), says what it is in `meta()`
+   (group, usage, actions, options, examples), and does its work in `handle()`
+   or `handle<Action>()`. Add its name to `BaseVerb`'s list; the help, the
+   completions and the options tables of `docs/cli-reference.md`
+   (`tools/generate-cli-reference.bxs`) are made from `meta()`, and
+   `tests/golden/cli-surface.json` pins what a person sees. For a new project
    convention, trace discovery, validation and generation through the build
    pipeline; add an example and focused tests.
 2. **Respect module boundaries.** Within shipped BoxLang classes, reference
