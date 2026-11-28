@@ -159,8 +159,8 @@ await scene( "define", async() => {
 	await page.keyboard.press( "Enter" );
 	await page.locator( "#embedColor" ).fill( "#7c3aed" );
 	await pause( 400 );
-	// typing scrolled the panel down: the picture starts at its heading
-	await page.locator( "dialog.drawer" ).evaluate( el => el.scrollTo( 0, 0 ) );
+	// typing scrolled the page down: the picture starts at its heading
+	await page.evaluate( () => { document.querySelector( "#content" )?.scrollTo( 0, 0 ); window.scrollTo( 0, 0 ); } );
 	await pause( 300 );
 	await shot( "editor-with-live-preview" );
 } );
@@ -183,8 +183,8 @@ await scene( "limits", async() => {
 await scene( "snippet", async() => {
 	await click( page.locator( "#saveEmbed" ) );
 	await page.getByText( "Made Docs helper." ).waitFor();
-	// saving a new embed keeps the panel open, now as the edit of the embed it made
-	await page.getByRole( "heading", { name: "Edit Docs helper" } ).waitFor();
+	// saving a new embed keeps the page, now as the edit of the embed it made
+	await page.getByRole( "heading", { name: "Edit Docs helper", level: 1 } ).waitFor();
 	await pause( 700 );
 	embedId = ( await page.locator( "[role=tabpanel]:visible code" ).textContent() ).match( /emb_[A-Za-z0-9]{10}/ )[ 0 ];
 	await pause( 500 );
@@ -213,7 +213,7 @@ await scene( "visitor", async() => {
 
 await scene( "counters", async() => {
 	await page.goto( AGENT + "/chat/embeds" );
-	await click( page.getByRole( "button", { name: "Edit Docs helper" } ) );
+	await click( page.getByRole( "link", { name: "Edit Docs helper" } ).first() );
 	await page.getByRole( "heading", { name: "Last 7 days" } ).waitFor();
 	await pause( 900 );
 	await page.getByRole( "heading", { name: "Last 7 days" } ).scrollIntoViewIfNeeded();
@@ -223,7 +223,8 @@ await scene( "counters", async() => {
 	await shot( "rotate-asks-first" );
 	await click( page.locator( "#confirmYes" ) );
 	await pause( 1200 );
-	await click( page.locator( "dialog.drawer" ).getByRole( "button", { name: "Close" } ) );
+	await click( page.locator( "#backToEmbeds" ) );
+	await page.getByRole( "heading", { name: "Embeds", level: 1 } ).waitFor();
 	await pause( 700 );
 } );
 
