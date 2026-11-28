@@ -14,7 +14,7 @@
  *     Only `local` supports this shorthand - every other target needs more
  *     configuration than a couple of flags can reasonably carry.
  */
-class {
+class extends="BaseVerb" {
 
 	/**
 	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
@@ -36,7 +36,6 @@ class {
 		}
 	}
 
-
 	static {
 		TARGET_CLASSES = {
 			"local"        : "models.deploy.targets.LocalTarget@bxagents",
@@ -48,43 +47,31 @@ class {
 		}
 	}
 
-	/**
-	 * @options { projectRoot (required), name (optional, a deploy/* entry), target (optional, defaults to "local"), destination (required for flag-only "local") }
-	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`deploy` requires a project root" )
-		}
-		var root = projectRoot.reReplace( "[\/]+$", "" )
-
-		var name = trim( arguments.options.name ?: "" )
+	function handle() {
+		var root = projectRoot()
+		var name = trim( option( "name" ) )
 		var target = ""
 		var config = {}
 
 		if ( len( name ) ) {
-			var resolver = new "models.deploy.DeploymentConfigResolver@bxagents"()
-			var entry = resolver.getEntry( root, name )
+			var entry = new "models.deploy.DeploymentConfigResolver@bxagents"().getEntry( root, name )
 			target = entry.target
 			config = entry.config
 		} else {
-			target = len( arguments.options.target ?: "" ) ? arguments.options.target : "local"
-
+			target = len( option( "target" ) ) ? option( "target" ) : "local"
 			if ( !static.TARGET_CLASSES.keyExists( target ) ) {
 				throw(
 					type    = "BxAgents.UnknownDeploymentTarget",
 					message = "Unknown deployment target [#target#] - must be one of: #static.TARGET_CLASSES.keyArray().toList()#"
 				)
 			}
-
 			if ( target != "local" ) {
 				throw(
 					type    = "BxAgents.MissingDeployEntry",
 					message = "deploy target [#target#] requires a deploy/*.bx entry (`deploy --name=<entry>`) - only 'local' supports the flag-only form"
 				)
 			}
-
-			var destination = trim( arguments.options.destination ?: "" )
+			var destination = trim( option( "destination" ) )
 			if ( !len( destination ) ) {
 				throw( type = "BxAgents.MissingDestination", message = "`deploy --target=local` requires --destination" )
 			}
@@ -99,15 +86,8 @@ class {
 			distDir     : root & "/dist",
 			manifest    : fileExists( manifestPath ) ? jsonDeserialize( fileRead( manifestPath ) ) : {}
 		}
-
-		var targetInstance = new "#static.TARGET_CLASSES[ target ]#"()
-		var result = targetInstance.deploy( config, context )
-
-		return {
-			exitCode : result.success ? 0 : 1,
-			message  : result.message,
-			result   : result
-		}
+		var result = new "#static.TARGET_CLASSES[ target ]#"().deploy( config, context )
+		return exitWith( result.success ? 0 : 1, result.message, { result : result } )
 	}
 
 }

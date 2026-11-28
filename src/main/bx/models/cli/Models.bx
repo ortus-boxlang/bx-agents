@@ -13,7 +13,7 @@
  */
 import bxModules.bxagents.models.cli.support.CliTable;
 
-class {
+class extends="BaseVerb" {
 
 	/**
 	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
@@ -37,34 +37,48 @@ class {
 		}
 	}
 
+	function handleList() {
+		var rows = known( loadConversation() )
+		return asJson( rows, () => listText( rows ) )
+	}
 
-	static {
-		ACTIONS = [ "list", "test" ]
+	function handleTest() {
+		var chat = loadConversation()
+		var rows = known( chat )
+		var wanted = trim( option( "profile" ) )
+		var chosen = rows
+		if ( len( wanted ) ) {
+			chosen = rows.filter( r => r.name == wanted )
+			if ( !chosen.len() ) {
+				throw( type = "BxAgents.UnknownProfile", message = "There is no profile [#wanted#]. Try `bxAgents models list`." )
+			}
+		} else if ( !isOptionSet( "all" ) ) {
+			chosen = [ rows[ 1 ] ]
+		}
+		var results = []
+		for ( var row in chosen ) {
+			// the default model is tested through the agent's own, a profile through its name
+			var outcome = chat.ping( row.name == "default" ? "" : row.name )
+			results.append( { name : row.name, model : outcome.model, ok : outcome.ok, ms : outcome.ms ?: 0, detail : outcome.ok ? outcome.reply : outcome.reason } )
+		}
+		var exitCode = results.filter( r => !r.ok ).len() ? 1 : 0
+		if ( isOptionSet( "json" ) ) {
+			return exitWith( exitCode, jsonSerialize( results ) )
+		}
+		var data = results.map( r => [ r.name, r.model, r.ok ? "ok" : "FAILED", r.ok ? "#r.ms# ms" : r.detail ] )
+		return exitWith( exitCode, CliTable::render( headers = [ "Profile", "Model", "Status", "Time" ], rows = data, alignRight = [ 4 ] ) )
 	}
 
 	/**
-	 * @options { projectRoot (required), _positional (the action), profile, all, json }
+	 * @return The agent's conversation, loaded from its build
 	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`models` requires a project root" )
-		}
-		var action = lCase( trim( arguments.options._positional ?: "" ) )
-		if ( !static.ACTIONS.contains( action ) ) {
-			throw( type = "BxAgents.UnknownModelsAction", message = "`models` needs one of: #static.ACTIONS.toList( ', ' )# - for example `bxAgents models test`." )
-		}
-		var root = projectRoot.reReplace( "[\/]+$", "" )
+	private any function loadConversation() {
 		var loader = new "models.cli.support.BuiltAgent@bxagents"()
-		if ( !loader.isBuilt( root ) ) {
-			throw( type = "BxAgents.NotBuilt", message = "No build found at [#root#/.build] - run `build` first" )
+		if ( !loader.isBuilt( projectRoot() ) ) {
+			throw( type = "BxAgents.NotBuilt", message = "No build found at [#projectRoot()#/.build] - run `build` first" )
 		}
-		var chat = new "models.chat.AgentConversation@bxagents"( loader.load( root ), "cli" )
-		var rows = known( chat )
-		return action == "list" ? list( rows, arguments.options.json ?: false ) : test( chat, rows, arguments.options )
+		return new "models.chat.AgentConversation@bxagents"( loader.load( projectRoot() ), "cli" )
 	}
-
-	// ----------------------------------------------------------------------------------
 
 	/**
 	 * @return [ { name, model, contextWindow, vision, hasApiKey, isDefault } ]: the app's default model, then the profiles
@@ -96,37 +110,9 @@ class {
 		return rows
 	}
 
-	private struct function list( required array rows, required boolean asJson ) {
-		if ( arguments.asJson ) {
-			return { exitCode : 0, message : jsonSerialize( arguments.rows ) }
-		}
+	private string function listText( required array rows ) {
 		var data = arguments.rows.map( r => [ r.name, r.model, r.contextWindow ? numberFormat( r.contextWindow ) : "?", len( r.vision ) ? r.vision : "?", r.hasApiKey ? "set" : "MISSING" ] )
-		return { exitCode : 0, message : CliTable::render( headers = [ "Profile", "Model", "Context", "Images", "Key" ], rows = data, alignRight = [ 3, 4 ] ) }
-	}
-
-	private struct function test( required any chat, required array rows, required struct options ) {
-		var wanted = trim( arguments.options.profile ?: "" )
-		var chosen = arguments.rows
-		if ( len( wanted ) ) {
-			chosen = arguments.rows.filter( r => r.name == wanted )
-			if ( !chosen.len() ) {
-				throw( type = "BxAgents.UnknownProfile", message = "There is no profile [#wanted#]. Try `bxAgents models list`." )
-			}
-		} else if ( !( arguments.options.all ?: false ) ) {
-			chosen = [ arguments.rows[ 1 ] ]
-		}
-		var results = []
-		for ( var row in chosen ) {
-			// the default model is tested through the agent's own, a profile through its name
-			var outcome = arguments.chat.ping( row.name == "default" ? "" : row.name )
-			results.append( { name : row.name, model : outcome.model, ok : outcome.ok, ms : outcome.ms ?: 0, detail : outcome.ok ? outcome.reply : outcome.reason } )
-		}
-		var failed = results.filter( r => !r.ok ).len()
-		if ( arguments.options.json ?: false ) {
-			return { exitCode : failed ? 1 : 0, message : jsonSerialize( results ) }
-		}
-		var data = results.map( r => [ r.name, r.model, r.ok ? "ok" : "FAILED", r.ok ? "#r.ms# ms" : r.detail ] )
-		return { exitCode : failed ? 1 : 0, message : CliTable::render( headers = [ "Profile", "Model", "Status", "Time" ], rows = data, alignRight = [ 4 ] ) }
+		return CliTable::render( headers = [ "Profile", "Model", "Context", "Images", "Key" ], rows = data, alignRight = [ 3, 4 ] )
 	}
 
 }

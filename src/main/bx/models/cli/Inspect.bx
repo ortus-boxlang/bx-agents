@@ -10,7 +10,7 @@
  */
 import bxModules.bxagents.models.util.Terminal;
 
-class {
+class extends="BaseVerb" {
 
 	/**
 	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
@@ -34,67 +34,43 @@ class {
 		}
 	}
 
-
-	/**
-	 * @options {
-	 *   projectRoot (required, absolute path),
-	 *   json        (optional boolean - print the whole report as JSON),
-	 *   md          (optional - true prints Markdown, a file name writes it there),
-	 *   section     (optional - comma-separated section names to show),
-	 *   environment (optional - resolve the agent for this environment),
-	 *   color       (optional boolean - false for no color),
-	 *   ascii       (optional boolean - avoid box-drawing characters),
-	 *   _paint      (test seam - a function ( style, text ) replacing the palette),
-	 *   _width      (test seam - the width to draw at)
-	 * }
-	 *
-	 * @return { exitCode, message, report }
-	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`inspect` requires a project root" )
-		}
-
+	function handle() {
 		var builder = new "models.report.ProjectReport@bxagents"()
-		var sections = builder.parseSections( arguments.options.section ?: "" )
-		var report = builder.build( projectRoot, arguments.options.environment ?: "" )
+		var sections = builder.parseSections( option( "section" ) )
+		var report = builder.build( projectRoot(), option( "environment" ) )
 
-		if ( arguments.options.json ?: false ) {
-			return { exitCode : 0, message : jsonSerialize( report ), report : report }
+		if ( isOptionSet( "json" ) ) {
+			return done( jsonSerialize( report ), { report : report } )
 		}
 
-		var md = arguments.options.md ?: false
-		if ( isSimpleValue( md ) && len( md ) && md != "false" ) {
+		var markdownOption = option( "md", false )
+		if ( isSimpleValue( markdownOption ) && len( markdownOption ) && markdownOption != "false" ) {
 			var markdown = new "models.report.ReportMarkdownRenderer@bxagents"().render( report, sections )
-			if ( md == "true" ) {
-				return { exitCode : 0, message : markdown, report : report }
+			if ( markdownOption == "true" ) {
+				return done( markdown, { report : report } )
 			}
-			var target = reFind( "^([A-Za-z]:)?[/\\]", md ) ? md : projectRoot & "/" & md
+			var target = reFind( "^([A-Za-z]:)?[/\\]", markdownOption ) ? markdownOption : projectRoot() & "/" & markdownOption
 			fileWrite( target, markdown )
-			return { exitCode : 0, message : "Wrote #target#", report : report }
+			return done( "Wrote #target#", { report : report } )
 		}
 
 		var text = new "models.report.ReportTextRenderer@bxagents"(
-			paint : arguments.options._paint ?: palette( arguments.options ),
-			width : arguments.options._width ?: terminalWidth(),
-			ascii : arguments.options.ascii ?: ( getSystemSetting( "TERM", "" ) == "dumb" )
+			paint : option( "_paint", palette() ),
+			width : option( "_width", terminalWidth() ),
+			ascii : option( "ascii", getSystemSetting( "TERM", "" ) == "dumb" )
 		).render( report, sections )
-
-		return { exitCode : 0, message : text, report : report }
+		return done( text, { report : report } )
 	}
 
 	/**
 	 * Color only at an interactive terminal, and never against `NO_COLOR`, `TERM=dumb`
 	 * or `--no-color`, so a pipe or a log file gets plain text.
 	 *
-	 * @options The verb's options
-	 *
 	 * @return A function ( style, text ) that applies the palette, or one that does not
 	 */
-	private function palette( required struct options ) {
+	private function palette() {
 		var plain = ( style, text ) => text
-		if ( !( arguments.options.color ?: true ) ) {
+		if ( !option( "color", true ) ) {
 			return plain
 		}
 		try {

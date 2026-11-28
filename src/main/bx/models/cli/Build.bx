@@ -1,7 +1,7 @@
 /**
  * `build` CLI verb - thin dispatcher over BuildPipeline (M12).
  */
-class {
+class extends="BaseVerb" {
 
 	/**
 	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
@@ -23,45 +23,24 @@ class {
 		}
 	}
 
-
-	/**
-	 * @options { projectRoot (required, absolute path), environment, generatorVersion, verbose, moduleDir (the module folder to copy into .build/runtime/modules, or "none"; default BXAGENTS_MODULE_DIR, else the installed module) }
-	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`build` requires a project root" )
-		}
-
-		// --verbose prints each build phase (and what it found/generated - the
-		// discovered counts, the WireBox-registered agent names, etc.) live as
-		// the build runs, via BuildPipeline's own onProgress callback - useful
-		// for debugging a slow or unexpectedly-behaving build. Silent (the
-		// callback's own no-op default) otherwise, so this costs nothing when
-		// not asked for.
-		var verbose = arguments.options.verbose ?: false
-		var onProgress = verbose
+	function handle() {
+		// --verbose prints each build phase live as it runs, through BuildPipeline's own onProgress callback. Silent otherwise.
+		var onProgress = isOptionSet( "verbose" )
 			? function( required string message ) { println( arguments.message ) }
 			: function( required string message ) {}
 
-		// "@bxagents" suffix, not a bare "bxagents.models...." path - see
-		// BuildPipeline.bx's init() docblock for why.
-		var pipeline = new "models.build.BuildPipeline@bxagents"( arguments.options.generatorVersion ?: "dev" )
-		if ( len( arguments.options.moduleDir ?: "" ) ) {
-			pipeline.setModuleSource( arguments.options.moduleDir )
+		// "@bxagents" suffix, not a bare "bxagents.models...." path - see BuildPipeline.bx's init() docblock for why.
+		var pipeline = new "models.build.BuildPipeline@bxagents"( option( "generatorVersion", "dev" ) )
+		if ( len( option( "moduleDir" ) ) ) {
+			pipeline.setModuleSource( option( "moduleDir" ) )
 		}
-		var result = pipeline.build( projectRoot, arguments.options.environment ?: "", onProgress )
+		var result = pipeline.build( projectRoot(), option( "environment" ), onProgress )
 
-		var lines = [ "Build succeeded: #result.appDir#" ]
+		var report = [ "Build succeeded: #result.appDir#" ]
 		for ( var warning in result.warnings ) {
-			lines.append( "  ! #warning#" )
+			report.append( "  ! #warning#" )
 		}
-
-		return {
-			exitCode : 0,
-			message  : lines.toList( char( 10 ) ),
-			result   : result
-		}
+		return lines( report, { result : result } )
 	}
 
 }

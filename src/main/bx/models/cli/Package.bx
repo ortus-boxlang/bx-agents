@@ -3,7 +3,7 @@
  * a prior `build` (reads its .build/manifest.json) - refuses to run (and
  * produces no .bxa) if no build exists yet.
  */
-class {
+class extends="BaseVerb" {
 
 	/**
 	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
@@ -23,19 +23,9 @@ class {
 		}
 	}
 
-
-	/**
-	 * @options { projectRoot (required, absolute path), version }
-	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`package` requires a project root" )
-		}
-
-		var root = projectRoot.reReplace( "[\/]+$", "" )
+	function handle() {
+		var root = projectRoot()
 		var manifestPath = root & "/.build/manifest.json"
-
 		if ( !fileExists( manifestPath ) ) {
 			throw(
 				type    = "BxAgents.NotBuilt",
@@ -44,26 +34,18 @@ class {
 		}
 
 		var manifest = jsonDeserialize( fileRead( manifestPath ) )
-		var version = len( arguments.options.version ?: "" ) ? arguments.options.version : "1.0.0"
+		var version = len( option( "version" ) ) ? option( "version" ) : "1.0.0"
 		var agentName = len( manifest.agent.name ?: "" ) ? manifest.agent.name : "bx-agent"
-		var baseName = "#agentName#-#version#"
 
-		// "@bxagents" suffix, not a bare "bxagents.models...." path - see
-		// BuildPipeline.bx's init() docblock for why.
-		var packager = new "models.build.PackagerService@bxagents"()
-		var result = packager.package(
+		// "@bxagents" suffix, not a bare "bxagents.models...." path - see BuildPipeline.bx's init() docblock for why.
+		var result = new "models.build.PackagerService@bxagents"().package(
 			projectRoot = root,
 			buildDir    = root & "/.build",
 			distDir     = root & "/dist",
 			manifest    = manifest,
-			baseName    = baseName
+			baseName    = "#agentName#-#version#"
 		)
-
-		return {
-			exitCode : 0,
-			message  : "Packaged: #result.bxa#",
-			result   : result
-		}
+		return done( "Packaged: #result.bxa#", { result : result } )
 	}
 
 }

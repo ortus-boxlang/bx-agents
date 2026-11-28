@@ -10,7 +10,7 @@
  * shown once, when it is made; only a hash of it is stored. The agent accepts issued tokens when its
  * `agentApi` has `tokens: true`.
  */
-class {
+class extends="BaseVerb" {
 
 	/**
 	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
@@ -34,47 +34,11 @@ class {
 		}
 	}
 
-
-	/**
-	 * @options { projectRoot (required), _positional (create, list or revoke), name, scope, expires, json }
-	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`token` requires a project root" )
-		}
-		var action = lCase( trim( arguments.options._positional ?: "" ) )
-		if ( !len( action ) || ![ "create", "list", "revoke" ].contains( action ) ) {
-			throw( type = "BxAgents.UnknownTokenAction", message = "`token` needs one of: create, list, revoke - for example `bxAgents token create --name=laptop`." )
-		}
-
-		var file = new "models.store.ChatStorePath@bxagents"().forProject( projectRoot )
-		directoryCreate( getDirectoryFromPath( file ), true, true )
-		var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
-		store.migrate()
-		var tokens = new "models.store.TokenService@bxagents"( store )
-
-		switch ( action ) {
-			case "create":
-				return create( tokens, arguments.options, file )
-			case "list":
-				return list( tokens, arguments.options )
-			case "revoke":
-				return revoke( tokens, arguments.options )
-		}
-	}
-
-	// ----------------------------------------------------------------------------------
-
-	private struct function create( required any tokens, required struct options, required string file ) {
-		var name = trim( arguments.options.name ?: "" )
-		if ( !len( name ) ) {
-			throw( type = "BxAgents.MissingTokenName", message = "`token create` requires --name=<who it is for>, for example --name=laptop" )
-		}
-		var scope = lCase( trim( arguments.options.scope ?: "chat" ) )
-		var made = arguments.tokens.create( name, scope, arguments.tokens.expiry( arguments.options.expires ?: "" ) )
-
-		var lines = [
+	function handleCreate() {
+		var name = requiredOption( "name", "BxAgents.MissingTokenName", "`token create` requires --name=<who it is for>, for example --name=laptop" )
+		var tokens = tokenService()
+		var made = tokens.create( name, lCase( trim( option( "scope", "chat" ) ) ), tokens.expiry( option( "expires" ) ) )
+		return lines( [
 			"Token for [#made.name#] (#made.scope#, #isDate( made.expiresAt ) ? 'expires ' & dateFormat( made.expiresAt, 'yyyy-MM-dd' ) & ' ' & timeFormat( made.expiresAt, 'HH:mm' ) : 'never expires'#):",
 			"",
 			"  " & made.token,
@@ -84,45 +48,46 @@ class {
 			"  bxAgents chat --connect=<server url> --token=<the token>",
 			"  BXAGENTS_TOKEN=<the token> bxAgents chat --connect=<server url>",
 			"",
-			"The agent accepts issued tokens when its agentApi has `tokens: true`. Database: #arguments.file#"
-		]
-		return { exitCode : 0, message : lines.toList( char( 10 ) ), token : made.token }
+			"The agent accepts issued tokens when its agentApi has `tokens: true`. Database: #chatStoreFile()#"
+		], { token : made.token } )
 	}
 
-	private struct function list( required any tokens, required struct options ) {
-		var rows = arguments.tokens.list()
-		if ( arguments.options.json ?: false ) {
-			return { exitCode : 0, message : jsonSerialize( rows.map( row => {
-				return { name : row.name, scope : row.scope, status : row.status, createdAt : stamp( row.createdAt ), lastUsedAt : stamp( row.lastUsedAt ?: "" ), expiresAt : stamp( row.expiresAt ?: "" ) }
-			} ) ) }
-		}
-		if ( !rows.len() ) {
-			return { exitCode : 0, message : "No tokens yet. Make one with `bxAgents token create --name=laptop`." }
-		}
-		var lines = [ pad( "NAME", 24 ) & pad( "SCOPE", 8 ) & pad( "STATUS", 9 ) & pad( "CREATED", 17 ) & pad( "LAST USED", 17 ) & "EXPIRES" ]
-		for ( var row in rows ) {
-			lines.append( pad( row.name, 24 ) & pad( row.scope, 8 ) & pad( row.status, 9 ) & pad( stamp( row.createdAt ), 17 ) & pad( len( stamp( row.lastUsedAt ?: "" ) ) ? stamp( row.lastUsedAt ) : "never", 17 ) & ( len( stamp( row.expiresAt ?: "" ) ) ? stamp( row.expiresAt ) : "never" ) )
-		}
-		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+	function handleList() {
+		var rows = tokenService().list()
+		var forJson = rows.map( row => {
+			return { name : row.name, scope : row.scope, status : row.status, createdAt : stamp( row.createdAt ), lastUsedAt : stamp( row.lastUsedAt ?: "" ), expiresAt : stamp( row.expiresAt ?: "" ) }
+		} )
+		return asJson( forJson, () => listText( rows ) )
 	}
 
-	private struct function revoke( required any tokens, required struct options ) {
-		var name = trim( arguments.options.name ?: "" )
-		if ( !len( name ) ) {
-			throw( type = "BxAgents.MissingTokenName", message = "`token revoke` requires --name=<the token's name>" )
+	function handleRevoke() {
+		var name = requiredOption( "name", "BxAgents.MissingTokenName", "`token revoke` requires --name=<the token's name>" )
+		if ( tokenService().revoke( name ) ) {
+			return done( "Revoked [#name#]. It stops working at once." )
 		}
-		if ( arguments.tokens.revoke( name ) ) {
-			return { exitCode : 0, message : "Revoked [#name#]. It stops working at once." }
+		return fail( "There is no active token named [#name#]. See `bxAgents token list`." )
+	}
+
+	/**
+	 * @return The token service of this project's chat database
+	 */
+	private any function tokenService() {
+		return new "models.store.TokenService@bxagents"( chatStore() )
+	}
+
+	private string function listText( required array rows ) {
+		if ( !arguments.rows.len() ) {
+			return "No tokens yet. Make one with `bxAgents token create --name=laptop`."
 		}
-		return { exitCode : 1, message : "There is no active token named [#name#]. See `bxAgents token list`." }
+		var report = [ padRight( "NAME", 24 ) & padRight( "SCOPE", 8 ) & padRight( "STATUS", 9 ) & padRight( "CREATED", 17 ) & padRight( "LAST USED", 17 ) & "EXPIRES" ]
+		for ( var row in arguments.rows ) {
+			report.append( padRight( row.name, 24 ) & padRight( row.scope, 8 ) & padRight( row.status, 9 ) & padRight( stamp( row.createdAt ), 17 ) & padRight( len( stamp( row.lastUsedAt ?: "" ) ) ? stamp( row.lastUsedAt ) : "never", 17 ) & ( len( stamp( row.expiresAt ?: "" ) ) ? stamp( row.expiresAt ) : "never" ) )
+		}
+		return report.toList( char( 10 ) )
 	}
 
 	private string function stamp( any value ) {
 		return isDate( arguments.value ?: "" ) ? dateTimeFormat( arguments.value, "yyyy-MM-dd HH:mm" ) : ""
-	}
-
-	private string function pad( required string text, required numeric width ) {
-		return left( arguments.text & repeatString( " ", arguments.width ), arguments.width )
 	}
 
 }

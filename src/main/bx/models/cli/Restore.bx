@@ -6,7 +6,7 @@
  * The database, `files/` and `skills/` are replaced; what was there is kept beside it as <name>.before-restore for one
  * restore. It stops if a server or chat looks to have the database open, unless --force is given.
  */
-class {
+class extends="BaseVerb" {
 
 	/**
 	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
@@ -29,28 +29,20 @@ class {
 		}
 	}
 
-
-	/**
-	 * @options { projectRoot (required), _positional (the backup), home, force }
-	 */
-	struct function run( struct options = {} ) {
-		var root = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( root ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`restore` requires a project root" )
-		}
-		var file = trim( arguments.options._positional ?: "" )
+	function handle() {
+		var file = firstArgument()
 		if ( !len( file ) ) {
 			throw( type = "BxAgents.MissingBackup", message = "`restore` needs the backup to put back, for example `bxAgents restore backups/backup-20261107-0914.zip`." )
 		}
-		var data = len( trim( arguments.options.home ?: "" ) )
-			? new "models.data.ProjectData@bxagents"().of( root.reReplace( "[\/]+$", "" ), trim( arguments.options.home ) )
-			: new "models.data.ProjectData@bxagents"().of( root.reReplace( "[\/]+$", "" ) )
-		var done = new "models.data.DataBackup@bxagents"( data.home ).restore( file, arguments.options.force ?: false )
-		var lines = [ "Restored #done.restored.toList( ', ' )# into #data.home.path()#" ]
-		if ( done.kept.len() ) {
-			lines.append( "Kept what was there as #done.kept.toList( ', ' )#. The next restore replaces them." )
+		var data = len( trim( option( "home" ) ) )
+			? new "models.data.ProjectData@bxagents"().of( projectRoot(), trim( option( "home" ) ) )
+			: new "models.data.ProjectData@bxagents"().of( projectRoot() )
+		var restored = new "models.data.DataBackup@bxagents"( data.home ).restore( file, isOptionSet( "force" ) )
+		var report = [ "Restored #restored.restored.toList( ', ' )# into #data.home.path()#" ]
+		if ( restored.kept.len() ) {
+			report.append( "Kept what was there as #restored.kept.toList( ', ' )#. The next restore replaces them." )
 		}
-		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+		return lines( report )
 	}
 
 }

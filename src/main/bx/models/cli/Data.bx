@@ -5,7 +5,7 @@
  */
 import bxModules.bxagents.models.util.ByteSize;
 
-class {
+class extends="BaseVerb" {
 
 	/**
 	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
@@ -25,37 +25,36 @@ class {
 		}
 	}
 
-
-	/**
-	 * @options { projectRoot (required), json }
-	 */
-	struct function run( struct options = {} ) {
-		var root = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( root ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`data` requires a project root" )
-		}
-		var found = new "models.data.ProjectData@bxagents"().of( root.reReplace( "[\/]+$", "" ) )
+	function handle() {
+		var found = new "models.data.ProjectData@bxagents"().of( projectRoot() )
 		var info = found.home.describe()
 		var volumes = found.volumes.listing()
-		if ( arguments.options.json ?: false ) {
-			info[ "volumes" ] = volumes
-			return { exitCode : 0, message : jsonSerialize( info ) }
-		}
-		var nl = char( 10 )
-		var lines = [
-			"Data home: #info.home#  (#sourceText( info.source )#)",
-			"Database:  #info.database#",
+		var forJson = duplicate( info )
+		forJson[ "volumes" ] = volumes
+		return asJson( forJson, () => describeText( info, volumes ) )
+	}
+
+	/**
+	 * @info What the data home holds
+	 * @volumes The volumes the agent can reach
+	 *
+	 * @return The report a person reads
+	 */
+	private string function describeText( required struct info, required array volumes ) {
+		var report = [
+			"Data home: #arguments.info.home#  (#sourceText( arguments.info.source )#)",
+			"Database:  #arguments.info.database#",
 			""
 		]
-		for ( var item in info.items ) {
-			lines.append( "  " & left( item.name & repeatString( " ", 10 ), 10 ) & right( repeatString( " ", 9 ) & ByteSize::format( item.bytes ), 9 ) & "   #item.files# #item.files == 1 ? 'file' : 'files'#" )
+		for ( var item in arguments.info.items ) {
+			report.append( "  " & padRight( item.name, 10 ) & right( repeatString( " ", 9 ) & ByteSize::format( item.bytes ), 9 ) & "   #item.files# #item.files == 1 ? 'file' : 'files'#" )
 		}
-		lines.append( "" )
-		lines.append( "Volumes:" )
-		for ( var volume in volumes ) {
-			lines.append( "  " & left( volume.name & repeatString( " ", 12 ), 12 ) & left( ( volume.mode == "rw" ? "read and write" : "read only" ) & repeatString( " ", 16 ), 16 ) & volume.description )
+		report.append( "" )
+		report.append( "Volumes:" )
+		for ( var volume in arguments.volumes ) {
+			report.append( "  " & padRight( volume.name, 12 ) & padRight( volume.mode == "rw" ? "read and write" : "read only", 16 ) & volume.description )
 		}
-		return { exitCode : 0, message : lines.toList( nl ) }
+		return report.toList( char( 10 ) )
 	}
 
 	private string function sourceText( required string source ) {

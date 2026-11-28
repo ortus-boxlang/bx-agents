@@ -7,7 +7,7 @@
  */
 import bxModules.bxagents.models.util.ByteSize;
 
-class {
+class extends="BaseVerb" {
 
 	/**
 	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
@@ -28,18 +28,10 @@ class {
 		}
 	}
 
-
-	/**
-	 * @options { projectRoot (required), to }
-	 */
-	struct function run( struct options = {} ) {
-		var root = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( root ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`backup` requires a project root" )
-		}
-		var home = new "models.data.ProjectData@bxagents"().of( root.reReplace( "[\/]+$", "" ) ).home
-		var made = new "models.data.DataBackup@bxagents"( home ).create( trim( arguments.options.to ?: "" ) )
-		return { exitCode : 0, message : "Backed up #made.entries# #made.entries == 1 ? 'file' : 'files'# (#ByteSize::format( made.bytes )#) to #made.file#" }
+	function handle() {
+		var home = new "models.data.ProjectData@bxagents"().of( projectRoot() ).home
+		var made = new "models.data.DataBackup@bxagents"( home ).create( trim( option( "to" ) ) )
+		return done( "Backed up #made.entries# #made.entries == 1 ? 'file' : 'files'# (#ByteSize::format( made.bytes )#) to #made.file#" )
 	}
 
 }

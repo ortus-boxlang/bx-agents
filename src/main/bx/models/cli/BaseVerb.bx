@@ -21,7 +21,7 @@
  * `meta()` keys: name, group, position (in its group), description, usage, actions ([ { name, description } ]),
  * actionsHeading, options ([ { name, display, description, takesValue, hidden } ]), optionsHeading, examples, note,
  * reference (the page anchor when it is not the name), subcommand (the first word is not a project folder),
- * projectRoot (default true).
+ * projectRoot (default true), actionExample (what the message for an unknown action suggests, when it is not the first example).
  */
 class {
 
@@ -42,7 +42,7 @@ class {
 			{ name : "projectRoot", takesValue : true, hidden : true }
 		]
 		definitions = {}
-		keys = [ "name", "group", "position", "description", "usage", "actions", "actionsHeading", "options", "optionsHeading", "examples", "note", "reference", "subcommand", "projectRoot" ]
+		keys = [ "name", "group", "position", "description", "usage", "actions", "actionsHeading", "options", "optionsHeading", "examples", "note", "reference", "subcommand", "projectRoot", "actionExample" ]
 		optionKeys = [ "name", "display", "description", "takesValue", "hidden" ]
 	}
 
@@ -269,7 +269,7 @@ class {
 	struct function unknownAction( required string action ) {
 		var definition = meta()
 		var names = definition.actions.map( entry => entry.name )
-		var example = definition.examples[ 1 ]
+		var example = definition.actionExample ?: definition.examples[ 1 ]
 		throw(
 			type    = "BxAgents.Unknown" & uCase( left( definition.name, 1 ) ) & mid( definition.name, 2, len( definition.name ) ) & "Action",
 			message = "`#definition.name#` needs one of: #names.toList( ', ' )# - for example `bxAgents #example#`."
@@ -334,30 +334,46 @@ class {
 
 	/**
 	 * @message What to print; nothing when empty
+	 * @extra More keys for the caller of the verb, such as the report it was built from
 	 *
 	 * @return A result that succeeded
 	 */
-	struct function done( string message = "" ) {
-		return { exitCode : 0, message : arguments.message }
+	struct function done( string message = "", struct extra = {} ) {
+		return { exitCode : 0, message : arguments.message }.append( arguments.extra )
+	}
+
+	/**
+	 * For a verb whose exit code is decided by what happened, such as a test run or a deployment.
+	 *
+	 * @exitCode What the command exits with
+	 * @message What to print
+	 * @extra More keys for the caller of the verb
+	 *
+	 * @return The result, with that exit code
+	 */
+	struct function exitWith( required numeric exitCode, required string message, struct extra = {} ) {
+		return { exitCode : arguments.exitCode, message : arguments.message }.append( arguments.extra )
 	}
 
 	/**
 	 * @message What to print
 	 * @exitCode What the command exits with
+	 * @extra More keys for the caller of the verb
 	 *
 	 * @return A result that failed
 	 */
-	struct function fail( required string message, numeric exitCode = 1 ) {
-		return { exitCode : arguments.exitCode, message : arguments.message }
+	struct function fail( required string message, numeric exitCode = 1, struct extra = {} ) {
+		return { exitCode : arguments.exitCode, message : arguments.message }.append( arguments.extra )
 	}
 
 	/**
 	 * @lines The lines to print
+	 * @extra More keys for the caller of the verb
 	 *
 	 * @return A result that succeeded and prints them
 	 */
-	struct function lines( required array lines ) {
-		return done( arguments.lines.toList( char( 10 ) ) )
+	struct function lines( required array lines, struct extra = {} ) {
+		return done( arguments.lines.toList( char( 10 ) ), arguments.extra )
 	}
 
 	/**
@@ -365,14 +381,43 @@ class {
 	 *
 	 * @data What --json prints
 	 * @text The text form: a string, or a function that gives one
+	 * @extra More keys for the caller of the verb
 	 *
 	 * @return A result that succeeded
 	 */
-	struct function asJson( required any data, required any text ) {
+	struct function asJson( required any data, required any text, struct extra = {} ) {
 		if ( isOptionSet( "json" ) ) {
-			return done( jsonSerialize( arguments.data ) )
+			return done( jsonSerialize( arguments.data ), arguments.extra )
 		}
-		return done( isCustomFunction( arguments.text ) || isClosure( arguments.text ) ? arguments.text() : arguments.text )
+		return done( isCustomFunction( arguments.text ) || isClosure( arguments.text ) ? arguments.text() : arguments.text, arguments.extra )
+	}
+
+	/**
+	 * @return The agent's chat database for this project, created and brought up to date
+	 */
+	any function chatStore() {
+		var file = new "models.store.ChatStorePath@bxagents"().forProject( projectRoot() )
+		directoryCreate( getDirectoryFromPath( file ), true, true )
+		var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
+		store.migrate()
+		return store
+	}
+
+	/**
+	 * @return The file of the chat database, whether or not it exists yet
+	 */
+	string function chatStoreFile() {
+		return new "models.store.ChatStorePath@bxagents"().forProject( projectRoot() )
+	}
+
+	/**
+	 * @text What to show in a column
+	 * @width How wide the column is
+	 *
+	 * @return The text, padded or cut to the width
+	 */
+	string function padRight( required string text, required numeric width ) {
+		return left( arguments.text & repeatString( " ", arguments.width ), arguments.width )
 	}
 
 	/**

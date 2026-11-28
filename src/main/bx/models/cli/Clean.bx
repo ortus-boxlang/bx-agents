@@ -15,7 +15,7 @@ import bxModules.bxagents.models.util.TreeDelete;
  * silently destroyed an unrelated project's output. `--force` bypasses the
  * marker check for the deliberate "I know what I'm doing" case.
  */
-class {
+class extends="BaseVerb" {
 
 	/**
 	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
@@ -35,63 +35,34 @@ class {
 		}
 	}
 
+	function handle() {
+		var root = projectRoot()
 
-	/**
-	 * @options { projectRoot (required, absolute path), force (optional boolean - clean even when the directory carries no BX Agents project marker) }
-	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`clean` requires a project root" )
-		}
-
-		var root = projectRoot.reReplace( "[\/]+$", "" )
-
-		if ( !( arguments.options.force ?: false ) && !isProjectRoot( root ) ) {
+		if ( !isOptionSet( "force" ) && !isProjectRoot( root ) ) {
 			throw(
 				type    = "BxAgents.NotAProject",
 				message = "[#root#] does not look like a BX Agents project - expected an Agent.yml, an Agent.bx or a .build/manifest.json there. Refusing to remove .build/ and dist/. Pass --force to clean it anyway."
 			)
 		}
 
-		var targets = []
-		for ( var folder in [ ".build", "dist" ] ) {
-			var path = root & "/" & folder
-			if ( directoryExists( path ) ) {
-				targets.append( path )
-			}
-		}
-
+		var targets = [ ".build", "dist" ].map( folder => root & "/" & folder ).filter( path => directoryExists( path ) )
 		if ( !targets.len() ) {
-			return {
-				exitCode : 0,
-				message  : "Nothing to clean"
-			}
+			return done( "Nothing to clean" )
 		}
 
-		// Say what is being deleted, path by path, BEFORE deleting it - a
-		// recursive delete should never be silent about its targets.
+		// Say what is being deleted, path by path, BEFORE deleting it: a recursive delete should never be silent about its targets.
 		for ( var target in targets ) {
 			println( "Removing #target#" )
 			// never through a link: a dev build links the web app module from its source (app/modules and public/includes), and
 			// directoryDelete( path, true ) follows a link and empties what it points at
 			TreeDelete::tree( target )
 		}
-
-		return {
-			exitCode : 0,
-			message  : "Removed: #targets.toList( ', ' )#"
-		}
+		return done( "Removed: #targets.toList( ', ' )#" )
 	}
 
 	/**
-	 * Is this directory recognizably a BX Agents project? Keyed off the same
-	 * two markers its sibling verbs already are: an `Agent.bx` (what `build`'s
-	 * own AgentConfigResolver requires, and what `new` refuses to overwrite)
-	 * or a `.build/manifest.json` (what `package`/`inspect` require). Either
-	 * one alone is enough - a project mid-scaffold has no build yet, and a
-	 * build output whose Agent.bx has since been moved away is still this
-	 * project's output to clean.
+	 * Is this directory recognizably a BX Agents project? It has an `Agent.yml` or `Agent.bx`, or a `.build/manifest.json`: a
+	 * project mid-scaffold has no build yet, and a build output whose agent file has since moved is still this project's to clean.
 	 *
 	 * @root Absolute path to the candidate project root, trailing slash stripped
 	 *
