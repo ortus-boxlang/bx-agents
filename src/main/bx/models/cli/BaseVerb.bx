@@ -21,7 +21,7 @@
  * `meta()` keys: name, group, position (in its group), description, usage, actions ([ { name, description } ]),
  * actionsHeading, options ([ { name, display, description, takesValue, hidden } ]), optionsHeading, examples, note,
  * reference (the page anchor when it is not the name), subcommand (the first word is not a project folder),
- * projectRoot (default true), actionExample (what the message for an unknown action suggests, when it is not the first example).
+ * projectRoot (default true), dispatch (default true; false when the words after the verb are not a fixed list of actions, such as the kinds `add` takes, so handle() reads them itself), actionExample (what the message for an unknown action suggests, when it is not the first example).
  */
 class {
 
@@ -42,7 +42,7 @@ class {
 			{ name : "projectRoot", takesValue : true, hidden : true }
 		]
 		definitions = {}
-		keys = [ "name", "group", "position", "description", "usage", "actions", "actionsHeading", "options", "optionsHeading", "examples", "note", "reference", "subcommand", "projectRoot", "actionExample" ]
+		keys = [ "name", "group", "position", "description", "usage", "actions", "actionsHeading", "options", "optionsHeading", "examples", "note", "reference", "subcommand", "projectRoot", "actionExample", "dispatch" ]
 		optionKeys = [ "name", "display", "description", "takesValue", "hidden" ]
 	}
 
@@ -211,6 +211,7 @@ class {
 		out.reference = out.reference ?: out.name
 		out.subcommand = out.subcommand ?: false
 		out.projectRoot = out.projectRoot ?: true
+		out.dispatch = out.dispatch ?: true
 		return out
 	}
 
@@ -241,7 +242,7 @@ class {
 				throw( type = "BxAgents.MissingProjectRoot", message = "`#definition.name#` requires a project root" )
 			}
 		}
-		if ( !( definition.actions ?: [] ).len() ) {
+		if ( !( definition.actions ?: [] ).len() || !( definition.dispatch ?: true ) ) {
 			return handle()
 		}
 		var action = lCase( trim( arguments.options._positional ?: "" ) )
