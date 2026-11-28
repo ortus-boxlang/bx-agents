@@ -21,7 +21,7 @@
  */
 import bxModules.bxagents.models.api.Caller;
 
-class {
+class extends="BaseVerb" {
 
 	/**
 	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
@@ -50,221 +50,209 @@ class {
 		}
 	}
 
-
-	static {
-		ACTIONS = [ "list", "rename", "fork", "delete", "clear", "export", "import" ]
+	function handleList() {
+		var context = setup()
+		var rows = context.sessions.search( context.user, { limit : 50, agent : trim( option( "agent" ) ), q : trim( option( "q" ) ) } ).rows
+		return asJson( rows, () => listText( rows, context.user ) )
 	}
 
-	/**
-	 * @options { projectRoot (required), _positional (the action), session, name, user, json, file, md, force }
-	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`sessions` requires a project root" )
-		}
-		var action = lCase( trim( arguments.options._positional ?: "" ) )
-		if ( !static.ACTIONS.contains( action ) ) {
-			throw( type = "BxAgents.UnknownSessionsAction", message = "`sessions` needs one of: #static.ACTIONS.toList( ', ' )# - for example `bxAgents sessions list`." )
-		}
-
-		var root = projectRoot.reReplace( "[\/]+$", "" )
-		var file = new "models.store.ChatStorePath@bxagents"().forProject( root )
-		directoryCreate( getDirectoryFromPath( file ), true, true )
-		var store = new "models.store.ChatStore@bxagents"( { driver : "sqlite", database : file } )
-		store.migrate()
-		var sessions = new "models.store.SessionStore@bxagents"( store )
-		var user = len( trim( arguments.options.user ?: "" ) ) ? trim( arguments.options.user ) : Caller::localId()
-
-		if ( action == "list" ) {
-			return list( sessions, user, arguments.options.json ?: false, trim( arguments.options.agent ?: "" ), trim( arguments.options.q ?: "" ) )
-		}
-
-		if ( action == "import" ) {
-			return importFile( root, sessions, user, arguments.options )
-		}
-
-		if ( action == "clear" && ( arguments.options.all ?: false ) ) {
-			return clearAll( root, sessions, user, trim( arguments.options.agent ?: "" ) )
-		}
-
-		var reference = trim( arguments.options.session ?: "" )
-		if ( !len( reference ) ) {
-			throw( type = "BxAgents.MissingSession", message = "`sessions #action#` needs --session=<number or id> (see `bxAgents sessions list`)." )
-		}
-		var found = sessions.resolve( user, reference )
-		if ( found.isEmpty() ) {
-			return { exitCode : 1, message : "There is no conversation [#reference#] for #user#. Try `bxAgents sessions list`." }
-		}
-		var name = trim( arguments.options.name ?: "" )
-
-		switch ( action ) {
-			case "rename":
-				if ( !len( name ) ) {
-					throw( type = "BxAgents.MissingSessionName", message = "`sessions rename` needs --name=<the new name>" )
-				}
-				sessions.rename( user, found.id, sessions.titleOf( name ) )
-				return { exitCode : 0, message : "Renamed to [#sessions.titleOf( name )#]." }
-			case "fork":
-				return fork( root, sessions, user, found, name )
-			case "delete":
-				return remove( root, sessions, user, found )
-			case "clear":
-				return clearOne( root, sessions, user, found )
-			case "export":
-				return exportFile( root, sessions, user, found, arguments.options )
-		}
-	}
-
-	// ----------------------------------------------------------------------------------
-
-	private struct function list( required any sessions, required string user, required boolean asJson, string agent = "", string q = "" ) {
-		var rows = arguments.sessions.search( arguments.user, { limit : 50, agent : arguments.agent, q : arguments.q } ).rows
-		if ( arguments.asJson ) {
-			return { exitCode : 0, message : jsonSerialize( rows ) }
-		}
-		if ( !rows.len() ) {
-			return { exitCode : 0, message : "No conversations yet for #arguments.user#." }
-		}
-		var lines = []
-		var number = 0
-		for ( var row in rows ) {
-			number++
-			lines.append( right( "  " & number, 3 ) & "  " & left( row.title ?: "", 60 ) & "  " & ( row.messageCount ?: 0 ) & " messages  " & dateTimeFormat( row.updatedAt, "yyyy-MM-dd HH:mm" ) & "  " & left( row.id, 8 ) )
-		}
-		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+	function handleRename() {
+		var context = setup()
+		return withSession( context, found => {
+			var name = trim( option( "name" ) )
+			if ( !len( name ) ) {
+				throw( type = "BxAgents.MissingSessionName", message = "`sessions rename` needs --name=<the new name>" )
+			}
+			context.sessions.rename( context.user, found.id, context.sessions.titleOf( name ) )
+			return done( "Renamed to [#context.sessions.titleOf( name )#]." )
+		} )
 	}
 
 	/**
 	 * Copies a conversation's messages, which needs the agent: a built project.
 	 */
-	private struct function fork( required string root, required any sessions, required string user, required struct found, required string name ) {
-		var loader = new "models.cli.support.BuiltAgent@bxagents"()
-		if ( !loader.isBuilt( arguments.root ) ) {
-			return { exitCode : 1, message : "`sessions fork` copies the messages, which the agent holds: run `bxAgents build` first." }
-		}
-		var conversation = new "models.chat.AgentConversation@bxagents"( loader.load( arguments.root ), arguments.user, arguments.sessions, arguments.found.id )
-		var outcome = conversation.fork( arguments.name )
-		return outcome.ok
-			? { exitCode : 0, message : "Forked as [#outcome.title#] (#left( outcome.id, 8 )#): #outcome.messages# messages copied." }
-			: { exitCode : 1, message : outcome.reason }
-	}
-
-	/**
-	 * Writes one conversation to a file, which needs the agent: a built project.
-	 */
-	private struct function exportFile( required string root, required any sessions, required string user, required struct found, required struct options ) {
-		var loader = new "models.cli.support.BuiltAgent@bxagents"()
-		if ( !loader.isBuilt( arguments.root ) ) {
-			return { exitCode : 1, message : "`sessions export` reads the messages, which the agent holds: run `bxAgents build` first." }
-		}
-		var conversation = new "models.chat.AgentConversation@bxagents"( loader.load( arguments.root ), arguments.user, arguments.sessions, arguments.found.id )
-		var outcome = conversation.exportSession()
-		if ( !outcome.ok ) {
-			return { exitCode : 1, message : outcome.reason }
-		}
-		var format = new "models.store.SessionFile@bxagents"()
-		var markdown = arguments.options.md ?: false
-		var file = trim( arguments.options.file ?: "" )
-		if ( !len( file ) ) {
-			file = format.slug( arguments.found.title ?: "" ) & ( markdown ? ".md" : ".json" )
-		}
-		if ( !file.reFind( "^([A-Za-z]:)?[\\/]" ) ) {
-			file = arguments.root & "/" & file
-		}
-		if ( fileExists( file ) && !( arguments.options.force ?: false ) ) {
-			return { exitCode : 1, message : "[#file#] already exists. Pick another with --file, or add --force to replace it." }
-		}
-		directoryCreate( getDirectoryFromPath( file ), true, true )
-		fileWrite( file, markdown ? format.markdown( outcome.data ) : jsonSerialize( outcome.data ) )
-		return { exitCode : 0, message : "Exported #outcome.data.messages.len()# messages to #file#. The file holds the whole conversation, so keep it where you would keep the conversation." }
-	}
-
-	/**
-	 * Adds an exported conversation as a new one, which needs the agent: a built project.
-	 */
-	private struct function importFile( required string root, required any sessions, required string user, required struct options ) {
-		var file = trim( arguments.options.file ?: "" )
-		if ( !len( file ) ) {
-			throw( type = "BxAgents.MissingSessionFile", message = "`sessions import` needs --file=<an exported conversation>." )
-		}
-		if ( !file.reFind( "^([A-Za-z]:)?[\\/]" ) ) {
-			file = arguments.root & "/" & file
-		}
-		if ( !fileExists( file ) ) {
-			return { exitCode : 1, message : "There is no file [#file#]." }
-		}
-		var data = ""
-		try {
-			data = new "models.store.SessionFile@bxagents"().parse( fileRead( file ) )
-		} catch ( "BxAgents.InvalidSessionFile" e ) {
-			return { exitCode : 1, message : e.message }
-		}
-		var loader = new "models.cli.support.BuiltAgent@bxagents"()
-		if ( !loader.isBuilt( arguments.root ) ) {
-			return { exitCode : 1, message : "`sessions import` puts the messages in the agent's memory: run `bxAgents build` first." }
-		}
-		var agent = loader.load( arguments.root )
-		var conversation = new "models.chat.AgentConversation@bxagents"( agent, arguments.user, arguments.sessions )
-		var outcome = conversation.importSession( data, trim( arguments.options.name ?: "" ) )
-		if ( !outcome.ok ) {
-			return { exitCode : 1, message : outcome.reason }
-		}
-		var note = len( data.agent ?: "" ) && data.agent != conversation.agentName() ? " It was exported from the agent [#data.agent#], and this one is [#conversation.agentName()#]." : ""
-		return { exitCode : 0, message : "Imported as [#outcome.title#] (#left( outcome.id, 8 )#): #outcome.messages# messages.#note#" }
-	}
-
-	/**
-	 * Forgets the messages of one conversation and keeps the conversation, which needs the agent: a built project.
-	 */
-	private struct function clearOne( required string root, required any sessions, required string user, required struct found ) {
-		var loader = new "models.cli.support.BuiltAgent@bxagents"()
-		if ( !loader.isBuilt( arguments.root ) ) {
-			return { exitCode : 1, message : "`sessions clear` forgets the messages, which the agent holds: run `bxAgents build` first." }
-		}
-		var done = new "models.api.Conversations@bxagents"( loader.load( arguments.root ), arguments.sessions ).clearMemory( owner( arguments.user ), arguments.found.id )
-		return done.succeeded()
-			? { exitCode : 0, message : "Cleared the messages of [#arguments.found.title ?: ''#] (#done.data().messages# messages). The conversation stays in the list." }
-			: { exitCode : 1, message : done.reason() }
-	}
-
-	/**
-	 * Forgets the messages of every conversation (of one agent, with --agent) and keeps the conversations. Whoever is at
-	 * the terminal owns this machine's database, so it is the admin's call.
-	 */
-	private struct function clearAll( required string root, required any sessions, required string user, string agent = "" ) {
-		var loader = new "models.cli.support.BuiltAgent@bxagents"()
-		if ( !loader.isBuilt( arguments.root ) ) {
-			return { exitCode : 1, message : "`sessions clear` forgets the messages, which the agent holds: run `bxAgents build` first." }
-		}
-		var agent = loader.load( arguments.root )
-		if ( len( arguments.agent ) && isNull( new "models.api.AgentTree@bxagents"( agent ).find( arguments.agent ) ) ) {
-			return { exitCode : 1, message : "There is no agent called [#arguments.agent#]." }
-		}
-		var done = new "models.api.Conversations@bxagents"( agent, arguments.sessions ).clearMemory( caller = owner( arguments.user, true ), all = true, agent = arguments.agent )
-		return done.succeeded()
-			? { exitCode : 0, message : "Cleared #done.data().messages# messages in #done.data().conversations# conversation#done.data().conversations == 1 ? '' : 's'#. The conversations stay in the list." }
-			: { exitCode : 1, message : done.reason() }
-	}
-
-	private any function owner( required string user, boolean admin = false ) {
-		return new "models.api.Caller@bxagents"( id = arguments.user, name = arguments.user, scope = arguments.admin ? "admin" : "chat", source = "terminal" )
+	function handleFork() {
+		var context = setup()
+		return withSession( context, found => {
+			var loader = new "models.cli.support.BuiltAgent@bxagents"()
+			if ( !loader.isBuilt( projectRoot() ) ) {
+				return fail( "`sessions fork` copies the messages, which the agent holds: run `bxAgents build` first." )
+			}
+			var conversation = new "models.chat.AgentConversation@bxagents"( loader.load( projectRoot() ), context.user, context.sessions, found.id )
+			var outcome = conversation.fork( trim( option( "name" ) ) )
+			return outcome.ok
+				? done( "Forked as [#outcome.title#] (#left( outcome.id, 8 )#): #outcome.messages# messages copied." )
+				: fail( outcome.reason )
+		} )
 	}
 
 	/**
 	 * Removes a conversation from the list and, when the project is built, forgets its messages too.
 	 */
-	private struct function remove( required string root, required any sessions, required string user, required struct found ) {
-		var loader = new "models.cli.support.BuiltAgent@bxagents"()
-		var cleared = loader.isBuilt( arguments.root )
-		if ( cleared ) {
-			// the row and the messages the agent still holds are removed together, in Conversations
-			var owner = new "models.api.Caller@bxagents"( id = arguments.user, name = arguments.user, scope = "chat", source = "terminal" )
-			new "models.api.Conversations@bxagents"( loader.load( arguments.root ), arguments.sessions ).delete( owner, arguments.found.id )
-		} else {
-			arguments.sessions.delete( arguments.user, arguments.found.id )
+	function handleDelete() {
+		var context = setup()
+		return withSession( context, found => {
+			var loader = new "models.cli.support.BuiltAgent@bxagents"()
+			var cleared = loader.isBuilt( projectRoot() )
+			if ( cleared ) {
+				// the row and the messages the agent still holds are removed together, in Conversations
+				new "models.api.Conversations@bxagents"( loader.load( projectRoot() ), context.sessions ).delete( actingUser( context.user ), found.id )
+			} else {
+				context.sessions.delete( context.user, found.id )
+			}
+			return done( "Deleted [#found.title ?: ''#]." & ( cleared ? "" : " The project is not built, so any messages a file or jdbc memory kept for it were left." ) )
+		} )
+	}
+
+	/**
+	 * Forgets the messages and keeps the conversations, which needs the agent: a built project. With --all it is every
+	 * conversation (of one agent, with --agent); whoever is at the terminal owns this machine's database, so it is the admin's call.
+	 */
+	function handleClear() {
+		var context = setup()
+		if ( isOptionSet( "all" ) ) {
+			return clearAll( context )
 		}
-		return { exitCode : 0, message : "Deleted [#arguments.found.title ?: ''#]." & ( cleared ? "" : " The project is not built, so any messages a file or jdbc memory kept for it were left." ) }
+		return withSession( context, found => {
+			var loader = new "models.cli.support.BuiltAgent@bxagents"()
+			if ( !loader.isBuilt( projectRoot() ) ) {
+				return fail( "`sessions clear` forgets the messages, which the agent holds: run `bxAgents build` first." )
+			}
+			var outcome = new "models.api.Conversations@bxagents"( loader.load( projectRoot() ), context.sessions ).clearMemory( actingUser( context.user ), found.id )
+			return outcome.succeeded()
+				? done( "Cleared the messages of [#found.title ?: ''#] (#outcome.data().messages# messages). The conversation stays in the list." )
+				: fail( outcome.reason() )
+		} )
+	}
+
+	/**
+	 * Writes one conversation to a file, which needs the agent: a built project.
+	 */
+	function handleExport() {
+		var context = setup()
+		return withSession( context, found => {
+			var loader = new "models.cli.support.BuiltAgent@bxagents"()
+			if ( !loader.isBuilt( projectRoot() ) ) {
+				return fail( "`sessions export` reads the messages, which the agent holds: run `bxAgents build` first." )
+			}
+			var conversation = new "models.chat.AgentConversation@bxagents"( loader.load( projectRoot() ), context.user, context.sessions, found.id )
+			var outcome = conversation.exportSession()
+			if ( !outcome.ok ) {
+				return fail( outcome.reason )
+			}
+			var format = new "models.store.SessionFile@bxagents"()
+			var markdown = isOptionSet( "md" )
+			var file = trim( option( "file" ) )
+			if ( !len( file ) ) {
+				file = format.slug( found.title ?: "" ) & ( markdown ? ".md" : ".json" )
+			}
+			file = absolutePath( file )
+			if ( fileExists( file ) && !isOptionSet( "force" ) ) {
+				return fail( "[#file#] already exists. Pick another with --file, or add --force to replace it." )
+			}
+			directoryCreate( getDirectoryFromPath( file ), true, true )
+			fileWrite( file, markdown ? format.markdown( outcome.data ) : jsonSerialize( outcome.data ) )
+			return done( "Exported #outcome.data.messages.len()# messages to #file#. The file holds the whole conversation, so keep it where you would keep the conversation." )
+		} )
+	}
+
+	/**
+	 * Adds an exported conversation as a new one, which needs the agent: a built project.
+	 */
+	function handleImport() {
+		var context = setup()
+		var file = trim( option( "file" ) )
+		if ( !len( file ) ) {
+			throw( type = "BxAgents.MissingSessionFile", message = "`sessions import` needs --file=<an exported conversation>." )
+		}
+		file = absolutePath( file )
+		if ( !fileExists( file ) ) {
+			return fail( "There is no file [#file#]." )
+		}
+		var data = ""
+		try {
+			data = new "models.store.SessionFile@bxagents"().parse( fileRead( file ) )
+		} catch ( "BxAgents.InvalidSessionFile" e ) {
+			return fail( e.message )
+		}
+		var loader = new "models.cli.support.BuiltAgent@bxagents"()
+		if ( !loader.isBuilt( projectRoot() ) ) {
+			return fail( "`sessions import` puts the messages in the agent's memory: run `bxAgents build` first." )
+		}
+		var conversation = new "models.chat.AgentConversation@bxagents"( loader.load( projectRoot() ), context.user, context.sessions )
+		var outcome = conversation.importSession( data, trim( option( "name" ) ) )
+		if ( !outcome.ok ) {
+			return fail( outcome.reason )
+		}
+		var note = len( data.agent ?: "" ) && data.agent != conversation.agentName() ? " It was exported from the agent [#data.agent#], and this one is [#conversation.agentName()#]." : ""
+		return done( "Imported as [#outcome.title#] (#left( outcome.id, 8 )#): #outcome.messages# messages.#note#" )
+	}
+
+	// ----------------------------------------------------------------------------------
+
+	/**
+	 * What every action needs: the conversations of this project and whose they are.
+	 */
+	private struct function setup() {
+		return {
+			sessions : new "models.store.SessionStore@bxagents"( chatStore() ),
+			user     : len( trim( option( "user" ) ) ) ? trim( option( "user" ) ) : Caller::localId()
+		}
+	}
+
+	/**
+	 * Picks the conversation named by --session and hands it to the action.
+	 *
+	 * @context What setup() gave
+	 * @work The action, a function that takes the conversation
+	 */
+	private struct function withSession( required struct context, required function work ) {
+		var reference = trim( option( "session" ) )
+		if ( !len( reference ) ) {
+			throw( type = "BxAgents.MissingSession", message = "`sessions #lCase( firstArgument() )#` needs --session=<number or id> (see `bxAgents sessions list`)." )
+		}
+		var found = arguments.context.sessions.resolve( arguments.context.user, reference )
+		if ( found.isEmpty() ) {
+			return fail( "There is no conversation [#reference#] for #arguments.context.user#. Try `bxAgents sessions list`." )
+		}
+		return arguments.work( found )
+	}
+
+	private string function listText( required array rows, required string user ) {
+		if ( !arguments.rows.len() ) {
+			return "No conversations yet for #arguments.user#."
+		}
+		var report = []
+		var number = 0
+		for ( var row in arguments.rows ) {
+			number++
+			report.append( right( "  " & number, 3 ) & "  " & left( row.title ?: "", 60 ) & "  " & ( row.messageCount ?: 0 ) & " messages  " & dateTimeFormat( row.updatedAt, "yyyy-MM-dd HH:mm" ) & "  " & left( row.id, 8 ) )
+		}
+		return report.toList( char( 10 ) )
+	}
+
+	private string function absolutePath( required string file ) {
+		return arguments.file.reFind( "^([A-Za-z]:)?[\\/]" ) ? arguments.file : projectRoot() & "/" & arguments.file
+	}
+
+	private struct function clearAll( required struct context ) {
+		var loader = new "models.cli.support.BuiltAgent@bxagents"()
+		if ( !loader.isBuilt( projectRoot() ) ) {
+			return fail( "`sessions clear` forgets the messages, which the agent holds: run `bxAgents build` first." )
+		}
+		var agent = loader.load( projectRoot() )
+		var agentName = trim( option( "agent" ) )
+		if ( len( agentName ) && isNull( new "models.api.AgentTree@bxagents"( agent ).find( agentName ) ) ) {
+			return fail( "There is no agent called [#agentName#]." )
+		}
+		var outcome = new "models.api.Conversations@bxagents"( agent, arguments.context.sessions ).clearMemory( caller = actingUser( arguments.context.user, true ), all = true, agent = agentName )
+		return outcome.succeeded()
+			? done( "Cleared #outcome.data().messages# messages in #outcome.data().conversations# conversation#outcome.data().conversations == 1 ? '' : 's'#. The conversations stay in the list." )
+			: fail( outcome.reason() )
+	}
+
+	private any function actingUser( required string user, boolean admin = false ) {
+		return new "models.api.Caller@bxagents"( id = arguments.user, name = arguments.user, scope = arguments.admin ? "admin" : "chat", source = "terminal" )
 	}
 
 }
