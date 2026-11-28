@@ -36,7 +36,7 @@
  *    reason outside this feature's control, the retry loop below just
  *    waits it out.
  */
-class {
+class extends="BaseVerb" {
 
 	/**
 	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
@@ -61,34 +61,19 @@ class {
 
 
 	/**
-	 * @options { projectRoot (required, absolute path), message (required, the prompt to send), json (optional boolean - print a JSON envelope instead of plain text), server (optional boolean - launch a throwaway boxlang-miniserver and invoke over real HTTP instead of in-process), port (optional, only used with --server; defaults to a free ephemeral port) }
-	 *
 	 * @return { exitCode, message }
 	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`invoke` requires a project root" )
-		}
-
-		var message = trim( arguments.options.message ?: "" )
-		if ( !len( message ) ) {
-			throw(
-				type    = "BxAgents.MissingMessage",
-				message = '`invoke` requires --message, e.g. --message="Hello there"'
-			)
-		}
-
-		var root = projectRoot.reReplace( "[\/]+$", "" )
-		var useServer = arguments.options.server ?: false
+	function handle() {
+		var message = requiredOption( "message", "BxAgents.MissingMessage", '`invoke` requires --message, e.g. --message="Hello there"' )
+		var root = projectRoot()
 
 		var spinner = createObject( "java", "ortus.boxlang.bxagents.tui.TuiScreen" ).isInteractive()
 			? createObject( "java", "ortus.boxlang.bxagents.tui.StartupSpinner" ).start( "waiting for response" )
 			: nullValue()
 		var response = ""
 		try {
-			response = useServer
-				? invokeViaServer( root, message, arguments.options )
+			response = isOptionSet( "server" )
+				? invokeViaServer( root, message )
 				: invokeInProcess( root, message )
 		} finally {
 			if ( !isNull( spinner ) ) {
@@ -96,12 +81,7 @@ class {
 			}
 		}
 
-		var asJson = arguments.options.json ?: false
-
-		return {
-			exitCode : 0,
-			message  : asJson ? jsonSerialize( { response : response } ) : toString( response )
-		}
+		return asJson( { response : response }, toString( response ) )
 	}
 
 	/**
@@ -147,13 +127,12 @@ class {
 	 *
 	 * @root Absolute path to the project root, trailing slash stripped
 	 * @message The prompt to send
-	 * @options This verb's own raw options struct - only `port` is read
 	 *
 	 * @return The agent's plain-string response (ColdBox toAi()'s "output" field)
 	 */
-	private any function invokeViaServer( required string root, required string message, required struct options ) {
+	private any function invokeViaServer( required string root, required string message ) {
 		var client = new "models.cli.support.AgentClient@bxagents"()
-		var launched = client.startServer( arguments.root, arguments.options.port ?: nullValue(), arguments.options.moduleDir ?: "" )
+		var launched = client.startServer( arguments.root, variables.options.port ?: nullValue(), option( "moduleDir" ) )
 
 		try {
 			return client.send( baseUrl : launched.baseUrl, message : arguments.message, timeoutSeconds : 20 ).output
