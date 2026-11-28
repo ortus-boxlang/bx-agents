@@ -19,6 +19,7 @@ const PAGES = [
 	"agent",
 	"gateways",
 	"embeds",
+	"embeds/new",
 	"logs",
 	"access",
 	"data"

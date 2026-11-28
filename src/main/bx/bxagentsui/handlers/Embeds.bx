@@ -1,14 +1,34 @@
 /**
- * Embeds (admin): the agent on other websites, for anonymous visitors. Defined here, pasted there.
+ * Embeds (admin): the agent on other websites, for anonymous visitors. Defined here, pasted there. Three pages, each with its own
+ * view: the list, the page that makes an embed and the page that changes one. Their data comes from the agent API through their
+ * Alpine components (components/admin/EmbedsPage.js).
  */
 class extends="BaseHandler" {
 
 	/**
-	 * The page. Its data comes from the agent API through its Alpine component (components/admin/EmbedsPage.js).
+	 * The list: a search, a state filter, a switch each, Edit and Delete.
 	 */
 	function index( event, rc, prc ) {
 
 		showPage( event, prc, "embeds", "embeds/index" )
+	}
+
+	/**
+	 * The page that makes a new embed. Saving it makes it, and the same page is then the edit of it.
+	 */
+	function create( event, rc, prc ) {
+
+		prc.embedId = ""
+		showPage( event, prc, "embeds", "embeds/edit" )
+	}
+
+	/**
+	 * The page that changes one embed. The route only takes an id in the shape of one, so it is safe to write into the page.
+	 */
+	function edit( event, rc, prc ) {
+
+		prc.embedId = rc.id
+		showPage( event, prc, "embeds", "embeds/edit" )
 	}
 
 }

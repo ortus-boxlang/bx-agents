@@ -1,7 +1,10 @@
+import { keepInAddress } from "../../utils/address.js";
+
 /**
- * The Embeds page (admin): the agent on other websites, for anonymous visitors. A list of embeds, an editor (agent, look
- * and text, the tools visitors may use, the websites that may show it, limits), a live preview drawn by the real widget,
- * the snippets to paste, the counters and Save, Disable and Rotate key.
+ * The Embeds pages (admin): the agent on other websites, for anonymous visitors. Two pages, each with its own handler action and
+ * view (handlers/Embeds.bx): the list (embedsPage: search, state filter, a switch each, Edit and Delete) and the page that makes
+ * or changes one (embedEditPage: agent, look and text, the tools visitors may use, the websites that may show it, limits, a live
+ * preview drawn by the real widget, the snippets to paste, the counters, and Save, Disable, Rotate key and Delete).
  *
  * Everything is read and written through the agent API (GET and POST /embeds ...). The page checks what it can before it
  * sends (the same rules as the server), but the server decides: what it refuses is shown in the form.
@@ -222,72 +225,31 @@ export function filterEmbeds( embeds, query, state, nowMs = Date.now() ) {
 }
 
 /**
+ * The list page: the embeds with a search, a state filter, a switch each, and Edit and Delete. Making or changing one is a page of
+ * its own (embedEditPage), reached by a link.
+ *
  * @returns {object} Alpine component state and actions
  */
 export function embedsPage() {
 	return {
-		/** @type {Array<{ name: string, label: string, svg: string }>} The launcher glyphs to pick from */
-		icons           : ICONS,
-		/** @type {boolean} True until the list answered */
-		loading         : true,
-		/** @type {string} Why the list could not be read */
-		failed          : "",
-		/** @type {Array<object>} The embeds */
-		embeds          : [],
-		/** @type {Array<string>} The names of the tools the agent has: what an embed may list */
-		tools           : [],
 		/** @type {Array<{ id: string, label: string }>} The state filter */
-		stateFilters    : STATE_FILTERS,
+		stateFilters : STATE_FILTERS,
+		/** @type {boolean} True until the list answered */
+		loading      : true,
+		/** @type {string} Why the list could not be read */
+		failed       : "",
+		/** @type {Array<object>} The embeds */
+		embeds       : [],
 		/** @type {string} The words the list is narrowed to (name and websites) */
-		query           : "",
+		query        : "",
 		/** @type {string} The state the list is narrowed to */
-		stateFilter     : "all",
+		stateFilter  : "all",
 		/** @type {string} The embed a switch or a delete is working on, so it cannot be hit twice */
-		busyId          : "",
-		/** @type {object|null} The embed being edited (a form), or null when none is open */
-		form            : null,
-		/** @type {string} The form as it was last saved, to tell what changed */
-		savedJson       : "",
-		/** @type {boolean} True while close() is asking about unsaved changes */
-		closing         : false,
-		/** @type {boolean} True while Save is going */
-		saving          : false,
-		/** @type {Array<{ field: string, text: string }>} What the page or the server refused */
-		problems        : [],
-		/** @type {string} The website being typed */
-		originDraft     : "",
-		/** @type {string} What is wrong with it */
-		originError     : "",
-		/** @type {string} The suggested question being typed */
-		suggestionDraft : "",
-		/** @type {Array<object>} The snippets of the open embed */
-		snippets        : [],
-		/** @type {string} The open snippet tab */
-		snippetTab      : "html",
-		/** @type {string} The snippet just copied, for the button */
-		copied          : "",
-		/** @type {object|null} The counters of the open embed */
-		usage           : null,
-		/** @type {boolean} True once the widget script of the agent is loaded, which draws the preview */
-		widgetReady     : false,
+		busyId       : "",
 
-		/** Loads the list and the widget that draws the preview. */
+		/** Loads the list. */
 		init() {
-			this.loadWidget();
 			this.load();
-		},
-
-		/** Loads the agent's widget script (the preview is the real widget, so it cannot drift from what visitors see). */
-		loadWidget() {
-			if ( window.customElements && customElements.get( "bx-agent" ) ) {
-				this.widgetReady = true;
-				return;
-			}
-			const script = document.createElement( "script" );
-			script.src = this.$store.session.config.apiBase + "/embed/widget.js";
-			script.onload = () => { this.widgetReady = true; };
-			script.onerror = () => { this.widgetReady = false; };
-			document.head.appendChild( script );
 		},
 
 		/** Reads the embeds. */
@@ -300,19 +262,19 @@ export function embedsPage() {
 			}
 			this.failed = "";
 			this.embeds = result.data.embeds || [];
-			this.tools = result.data.tools || [];
 		},
 
-		/** @returns {boolean} True while the panel (the drawer with the editor) is open: it is open for as long as there is a form */
-		get panelOpen() {
-			return !!this.form;
+		/**
+		 * @param {object} embed An embed of the list
+		 * @returns {string} The address of the page that edits it
+		 */
+		editUrl( embed ) {
+			return this.$store.session.config.basePath + "/embeds/" + embed.id;
 		},
 
-		/** The drawer's own close (its X, its Esc) comes here: it closes through close(), which asks about unsaved changes. */
-		set panelOpen( open ) {
-			if ( !open ) {
-				this.close();
-			}
+		/** @returns {string} The address of the page that makes a new one */
+		get newUrl() {
+			return this.$store.session.config.basePath + "/embeds/new";
 		},
 
 		/** @returns {Array<object>} The embeds that match the search and the state filter */
@@ -337,6 +299,173 @@ export function embedsPage() {
 		clearFilter() {
 			this.query = "";
 			this.stateFilter = "all";
+		},
+
+		/**
+		 * @param {object} embed An embed
+		 * @returns {{ kind: string, label: string }} Its state chip
+		 */
+		stateOf( embed ) {
+			return stateOfEmbed( embed );
+		},
+
+		/**
+		 * The switch of a row: turns the embed on or off at once. A visitor of an embed that is off is answered as if it did not exist.
+		 *
+		 * @param {object} embed An embed of the list
+		 * @param {Event} event The switch's change event: the state it was moved to, and the box to put back when it did not work
+		 */
+		async toggleRow( embed, event ) {
+			const on = event.target.checked;
+			this.busyId = embed.id;
+			const result = await this.$api.post( "/embeds/update", { id: embed.id, enabled: on } );
+			this.busyId = "";
+			if ( !result.ok ) {
+				event.target.checked = !!embed.enabled;
+				this.$toast.error( result.error || "That did not work." );
+				return;
+			}
+			embed.enabled = on;
+			this.$toast.success( on ? embed.name + " is on." : embed.name + " is off. Visitors get no chat until you turn it on." );
+		},
+
+		/**
+		 * Deletes an embed for good, after asking. Its key and its counters go with it, and the chat on the other website
+		 * shows nothing. Turning it off is the way to keep it.
+		 *
+		 * @param {object} embed An embed of the list
+		 */
+		async remove( embed ) {
+			if ( !await this.$confirm( {
+				title  : "Delete " + embed.name + "?",
+				body   : "It is removed for good, with its key and its counters, and the chat on your website shows nothing. To keep it and only stop it, turn it off instead.",
+				yes    : "Delete",
+				danger : true
+			} ) ) {
+				return;
+			}
+			this.busyId = embed.id;
+			const result = await this.$api.post( "/embeds/delete", { id: embed.id } );
+			this.busyId = "";
+			if ( !result.ok ) {
+				this.$toast.error( result.error || "The embed was not deleted." );
+				return;
+			}
+			this.$toast.success( "Deleted " + embed.name + "." );
+			await this.load();
+		}
+	};
+}
+
+/**
+ * The page that makes a new embed or changes one. A new embed has no id; saving it makes it, and the same page is then the edit
+ * of it (the address becomes /embeds/<id>), so what was typed is not lost and the snippet is there to copy.
+ *
+ * @param {string} embedId The embed to edit, or "" for a new one
+ * @returns {object} Alpine component state and actions
+ */
+export function embedEditPage( embedId = "" ) {
+	return {
+		/** @type {Array<{ name: string, label: string, svg: string }>} The launcher glyphs to pick from */
+		icons           : ICONS,
+		/** @type {string} The embed being edited; empty for a new one until it is saved */
+		embedId,
+		/** @type {boolean} True until the embeds were read */
+		loading         : true,
+		/** @type {string} Why the page cannot show the embed ("" when it can) */
+		failed          : "",
+		/** @type {Array<string>} The names of the tools the agent has: what an embed may list */
+		tools           : [],
+		/** @type {object|null} The embed being edited (a form) */
+		form            : null,
+		/** @type {string} The form as it was last saved, to tell what changed */
+		savedJson       : "",
+		/** @type {boolean} True while Save is going */
+		saving          : false,
+		/** @type {Array<{ field: string, text: string }>} What the page or the server refused */
+		problems        : [],
+		/** @type {string} The website being typed */
+		originDraft     : "",
+		/** @type {string} What is wrong with it */
+		originError     : "",
+		/** @type {string} The suggested question being typed */
+		suggestionDraft : "",
+		/** @type {Array<object>} The snippets of the open embed */
+		snippets        : [],
+		/** @type {string} The open snippet tab */
+		snippetTab      : "html",
+		/** @type {string} The snippet just copied, for the button */
+		copied          : "",
+		/** @type {object|null} The counters of the open embed */
+		usage           : null,
+		/** @type {boolean} True once the widget script of the agent is loaded, which draws the preview */
+		widgetReady     : false,
+
+		/** Loads the embed (or an empty form) and the widget that draws the preview. */
+		init() {
+			this.loadWidget();
+			// leaving the page (a reload, another address) with changes that are not saved: the browser asks first
+			window.addEventListener( "beforeunload", event => {
+				if ( this.dirty ) {
+					event.preventDefault();
+					event.returnValue = "";
+				}
+			} );
+			this.load();
+		},
+
+		/** Loads the agent's widget script (the preview is the real widget, so it cannot drift from what visitors see). */
+		loadWidget() {
+			if ( window.customElements && customElements.get( "bx-agent" ) ) {
+				this.widgetReady = true;
+				return;
+			}
+			const script = document.createElement( "script" );
+			script.src = this.$store.session.config.apiBase + "/embed/widget.js";
+			script.onload = () => { this.widgetReady = true; };
+			script.onerror = () => { this.widgetReady = false; };
+			document.head.appendChild( script );
+		},
+
+		/** Reads the embeds and the agent's tools, and opens the form: the embed asked for, or an empty one. */
+		async load() {
+			const result = await this.$api.get( "/embeds" );
+			this.loading = false;
+			if ( !result.ok ) {
+				this.failed = result.status === 404 ? "This agent keeps no database, so it has no embeds." : "Could not load the embed.";
+				return;
+			}
+			this.tools = result.data.tools || [];
+			if ( !this.embedId ) {
+				this.form = blankEmbed();
+				this.savedJson = "";
+				this.$nextTick( () => document.getElementById( "embedName" )?.focus() );
+				return;
+			}
+			const found = ( result.data.embeds || [] ).find( e => e.id === this.embedId );
+			if ( !found ) {
+				this.failed = "There is no embed " + this.embedId + ". It may have been deleted.";
+				return;
+			}
+			this.form = formOf( found );
+			this.savedJson = JSON.stringify( this.form );
+			await Promise.all( [
+				this.loadSnippets(),
+				this.loadUsage()
+			] );
+		},
+
+		/** @returns {string} The address of the list */
+		get listUrl() {
+			return this.$store.session.config.basePath + "/embeds";
+		},
+
+		/** @returns {string} The page's title */
+		get title() {
+			if ( !this.form ) {
+				return "Embed";
+			}
+			return this.form.id ? "Edit " + ( this.form.name || "embed" ) : "New embed";
 		},
 
 		/** @returns {boolean} True when the form has changes that are not saved */
@@ -372,113 +501,19 @@ export function embedsPage() {
 		},
 
 		/**
-		 * @param {{ enabled: boolean, expires?: string }} embed An embed
-		 * @returns {{ kind: string, label: string }} Its state chip
-		 */
-		stateOf( embed ) {
-			return stateOfEmbed( embed );
-		},
-
-		/** Opens an empty form for a new embed. */
-		newEmbed() {
-			this.form = blankEmbed();
-			this.savedJson = "";
-			this.problems = [];
-			this.snippets = [];
-			this.usage = null;
-			this.originDraft = this.originError = this.suggestionDraft = "";
-			this.$nextTick( () => document.getElementById( "embedName" )?.focus() );
-		},
-
-		/**
-		 * Opens an embed to edit.
+		 * The link back to the list: with changes that are not saved it asks first.
 		 *
-		 * @param {object} embed An embed of the list
+		 * @param {Event} event The click
 		 */
-		async select( embed ) {
-			if ( this.dirty && !await this.$confirm( { title: "Leave without saving?", body: "Your changes to " + ( this.form.name || "this embed" ) + " are not saved.", yes: "Leave", danger: true } ) ) {
+		async leave( event ) {
+			if ( !this.dirty ) {
 				return;
 			}
-			this.form = formOf( embed );
-			this.savedJson = JSON.stringify( this.form );
-			this.problems = [];
-			this.originDraft = this.originError = this.suggestionDraft = "";
-			this.snippets = [];
-			this.usage = null;
-			await Promise.all( [
-				this.loadSnippets(),
-				this.loadUsage()
-			] );
-		},
-
-		/** Closes the editor, after asking when there are changes that are not saved. A second request while it asks is ignored. */
-		async close() {
-			if ( !this.form || this.closing ) {
-				return;
+			event.preventDefault();
+			if ( await this.$confirm( { title: "Leave without saving?", body: "Your changes to " + ( this.form.name || "this embed" ) + " are not saved.", yes: "Leave", danger: true } ) ) {
+				this.savedJson = JSON.stringify( this.form );
+				window.location.href = this.listUrl;
 			}
-			this.closing = true;
-			try {
-				if ( this.dirty && !await this.$confirm( { title: "Leave without saving?", body: "Your changes are not saved.", yes: "Leave", danger: true } ) ) {
-					return;
-				}
-				this.form = null;
-			} finally {
-				this.closing = false;
-			}
-		},
-
-		/**
-		 * The switch of a row: turns the embed on or off at once. A visitor of an embed that is off is answered as if it did not exist.
-		 *
-		 * @param {object} embed An embed of the list
-		 * @param {Event} event The switch's change event: the state it was moved to, and the box to put back when it did not work
-		 */
-		async toggleRow( embed, event ) {
-			const on = event.target.checked;
-			this.busyId = embed.id;
-			const result = await this.$api.post( "/embeds/update", { id: embed.id, enabled: on } );
-			this.busyId = "";
-			if ( !result.ok ) {
-				event.target.checked = !!embed.enabled;
-				this.$toast.error( result.error || "That did not work." );
-				return;
-			}
-			embed.enabled = on;
-			if ( this.form && this.form.id === embed.id ) {
-				const wasClean = !this.dirty;
-				this.form.enabled = on;
-				this.markSaved( wasClean );
-			}
-			this.$toast.success( on ? embed.name + " is on." : embed.name + " is off. Visitors get no chat until you turn it on." );
-		},
-
-		/**
-		 * Deletes an embed for good, after asking. Its key and its counters go with it, and the chat on the other website
-		 * shows nothing. Turning it off is the way to keep it.
-		 *
-		 * @param {object} embed An embed of the list
-		 */
-		async remove( embed ) {
-			if ( !await this.$confirm( {
-				title  : "Delete " + embed.name + "?",
-				body   : "It is removed for good, with its key and its counters, and the chat on your website shows nothing. To keep it and only stop it, turn it off instead.",
-				yes    : "Delete",
-				danger : true
-			} ) ) {
-				return;
-			}
-			this.busyId = embed.id;
-			const result = await this.$api.post( "/embeds/delete", { id: embed.id } );
-			this.busyId = "";
-			if ( !result.ok ) {
-				this.$toast.error( result.error || "The embed was not deleted." );
-				return;
-			}
-			if ( this.form && this.form.id === embed.id ) {
-				this.form = null;
-			}
-			this.$toast.success( "Deleted " + embed.name + "." );
-			await this.load();
 		},
 
 		/** Reads the snippets of the open embed, written for this agent's own address. */
@@ -562,7 +597,7 @@ export function embedsPage() {
 			return found ? found.text : "";
 		},
 
-		/** Saves the open embed: a new one is made, an old one is changed. */
+		/** Saves the embed: a new one is made, an old one is changed. A new one is then the edit of itself. */
 		async save() {
 			// a website typed but not added is added now: leaving it out silently would be a surprise
 			if ( this.originDraft.trim() ) {
@@ -590,19 +625,21 @@ export function embedsPage() {
 				return;
 			}
 			this.$toast.success( ( isNew ? "Made " : "Saved " ) + result.data.name + "." );
-			// the form becomes the saved embed (a new one is now an edit of itself) BEFORE the list is read again: the other way
-			// round, whatever was typed while the list loaded was thrown away when the form was set from the answer
 			this.form = formOf( result.data );
 			this.savedJson = JSON.stringify( this.form );
 			this.problems = [];
-			await this.load();
+			if ( isNew ) {
+				// this page is now the edit of the embed it made, and the address says so
+				this.embedId = result.data.id;
+				keepInAddress( this.listUrl + "/" + result.data.id );
+			}
 			await Promise.all( [
 				this.loadSnippets(),
 				this.loadUsage()
 			] );
 		},
 
-		/** Turns the open embed off or on. A visitor of an embed that is off is answered as if it did not exist. */
+		/** Turns the embed off or on. A visitor of an embed that is off is answered as if it did not exist. */
 		async toggleEnabled() {
 			if ( !this.form.id ) {
 				this.form.enabled = !this.form.enabled;
@@ -622,7 +659,29 @@ export function embedsPage() {
 			this.form.enabled = !turningOff;
 			this.markSaved( wasClean );
 			this.$toast.success( turningOff ? "Turned off." : "Turned on." );
-			await this.load();
+		},
+
+		/**
+		 * Deletes the embed for good, after asking, and goes back to the list. Its key and its counters go with it, and the chat on
+		 * the other website shows nothing. Turning it off is the way to keep it.
+		 */
+		async remove() {
+			if ( !this.form.id || !await this.$confirm( {
+				title  : "Delete " + this.form.name + "?",
+				body   : "It is removed for good, with its key and its counters, and the chat on your website shows nothing. To keep it and only stop it, turn it off instead.",
+				yes    : "Delete",
+				danger : true
+			} ) ) {
+				return;
+			}
+			const result = await this.$api.post( "/embeds/delete", { id: this.form.id } );
+			if ( !result.ok ) {
+				this.$toast.error( result.error || "The embed was not deleted." );
+				return;
+			}
+			// nothing is left to lose by leaving
+			this.savedJson = JSON.stringify( this.form );
+			window.location.href = this.listUrl;
 		},
 
 		/**
@@ -656,7 +715,6 @@ export function embedsPage() {
 			this.form.keyVersion = result.data.keyVersion;
 			this.markSaved( wasClean );
 			this.$toast.success( "New key, version " + result.data.keyVersion + ". Open sessions have ended." );
-			await this.load();
 		},
 
 		/**

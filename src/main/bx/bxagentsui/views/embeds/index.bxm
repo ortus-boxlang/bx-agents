@@ -1,12 +1,12 @@
-<!--- Embeds (admin): the agent on other websites, for anonymous visitors. The page is the list, with a search, a state filter, a
-      switch per embed and Edit and Delete; making or changing one happens in a drawer (embeds/_editor), which stays open after a new
-      embed is saved, now as the edit of it. State and actions: embedsPage (resources/assets/js/components/admin/EmbedsPage.js). --->
+<!--- Embeds (admin): the list of the agent's embeds on other websites, for anonymous visitors, with a search, a state filter, a switch
+      each, and Edit and Delete. Making or changing one is a page of its own (embeds/edit). State and actions: embedsPage
+      (resources/assets/js/components/admin/EmbedsPage.js). --->
 <bx:output>
 <div class="pg embeds" x-data="embedsPage">
 	#view( view = "_components/ui/page-head", module = "bxagentsui", args = {
 		title   : "Embeds",
 		note    : "Put the agent on another website. Define it here, paste the snippet there. Visitors do not sign in: they can only ask questions, with the tools you tick.",
-		actions : '<button type="button" class="btn primary" id="newEmbed" @click="newEmbed()">' & view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "plus" } ) & ' New embed</button>'
+		actions : '<a class="btn primary" id="newEmbed" href="' & encodeForHTML( prc.ui.basePath ) & '/embeds/new">' & view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "plus" } ) & ' New embed</a>'
 	} )#
 	<p class="pg-note" x-show="loading">Loading...</p>
 	<p class="pg-error" role="alert" x-show="failed" x-text="failed" x-cloak></p>
@@ -33,9 +33,9 @@
 				<thead><tr><th scope="col">Embed</th><th scope="col">State</th><th scope="col">On</th><th scope="col">Actions</th></tr></thead>
 				<tbody>
 					<template x-for="embed in shown" :key="embed.id">
-						<tr :class="{ 'is-open': form && form.id === embed.id }">
+						<tr>
 							<td>
-								<a href="##" class="row-link" @click.prevent="select( embed )" x-text="embed.name"></a>
+								<a :href="editUrl( embed )" class="row-link" x-text="embed.name"></a>
 								<div class="pg-note embeds-origins" x-text="embed.limits.allowedOrigins.join( ', ' )"></div>
 							</td>
 							<td><span class="chip" :class="stateOf( embed ).kind" x-text="stateOf( embed ).label"></span></td>
@@ -45,7 +45,7 @@
 							</td>
 							<td>
 								<div class="pg-actions nowrap">
-									<button type="button" class="btn icon" title="Edit" :aria-label="'Edit ' + embed.name" @click="select( embed )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "pencil-simple" } )#</button>
+									<a class="btn icon" :href="editUrl( embed )" title="Edit" :aria-label="'Edit ' + embed.name">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "pencil-simple" } )#</a>
 									<button type="button" class="btn icon danger" title="Delete" :aria-label="'Delete ' + embed.name" :disabled="busyId === embed.id" @click="remove( embed )">#view( view = "_components/ui/icon", module = "bxagentsui", args = { name : "trash" } )#</button>
 								</div>
 							</td>
@@ -59,13 +59,5 @@
 			<p><button type="button" class="btn" id="clearEmbedFilter" @click="clearFilter()">Show every embed</button></p>
 		</div>
 	</div>
-
-	#view( view = "_components/ui/drawer", module = "bxagentsui", args = {
-		title           : "Embed",
-		titleExpression : "form ? ( form.id ? 'Edit ' + ( form.name || 'embed' ) : 'New embed' ) : 'Embed'",
-		open            : "panelOpen",
-		cancel          : "close()",
-		contentView     : "embeds/_editor"
-	} )#
 </div>
 </bx:output>
