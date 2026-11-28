@@ -1,0 +1,68 @@
+/**
+ * A verb for the BaseVerb specs: it says what it is from the struct it is given, and records what it was asked to do.
+ */
+class extends="bxagents.models.cli.BaseVerb" {
+
+	property name="calls" type="array";
+
+	/**
+	 * @shape What this verb says it is
+	 */
+	function init( required struct shape ) {
+		variables.shape = arguments.shape
+		variables.calls = []
+		return this
+	}
+
+	/**
+	 * @return What was called, in order
+	 */
+	array function called() {
+		return variables.calls
+	}
+
+	struct function meta() {
+		return variables.shape
+	}
+
+	function handle() {
+		variables.calls.append( "handle" )
+		return done( "plain" )
+	}
+
+	function handleList() {
+		variables.calls.append( "handleList" )
+		return asJson( { rows : 2 }, () => "two rows" )
+	}
+
+	function handleCreate() {
+		variables.calls.append( "handleCreate" )
+		var name = requiredOption( "name", "FakeVerb.MissingName", "`fake create` requires --name" )
+		return done( "made #name#", { id : 7 } )
+	}
+
+	/**
+	 * Lets a spec ask the protected helpers.
+	 */
+	any function help( required string helper, array arguments = [] ) {
+		switch ( arguments.helper ) {
+			case "firstArgument":
+				return firstArgument()
+			case "projectRoot":
+				return projectRoot()
+			case "option":
+				return option( arguments.arguments[ 1 ], arguments.arguments[ 2 ] ?: "" )
+			case "isOptionSet":
+				return isOptionSet( arguments.arguments[ 1 ] )
+			case "padRight":
+				return padRight( arguments.arguments[ 1 ], arguments.arguments[ 2 ] )
+			case "fail":
+				return fail( arguments.arguments[ 1 ], arguments.arguments[ 2 ] ?: 1, arguments.arguments[ 3 ] ?: {} )
+			case "exitWith":
+				return exitWith( arguments.arguments[ 1 ], arguments.arguments[ 2 ] )
+			case "lines":
+				return lines( arguments.arguments[ 1 ] )
+		}
+	}
+
+}
