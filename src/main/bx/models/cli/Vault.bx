@@ -17,7 +17,7 @@
  */
 import bxModules.bxagents.models.api.Caller;
 
-class {
+class extends="BaseVerb" {
 
 	/**
 	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
@@ -48,242 +48,175 @@ class {
 		}
 	}
 
-
-	static {
-		ACTIONS = [ "list", "add", "edit", "remove", "status", "audit", "key" ]
+	function handleList() {
+		var scope = lCase( trim( option( "scope", "all" ) ) )
+		var rows = vaultService().listAll()
+		if ( scope != "all" ) {
+			rows = rows.filter( row => row.scope == scope )
+		}
+		var wanted = trim( option( "user" ) )
+		if ( len( wanted ) ) {
+			rows = rows.filter( row => row.scope == "agent" || row.owner == wanted )
+		}
+		return asJson( rows.map( row => publicRow( row ) ), () => listText( rows ) )
 	}
 
 	/**
-	 * @options { projectRoot (required), _positional (the action), name, scope, user, description, hosts, value, stdin, yes, limit, json;
-	 *            prompter and stdinText replace the terminal for tests }
+	 * Save a new secret. The value is typed hidden or piped, never a flag.
 	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`vault` requires a project root" )
-		}
-		var action = lCase( trim( arguments.options._positional ?: "" ) )
-		if ( !static.ACTIONS.contains( action ) ) {
-			throw( type = "BxAgents.UnknownVaultAction", message = "`vault` needs one of: #static.ACTIONS.toList( ', ' )# - for example `bxAgents vault list`." )
-		}
-		if ( action == "key" ) {
-			return keyAction( projectRoot )
-		}
+	function handleAdd() {
+		var name = requiredOption( "name", "BxAgents.MissingVaultOption", "`vault add` needs --name=<SECRET_NAME>, for example --name=GMAIL_TOKEN" )
+		var target = targetOf()
+		var value = readValue( "Value for #name#" )
+		var made = vaultService().add( name, value, {
+			scope       : target.scope,
+			owner       : target.owner,
+			description : option( "description" ),
+			hosts       : option( "hosts", [] ),
+			actor       : Caller::localId(),
+			via         : "cli"
+		} )
+		return done( "Saved #target.scope# secret [#made.name#]#target.scope == 'user' ? ' for ' & target.owner : ''#. It is sealed and cannot be shown again." )
+	}
 
-		var file = new "models.store.ChatStorePath@bxagents"().forProject( projectRoot )
-		directoryCreate( getDirectoryFromPath( file ), true, true )
-		var vault = new "models.vault.VaultWiring@bxagents"().service( file )
-		var who = Caller::localId()
-
-		switch ( action ) {
-			case "list":
-				return list( vault, arguments.options )
-			case "status":
-				return status( vault, arguments.options, file )
-			case "audit":
-				return audit( vault, arguments.options )
-			case "add":
-				return add( vault, arguments.options, who )
-			case "edit":
-				return edit( vault, arguments.options, who )
-			case "remove":
-				return remove( vault, arguments.options, who )
+	/**
+	 * Change a secret: its description, its hosts and, when asked, its value. Only what is given changes.
+	 */
+	function handleEdit() {
+		var name = requiredOption( "name", "BxAgents.MissingVaultOption", "`vault edit` needs --name=<SECRET_NAME>" )
+		var target = targetOf()
+		var changes = {}
+		if ( hasOption( "description" ) ) {
+			changes[ "description" ] = option( "description" )
 		}
+		if ( hasOption( "hosts" ) ) {
+			changes[ "hosts" ] = option( "hosts" )
+		}
+		if ( isOptionSet( "stdin" ) || isOptionSet( "value" ) || !changes.count() ) {
+			changes[ "value" ] = readValue( "New value for #name#" )
+		}
+		vaultService().update( name, changes, { scope : target.scope, owner : target.owner, actor : Caller::localId(), via : "cli" } )
+		return done( "Updated #target.scope# secret [#name#]: #changes.keyArray().sort( 'text' ).toList( ', ' )#." )
+	}
+
+	/**
+	 * Remove a secret, after asking unless --yes is given.
+	 */
+	function handleRemove() {
+		var name = requiredOption( "name", "BxAgents.MissingVaultOption", "`vault remove` needs --name=<SECRET_NAME>" )
+		var target = targetOf()
+		if ( !isOptionSet( "yes" ) ) {
+			var prompter = openPrompter()
+			var sure = prompter.confirm( "Remove the #target.scope# secret #name#?", "Anything that uses it will stop working.", false )
+			prompter.close()
+			if ( !sure ) {
+				return fail( "Nothing removed." )
+			}
+		}
+		return vaultService().remove( name, { scope : target.scope, owner : target.owner, actor : Caller::localId(), via : "cli" } )
+			? done( "Removed [#name#]." )
+			: fail( "There is no #target.scope# secret named [#name#]. See `bxAgents vault list`." )
+	}
+
+	/**
+	 * Say where the key comes from, how many secrets there are and whether any cannot be opened with this key.
+	 */
+	function handleStatus() {
+		var state = vaultService().status()
+		state[ "database" ] = chatStoreFile()
+		if ( isOptionSet( "json" ) ) {
+			return done( jsonSerialize( state ) )
+		}
+		var report = [
+			"Secrets:  #state.secrets#",
+			"Key:      #state.keySource == 'env' ? 'from BXAGENTS_VAULT_KEY' : ( state.keySource == 'file' ? 'a key file next to the database' : 'none yet (made when the first secret is saved)' )#",
+			"Database: #chatStoreFile()#"
+		]
+		if ( state.keySource == "file" ) {
+			report.append( "" )
+			report.append( "The key file sits beside the data it protects: anyone who copies the data folder gets both." )
+			report.append( "Set BXAGENTS_VAULT_KEY to a key you keep elsewhere (`bxAgents vault key` makes one)." )
+		}
+		if ( state.wrongKey > 0 ) {
+			report.append( "" )
+			report.append( "#state.wrongKey# secret(s) were sealed with another key and cannot be opened with this one." )
+		}
+		return exitWith( state.wrongKey > 0 ? 1 : 0, report.toList( char( 10 ) ) )
+	}
+
+	/**
+	 * List the latest audit rows: who added, used, was refused and removed what. Never a value.
+	 */
+	function handleAudit() {
+		var rows = vaultService().audit( isNumeric( option( "limit" ) ) ? option( "limit" ) : 50 )
+		return asJson( rows, () => auditText( rows ) )
+	}
+
+	/**
+	 * Make a new random key to put in BXAGENTS_VAULT_KEY. Does not touch the database.
+	 */
+	function handleKey() {
+		var key = new "models.vault.VaultKey@bxagents"( projectRoot() ).generate()
+		return done( "A new vault key. Keep it somewhere safe, and set it where the agent runs:#char( 10 )##char( 10 )#  BXAGENTS_VAULT_KEY=#key##char( 10 )##char( 10 )#It cannot be recovered if you lose it, and secrets sealed with another key will not open.", { key : key } )
 	}
 
 	// ----------------------------------------------------------------------------------
 
 	/**
-	 * Show the secrets, as a table or as JSON.
-	 *
-	 * @vault   The VaultService
-	 * @options The parsed options: scope, user, json
-	 *
-	 * @return { exitCode, message }
+	 * @return The VaultService on this project's chat database, whose folder is created
 	 */
-	private struct function list( required any vault, required struct options ) {
-		var scope = lCase( trim( arguments.options.scope ?: "all" ) )
-		var rows = arguments.vault.listAll()
-		if ( scope != "all" ) {
-			rows = rows.filter( row => row.scope == scope )
+	private any function vaultService() {
+		var file = chatStoreFile()
+		directoryCreate( getDirectoryFromPath( file ), true, true )
+		return new "models.vault.VaultWiring@bxagents"().service( file )
+	}
+
+	/**
+	 * The terminal, or the prompter a test hands in.
+	 */
+	private any function openPrompter() {
+		var given = option( "prompter", "" )
+		return isObject( given ) ? given : new "models.wizard.prompters.PrompterFactory@bxagents"().create( variables.options, "vault" )
+	}
+
+	private string function listText( required array rows ) {
+		if ( !arguments.rows.len() ) {
+			return "No secrets yet. Add one with `bxAgents vault add --name=GMAIL_TOKEN`."
 		}
-		var wanted = trim( arguments.options.user ?: "" )
-		if ( len( wanted ) ) {
-			rows = rows.filter( row => row.scope == "agent" || row.owner == wanted )
-		}
-		if ( arguments.options.json ?: false ) {
-			return { exitCode : 0, message : jsonSerialize( rows.map( row => publicRow( row ) ) ) }
-		}
-		if ( !rows.len() ) {
-			return { exitCode : 0, message : "No secrets yet. Add one with `bxAgents vault add --name=GMAIL_TOKEN`." }
-		}
-		var lines = [ pad( "NAME", 26 ) & pad( "SCOPE", 8 ) & pad( "OWNER", 14 ) & pad( "HOSTS", 28 ) & pad( "LAST USED", 17 ) & "ABOUT" ]
-		for ( var row in rows ) {
-			lines.append(
+		var report = [ pad( "NAME", 26 ) & pad( "SCOPE", 8 ) & pad( "OWNER", 14 ) & pad( "HOSTS", 28 ) & pad( "LAST USED", 17 ) & "ABOUT" ]
+		for ( var row in arguments.rows ) {
+			report.append(
 				pad( row.name, 26 ) & pad( row.scope, 8 ) & pad( len( row.owner ) ? row.owner : "-", 14 )
 				& pad( row.hosts.len() ? row.hosts.toList( "," ) : "any", 28 )
 				& pad( isDate( row.lastUsedAt ) ? dateTimeFormat( row.lastUsedAt, "yyyy-MM-dd HH:mm" ) : "never", 17 )
 				& row.description
 			)
 		}
-		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+		return report.toList( char( 10 ) )
 	}
 
-	/**
-	 * Save a new secret. The value is typed hidden or piped, never a flag.
-	 *
-	 * @vault   The VaultService
-	 * @options The parsed options: name, scope, user, description, hosts, stdin
-	 * @who     Who is doing it, for the audit
-	 *
-	 * @return { exitCode, message }
-	 */
-	private struct function add( required any vault, required struct options, required string who ) {
-		var name = required( arguments.options, "name", "`vault add` needs --name=<SECRET_NAME>, for example --name=GMAIL_TOKEN" )
-		var target = targetOf( arguments.options )
-		var value = readValue( arguments.options, "Value for #name#" )
-		var made = arguments.vault.add( name, value, {
-			scope       : target.scope,
-			owner       : target.owner,
-			description : arguments.options.description ?: "",
-			hosts       : arguments.options.hosts ?: [],
-			actor       : arguments.who,
-			via         : "cli"
-		} )
-		return { exitCode : 0, message : "Saved #target.scope# secret [#made.name#]#target.scope == 'user' ? ' for ' & target.owner : ''#. It is sealed and cannot be shown again." }
-	}
-
-	/**
-	 * Change a secret: its description, its hosts and, when asked, its value. Only what is given changes.
-	 *
-	 * @vault   The VaultService
-	 * @options The parsed options: name, scope, user, description, hosts, value, stdin
-	 * @who     Who is doing it, for the audit
-	 *
-	 * @return { exitCode, message }
-	 */
-	private struct function edit( required any vault, required struct options, required string who ) {
-		var name = required( arguments.options, "name", "`vault edit` needs --name=<SECRET_NAME>" )
-		var target = targetOf( arguments.options )
-		var changes = {}
-		if ( arguments.options.keyExists( "description" ) ) {
-			changes[ "description" ] = arguments.options.description
+	private string function auditText( required array rows ) {
+		if ( !arguments.rows.len() ) {
+			return "Nothing recorded yet."
 		}
-		if ( arguments.options.keyExists( "hosts" ) ) {
-			changes[ "hosts" ] = arguments.options.hosts
-		}
-		if ( ( arguments.options.stdin ?: false ) || ( arguments.options.value ?: false ) || !changes.count() ) {
-			changes[ "value" ] = readValue( arguments.options, "New value for #name#" )
-		}
-		arguments.vault.update( name, changes, { scope : target.scope, owner : target.owner, actor : arguments.who, via : "cli" } )
-		return { exitCode : 0, message : "Updated #target.scope# secret [#name#]: #changes.keyArray().sort( 'text' ).toList( ', ' )#." }
-	}
-
-	/**
-	 * Remove a secret, after asking unless --yes is given.
-	 *
-	 * @vault   The VaultService
-	 * @options The parsed options: name, scope, user, yes
-	 * @who     Who is doing it, for the audit
-	 *
-	 * @return { exitCode, message }
-	 */
-	private struct function remove( required any vault, required struct options, required string who ) {
-		var name = required( arguments.options, "name", "`vault remove` needs --name=<SECRET_NAME>" )
-		var target = targetOf( arguments.options )
-		if ( !( arguments.options.yes ?: false ) ) {
-			var prompter = arguments.options.prompter ?: new "models.wizard.prompters.PrompterFactory@bxagents"().create( arguments.options, "vault" )
-			var sure = prompter.confirm( "Remove the #target.scope# secret #name#?", "Anything that uses it will stop working.", false )
-			prompter.close()
-			if ( !sure ) {
-				return { exitCode : 1, message : "Nothing removed." }
-			}
-		}
-		return arguments.vault.remove( name, { scope : target.scope, owner : target.owner, actor : arguments.who, via : "cli" } )
-			? { exitCode : 0, message : "Removed [#name#]." }
-			: { exitCode : 1, message : "There is no #target.scope# secret named [#name#]. See `bxAgents vault list`." }
-	}
-
-	/**
-	 * Say where the key comes from, how many secrets there are and whether any cannot be opened with this key.
-	 *
-	 * @vault   The VaultService
-	 * @options The parsed options: json
-	 * @file    The database file, for the report
-	 *
-	 * @return { exitCode, message }
-	 */
-	private struct function status( required any vault, required struct options, required string file ) {
-		var state = arguments.vault.status()
-		state[ "database" ] = arguments.file
-		if ( arguments.options.json ?: false ) {
-			return { exitCode : 0, message : jsonSerialize( state ) }
-		}
-		var lines = [
-			"Secrets:  #state.secrets#",
-			"Key:      #state.keySource == 'env' ? 'from BXAGENTS_VAULT_KEY' : ( state.keySource == 'file' ? 'a key file next to the database' : 'none yet (made when the first secret is saved)' )#",
-			"Database: #arguments.file#"
-		]
-		if ( state.keySource == "file" ) {
-			lines.append( "" )
-			lines.append( "The key file sits beside the data it protects: anyone who copies the data folder gets both." )
-			lines.append( "Set BXAGENTS_VAULT_KEY to a key you keep elsewhere (`bxAgents vault key` makes one)." )
-		}
-		if ( state.wrongKey > 0 ) {
-			lines.append( "" )
-			lines.append( "#state.wrongKey# secret(s) were sealed with another key and cannot be opened with this one." )
-		}
-		return { exitCode : state.wrongKey > 0 ? 1 : 0, message : lines.toList( char( 10 ) ) }
-	}
-
-	/**
-	 * List the latest audit rows: who added, used, was refused and removed what. Never a value.
-	 *
-	 * @vault   The VaultService
-	 * @options The parsed options: limit, json
-	 *
-	 * @return { exitCode, message }
-	 */
-	private struct function audit( required any vault, required struct options ) {
-		var rows = arguments.vault.audit( isNumeric( arguments.options.limit ?: "" ) ? arguments.options.limit : 50 )
-		if ( arguments.options.json ?: false ) {
-			return { exitCode : 0, message : jsonSerialize( rows ) }
-		}
-		if ( !rows.len() ) {
-			return { exitCode : 0, message : "Nothing recorded yet." }
-		}
-		var lines = [ pad( "WHEN", 17 ) & pad( "ACTION", 9 ) & pad( "NAME", 24 ) & pad( "SCOPE", 8 ) & pad( "WHO", 14 ) & pad( "VIA", 22 ) & "RESULT" ]
-		for ( var row in rows ) {
-			lines.append(
+		var report = [ pad( "WHEN", 17 ) & pad( "ACTION", 9 ) & pad( "NAME", 24 ) & pad( "SCOPE", 8 ) & pad( "WHO", 14 ) & pad( "VIA", 22 ) & "RESULT" ]
+		for ( var row in arguments.rows ) {
+			report.append(
 				pad( dateTimeFormat( row.at, "yyyy-MM-dd HH:mm" ), 17 ) & pad( row.action, 9 ) & pad( row.name, 24 ) & pad( row.scope, 8 )
 				& pad( len( row.actor ) ? row.actor : "-", 14 ) & pad( len( row.via ) ? row.via : "-", 22 ) & ( row.ok == 1 ? "ok" : "refused" )
 			)
 		}
-		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+		return report.toList( char( 10 ) )
 	}
-
-	/**
-	 * Make a new random key to put in BXAGENTS_VAULT_KEY. Does not touch the database.
-	 *
-	 * @projectRoot The project folder
-	 *
-	 * @return { exitCode, message, key }
-	 */
-	private struct function keyAction( required string projectRoot ) {
-		var key = new "models.vault.VaultKey@bxagents"( arguments.projectRoot ).generate()
-		return { exitCode : 0, message : "A new vault key. Keep it somewhere safe, and set it where the agent runs:#char( 10 )##char( 10 )#  BXAGENTS_VAULT_KEY=#key##char( 10 )##char( 10 )#It cannot be recovered if you lose it, and secrets sealed with another key will not open.", key : key }
-	}
-
-	// ----------------------------------------------------------------------------------
 
 	/**
 	 * The value: piped in with --stdin, else typed hidden at a terminal. Never from a flag.
 	 */
-	private string function readValue( required struct options, required string title ) {
-		if ( arguments.options.keyExists( "stdinText" ) ) {
-			return trim( arguments.options.stdinText )
+	private string function readValue( required string title ) {
+		if ( hasOption( "stdinText" ) ) {
+			return trim( variables.options.stdinText )
 		}
-		if ( arguments.options.stdin ?: false ) {
+		if ( isOptionSet( "stdin" ) ) {
 			var text = createObject( "java", "java.lang.String" ).init( createObject( "java", "java.lang.System" )[ "in" ].readAllBytes(), "UTF-8" )
 			text = text.reReplace( "[\r\n]+$", "" )
 			if ( !len( text ) ) {
@@ -291,7 +224,7 @@ class {
 			}
 			return text
 		}
-		var prompter = arguments.options.prompter ?: new "models.wizard.prompters.PrompterFactory@bxagents"().create( arguments.options, "vault" )
+		var prompter = openPrompter()
 		var typed = prompter.text( arguments.title, "It is hidden as you type and is never shown again.", "", true, "A secret needs a value." )
 		prompter.close()
 		return typed
@@ -300,9 +233,9 @@ class {
 	/**
 	 * @return { scope, owner }: the agent's by default, a person's with --user (or --scope=user for yourself)
 	 */
-	private struct function targetOf( required struct options ) {
-		var user = trim( arguments.options.user ?: "" )
-		var scope = lCase( trim( arguments.options.scope ?: ( len( user ) ? "user" : "agent" ) ) )
+	private struct function targetOf() {
+		var user = trim( option( "user" ) )
+		var scope = lCase( trim( option( "scope", len( user ) ? "user" : "agent" ) ) )
 		if ( !listFindNoCase( "agent,user", scope ) ) {
 			throw( type = "BxAgents.InvalidVaultScope", message = "--scope must be agent or user." )
 		}
@@ -313,30 +246,7 @@ class {
 	}
 
 	/**
-	 * Read a required option.
-	 *
-	 * @options The parsed options
-	 * @key     The option's name
-	 * @message What to say when it is missing
-	 *
-	 * @return The trimmed value
-	 *
-	 * @throws BxAgents.MissingVaultOption when it is missing
-	 */
-	private string function required( required struct options, required string key, required string message ) {
-		var value = trim( arguments.options[ arguments.key ] ?: "" )
-		if ( !len( value ) ) {
-			throw( type = "BxAgents.MissingVaultOption", message = arguments.message )
-		}
-		return value
-	}
-
-	/**
 	 * A secret as the JSON output shows it: names and dates, never a value.
-	 *
-	 * @row A secret's metadata
-	 *
-	 * @return The struct to print
 	 */
 	private struct function publicRow( required struct row ) {
 		return {
@@ -351,28 +261,16 @@ class {
 		}
 	}
 
-	/**
-	 * Format a date for the output.
-	 *
-	 * @value A date, or anything else
-	 *
-	 * @return yyyy-MM-dd HH:mm, or an empty string when it is not a date
-	 */
 	private string function stamp( any value ) {
 		return isDate( arguments.value ?: "" ) ? dateTimeFormat( arguments.value, "yyyy-MM-dd HH:mm" ) : ""
 	}
 
 	/**
-	 * Pad text to a column width. Text that is longer keeps all of its characters and gets one space after it.
-	 *
-	 * @text  The text
-	 * @width The column width
-	 *
-	 * @return The padded text
+	 * A column: text that is longer than its width keeps all of its characters and gets one space after it, which
+	 * padRight() would cut.
 	 */
 	private string function pad( required string text, required numeric width ) {
-		// a value longer than its column keeps all of its text and one space after it
-		return len( arguments.text ) >= arguments.width ? arguments.text & " " : left( arguments.text & repeatString( " ", arguments.width ), arguments.width )
+		return len( arguments.text ) >= arguments.width ? arguments.text & " " : padRight( arguments.text, arguments.width )
 	}
 
 }
