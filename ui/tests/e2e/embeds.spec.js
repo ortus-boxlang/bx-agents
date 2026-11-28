@@ -99,7 +99,11 @@ test.describe( "The Embeds page", () => {
 		await expect( page.getByRole( "heading", { name: "Embeds", level: 1 } ) ).toBeVisible();
 		await expect( page.locator( "nav" ).getByRole( "link", { name: "Embeds" } ) ).toBeVisible();
 
+		// New embed is a link to a page of its own, with the form on it
 		await page.locator( "#newEmbed" ).click();
+		await expect( page ).toHaveURL( /\/chat\/embeds\/new$/ );
+		await expect( page.getByRole( "heading", { name: "New embed", level: 1 } ) ).toBeVisible();
+		await expect( page.locator( "nav" ).getByRole( "link", { name: "Embeds" } ) ).toHaveAttribute( "aria-current", "page" );
 		await expect( page.locator( "#embedName" ) ).toBeFocused();
 		// nothing can be saved without a name and a website: the page says so in words
 		await page.locator( "#saveEmbed" ).click();
@@ -144,8 +148,9 @@ test.describe( "The Embeds page", () => {
 
 		await page.locator( "#saveEmbed" ).click();
 		await expect( page.locator( ".toast" ).filter( { hasText: "Made " + name } ) ).toBeVisible();
-		const item = page.locator( ".embeds-item" ).filter( { hasText: name } );
-		await expect( item ).toContainText( "On" );
+		// saving a new embed keeps this page, now as the edit of the embed it made, and the address says so
+		await expect( page.getByRole( "heading", { name: "Edit " + name, level: 1 } ) ).toBeVisible();
+		await expect( page ).toHaveURL( /\/chat\/embeds\/emb_[A-Za-z0-9]{10}$/ );
 
 		// the snippets are for this embed, with a note each, and Copy puts the text on the clipboard
 		const id = ( await page.locator( "[role=tabpanel]:visible code" ).textContent() ).match( /emb_[A-Za-z0-9]{10}/ )[ 0 ];
@@ -174,12 +179,143 @@ test.describe( "The Embeds page", () => {
 
 		await page.locator( "#toggleEmbed" ).click();
 		await page.locator( "#confirmYes" ).click();
-		await expect( item ).toContainText( "Off" );
 		await expect( page.locator( "#toggleEmbed" ) ).toHaveText( "Enable" );
 		// what was stored on its own (a new key, turned off) is not "unsaved changes"
 		await expect( page.getByText( "Unsaved changes" ) ).toBeHidden();
 		await expect( page.locator( "#saveEmbed" ) ).toBeDisabled();
+
+		// the link back goes to the list, where the embed is, and off
+		await page.locator( "#backToEmbeds" ).click();
+		await expect( page ).toHaveURL( /\/chat\/embeds$/ );
+		const item = page.locator( "tbody tr" ).filter( { hasText: name } );
+		await expect( item ).toContainText( "Off" );
+		await page.request.post( API + "/embeds/delete", { headers: JSON_HEADERS, data: { id } } );
 		expect( errors ).toEqual( [] );
+	} );
+
+	test( "lists the embeds with a search and a state filter, a switch each, Edit and Delete", async( { page, request, errors } ) => {
+		const tag = "z" + Date.now();
+		// websites no earlier run used, so the search for one finds only this run's embed
+		const port = 41000 + ( Date.now() % 20000 );
+		const made = [];
+		for ( const [
+			suffix,
+			enabled,
+			origin
+		] of [
+				[
+					"alpha",
+					true,
+					"http://127.0.0.1:" + port
+				],
+				[
+					"beta",
+					false,
+					"http://127.0.0.1:" + ( port + 1 )
+				]
+			] ) {
+			made.push( await makeEmbed( request, { name: tag + " " + suffix, enabled, limits: { allowedOrigins: [ origin ] } } ) );
+		}
+		const [
+			alpha,
+			beta
+		] = made;
+		try {
+			await page.goto( "/chat/embeds" );
+			const rows = page.locator( "tbody tr" );
+			const row = name => rows.filter( { hasText: name } );
+
+			// search: by name, and by website
+			await page.locator( "#embedSearch" ).fill( tag );
+			await expect( rows ).toHaveCount( 2 );
+			await page.locator( "#embedSearch" ).fill( String( port + 1 ) );
+			await expect( rows ).toHaveCount( 1 );
+			await expect( row( tag + " beta" ) ).toBeVisible();
+			await expect( page.getByText( "Showing 1 of" ) ).toBeVisible();
+			await page.locator( "#embedSearch" ).fill( "no embed has this" );
+			await expect( page.getByText( "No embeds match" ) ).toBeVisible();
+			await page.locator( "#clearEmbedFilter" ).click();
+			await expect( page.locator( "#embedSearch" ) ).toHaveValue( "" );
+
+			// the state filter, with the search
+			await page.locator( "#embedSearch" ).fill( tag );
+			await page.getByRole( "button", { name: /^Off/ } ).click();
+			await expect( page.getByRole( "button", { name: /^Off/ } ) ).toHaveAttribute( "aria-pressed", "true" );
+			await expect( rows ).toHaveCount( 1 );
+			await expect( row( tag + " beta" ) ).toContainText( "Off" );
+			await page.getByRole( "button", { name: /^On/ } ).click();
+			await expect( rows ).toHaveCount( 1 );
+			await expect( row( tag + " alpha" ) ).toContainText( "On" );
+			await page.getByRole( "button", { name: /^All/ } ).click();
+
+			// the switch turns one off and on at once, and the server has it
+			// (the checkbox is drawn as a track, so the track is what is clicked)
+			const flip = name => row( name ).locator( ".switch" ).click();
+			await expect( page.getByRole( "switch", { name: tag + " alpha is on" } ) ).toBeChecked();
+			await flip( tag + " alpha" );
+			await expect( page.locator( ".toast" ).filter( { hasText: tag + " alpha is off" } ) ).toBeVisible();
+			await expect( row( tag + " alpha" ) ).toContainText( "Off" );
+			expect( ( await ( await request.get( API + "/embeds/get?id=" + alpha.id, { headers: JSON_HEADERS } ) ).json() ).enabled ).toBe( false );
+			await expect( page.getByRole( "switch", { name: tag + " alpha is off" } ) ).not.toBeChecked();
+			await flip( tag + " alpha" );
+			await expect( row( tag + " alpha" ) ).toContainText( "On" );
+			expect( ( await ( await request.get( API + "/embeds/get?id=" + alpha.id, { headers: JSON_HEADERS } ) ).json() ).enabled ).toBe( true );
+
+			// Edit is a link to the page of that embed, and the change is saved there
+			await row( tag + " alpha" ).getByRole( "link", { name: "Edit " + tag + " alpha" } ).click();
+			await expect( page ).toHaveURL( new RegExp( "/chat/embeds/" + alpha.id + "$" ) );
+			await expect( page.getByRole( "heading", { name: "Edit " + tag + " alpha", level: 1 } ) ).toBeVisible();
+			await page.locator( "#embedTitle" ).fill( "Changed title" );
+			await page.locator( "#saveEmbed" ).click();
+			await expect( page.locator( ".toast" ).filter( { hasText: "Saved " + tag + " alpha" } ) ).toBeVisible();
+			expect( ( await ( await request.get( API + "/embeds/get?id=" + alpha.id, { headers: JSON_HEADERS } ) ).json() ).look.title ).toBe( "Changed title" );
+
+			// the link back with unsaved changes asks first; staying keeps the page and the change, leaving drops it
+			await page.locator( "#embedTitle" ).fill( "Not saved" );
+			await page.locator( "#backToEmbeds" ).click();
+			await expect( page.locator( "#confirmTitle" ) ).toContainText( "Leave without saving" );
+			await page.locator( "#confirmNo" ).click();
+			await expect( page ).toHaveURL( new RegExp( "/chat/embeds/" + alpha.id + "$" ) );
+			await expect( page.locator( "#embedTitle" ) ).toHaveValue( "Not saved" );
+			await page.locator( "#backToEmbeds" ).click();
+			await page.locator( "#confirmYes" ).click();
+			await expect( page ).toHaveURL( /\/chat\/embeds$/ );
+			expect( ( await ( await request.get( API + "/embeds/get?id=" + alpha.id, { headers: JSON_HEADERS } ) ).json() ).look.title ).toBe( "Changed title" );
+
+			// Delete asks, then removes it for good: the row, and the embed
+			await row( tag + " beta" ).getByRole( "button", { name: "Delete " + tag + " beta" } ).click();
+			await expect( page.locator( "#confirmTitle" ) ).toContainText( "Delete " + tag + " beta" );
+			await page.locator( "#confirmNo" ).click();
+			await expect( row( tag + " beta" ) ).toBeVisible();
+			await row( tag + " beta" ).getByRole( "button", { name: "Delete " + tag + " beta" } ).click();
+			await page.locator( "#confirmYes" ).click();
+			await expect( page.locator( ".toast" ).filter( { hasText: "Deleted " + tag + " beta" } ) ).toBeVisible();
+			await expect( row( tag + " beta" ) ).toHaveCount( 0 );
+			expect( ( await request.get( API + "/embeds/get?id=" + beta.id, { headers: JSON_HEADERS } ) ).status() ).toBe( 404 );
+
+			// Delete on the page of an embed asks, removes it and goes back to the list
+			await row( tag + " alpha" ).getByRole( "link", { name: "Edit " + tag + " alpha" } ).click();
+			await page.locator( "#deleteEmbed" ).click();
+			await expect( page.locator( "#confirmTitle" ) ).toContainText( "Delete " + tag + " alpha" );
+			await page.locator( "#confirmYes" ).click();
+			await expect( page ).toHaveURL( /\/chat\/embeds$/ );
+			await expect( row( tag + " alpha" ) ).toHaveCount( 0 );
+			expect( ( await request.get( API + "/embeds/get?id=" + alpha.id, { headers: JSON_HEADERS } ) ).status() ).toBe( 404 );
+
+			// the page of an embed that is not there says so, with the way back
+			await page.goto( "/chat/embeds/" + alpha.id );
+			await expect( page.getByText( "There is no embed " + alpha.id ) ).toBeVisible();
+			await expect( page.getByRole( "link", { name: "Back to the embeds" } ) ).toBeVisible();
+			expect( errors ).toEqual( [] );
+		} catch ( error ) {
+			// said here so the first failure is not hidden behind the clean-up below running out of time
+			console.log( "FIRST ERROR: " + String( error.message ).split( "\n" ).slice( 0, 12 ).join( " | " ) );
+			throw error;
+		} finally {
+			for ( const embed of made ) {
+				await request.post( API + "/embeds/delete", { headers: JSON_HEADERS, data: { id: embed.id }, timeout: 5000 } ).catch( () => {} );
+			}
+		}
 	} );
 
 	test( "is refused to a member, in the page and in the API", async( { member } ) => {

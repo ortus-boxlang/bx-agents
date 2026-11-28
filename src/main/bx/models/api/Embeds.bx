@@ -109,6 +109,27 @@ class {
 	}
 
 	/**
+	 * Removes an embed for good, with its counters (see EmbedService.delete).
+	 *
+	 * @caller The Caller; it must be an admin
+	 * @id The embed's id
+	 *
+	 * @return An Outcome: { deleted : true, id }, or not_found
+	 */
+	any function delete( required any caller, required string id ) {
+		var refused = adminOnly( arguments.caller )
+		if ( !isNull( refused ) ) {
+			return refused
+		}
+		try {
+			var gone = variables.service.delete( trim( arguments.id ) )
+			return Outcome::done( { "deleted" : true, "id" : gone.id } )
+		} catch ( any e ) {
+			return mapped( e )
+		}
+	}
+
+	/**
 	 * The text to paste on the other website, one per way of doing it.
 	 *
 	 * @caller The Caller; it must be an admin

@@ -144,6 +144,8 @@ class {
 		return Outcome::done( {
 			threadId : threadId,
 			scoped   : options.threadId,
+			// a visitor of an embed (an anonymous person on another website) is never told why a turn failed, see failureText()
+			visitor  : arguments.caller.isEmbed(),
 			work     : ( onChunk ) => {
 				try {
 					return thisAgent.stream( onChunk, input, params, options )
@@ -228,6 +230,18 @@ class {
 	}
 
 	/**
+	 * What a client is told when a turn fails. The terminal that runs the agent in its own process gets the full diagnostic, any other
+	 * client the exception's message. A visitor of an embed gets neither: the message of a provider or engine error can carry a key
+	 * fragment, an upstream address or a model name, and it is read by anyone with `curl`. The detail is in the log.
+	 */
+	private string function failureText( required any e, required string diagnostic, boolean visitor = false ) {
+		if ( arguments.visitor ) {
+			return "Something went wrong. Please try again in a moment."
+		}
+		return variables.localImages ? arguments.diagnostic : arguments.e.message
+	}
+
+	/**
 	 * One whole turn without frames.
 	 *
 	 * @return An Outcome: { output, threadId }, or the refusal from prepareTurn
@@ -243,7 +257,7 @@ class {
 		} catch ( any e ) {
 			var diagnostic = bxModules.bxagents.models.runtime.ErrorReport::describe( e, bxModules.bxagents.models.runtime.ErrorReport::forAgent( variables.agent ) )
 			Logger::log( "agent", "error", "A turn failed (from #arguments.caller.source()#): " & diagnostic )
-			return Outcome::failed( "internal", variables.localImages ? diagnostic : e.message )
+			return Outcome::failed( "internal", failureText( e, diagnostic, arguments.caller.isEmbed() ) )
 		}
 	}
 
@@ -340,7 +354,7 @@ class {
 			var diagnostic = bxModules.bxagents.models.runtime.ErrorReport::describe( e, bxModules.bxagents.models.runtime.ErrorReport::forAgent( variables.agent ) )
 			Logger::log( "agent", "error", "A streamed turn failed: " & diagnostic )
 			if ( open() ) {
-				send( "error", { "message" : variables.localImages ? diagnostic : e.message } )
+				send( "error", { "message" : failureText( e, diagnostic, arguments.turn.visitor ?: false ) } )
 			}
 		} finally {
 			InterceptorRegistration::unregister( interceptor )

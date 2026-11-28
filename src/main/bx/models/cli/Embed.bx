@@ -10,6 +10,7 @@
  *   bxAgents embed show --id=emb_... [--json]
  *   bxAgents embed disable --id=emb_...
  *   bxAgents embed rotate --id=emb_...
+ *   bxAgents embed delete --id=emb_...
  *
  * Run it where the agent's database is. The tools are not checked against the agent here (the web app's Embeds page does that);
  * a name the agent does not have is simply never run. The signing key is never printed.
@@ -26,10 +27,10 @@ class extends="BaseVerb" {
 			position : 3,
 			description : "Manage the agent as an embed on other websites",
 			usage : "<action> [options]",
-			actions : [ { name : "create" }, { name : "list" }, { name : "show" }, { name : "disable" }, { name : "rotate" } ],
+			actions : [ { name : "create" }, { name : "list" }, { name : "show" }, { name : "disable" }, { name : "rotate" }, { name : "delete" } ],
 			options : [
 				{ name : "name", display : "--name=<text>", description : "What to call the embed (create).", takesValue : true },
-				{ name : "id", display : "--id=<emb_...>", description : "The embed to show, disable or rotate.", takesValue : true },
+				{ name : "id", display : "--id=<emb_...>", description : "The embed to show, disable, rotate or delete.", takesValue : true },
 				{ name : "origin", display : "--origin=<urls>", description : "Websites that may show it, comma separated: scheme, host, optional port.", takesValue : true },
 				{ name : "tools", display : "--tools=<names>", description : "Tools a visitor's turn may use, comma separated.", takesValue : true },
 				{ name : "per-minute", display : "--per-minute=<n>", description : "Messages per visitor per minute (default 10).", takesValue : true },
@@ -45,7 +46,7 @@ class extends="BaseVerb" {
 				{ name : "position", takesValue : true, hidden : true },
 				{ name : "theme", takesValue : true, hidden : true }
 			],
-			examples : [ "embed create --name=""Docs helper"" --origin=https://docs.example.com", "embed list", "embed rotate --id=emb_..." ],
+			examples : [ "embed create --name=""Docs helper"" --origin=https://docs.example.com", "embed list", "embed rotate --id=emb_...", "embed delete --id=emb_..." ],
 			subcommand : true
 		}
 	}
@@ -109,6 +110,15 @@ class extends="BaseVerb" {
 		}
 		embeds().update( id, { enabled : false } )
 		return done( "Embed #id# is off. Visitors are answered as if it did not exist." )
+	}
+
+	function handleDelete() {
+		var id = trim( option( "id" ) )
+		if ( embeds().get( id ).isEmpty() ) {
+			return fail( "There is no embed [#id#]. See `bxAgents embed list`." )
+		}
+		embeds().delete( id )
+		return done( "Embed #id# is deleted, with its signing key and its counters. The widget on your website now shows nothing; to turn an embed off and keep it, use `embed disable`." )
 	}
 
 	function handleRotate() {

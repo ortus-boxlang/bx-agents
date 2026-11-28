@@ -24,14 +24,15 @@ class {
 	struct function run( required struct options, required struct config, required string subject, required any wiring, required array yamlEntries ) {
 		var policy = ConnectorSettings::resolve( arguments.config )
 		var words = ( arguments.options._positionals ?: [] ).map( w => toString( w ) )
-		var timeout = val( arguments.options.timeout ?: 300 )
+		var timeout = val( arguments.options.timeout ?: 120 )
 		var agent = new "models.connectors.NullAgent@bxagents"()
 		var wiringOfConnectors = new "models.connectors.ConnectorWiring@bxagents"()
 		var stack = wiringOfConnectors.stackOf( agent, policy, { store : arguments.wiring.storeFor(), vault : arguments.wiring.service() } )
 		try {
+			var vaultOf = arguments.wiring
 			var cliStack = stack.copy()
 			cliStack.runtime = new "models.connectors.NoRuntime@bxagents"()
-			var connections = new "models.cli.chat.LocalConnections@bxagents"( ConnectorEndpoint::oauthEntries( policy.available ), arguments.wiring, arguments.subject, { seconds : timeout } )
+			var connections = new "models.cli.chat.LocalConnections@bxagents"( ConnectorEndpoint::oauthEntries( policy.available, ConnectorEndpoint::credentialReader( () => vaultOf.service() ) ), arguments.wiring, arguments.subject, { seconds : timeout } )
 			var person = new Caller( id = arguments.subject, scope = "admin", source = "cli" )
 			var source = new "models.connectors.LocalConnectorSource@bxagents"( cliStack, person, false, new "models.connectors.LoopbackSignIn@bxagents"( connections ) )
 

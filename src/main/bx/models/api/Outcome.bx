@@ -15,8 +15,9 @@ class {
 	 * @code A name from ApiEdge's list, such as `not_found` or `forbidden`
 	 * @reason What to tell the person
 	 */
-	static any function failed( required string code, string reason = "" ) {
-		return new Outcome( ok = false, code = arguments.code, reason = arguments.reason )
+	static any function failed( required string code, string reason = "", numeric retryAfter = 0 ) {
+		// retryAfter: for a 429, the seconds a client should wait (sent as Retry-After, see ApiEdge.retryAfterOf)
+		return new Outcome( ok = false, code = arguments.code, reason = arguments.reason, data = arguments.retryAfter > 0 ? { retryAfter : int( arguments.retryAfter ) } : {} )
 	}
 
 	/**

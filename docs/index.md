@@ -44,7 +44,7 @@ document, twelve kinds of gateway, routines, a vault, backups, and tests that ne
 | **Build** | [Folders are the API](conventions/agent-yaml.md). A [wizard](guides/new-wizard.md) and eight starters. [Sub-agents](conventions/subagents.md) you can also talk to directly. [Skills](conventions/skills.md) from a registry, or saved by the agent with your approval. Tests with no tokens. |
 | **Run** | A [web app](conventions/web-ui.md) with a left menu and fourteen pages. A [terminal chat](guides/terminal-ui.md) with 36 slash commands. [Routines](conventions/routines.md) people make by asking. [Schedules](conventions/schedules.md), approvals, a packaged `.bxa` and six deploy targets. |
 | **Remember** | Memory in the chat database for every agent, per person, the same in the terminal, the web app and the API. Per-person notes and shared notes about the agent's work. A [data home](conventions/data.md) with volumes, and backups with restore. |
-| **Connect** | [Twelve gateway types](conventions/gateways/index.md), and routines that deliver to them. An [API](guides/agent-api.md) with 88 routes, OpenAPI and a BoxLang client. [MCP](conventions/mcp.md) in both directions, with [per-person sign-in](conventions/connect.md) and seven built-in [connectors](conventions/connectors.md). A [vault](conventions/vault.md) with an activity log. |
+| **Connect** | [Twelve gateway types](conventions/gateways/index.md), and routines that deliver to them. An [API](guides/agent-api.md) with 89 routes, OpenAPI and a BoxLang client. [MCP](conventions/mcp.md) in both directions, with [per-person sign-in](conventions/connect.md) and seven built-in [connectors](conventions/connectors.md). A [vault](conventions/vault.md) with an activity log. |
 | **Operate** | Admin and member roles, tokens and people, `allowedIPs` and a rate limit. Five [logs](conventions/logs.md). The agent tree, its files and its token usage. Gateway state with a reconnect button. `bxAgents doctor`. |
 | **Extend** | [Extensions](conventions/extensions.md) add commands, keys, status items, listeners, schedulers, page slots, CLI verbs, tools, skills and gateway types. [Interceptors](conventions/interceptors.md), modules and a class-based `Agent.bx`. |
 
@@ -258,7 +258,7 @@ GitHub and Signal - coordinated by one session with `reject` / `queue` / `steer`
 Each person and each thread has their own conversation, and slash commands work there too.
 :::
 ::: card title="HTTP and MCP" icon="phosphor-duotone:stack" href="guides/agent-api.md"
-Every agent serves an HTTP API (88 routes) with an OpenAPI document, open on your machine or behind tokens,
+Every agent serves an HTTP API (89 routes) with an OpenAPI document, open on your machine or behind tokens,
 `allowedIPs` and a rate limit. Host local MCP servers from `mcp/` so other clients can call your tools.
 :::
 ::: card title="Ship it" icon="phosphor-duotone:package" href="deployment-and-secrets.md"

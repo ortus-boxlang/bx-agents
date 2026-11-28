@@ -1,14 +1,14 @@
 ---
 title: connectors
 icon: phosphor-duotone:plugs-connected
-summary: Ready-made connections to 35 services, in groups: GitHub, Stripe, Notion, Slack, Linear, Vercel and more. Each person connects their own account.
+summary: Ready-made connections to 38 services, in groups: GitHub, Stripe, Notion, Slack, Linear, Vercel and more. Each person connects their own account.
 description: The connector catalog that ships with BX Agents, how a person connects one, how an admin limits them, and how they behave in the web page, the terminal and chat gateways.
 tags: [conventions, mcp, secrets]
 ---
 
 # Connectors
 
-A **connector** is a ready-made connection to a service that has an MCP server. BX Agents ships with 35, in groups (Developer, Productivity, Sales, Finance, Analytics, Microsoft 365, Social Media, Advertising and Apps): [the connector catalog](connector-catalog.md) lists each one. Every agent offers them by default. Offering one does not connect it: nothing contacts a service until a person connects their own account.
+A **connector** is a ready-made connection to a service that has an MCP server. BX Agents ships with 38, in groups (Developer, Productivity, Sales, Finance, Analytics, Microsoft 365, Social Media, Advertising and Apps): [the connector catalog](connector-catalog.md) lists each one. Every agent offers them by default. Offering one does not connect it: nothing contacts a service until a person connects their own account.
 
 - **Personal.** A token or sign in belongs to one person. The agent uses it only when that person asks, and two people never share a token or a session.
 - **Sealed.** Tokens are stored in the [vault](vault.md), locked to the host of the service. The model never sees one.
@@ -104,6 +104,15 @@ Most connectors take a sign in or a token. A few need something else, and the ca
 - **A host chosen from a list.** The address may be `https://{site}/mcp`, with one option of `target: host` that lists the hosts it may be (`choices`, each a host name and a label) and a default. A value that is not on the list is never used, at connect time or when the connector is called, so nobody can point a connector at a server of their own. A token is sealed for every host on the list. A connector with a sign in uses the host the admin sets in `connectors.override`; one with a token lets each person choose.
 - **A public server.** `auth: [ { type: none } ]` on a web connector means it asks for nothing. A person switches it on for themselves, no secret is stored, and the entry's risk note says that what the agent sends goes to a third party.
 - **A sign in through an app of your own.** Some services do not allow dynamic client registration, so no sign in can be made for them out of the box. Their files have `app: own` on the oauth method. Until an admin has set the app, the connector says so, with how to register it, and nobody can connect it. The admin registers an app with the service, gives it the redirect address (the app's public address followed by `<api path>/connect/callback`, `/__bxagents/connect/callback` by default) and sets the client id, and the client secret when the service gives one, under the names the file lists (`SLACK_CLIENT_ID` and `SLACK_CLIENT_SECRET` for Slack) as secrets of the agent in the vault or as environment variables, then restarts the agent. They are read when the agent starts and held in memory: never written to a file, never returned by the API.
+
+## Google: Gmail, Calendar and Drive
+
+Google's terms for agents (the Workspace AI Tools Addendum) say an agent must use Google's own MCP servers and not call its REST APIs directly. So these three connectors are Google's MCP servers, and BxAgents does the sign in itself, with Google's addresses written in the connector file (`endpoints`), because those servers' discovery metadata does not fit what an MCP client finds on its own.
+
+- **Sign in.** Each person is sent to Google's sign-in page, agrees to the permissions, and comes back to the agent: the app's public address followed by `<api path>/connect/callback` on the web, a short-lived listener on `127.0.0.1` at a terminal. The tokens are sealed in the vault, per person, only for Google's hosts, and renewed before they run out (the sign in asks for offline access). Disconnecting revokes the grant at Google and forgets the tokens.
+- **Admin setup, once for all three.** In the Google Cloud console (Google Auth Platform, Clients) make an OAuth client with **Use this client for an AI-powered agent** ticked, enable the Gmail, Calendar and Drive APIs and their MCP services in the project, and set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` as secrets of the agent in the vault or as environment variables, then restart the agent. For the web app the client is a Web application client with the callback address above as an authorized redirect address; for the terminal it is a Desktop app client, which takes any loopback address. Without these the connectors say an admin has to set them up.
+- **Who can sign in.** An app in testing mode gives people 7-day refresh tokens and is limited to 100 test users; an app in "personal mode" (only its creator) has neither limit; an internal Workspace app needs no verification. A public app reading Gmail needs Google's verification and a security assessment. Google's standard tier allows a daily number of MCP requests per project and product.
+- **What is kept.** The agent keeps a person's own messages and the answers it gave, and no tool results. Google's terms say user data obtained through an agent may not be kept after the person disconnects, so a conversation that used one of these connectors is marked (`onDisconnect: purge` in the connector file), and when the person disconnects it the agent replaces its answers in those conversations with a note. Their own messages stay. If the agent was not running at that moment (the terminal's `connect` command), it finishes the job when it starts.
 
 ## Adding a connector
 

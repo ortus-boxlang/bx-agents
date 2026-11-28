@@ -28,7 +28,7 @@ hooks, bot protection, variables and context.
   <track kind="captions" src="/assets/video/embeds-tour.vtt" srclang="en" label="English" default>
 </video>
 
-*About a minute: an admin makes an embed, a visitor chats from another website, and the admin looks at the counters, rotates the key and disables it. The answers come from a scripted demo model, so they are canned. Narrated, with captions.*
+*About a minute and a half: an admin makes an embed on its own page, a visitor chats from another website, and the admin looks at the counters, rotates the key, then searches the list, turns the embed off with its switch and sees that Delete asks first. The answers come from a scripted demo model, so they are canned. Narrated, with captions.*
 
 ## The record
 
@@ -106,8 +106,9 @@ Like every other route of the agent API, the id goes in the query or the body, n
 GET  <api>/embeds               list, with the names of the tools an embed may list
 POST <api>/embeds               create; the answer carries the new id
 GET  <api>/embeds/get?id=       one embed, without the key
-POST <api>/embeds/update        body { id, ...fields }; fields not sent keep their value; { enabled: false } turns it off
+POST <api>/embeds/update        body { id, ...fields }; fields not sent keep their value, also the ones inside look, limits and target; { enabled: false } turns it off
 POST <api>/embeds/rotate        body { id }; new signing key; every open session stops working
+POST <api>/embeds/delete        body { id }; removes the embed for good, with its key and its counters (turning it off is the way to keep it)
 GET  <api>/embeds/snippets?id=&base=   the HTML script tag, iframe, web component and curl, with the id filled in
 GET  <api>/embeds/usage?id=     counters for the last 7 days: messages, refused for a wrong origin, refused for a limit
 ```
@@ -115,7 +116,7 @@ GET  <api>/embeds/usage?id=     counters for the last 7 days: messages, refused 
 They are in `ApiContract`, so the OpenAPI document and the route specs have them. Embed management needs the app's shared database;
 without one the routes answer `not_found`. Admin scope is the gate, and `agentApi.embeds: false` is a master switch: with it the admin routes and the seven public routes are not written at all, the page leaves the menu and the OpenAPI document does not list them (see [the master switch](#the-master-switch)).
 
-CLI: `bxAgents embed create|list|show|disable|rotate`. They are added to `ApiContract`, so the OpenAPI document and the route
+CLI: `bxAgents embed create|list|show|disable|rotate|delete`. They are added to `ApiContract`, so the OpenAPI document and the route
 specs pick them up.
 
 ## A visit, step by step
@@ -139,8 +140,9 @@ Limits run on the **server's clock**, never on a time the client sends:
 
 | Limit | Over it |
 |---|---|
-| per visitor, per minute | `429` with `Retry-After` |
-| daily messages for the embed | `429` |
+| per visitor, per minute | `429` with `Retry-After: 60` |
+| daily messages for the embed | `429` with `Retry-After` set to the seconds left of the server's day |
+| a new session, per address, per minute | `429` with `Retry-After: 60` |
 | message longer than `maxMessageChars` | `400` |
 
 ## The embed caller and its scope
@@ -195,7 +197,8 @@ It does not stop a person from calling the embed directly. Do not rely on it for
 2. **The `embed` scope.** Even a fully scripted attacker can only chat. No notes, memory, vault, other chats or admin routes.
 3. **The limits.** Per visitor per minute, a daily cap for the whole embed, a maximum message length. The daily cap is also the cost cap.
 4. **Server-side truth.** The record decides the agent, profile, model and tools. A forged `userId`, `agent`, `profile` or `tools` in a body changes nothing.
-5. **Key rotation and disable.** Rotating the key ends every session at once. A disabled or expired embed answers like an unknown one (same status, same body), so a visitor cannot tell which ids exist.
+5. **Key rotation, disable and delete.** Rotating the key ends every session at once. A disabled or expired embed answers like an unknown one (same status, same body), so a visitor cannot tell which ids exist; a deleted one is an unknown one.
+6. **A visitor is never told why a turn failed.** An error in a visitor's stream or answer is one fixed sentence; the provider's or the engine's message (which can carry a key fragment, an upstream address or a model name) goes to the log. The tool filter also fails closed: a request object that cannot say what it is allows no tool.
 
 **Accepted for now:** a script can mint many visitor ids (each session call is rate limited, but not by identity). The daily cap
 bounds the damage. Bot protection is a later increment. Prompt injection through a visitor's message is possible for any agent that
@@ -228,7 +231,9 @@ The hosted page runs on the agent's own origin, so a request from it is from tha
 
 The pictures below are from that run.
 
-![The Embeds editor: the agent, the look and text on the left, and on the right the preview, which is the real widget drawn from the form](../assets/webui/webui-embeds-editor.png)
+![The Embeds list: a search, the state filter with its counts, a switch, Edit and Delete a row](../assets/webui/webui-embeds-list.png)
+
+![The page that makes or changes an embed: the agent, the look and text on the left, and on the right the preview, which is the real widget drawn from the form](../assets/webui/webui-embeds-editor.png)
 
 ![A wildcard website is refused in words before anything is saved](../assets/webui/webui-embeds-wildcard-refused.png)
 
@@ -239,6 +244,8 @@ The pictures below are from that run.
 ![The last seven days: real counters](../assets/webui/webui-embeds-counters.png)
 
 ![Rotate key asks first](../assets/webui/webui-embeds-rotate.png)
+
+![Delete asks first, and says what it removes](../assets/webui/webui-embeds-delete.png)
 
 A disabled or expired embed stops showing its bubble at the next page load: `config` is sent with `Cache-Control: no-cache`, so a browser asks again every time. (A 30 second cache was tried first. A recording of the tour showed the bubble staying on the website for up to 30 seconds after Disable, so it was removed.)
 
@@ -251,15 +258,30 @@ origins>`. A site that is not listed cannot frame it. The page loads the same wi
 
 ## The Embeds admin page
 
-Built as described below; see also [The web app](web-ui.md#embeds). It is checked with axe (light, dark, desktop and phone) and with browser tests that make an embed, refuse bad websites, watch the preview follow the form, copy a snippet, rotate the key and turn it off.
+Built as described below; see also [The web app](web-ui.md#embeds). It is checked with axe (light, dark, desktop and phone) and with browser tests that make an embed, refuse bad websites, watch the preview follow the form, copy a snippet, rotate the key, turn it off, search and filter the list, turn embeds on and off with a switch, edit and delete one.
 
 A page in the web app (`bxagentsui`), under **Admin**, next to Gateways, admin scope only, themed like the other pages (system,
-light, dark) and usable by keyboard.
+light, dark) and usable by keyboard. Three pages, each with its own route, handler action (`handlers/Embeds.bx`) and view: the **list** (`/embeds`), the page that **makes** one (`/embeds/new`) and the page that **changes** one (`/embeds/<id>`). The Embeds menu entry stays marked on all three.
 
 ```text
-+ Embeds ------------------------------------------------------------------------+
-| [ Docs helper    on  ]  [ Pricing bot  off ]   [ New embed ]                      |
-+----------------------------------------------+-----------------------------------+
++ Embeds ----------------------------------------------------- [ New embed ] +
+| [ Search by name or website ]   [All 4] [On 2] [Off 1] [Expired 1]          |
++-----------------------------------------------------------------------------+
+| Embed                       State     On       Actions                      |
+| Docs helper                 [On]      (o--)    [Edit] [Delete]              |
+|   https://docs.example.com                                                  |
+| Pricing bot                 [Off]     (--o)    [Edit] [Delete]              |
++-----------------------------------------------------------------------------+
+```
+
+- **Search** matches the name and the allowed websites, any case; every word has to match. The **state filter** is All, On, Off or Expired (an embed that is on with a date that has passed), each with its count. "Showing 2 of 4" says when the list is narrowed, and an empty result offers to show every embed again.
+- **The switch** turns an embed on or off at once. A visitor of an embed that is off is answered as if it did not exist. It is saved when it is moved; if the server refuses, it goes back and says so.
+- **Edit** (or the embed's name) is a link to the page of that embed, and **New embed** a link to `/embeds/new`. **Delete** asks first, then removes the embed for good, with its key and its counters; turning it off is the way to keep it.
+- **Saving a new embed keeps the page**, which is then the edit of the embed it made (the address becomes `/embeds/<id>`): its snippets and counters appear, and the person goes back with the **All embeds** link. Leaving with changes that are not saved asks first (the link back, and the browser's own prompt for a reload or another address). **Delete** on the page of an embed asks, removes it and goes back to the list. The page of an id that is not there says so, with the way back.
+
+```text
++ < All embeds ------------------------------------------------------------+
+| Edit Docs helper                                                             |
 | Agent        name, agent, profile            |  Live preview of the widget       |
 | Look & text  title, placeholder, welcome,    |  (updates as you type)            |
 |              up to 3 suggestions, color,     |                                   |
@@ -268,7 +290,7 @@ light, dark) and usable by keyboard.
 |              [ ] note_remember (all off=none)|                                   |
 | Allowed websites   (chips, no wildcards)     |  Last 7 days                      |
 | Limits       per minute, per day, max chars  |  messages | wrong origin | limit  |
-| [Save] [Disable] [Rotate key...]             |                                   |
+| [Save] [Disable] [Rotate key...] [Delete]    |                                   |
 +----------------------------------------------+-----------------------------------+
 ```
 
@@ -281,6 +303,17 @@ has none), `question`, `sparkle`, `headset` and `book`. The widget draws them it
 on save ("look.icon is one of: ..."), and the widget falls back to the bubble for any other value. It is a name, never markup or a
 URL, so an embed cannot make a visitor's page load an image from somewhere else. The editor shows the five as a radio group. A custom
 image (a URL, with a rule on which hosts) is not built.
+
+## Known limits (from a review of this code)
+
+Found by reading, not fixed, and none of them lets a visitor past the tool list or the scope:
+
+- **The session limiter keys on the network address.** Behind a reverse proxy or a CDN that does not pass the real address on, every visitor looks like one, so one script with a listed `Origin` can use the 20 sessions a minute up and block new visitors. Counting by a trusted forwarded address is a later change.
+- **The daily cap can overshoot** by about the number of requests in flight at once: it is read, checked and counted in separate statements.
+- **A refused request costs two database writes** (the counter), which an anonymous caller can cause against a live embed id.
+- **Disable is not revocation.** A token made before Disable works again after Enable, until it expires or the key is rotated.
+- **The origin check trusts `Host` and `Sec-Fetch-Site`** for the agent's own origin. A browser cannot forge them; a program can, and a program can already send a listed `Origin`.
+- **The limiter's sweep** of old keys is not atomic: once in a while a hit is lost.
 
 ## The master switch
 

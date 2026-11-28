@@ -80,7 +80,10 @@ class extends="testbox.system.BaseSpec" {
 					for ( var i = 1; i <= 20; i++ ) {
 						expect( pub.startSession( embed.id, site, "10.0.0.1" ).succeeded() ).toBeTrue();
 					}
-					expect( pub.startSession( embed.id, site, "10.0.0.1" ).code() ).toBe( "rate_limited" );
+					var limited = pub.startSession( embed.id, site, "10.0.0.1" );
+					expect( limited.code() ).toBe( "rate_limited" );
+					// how long to wait, which the API sends as Retry-After
+					expect( new bxagents.models.api.ApiEdge().retryAfterOf( limited ) ).toBe( 60 );
 					expect( pub.startSession( embed.id, site, "10.0.0.2" ).succeeded() ).toBeTrue();
 				} );
 
@@ -189,6 +192,10 @@ class extends="testbox.system.BaseSpec" {
 					var over = pub.message( embed.id, site, bearer(), { input : "hi" } );
 					expect( over.code() ).toBe( "rate_limited" );
 					expect( over.reason() ).toInclude( "today" );
+					// the rest of the day, and never more than a day
+					var wait = new bxagents.models.api.ApiEdge().retryAfterOf( over );
+					expect( wait ).toBeGT( 0 );
+					expect( wait ).toBeLTE( 86400 );
 				} );
 
 				it( "does not run for an embed that was turned off after the session started", function() {

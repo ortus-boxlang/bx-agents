@@ -84,6 +84,36 @@ class {
 	}
 
 	/**
+	 * @entry The connector as offered
+	 *
+	 * @return True when its sign in uses addresses written in its file (an own app with `endpoints`), which BxAgents does
+	 *         itself (OAuthApp), and the token it gets is the one the MCP server is called with
+	 */
+	static boolean function hasOwnEndpoints( required struct entry ) {
+		var method = ConnectorEndpoint::ownApp( arguments.entry )
+		return method.count() && isStruct( method.endpoints ?: "" )
+	}
+
+	/**
+	 * A reader of the admin's settings: a secret of the agent in the vault, or an environment variable of the same name.
+	 * For the client id and secret of an own app; nothing is cached and nothing is written anywhere.
+	 *
+	 * @vault A VaultService, or a function that makes one when it is first needed (the vault is not opened for a project that has no own app)
+	 *
+	 * @return A function ( name ) => value, "" when there is none
+	 */
+	static function function credentialReader( required any vault ) {
+		var held = arguments.vault
+		return ( name ) => {
+			try {
+				return ( isClosure( held ) ? held() : held ).resolve( name, { via : "connectors" } )
+			} catch ( any e ) {
+				return trim( getSystemSetting( name, "" ) )
+			}
+		}
+	}
+
+	/**
 	 * The client id and secret of an own app, as the admin gave them: a secret of the agent in the vault, or an environment
 	 * variable of the same name. Nothing is cached, and the values are never written to a file or returned by the API.
 	 *
@@ -218,6 +248,11 @@ class {
 				oauth.clientId = app.clientId
 				if ( len( app.clientSecret ) ) {
 					oauth.clientSecret = app.clientSecret
+				}
+				// a service whose addresses are in the file: BxAgents signs the person in itself
+				if ( isStruct( method[ 1 ].endpoints ?: "" ) ) {
+					oauth.endpoints = duplicate( method[ 1 ].endpoints )
+					oauth.params = duplicate( method[ 1 ].params ?: {} )
 				}
 			}
 			var made = { name : entry.id, prefix : entry.id, url : where.url, oauth : oauth }
