@@ -8,7 +8,7 @@
  *
  * Add `--json` to list or show for a script.
  */
-class {
+class extends="BaseVerb" {
 
 	/**
 	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
@@ -26,7 +26,8 @@ class {
 			],
 			examples : [ "connectors", "connectors show github", "connectors check" ],
 			note : "Only reads the catalog; use connect to sign in.",
-			subcommand : true
+			subcommand : true,
+			projectRoot : false
 		}
 	}
 
@@ -36,67 +37,51 @@ class {
 	}
 
 	/**
-	 * @options {
-	 *   _positionals ([ subcommand, id ]),
-	 *   dir (check: a folder of connector files instead of the shipped catalog),
-	 *   json (list, show, check: JSON)
-	 * }
-	 *
-	 * @return { exitCode, message }
+	 * Reads the catalog, so it needs no project. The words are `_positionals`: [ subcommand, id ].
 	 */
-	struct function run( struct options = {} ) {
-		var args = arguments.options._positionals ?: []
-		var command = args.len() ? args[ 1 ] : "list"
+	function handle() {
+		var words = option( "_positionals", [] )
+		var command = words.len() ? words[ 1 ] : "list"
 		if ( !static.SUBCOMMANDS.contains( command ) ) {
 			throw( type = "BxAgents.UnknownConnectorsCommand", message = "Say what to do: bxAgents connectors [#static.SUBCOMMANDS.toList( '|' )#]" )
 		}
-		var catalog = new "models.connectors.ConnectorCatalog@bxagents"( trim( arguments.options.dir ?: "" ) )
-		var asJson = arguments.options.json ?: false
+		var catalog = new "models.connectors.ConnectorCatalog@bxagents"( trim( option( "dir" ) ) )
 
 		switch ( command ) {
 			case "show":
-				return doShow( catalog, args.slice( 2 ), asJson )
+				return showEntry( catalog, words.slice( 2 ) )
 			case "check":
-				return doCheck( catalog, asJson )
+				return check( catalog )
 			default:
-				return doList( catalog, asJson )
+				return list( catalog )
 		}
 	}
 
-	/**
-	 * @catalog The ConnectorCatalog
-	 * @asJson Print JSON
-	 *
-	 * @return { exitCode, message }
-	 */
-	private struct function doList( required any catalog, required boolean asJson ) {
-		var entries = arguments.catalog.all()
-		if ( arguments.asJson ) {
-			return { exitCode : 0, message : jsonSerialize( entries ) }
-		}
-		var lines = [ "ID           NAME                              HOW IN              RISK    VERIFIED" ]
-		for ( var group in arguments.catalog.grouped() ) {
-			lines.append( "" )
-			lines.append( group.category )
-			for ( var entry in group.connectors ) {
-				lines.append(
-					"  " & pad( entry.id, 13 ) & pad( entry.name, 34 ) & pad( ways( entry ), 20 ) & pad( entry.risk, 8 ) & entry.verifiedOn
-				)
+	private struct function list( required any catalog ) {
+		var knownCatalog = arguments.catalog
+		var entries = knownCatalog.all()
+		return asJson( entries, () => {
+			var report = [ "ID           NAME                              HOW IN              RISK    VERIFIED" ]
+			for ( var group in knownCatalog.grouped() ) {
+				report.append( "" )
+				report.append( group.category )
+				for ( var entry in group.connectors ) {
+					report.append(
+						"  " & fitColumn( entry.id, 13 ) & fitColumn( entry.name, 34 ) & fitColumn( ways( entry ), 20 ) & fitColumn( entry.risk, 8 ) & entry.verifiedOn
+					)
+				}
 			}
-		}
-		lines.append( "" )
-		lines.append( "#entries.len()# connectors. Nothing is active until a person connects one. bxAgents connectors show <id> says more." )
-		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+			report.append( "" )
+			report.append( "#entries.len()# connectors. Nothing is active until a person connects one. bxAgents connectors show <id> says more." )
+			return report.toList( char( 10 ) )
+		} )
 	}
 
 	/**
 	 * @catalog The ConnectorCatalog
 	 * @words What came after `show`
-	 * @asJson Print JSON
-	 *
-	 * @return { exitCode, message }
 	 */
-	private struct function doShow( required any catalog, required array words, required boolean asJson ) {
+	private struct function showEntry( required any catalog, required array words ) {
 		if ( arguments.words.len() != 1 ) {
 			throw( type = "BxAgents.MissingConnector", message = "Say which one: bxAgents connectors show <id>. The ids are: #arguments.catalog.ids().toList( ', ' )#" )
 		}
@@ -104,55 +89,51 @@ class {
 		if ( !entry.count() ) {
 			throw( type = "BxAgents.UnknownConnector", message = "There is no connector [#arguments.words[ 1 ]#]. The ids are: #arguments.catalog.ids().toList( ', ' )#" )
 		}
-		if ( arguments.asJson ) {
-			return { exitCode : 0, message : jsonSerialize( entry ) }
-		}
-		var lines = [
-			"#entry.name# (#entry.id#)",
-			entry.summary,
-			"",
-			entry.transport == "http" ? "Address:  #entry.url#" : "Command:  #entry.command.toList( ' ' )#  (needs #entry.requires.program# on the PATH)",
-			"Group:    #entry.category#",
-			"Risk:     #entry.risk#. #entry.riskNote#",
-			"Docs:     #entry.docs#",
-			"Checked:  #entry.verifiedOn#",
-			"",
-			"How a person gets in:"
-		]
-		for ( var method in entry.auth ) {
-			lines.append( "  " & describeMethod( method, entry ) )
-		}
-		if ( entry.options.len() ) {
-			lines.append( "" )
-			lines.append( "Options:" )
-			for ( var option in entry.options ) {
-				lines.append( "  #option.key# (#option.type#, sent as #option.target# #option.name#" & ( len( toString( option.default ) ) && option.default != false ? ", default #option.default#" : "" ) & ")  #option.help#" )
+		return asJson( entry, () => {
+			var report = [
+				"#entry.name# (#entry.id#)",
+				entry.summary,
+				"",
+				entry.transport == "http" ? "Address:  #entry.url#" : "Command:  #entry.command.toList( ' ' )#  (needs #entry.requires.program# on the PATH)",
+				"Group:    #entry.category#",
+				"Risk:     #entry.risk#. #entry.riskNote#",
+				"Docs:     #entry.docs#",
+				"Checked:  #entry.verifiedOn#",
+				"",
+				"How a person gets in:"
+			]
+			for ( var method in entry.auth ) {
+				report.append( "  " & describeMethod( method, entry ) )
 			}
-		}
-		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+			if ( entry.options.len() ) {
+				report.append( "" )
+				report.append( "Options:" )
+				for ( var setting in entry.options ) {
+					report.append( "  #setting.key# (#setting.type#, sent as #setting.target# #setting.name#" & ( len( toString( setting.default ) ) && setting.default != false ? ", default #setting.default#" : "" ) & ")  #setting.help#" )
+				}
+			}
+			return report.toList( char( 10 ) )
+		} )
 	}
 
 	/**
-	 * @catalog The ConnectorCatalog
-	 * @asJson Print JSON
-	 *
-	 * @return { exitCode : 0 when every file passes, 1 otherwise, message }
+	 * @return exit code 0 when every file passes, 1 otherwise
 	 */
-	private struct function doCheck( required any catalog, required boolean asJson ) {
+	private struct function check( required any catalog ) {
 		var result = arguments.catalog.check()
-		if ( arguments.asJson ) {
-			return { exitCode : result.ok ? 0 : 1, message : jsonSerialize( result ) }
+		if ( isOptionSet( "json" ) ) {
+			return exitWith( result.ok ? 0 : 1, jsonSerialize( result ) )
 		}
 		if ( result.ok ) {
-			return { exitCode : 0, message : "#result.count# connectors checked, no problems. (#arguments.catalog.folder()#)" }
+			return done( "#result.count# connectors checked, no problems. (#arguments.catalog.folder()#)" )
 		}
-		var lines = []
+		var report = []
 		for ( var problem in result.errors ) {
-			lines.append( ( len( problem.file ) ? problem.file : "catalog" ) & ( len( problem.field ) ? " [#problem.field#]" : "" ) & ": " & problem.message )
+			report.append( ( len( problem.file ) ? problem.file : "catalog" ) & ( len( problem.field ) ? " [#problem.field#]" : "" ) & ": " & problem.message )
 		}
-		lines.append( "" )
-		lines.append( "#result.errors.len()# problem#result.errors.len() == 1 ? '' : 's'# found. #result.count# of the files pass." )
-		return { exitCode : 1, message : lines.toList( char( 10 ) ) }
+		report.append( "" )
+		report.append( "#result.errors.len()# problem#result.errors.len() == 1 ? '' : 's'# found. #result.count# of the files pass." )
+		return exitWith( 1, report.toList( char( 10 ) ) )
 	}
 
 	/**
@@ -185,12 +166,9 @@ class {
 	}
 
 	/**
-	 * @text The text
-	 * @width How wide the column is
-	 *
-	 * @return The text padded with spaces, or cut so a long one never pushes the columns
+	 * A column that cuts a long text, so it never pushes the columns, which padRight() does without the dot.
 	 */
-	private string function pad( required string text, required numeric width ) {
+	private string function fitColumn( required string text, required numeric width ) {
 		var cut = len( arguments.text ) > arguments.width - 1 ? left( arguments.text, arguments.width - 2 ) & "." : arguments.text
 		return cut & repeatString( " ", arguments.width - len( cut ) )
 	}

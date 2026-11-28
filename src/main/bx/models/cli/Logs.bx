@@ -14,7 +14,7 @@
 import bxModules.bxagents.models.util.ByteSize;
 import bxModules.bxagents.models.logs.Logger;
 
-class {
+class extends="BaseVerb" {
 
 	/**
 	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
@@ -41,7 +41,9 @@ class {
 			],
 			examples : [ "logs", "logs gateways --follow", "logs --ui" ],
 			note : "Without an area, lists the available log files.",
-			subcommand : true
+			subcommand : true,
+			dispatch : false,
+			projectRoot : false
 		}
 	}
 
@@ -54,64 +56,61 @@ class {
 	}
 
 	/**
-	 * @options { projectRoot (required), _positional (the area), tail, level, grep, json, follow, ui, connect, token,
-	 *          api-path; for tests: _out (prints a line), _polls (stops following after this many looks), _client }
+	 * The area is the first word, which may be an array. A project is needed only to read local files, so the base does not check it:
+	 * `--connect` reads a served agent. Test seams in the options: _out (prints a line), _polls (stops following after this many
+	 * looks), _pollMs, _interactive, _screen, _client.
 	 */
-	struct function run( struct options = {} ) {
-		var area = lCase( trim( isArray( arguments.options._positional ?: "" ) ? ( arguments.options._positional[ 1 ] ?: "" ) : ( arguments.options._positional ?: "" ) ) )
-		var asJson = arguments.options.json ?: false
-		var nl = char( 10 )
-		var remote = len( trim( arguments.options.connect ?: "" ) ) > 0
+	function handle() {
+		var area = areaTyped()
+		var remote = len( trim( option( "connect" ) ) ) > 0
 
-		if ( arguments.options.ui ?: false ) {
-			return viewer( area, arguments.options, remote ? nullValue() : localReader( arguments.options ) )
+		if ( isOptionSet( "ui" ) ) {
+			return viewer( area, remote ? nullValue() : localReader() )
 		}
-		if ( arguments.options.follow ?: false ) {
+		if ( isOptionSet( "follow" ) ) {
 			if ( !len( area ) ) {
-				return { exitCode : 1, message : "Name the log to follow: bxAgents logs <#Logger::areas().toList( '|' )#> --follow" }
+				return fail( "Name the log to follow: bxAgents logs <#Logger::areas().toList( '|' )#> --follow" )
 			}
-			return follow( area, arguments.options, remote ? nullValue() : localReader( arguments.options ) )
+			return follow( area, remote ? nullValue() : localReader() )
 		}
 		if ( remote ) {
-			return remoteRead( area, arguments.options )
+			return remoteRead( area )
 		}
-		var home = new models.data.ProjectData@bxagents().of( projectRootOf( arguments.options ) ).home
-		var reader = localReader( arguments.options )
+		var home = logsHome()
+		var reader = localReader()
 
 		if ( !len( area ) ) {
 			var found = reader.list()
-			if ( asJson ) {
-				return { exitCode : 0, message : jsonSerialize( { logs : found } ) }
-			}
-			if ( !found.len() ) {
-				return { exitCode : 0, message : "No logs yet in #home.folder( 'logs' )#. They appear when the agent runs." }
-			}
-			var rows = [ "Logs in #home.folder( 'logs' )#:", "" ]
-			for ( var log in found ) {
-				rows.append( "  " & left( log.area & repeatString( " ", 11 ), 11 ) & right( repeatString( " ", 9 ) & ByteSize::format( log.bytes ), 9 ) & "   " & dateTimeFormat( log.modified, "yyyy-MM-dd HH:mm" ) )
-			}
-			rows.append( "" )
-			rows.append( "Read one with: bxAgents logs <area> [--tail=N] [--level=warn] [--grep=TEXT]" )
-			return { exitCode : 0, message : rows.toList( nl ) }
+			return asJson( { logs : found }, () => {
+				if ( !found.len() ) {
+					return "No logs yet in #home.folder( 'logs' )#. They appear when the agent runs."
+				}
+				var rows = [ "Logs in #home.folder( 'logs' )#:", "" ]
+				for ( var log in found ) {
+					rows.append( "  " & padRight( log.area, 11 ) & right( repeatString( " ", 9 ) & ByteSize::format( log.bytes ), 9 ) & "   " & dateTimeFormat( log.modified, "yyyy-MM-dd HH:mm" ) )
+				}
+				rows.append( "" )
+				rows.append( "Read one with: bxAgents logs <area> [--tail=N] [--level=warn] [--grep=TEXT]" )
+				return rows.toList( char( 10 ) )
+			} )
 		}
 
-		var tail = arguments.options.tail ?: static.DEFAULT_TAIL
+		var tail = option( "tail", static.DEFAULT_TAIL )
 		if ( !isNumeric( tail ) || tail < 1 ) {
-			return { exitCode : 1, message : "--tail must be a whole number of 1 or more." }
+			return fail( "--tail must be a whole number of 1 or more." )
 		}
 		var result
 		try {
-			result = reader.tail( area, int( tail ), arguments.options.level ?: "", arguments.options.grep ?: "" )
+			result = reader.tail( area, int( tail ), option( "level" ), option( "grep" ) )
 		} catch ( "BxAgents.UnknownLog" e ) {
-			return { exitCode : 1, message : e.message }
+			return fail( e.message )
 		}
-		if ( asJson ) {
-			return { exitCode : 0, message : jsonSerialize( result ) }
-		}
-		if ( !result.lines.len() ) {
-			return { exitCode : 0, message : "No lines in the #area# log" & ( len( arguments.options.level ?: "" ) || len( arguments.options.grep ?: "" ) ? " that match." : " yet." ) }
-		}
-		return { exitCode : 0, message : result.lines.map( ( l ) => lineText( l ) ).toList( nl ) }
+		return asJson( result, () => {
+			if ( !result.lines.len() ) {
+				return "No lines in the #area# log" & ( len( option( "level" ) ) || len( option( "grep" ) ) ? " that match." : " yet." )
+			}
+			return result.lines.map( ( l ) => lineText( l ) ).toList( char( 10 ) )
+		} )
 	}
 
 	/**
@@ -128,23 +127,23 @@ class {
 	 * The last lines of one log, then each new line as it is written, until Ctrl+C (or `_polls` looks, for tests).
 	 * Local: the file is read every second. With --connect: GET /logs/stream, opened again when the server ends it.
 	 */
-	private struct function follow( required string area, required struct options, any reader ) {
-		var say = outputOf( arguments.options )
-		var level = arguments.options.level ?: ""
-		var q = arguments.options.grep ?: ""
-		var tail = arguments.options.tail ?: 20
+	private struct function follow( required string area, any reader ) {
+		var say = outputOf()
+		var level = option( "level" )
+		var q = option( "grep" )
+		var tail = option( "tail", 20 )
 		if ( !isNumeric( tail ) || tail < 1 ) {
-			return { exitCode : 1, message : "--tail must be a whole number of 1 or more." }
+			return fail( "--tail must be a whole number of 1 or more." )
 		}
-		var polls = arguments.options._polls ?: 0
+		var polls = option( "_polls", 0 )
 		var looked = 0
 		try {
 			if ( isNull( arguments.reader ) ) {
-				var client = remoteClient( arguments.options )
+				var client = remoteClient()
 				for ( var l in client.logs( arguments.area, int( tail ), level, q ).lines ?: [] ) {
 					say( lineText( l ) )
 				}
-				say( "(following #arguments.area# on #arguments.options.connect#; Ctrl+C stops)" )
+				say( "(following #arguments.area# on #option( 'connect' )#; Ctrl+C stops)" )
 				while ( !polls || looked < polls ) {
 					looked++
 					var following = arguments.area
@@ -158,7 +157,7 @@ class {
 						}
 					}, level, q )
 				}
-				return { exitCode : 0, message : "" }
+				return done()
 			}
 			// where the file ends before the tail is read, so no line written in between is missed
 			var offset = arguments.reader.since( arguments.area, -1, level, q ).offset
@@ -168,7 +167,7 @@ class {
 			say( "(following #arguments.area#; Ctrl+C stops)" )
 			while ( !polls || looked < polls ) {
 				looked++
-				sleep( arguments.options._pollMs ?: static.POLL_MS )
+				sleep( option( "_pollMs", static.POLL_MS ) )
 				var found = arguments.reader.since( arguments.area, offset, level, q )
 				offset = found.offset
 				if ( found.reset ) {
@@ -178,32 +177,32 @@ class {
 					say( lineText( l ) )
 				}
 			}
-			return { exitCode : 0, message : "" }
+			return done()
 		} catch ( "BxAgents.UnknownLog" e ) {
-			return { exitCode : 1, message : e.message }
+			return fail( e.message )
 		} catch ( any e ) {
-			return { exitCode : 1, message : remoteProblem( e ) }
+			return fail( remoteProblem( e ) )
 		}
 	}
 
 	/**
 	 * `--ui`: the full-screen viewer (LogScreen). Without a real terminal it follows instead.
 	 */
-	private struct function viewer( required string area, required struct options, any reader ) {
-		var interactive = arguments.options._interactive ?: createObject( "java", "ortus.boxlang.bxagents.tui.TuiScreen" ).isInteractive()
+	private struct function viewer( required string area, any reader ) {
+		var interactive = variables.options._interactive ?: createObject( "java", "ortus.boxlang.bxagents.tui.TuiScreen" ).isInteractive()
 		if ( !interactive ) {
-			outputOf( arguments.options )( "(--ui needs a terminal; following the log instead)" )
-			return follow( len( arguments.area ) ? arguments.area : "agent", arguments.options, isNull( arguments.reader ) ? nullValue() : arguments.reader )
+			outputOf()( "(--ui needs a terminal; following the log instead)" )
+			return follow( len( arguments.area ) ? arguments.area : "agent", isNull( arguments.reader ) ? nullValue() : arguments.reader )
 		}
-		var screen = arguments.options._screen ?: createObject( "java", "ortus.boxlang.bxagents.tui.LogScreen" ).open( Logger::areas(), len( arguments.area ) ? arguments.area : "agent" )
+		var screen = variables.options._screen ?: createObject( "java", "ortus.boxlang.bxagents.tui.LogScreen" ).open( Logger::areas(), len( arguments.area ) ? arguments.area : "agent" )
 		// what the loop shares with load(): a closure that assigns a variable of this function makes its own
 		var state = {
 			remote : isNull( arguments.reader ),
-			client : isNull( arguments.reader ) ? remoteClient( arguments.options ) : "",
+			client : isNull( arguments.reader ) ? remoteClient() : "",
 			reader : arguments.reader ?: "",
 			offset : -1,
 			cap    : static.VIEW_LINES,
-			from   : arguments.options.connect ?: ""
+			from   : option( "connect" )
 		}
 		var load = function() {
 			try {
@@ -252,47 +251,47 @@ class {
 		} finally {
 			screen.close()
 		}
-		return { exitCode : 0, message : "" }
+		return done()
 	}
 
 	/**
 	 * Which logs there are, or the last lines of one, from a served agent (--connect).
 	 */
-	private struct function remoteRead( required string area, required struct options ) {
+	private struct function remoteRead( required string area ) {
 		try {
-			var client = remoteClient( arguments.options )
-			var tail = arguments.options.tail ?: static.DEFAULT_TAIL
+			var client = remoteClient()
+			var tail = option( "tail", static.DEFAULT_TAIL )
+			var server = option( "connect" )
 			if ( !len( arguments.area ) ) {
 				var found = client.logs()
-				if ( arguments.options.json ?: false ) {
-					return { exitCode : 0, message : jsonSerialize( { logs : found.logs ?: [] } ) }
-				}
-				var rows = [ "Logs on #arguments.options.connect#:", "" ]
-				for ( var log in found.logs ?: [] ) {
-					rows.append( "  " & left( log.area & repeatString( " ", 11 ), 11 ) & right( repeatString( " ", 9 ) & ByteSize::format( log.bytes ), 9 ) )
-				}
-				return { exitCode : 0, message : rows.toList( char( 10 ) ) }
+				return asJson( { logs : found.logs ?: [] }, () => {
+					var rows = [ "Logs on #server#:", "" ]
+					for ( var log in found.logs ?: [] ) {
+						rows.append( "  " & padRight( log.area, 11 ) & right( repeatString( " ", 9 ) & ByteSize::format( log.bytes ), 9 ) )
+					}
+					return rows.toList( char( 10 ) )
+				} )
 			}
-			var result = client.logs( arguments.area, isNumeric( tail ) ? int( tail ) : static.DEFAULT_TAIL, arguments.options.level ?: "", arguments.options.grep ?: "" )
-			if ( arguments.options.json ?: false ) {
-				return { exitCode : 0, message : jsonSerialize( result ) }
-			}
-			var lines = result.lines ?: []
-			return { exitCode : 0, message : lines.len() ? lines.map( ( l ) => lineText( l ) ).toList( char( 10 ) ) : "No lines in the #arguments.area# log." }
+			var area = arguments.area
+			var result = client.logs( area, isNumeric( tail ) ? int( tail ) : static.DEFAULT_TAIL, option( "level" ), option( "grep" ) )
+			return asJson( result, () => {
+				var lines = result.lines ?: []
+				return lines.len() ? lines.map( ( l ) => lineText( l ) ).toList( char( 10 ) ) : "No lines in the #area# log."
+			} )
 		} catch ( any e ) {
-			return { exitCode : 1, message : remoteProblem( e ) }
+			return fail( remoteProblem( e ) )
 		}
 	}
 
 	/** @return An AgentApiClient for --connect, with --token (or BXAGENTS_TOKEN) and --api-path */
-	private any function remoteClient( required struct options ) {
-		if ( !isNull( arguments.options._client ) ) {
-			return arguments.options._client
+	private any function remoteClient() {
+		if ( !isNull( variables.options._client ) ) {
+			return variables.options._client
 		}
 		return new models.api.AgentApiClient@bxagents(
-			url    = trim( arguments.options.connect ),
-			token  = trim( arguments.options.token ?: getSystemSetting( "BXAGENTS_TOKEN", "" ) ),
-			path   = trim( arguments.options[ "api-path" ] ?: arguments.options.apiPath ?: "" ),
+			url    = trim( option( "connect" ) ),
+			token  = trim( option( "token", getSystemSetting( "BXAGENTS_TOKEN", "" ) ) ),
+			path   = trim( option( "api-path", option( "apiPath" ) ) ),
 			source = "cli"
 		)
 	}
@@ -303,25 +302,30 @@ class {
 		return message.find( "HTTP 403" ) ? "Only an admin may read the logs: use an admin token (--token or BXAGENTS_TOKEN)." : message
 	}
 
-	/** @return The LogReader of the project's data home */
-	private any function localReader( required struct options ) {
-		var home = new models.data.ProjectData@bxagents().of( projectRootOf( arguments.options ) ).home
-		return new models.logs.LogReader@bxagents( home.folder( "logs" ) )
+	/** @return The log the user named: the first word, which is an array when the parser collected several */
+	private string function areaTyped() {
+		var typed = option( "_positional" )
+		return lCase( trim( isArray( typed ) ? ( typed[ 1 ] ?: "" ) : typed ) )
 	}
 
-	/** @return The project root, without a trailing slash */
-	private string function projectRootOf( required struct options ) {
-		var root = trim( arguments.options.projectRoot ?: "" )
+	/** @return The data home of the project, which is where the logs are */
+	private any function logsHome() {
+		var root = projectRoot()
 		if ( !len( root ) ) {
 			throw( type = "BxAgents.MissingProjectRoot", message = "`logs` requires a project root" )
 		}
-		return root.reReplace( "[\/]+$", "" )
+		return new models.data.ProjectData@bxagents().of( root ).home
+	}
+
+	/** @return The LogReader of the project's data home */
+	private any function localReader() {
+		return new models.logs.LogReader@bxagents( logsHome().folder( "logs" ) )
 	}
 
 	/** @return A function that prints one line: println, or the test's own */
-	private any function outputOf( required struct options ) {
-		if ( !isNull( arguments.options._out ) ) {
-			return arguments.options._out
+	private any function outputOf() {
+		if ( !isNull( variables.options._out ) ) {
+			return variables.options._out
 		}
 		var system = createObject( "java", "java.lang.System" )
 		// flushed line by line: through a pipe (--follow | grep) the output is otherwise held back until the program ends,

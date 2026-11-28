@@ -21,7 +21,7 @@ import bxModules.bxagents.models.api.Caller;
 import bxModules.bxagents.models.connect.OAuthServers;
 import bxModules.bxagents.models.connectors.ConnectorSettings;
 
-class {
+class extends="BaseVerb" {
 
 	/**
 	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
@@ -52,114 +52,89 @@ class {
 
 
 	/**
-	 * @options { projectRoot (required), _positional (the server's name), remove, port, user, timeout, json, noOpen;
-	 *            _receive ( redirectUri, authorizationUrl ) => { code, state, iss } and _clientFactory replace the browser and bx-ai for tests }
-	 *
-	 * @return { exitCode, message }
+	 * Test seams in the options: `_receive( redirectUri, authorizationUrl )` gives { code, state, iss } instead of the browser, and
+	 * `_clientFactory` replaces bx-ai.
 	 */
-	struct function run( struct options = {} ) {
-		var projectRoot = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( projectRoot ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`connect` requires a project root" )
-		}
-		var name = trim( arguments.options._positional ?: "" )
-		var subject = len( trim( arguments.options.user ?: "" ) ) ? trim( arguments.options.user ) : Caller::localId()
+	function handle() {
+		var name = firstArgument()
+		var subject = len( trim( option( "user" ) ) ) ? trim( option( "user" ) ) : Caller::localId()
 
-		var config = new "models.build.AgentConfigResolver@bxagents"().resolve( projectRoot = projectRoot )
+		var config = new "models.build.AgentConfigResolver@bxagents"().resolve( projectRoot = projectRoot() )
 		var entries = OAuthServers::of( config )
 		var offered = ConnectorSettings::resolve( config ).available.len() > 0
 		if ( !entries.len() && !offered ) {
-			return { exitCode : 1, message : "This project offers no connectors (`connectors: none`) and no mcpServers entry has an `oauth` key, so there is nothing to connect to. Add one to Agent.yml, for example `oauth: true`." }
+			return fail( "This project offers no connectors (`connectors: none`) and no mcpServers entry has an `oauth` key, so there is nothing to connect to. Add one to Agent.yml, for example `oauth: true`." )
 		}
 
-		var file = new "models.store.ChatStorePath@bxagents"().forProject( projectRoot )
+		var file = chatStoreFile()
 		directoryCreate( getDirectoryFromPath( file ), true, true )
 		var wiring = new "models.vault.VaultWiring@bxagents"().pin( file )
 		// the connectors and everything typed after the first word go through the console, unless the first word is a service written in Agent.yml
 		if ( offered && !entries.some( e => e.name == name ) ) {
-			return new "models.connectors.ConnectTerminal@bxagents"().run( arguments.options, config, subject, wiring, entries )
+			return new "models.connectors.ConnectTerminal@bxagents"().run( variables.options, config, subject, wiring, entries )
 		}
 		var settings = { wiring : wiring }
-		if ( isClosure( arguments.options._clientFactory ?: "" ) ) {
-			settings[ "clientFactory" ] = arguments.options._clientFactory
+		if ( isClosure( option( "_clientFactory" ) ) ) {
+			settings[ "clientFactory" ] = option( "_clientFactory" )
 		}
 
 		if ( !len( name ) ) {
-			return list( new "models.connect.ConnectionService@bxagents"( entries, settings ), subject, arguments.options )
+			return list( new "models.connect.ConnectionService@bxagents"( entries, settings ), subject )
 		}
-		if ( arguments.options.remove ?: false ) {
+		if ( isOptionSet( "remove" ) ) {
 			return remove( new "models.connect.ConnectionService@bxagents"( entries, settings ), name, subject )
 		}
-		return connect( entries, settings, name, subject, arguments.options )
+		return connect( entries, settings, name, subject )
 	}
 
 	// ----------------------------------------------------------------------------------
 
 	/**
 	 * Shows the servers and whether the person is connected.
-	 *
-	 * @service A ConnectionService
-	 * @subject The person
-	 * @options The parsed options: json
-	 *
-	 * @return { exitCode, message }
 	 */
-	private struct function list( required any service, required string subject, required struct options ) {
+	private struct function list( required any service, required string subject ) {
 		var rows = arguments.service.list( arguments.subject )
-		if ( arguments.options.json ?: false ) {
-			return { exitCode : 0, message : jsonSerialize( { "user" : arguments.subject, "servers" : rows } ) }
-		}
-		var lines = [ "Sign ins of #arguments.subject#:" ]
-		for ( var row in rows ) {
-			lines.append( "  " & pad( row.name, 18 ) & pad( row.connected ? "connected" : "not connected", 16 ) & row.url )
-		}
-		var missing = rows.filter( row => !row.connected )
-		if ( missing.len() ) {
-			lines.append( "" )
-			lines.append( "Connect with `bxAgents connect #missing[ 1 ].name#`." )
-		}
-		return { exitCode : 0, message : lines.toList( char( 10 ) ) }
+		var subject = arguments.subject
+		return asJson( { "user" : subject, "servers" : rows }, () => {
+			var report = [ "Sign ins of #subject#:" ]
+			for ( var row in rows ) {
+				report.append( "  " & pad( row.name, 18 ) & pad( row.connected ? "connected" : "not connected", 16 ) & row.url )
+			}
+			var missing = rows.filter( row => !row.connected )
+			if ( missing.len() ) {
+				report.append( "" )
+				report.append( "Connect with `bxAgents connect #missing[ 1 ].name#`." )
+			}
+			return report.toList( char( 10 ) )
+		} )
 	}
 
 	/**
 	 * Forgets the person's sign in to one server.
-	 *
-	 * @service A ConnectionService
-	 * @name The server's name
-	 * @subject The person
-	 *
-	 * @return { exitCode, message }
 	 */
 	private struct function remove( required any service, required string name, required string subject ) {
 		try {
 			arguments.service.disconnect( arguments.name, arguments.subject )
 		} catch ( "BxAgents.UnknownConnection" e ) {
-			return { exitCode : 1, message : e.message }
+			return fail( e.message )
 		}
-		return { exitCode : 0, message : "Disconnected #arguments.subject# from #arguments.name#." }
+		return done( "Disconnected #arguments.subject# from #arguments.name#." )
 	}
 
 	/**
 	 * Signs in: starts, waits for the browser to come back, finishes.
-	 *
-	 * @entries The oauth entries
-	 * @settings The ConnectionService options
-	 * @name The server's name
-	 * @subject The person
-	 * @options The parsed options: port, timeout, noOpen, _receive
-	 *
-	 * @return { exitCode, message }
 	 */
-	private struct function connect( required array entries, required struct settings, required string name, required string subject, required struct options ) {
-		var seconds = isNumeric( arguments.options.timeout ?: "" ) ? int( arguments.options.timeout ) : 300
-		var receive = arguments.options._receive ?: ""
+	private struct function connect( required array entries, required struct settings, required string name, required string subject ) {
+		var seconds = isNumeric( option( "timeout" ) ) ? int( option( "timeout" ) ) : 300
+		var receive = option( "_receive" )
+		var port = isNumeric( option( "port" ) ) ? int( option( "port" ) ) : 0
 		var listener = ""
-		var redirectUri = "http://127.0.0.1:" & ( isNumeric( arguments.options.port ?: "" ) ? int( arguments.options.port ) : 0 ) & "/callback"
+		var redirectUri = "http://127.0.0.1:" & port & "/callback"
 		try {
 			if ( !isClosure( receive ) ) {
 				var page = new "models.connect.CallbackPage@bxagents"()
 				listener = createObject( "java", "ortus.boxlang.bxagents.util.LoopbackCallback" ).start(
-					isNumeric( arguments.options.port ?: "" ) ? int( arguments.options.port ) : 0,
+					port,
 					"/callback",
 					page.connected( arguments.name ),
 					page.refused( "The provider did not send you back with a code." )
@@ -177,26 +152,26 @@ class {
 			} else {
 				println( "Open this address and sign in to #arguments.name#:" )
 				println( started.authorizationUrl )
-				if ( !( arguments.options.noOpen ?: false ) ) {
+				if ( !isOptionSet( "noOpen" ) ) {
 					new "models.connect.BrowserLauncher@bxagents"().open( started.authorizationUrl )
 				}
 				println( "Waiting up to #seconds# seconds for the browser to come back to #redirectUri# ..." )
 				query = toStruct( listener.await( seconds ) )
 			}
 			if ( len( query.error ?: "" ) ) {
-				return { exitCode : 1, message : "Not connected: #query.error_description ?: query.error#" }
+				return fail( "Not connected: #query.error_description ?: query.error#" )
 			}
-			var done = service.complete( query.code ?: "", query.state ?: "", query.iss ?: "" )
-			return { exitCode : 0, message : "Connected #done.subject# to #done.name#." }
+			var completed = service.complete( query.code ?: "", query.state ?: "", query.iss ?: "" )
+			return done( "Connected #completed.subject# to #completed.name#." )
 		} catch ( "BxAgents.UnknownConnection" e ) {
-			return { exitCode : 1, message : e.message }
+			return fail( e.message )
 		} catch ( "BxAgents.MissingVaultSecret" e ) {
-			return { exitCode : 1, message : e.message }
+			return fail( e.message )
 		} catch ( "java.util.concurrent.TimeoutException" e ) {
-			return { exitCode : 1, message : "Nobody came back within #seconds# seconds. Run `bxAgents connect #arguments.name#` again." }
+			return fail( "Nobody came back within #seconds# seconds. Run `bxAgents connect #arguments.name#` again." )
 		} catch ( any e ) {
 			if ( left( e.type, 8 ) == "MCPOAuth" ) {
-				return { exitCode : 1, message : e.message }
+				return fail( e.message )
 			}
 			rethrow
 		} finally {
@@ -220,13 +195,11 @@ class {
 	}
 
 	/**
-	 * @text The text
-	 * @width The column width
-	 *
-	 * @return The text padded to the width, with one space after it when it is longer
+	 * A column: text that is longer than its width keeps all of its characters and gets one space after it, which
+	 * padRight() would cut.
 	 */
 	private string function pad( required string text, required numeric width ) {
-		return len( arguments.text ) >= arguments.width ? arguments.text & " " : arguments.text & repeatString( " ", arguments.width - len( arguments.text ) )
+		return len( arguments.text ) >= arguments.width ? arguments.text & " " : padRight( arguments.text, arguments.width )
 	}
 
 }

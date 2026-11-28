@@ -9,7 +9,7 @@
  */
 import bxModules.bxagents.models.util.Strings;
 
-class {
+class extends="BaseVerb" {
 
 	/**
 	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
@@ -77,35 +77,27 @@ class {
 			optionsHeading : "COMMON OPTIONS",
 			examples : [ "add", "add tool Greeter --dry-run", "add gateway web" ],
 			note : "Each kind has its own settings; see the full reference below.",
-			subcommand : true
+			subcommand : true,
+			dispatch : false
 		}
 	}
 
 
 	/**
-	 * @options {
-	 *   projectRoot (required, absolute path),
-	 *   _positionals ([ kind, name ]),
-	 *   yes, tui, force, dry-run, and each kind's own answer flags,
-	 *   _interactive / _prompter (test seams)
-	 * }
-	 *
-	 * @return { exitCode, message }
+	 * The words are `_positionals` ([ kind, name ]), and the kind is resolved by a registry, so the base does not dispatch.
+	 * Test seams in the options: _interactive, _prompter.
 	 */
-	struct function run( struct options = {} ) {
-		var root = trim( arguments.options.projectRoot ?: "" )
-		if ( !len( root ) ) {
-			throw( type = "BxAgents.MissingProjectRoot", message = "`add` requires a project root" )
-		}
+	function handle() {
+		var root = projectRoot()
 		if ( !new "models.build.AgentDefinitionLocator@bxagents"().exists( root ) ) {
 			throw( type = "BxAgents.NotAnAgentProject", message = "No Agent.yml or Agent.bx found at [#root#] - run `add` inside a BX Agents project, or pass --projectRoot" )
 		}
 
 		var kinds = new "models.add.AddKinds@bxagents"()
-		var args = arguments.options._positionals ?: []
+		var args = option( "_positionals", [] )
 		var factory = new "models.wizard.prompters.PrompterFactory@bxagents"()
-		var asks = !( arguments.options.yes ?: false ) && ( arguments.options._interactive ?: factory.isTerminal() )
-		var prompter = asks ? ( arguments.options._prompter ?: factory.create( arguments.options, "add" ) ) : ""
+		var asks = !isOptionSet( "yes" ) && ( option( "_interactive", factory.isTerminal() ) )
+		var prompter = asks ? ( variables.options._prompter ?: factory.create( variables.options, "add" ) ) : ""
 
 		try {
 			var kindName = args.len() ? args[ 1 ] : ""
@@ -119,19 +111,19 @@ class {
 				throw( type = "BxAgents.UnknownAddKind", message = "Unknown kind [#kindName#]. You can add: #kinds.names().toList( ', ' )#" )
 			}
 
-			var ctx = {
+			var context = {
 				root    : root,
 				name    : args.len() > 1 ? args[ 2 ] : "",
 				args    : args.len() > 1 ? args.slice( 2 ) : [],
-				options : arguments.options,
+				options : variables.options,
 				project : projectInfo( root )
 			}
-			var result = new "models.add.AddEngine@bxagents"( root, arguments.options, prompter ).run( kinds.create( kindName ), ctx )
+			var result = new "models.add.AddEngine@bxagents"( root, variables.options, prompter ).run( kinds.create( kindName ), context )
 			closePrompter( prompter )
 			return result
 		} catch ( BxAgents.WizardAbort e ) {
 			closePrompter( prompter )
-			return { exitCode : 1, message : "Cancelled. Nothing was changed." }
+			return fail( "Cancelled. Nothing was changed." )
 		} catch ( any e ) {
 			closePrompter( prompter )
 			rethrow
