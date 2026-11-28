@@ -1,6 +1,6 @@
 # The embeds tour
 
-A narrated recording of the [embeds](../../../docs/conventions/embeds.md) feature: an admin makes an embed in the panel of the Embeds page, a visitor chats from another website, the admin reads the counters, rotates the key, then searches the list, turns the embed off with its switch and sees that Delete asks first. It makes the screenshots and the video in `docs/assets` (`webui-embeds-*.png`, `video/embeds-tour.*`).
+A narrated recording of the [embeds](../../../docs/conventions/embeds.md) feature: an admin makes an embed on its own page, a visitor chats from another website, the admin reads the counters, rotates the key, then searches the list, turns the embed off with its switch and sees that Delete asks first. It makes the screenshots and the video in `docs/assets` (`webui-embeds-*.png`, `video/embeds-tour.*`).
 
 The voice is the one of every demo video of this repo, Kokoro `af_heart` (see [`../narration`](../narration)). The answers come from the scripted model [`model.json`](model.json), so nothing needs a key.
 

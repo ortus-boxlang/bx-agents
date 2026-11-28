@@ -28,7 +28,7 @@ hooks, bot protection, variables and context.
   <track kind="captions" src="/assets/video/embeds-tour.vtt" srclang="en" label="English" default>
 </video>
 
-*About a minute and a half: an admin makes an embed in the panel of the Embeds page, a visitor chats from another website, and the admin looks at the counters, rotates the key, then searches the list, turns the embed off with its switch and sees that Delete asks first. The answers come from a scripted demo model, so they are canned. Narrated, with captions.*
+*About a minute and a half: an admin makes an embed on its own page, a visitor chats from another website, and the admin looks at the counters, rotates the key, then searches the list, turns the embed off with its switch and sees that Delete asks first. The answers come from a scripted demo model, so they are canned. Narrated, with captions.*
 
 ## The record
 
@@ -233,7 +233,7 @@ The pictures below are from that run.
 
 ![The Embeds list: a search, the state filter with its counts, a switch, Edit and Delete a row](../assets/webui/webui-embeds-list.png)
 
-![The panel that opens for New and Edit: the agent, the look and text on the left, and on the right the preview, which is the real widget drawn from the form](../assets/webui/webui-embeds-editor.png)
+![The page that makes or changes an embed: the agent, the look and text on the left, and on the right the preview, which is the real widget drawn from the form](../assets/webui/webui-embeds-editor.png)
 
 ![A wildcard website is refused in words before anything is saved](../assets/webui/webui-embeds-wildcard-refused.png)
 
@@ -261,7 +261,7 @@ origins>`. A site that is not listed cannot frame it. The page loads the same wi
 Built as described below; see also [The web app](web-ui.md#embeds). It is checked with axe (light, dark, desktop and phone) and with browser tests that make an embed, refuse bad websites, watch the preview follow the form, copy a snippet, rotate the key, turn it off, search and filter the list, turn embeds on and off with a switch, edit and delete one.
 
 A page in the web app (`bxagentsui`), under **Admin**, next to Gateways, admin scope only, themed like the other pages (system,
-light, dark) and usable by keyboard. The page is the **list**; making or changing an embed happens in a **drawer** beside it.
+light, dark) and usable by keyboard. Three pages, each with its own route, handler action (`handlers/Embeds.bx`) and view: the **list** (`/embeds`), the page that **makes** one (`/embeds/new`) and the page that **changes** one (`/embeds/<id>`). The Embeds menu entry stays marked on all three.
 
 ```text
 + Embeds ----------------------------------------------------- [ New embed ] +
@@ -276,11 +276,12 @@ light, dark) and usable by keyboard. The page is the **list**; making or changin
 
 - **Search** matches the name and the allowed websites, any case; every word has to match. The **state filter** is All, On, Off or Expired (an embed that is on with a date that has passed), each with its count. "Showing 2 of 4" says when the list is narrowed, and an empty result offers to show every embed again.
 - **The switch** turns an embed on or off at once. A visitor of an embed that is off is answered as if it did not exist. It is saved when it is moved; if the server refuses, it goes back and says so.
-- **Edit** (or the embed's name) and **New embed** open the same drawer. **Delete** asks first, then removes the embed for good, with its key and its counters; turning it off is the way to keep it.
-- **Saving a new embed keeps the drawer open**, now as the edit of the embed it made: its snippets and counters appear, and the person closes the drawer when done. Close, the X and Esc ask before dropping changes that are not saved.
+- **Edit** (or the embed's name) is a link to the page of that embed, and **New embed** a link to `/embeds/new`. **Delete** asks first, then removes the embed for good, with its key and its counters; turning it off is the way to keep it.
+- **Saving a new embed keeps the page**, which is then the edit of the embed it made (the address becomes `/embeds/<id>`): its snippets and counters appear, and the person goes back with the **All embeds** link. Leaving with changes that are not saved asks first (the link back, and the browser's own prompt for a reload or another address). **Delete** on the page of an embed asks, removes it and goes back to the list. The page of an id that is not there says so, with the way back.
 
 ```text
-+ Edit Docs helper ------------------------------------------------- [X] +
++ < All embeds ------------------------------------------------------------+
+| Edit Docs helper                                                             |
 | Agent        name, agent, profile            |  Live preview of the widget       |
 | Look & text  title, placeholder, welcome,    |  (updates as you type)            |
 |              up to 3 suggestions, color,     |                                   |
