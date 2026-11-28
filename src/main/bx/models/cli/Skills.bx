@@ -15,7 +15,7 @@
  */
 import bxModules.bxagents.models.util.NameRules;
 
-class {
+class extends="BaseVerb" {
 
 	/**
 	 * What this verb is: read by the dispatcher, the help, the completions and the reference page.
@@ -36,13 +36,11 @@ class {
 			],
 			examples : [ "skills find release", "skills list", "skills install" ],
 			note : "install without a source restores the skills listed in the project's lock file.",
-			subcommand : true
+			subcommand : true,
+			// the words after the verb are an action and its arguments, and `find` works outside a project
+			dispatch : false,
+			projectRoot : false
 		}
-	}
-
-
-	static {
-		SUBCOMMANDS = [ "find", "install", "list", "show", "update", "remove" ]
 	}
 
 	/**
@@ -52,23 +50,22 @@ class {
 	 *   limit (find: how many), registry (the registry address), json (list/find: JSON), dry-run (update),
 	 *   _transport (test seam - a function ( method, url, params ) returning { status, body })
 	 * }
-	 *
-	 * @return { exitCode, message }
 	 */
-	struct function run( struct options = {} ) {
-		var args = arguments.options._positionals ?: []
-		if ( !args.len() || !static.SUBCOMMANDS.contains( args[ 1 ] ) ) {
-			throw( type = "BxAgents.UnknownSkillsCommand", message = "Say what to do: bxAgents skills <#static.SUBCOMMANDS.toList( '|' )#> ..." )
+	function handle() {
+		var words = option( "_positionals", [] )
+		var commands = meta().actions.map( entry => entry.name )
+		if ( !words.len() || !commands.contains( words[ 1 ] ) ) {
+			throw( type = "BxAgents.UnknownSkillsCommand", message = "Say what to do: bxAgents skills <#commands.toList( '|' )#> ..." )
 		}
-		var command = args[ 1 ]
-		var rest = args.slice( 2 )
-		var client = new "models.skills.RegistryClient@bxagents"( arguments.options.registry ?: "", arguments.options._transport ?: "" )
+		var command = words[ 1 ]
+		var rest = words.slice( 2 )
+		var client = new "models.skills.RegistryClient@bxagents"( option( "registry" ), option( "_transport" ) )
 
 		if ( command == "find" ) {
-			return doFind( client, rest, arguments.options )
+			return findSkills( client, rest )
 		}
 
-		var root = trim( arguments.options.projectRoot ?: "" )
+		var root = projectRoot()
 		if ( !len( root ) ) {
 			throw( type = "BxAgents.MissingProjectRoot", message = "`skills #command#` requires a project root" )
 		}
@@ -79,72 +76,73 @@ class {
 
 		switch ( command ) {
 			case "install":
-				return rest.len() ? doInstall( installer, root, rest ) : doRestore( installer, root )
+				return rest.len() ? installSkills( installer, root, rest ) : restoreSkills( installer, root )
 			case "list":
-				return doList( installer, root, arguments.options )
+				return listInstalled( installer, root )
 			case "show":
-				return doShow( root, rest )
+				return showSkill( root, rest )
 			case "update":
-				return doUpdate( installer, root, rest, arguments.options[ "dry-run" ] ?: false )
+				return updateSkills( installer, root, rest )
 			default:
 				if ( rest.len() != 1 ) {
 					throw( type = "BxAgents.MissingSkillName", message = "Say which skill to remove: bxAgents skills remove <name>" )
 				}
 				installer.remove( root, rest[ 1 ] )
-				return { exitCode : 0, message : "- Removed #rest[ 1 ]#" }
+				return done( "- Removed #rest[ 1 ]#" )
 		}
 	}
 
 	// --------------------------------------------------------------------------
 
-	private struct function doFind( required any client, required array words, required struct options ) {
+	private struct function findSkills( required any client, required array words ) {
 		if ( !arguments.words.len() ) {
 			throw( type = "BxAgents.MissingSearch", message = "Say what to look for: bxAgents skills find <words>" )
 		}
-		var limit = int( val( arguments.options.limit ?: 10 ) )
-		var hits = arguments.client.search( arguments.words.toList( " " ), max( 1, limit ) )
-		if ( arguments.options.json ?: false ) {
-			return { exitCode : 0, message : jsonSerialize( hits ) }
-		}
-		if ( !hits.len() ) {
-			return { exitCode : 0, message : "Nothing found for [#arguments.words.toList( ' ' )#] in #arguments.client.url()#." }
-		}
-		var out = []
-		for ( var hit in hits ) {
-			out.append( hit.name & "  " & hit.owner & "/" & hit.repo & "/" & hit.slug )
-			out.append( "  " & shorten( hit.description, 110 ) )
-			out.append( "  audit: " & ( len( hit.audit ) ? hit.audit : "unknown" ) & ", " & hit.installs & " installs" )
-			out.append( "" )
-		}
-		out.append( "Install one: bxAgents skills install <owner/repo/skill>" )
-		return { exitCode : 0, message : out.toList( char( 10 ) ) }
+		var query = arguments.words.toList( " " )
+		var client = arguments.client
+		var hits = client.search( query, max( 1, int( val( option( "limit", 10 ) ) ) ) )
+		return asJson( hits, () => findText( hits, query, client.url() ) )
 	}
 
-	private struct function doInstall( required any installer, required string root, required array refs ) {
-		var done = arguments.installer.install( arguments.root, arguments.refs )
-		var out = []
-		for ( var d in done ) {
-			var flag = d.audit == "trusted" ? "" : "  ! audit: " & ( len( d.audit ) ? d.audit : "unknown" )
-			out.append( ( d.change == "installed" ? "+ Installed " : ( d.change == "updated" ? "~ Updated   " : "= Unchanged " ) ) & d.name & flag )
-			out.append( "    .agents/skills/#d.name#/SKILL.md" )
+	private string function findText( required array hits, required string query, required string registry ) {
+		if ( !arguments.hits.len() ) {
+			return "Nothing found for [#arguments.query#] in #arguments.registry#."
 		}
-		out.append( "" )
-		out.append( "Skills are instructions your agent will follow. Read what you install before you ship it." )
-		out.append( "Commit .agents/skills.lock.json; the skills themselves are restored at build time." )
-		return { exitCode : 0, message : out.toList( char( 10 ) ) }
+		var report = []
+		for ( var hit in arguments.hits ) {
+			report.append( hit.name & "  " & hit.owner & "/" & hit.repo & "/" & hit.slug )
+			report.append( "  " & shorten( hit.description, 110 ) )
+			report.append( "  audit: " & ( len( hit.audit ) ? hit.audit : "unknown" ) & ", " & hit.installs & " installs" )
+			report.append( "" )
+		}
+		report.append( "Install one: bxAgents skills install <owner/repo/skill>" )
+		return report.toList( char( 10 ) )
+	}
+
+	private struct function installSkills( required any installer, required string root, required array refs ) {
+		var report = []
+		for ( var installed in arguments.installer.install( arguments.root, arguments.refs ) ) {
+			var flag = installed.audit == "trusted" ? "" : "  ! audit: " & ( len( installed.audit ) ? installed.audit : "unknown" )
+			report.append( ( installed.change == "installed" ? "+ Installed " : ( installed.change == "updated" ? "~ Updated   " : "= Unchanged " ) ) & installed.name & flag )
+			report.append( "    .agents/skills/#installed.name#/SKILL.md" )
+		}
+		report.append( "" )
+		report.append( "Skills are instructions your agent will follow. Read what you install before you ship it." )
+		report.append( "Commit .agents/skills.lock.json; the skills themselves are restored at build time." )
+		return lines( report )
 	}
 
 	/**
 	 * Prints one skill's SKILL.md, from the project (skills/), the registry installs (.agents/skills/) or the ones the
 	 * agent saved in its data home, in that order. Never prints a folder: a skill is read by name.
 	 */
-	private struct function doShow( required string root, required array rest ) {
+	private struct function showSkill( required string root, required array rest ) {
 		if ( arguments.rest.len() != 1 ) {
 			throw( type = "BxAgents.MissingSkillName", message = "Say which skill to read: bxAgents skills show <name>" )
 		}
 		var name = trim( arguments.rest[ 1 ] )
 		if ( !NameRules::isSafeFolder( name, 64 ) ) {
-			return { exitCode : 1, message : "[#name#] is not a skill name. Names are letters, digits, . _ and -." }
+			return fail( "[#name#] is not a skill name. Names are letters, digits, . _ and -." )
 		}
 		var places = [ { origin : "project", folder : arguments.root & "/skills" }, { origin : "installed", folder : arguments.root & "/.agents/skills" } ]
 		try {
@@ -155,65 +153,62 @@ class {
 		for ( var place in places ) {
 			var file = place.folder & "/" & name & "/SKILL.md"
 			if ( fileExists( file ) ) {
-				return { exitCode : 0, message : name & " (" & place.origin & ")" & char( 10 ) & char( 10 ) & fileRead( file, "UTF-8" ) }
+				return done( name & " (" & place.origin & ")" & char( 10 ) & char( 10 ) & fileRead( file, "UTF-8" ) )
 			}
 		}
-		return { exitCode : 1, message : "There is no skill called [#name#]. Try `bxAgents skills list`, or /skills in a chat for every skill the agent has." }
+		return fail( "There is no skill called [#name#]. Try `bxAgents skills list`, or /skills in a chat for every skill the agent has." )
 	}
 
-	private struct function doRestore( required any installer, required string root ) {
+	private struct function restoreSkills( required any installer, required string root ) {
 		var restored = arguments.installer.restore( arguments.root )
 		if ( !restored.len() ) {
-			return { exitCode : 0, message : "Everything in .agents/skills.lock.json is installed." }
+			return done( "Everything in .agents/skills.lock.json is installed." )
 		}
-		var out = []
-		for ( var r in restored ) {
-			out.append( "+ Restored " & r.name & ( r.moved ? "  ! the registry's copy differs from the locked one; run: bxAgents skills update #r.name#" : "" ) )
-		}
-		return { exitCode : 0, message : out.toList( char( 10 ) ) }
+		return lines( restored.map( r => "+ Restored " & r.name & ( r.moved ? "  ! the registry's copy differs from the locked one; run: bxAgents skills update #r.name#" : "" ) ) )
 	}
 
-	private struct function doList( required any installer, required string root, required struct options ) {
+	private struct function listInstalled( required any installer, required string root ) {
 		var rows = arguments.installer.installed( arguments.root )
-		if ( arguments.options.json ?: false ) {
-			return { exitCode : 0, message : jsonSerialize( rows ) }
-		}
-		if ( !rows.len() ) {
-			return { exitCode : 0, message : "No skills installed from the registry. Find one: bxAgents skills find <words>" }
+		return asJson( rows, () => installedText( rows ) )
+	}
+
+	private string function installedText( required array rows ) {
+		if ( !arguments.rows.len() ) {
+			return "No skills installed from the registry. Find one: bxAgents skills find <words>"
 		}
 		var width = 0
-		for ( var r in rows ) {
-			width = max( width, len( r.name ) )
+		for ( var row in arguments.rows ) {
+			width = max( width, len( row.name ) )
 		}
 		var notes = { ok : "", missing : "  not installed; bxAgents skills install restores it", modified : "  edited since it was installed" }
-		var out = rows.map( r => r.name & repeatString( " ", width - len( r.name ) + 2 ) & r.source & "/" & r.skill & notes[ r.state ] )
-		return { exitCode : 0, message : out.toList( char( 10 ) ) }
+		return arguments.rows.map( row => padRight( row.name, width + 2 ) & row.source & "/" & row.skill & notes[ row.state ] ).toList( char( 10 ) )
 	}
 
-	private struct function doUpdate( required any installer, required string root, required array names, required boolean dryRun ) {
-		var rows = arguments.installer.update( arguments.root, arguments.names, arguments.dryRun )
+	private struct function updateSkills( required any installer, required string root, required array names ) {
+		var dryRun = isOptionSet( "dry-run" )
+		var rows = arguments.installer.update( arguments.root, arguments.names, dryRun )
 		if ( !rows.len() ) {
-			return { exitCode : 0, message : "No skills installed from the registry." }
+			return done( "No skills installed from the registry." )
 		}
-		var out = []
+		var report = []
 		var failed = false
-		for ( var r in rows ) {
-			switch ( r.change ) {
+		for ( var row in rows ) {
+			switch ( row.change ) {
 				case "updated":
-					out.append( ( arguments.dryRun ? "~ Would update " : "~ Updated " ) & r.name & "  " & left( r.from, 7 ) & " -> " & left( r.to, 7 ) )
+					report.append( ( dryRun ? "~ Would update " : "~ Updated " ) & row.name & "  " & left( row.from, 7 ) & " -> " & left( row.to, 7 ) )
 					break
 				case "modified":
-					out.append( "! Skipped " & r.name & ": " & r.reason )
+					report.append( "! Skipped " & row.name & ": " & row.reason )
 					break
 				case "failed":
 					failed = true
-					out.append( "x Failed " & r.name & ": " & r.reason )
+					report.append( "x Failed " & row.name & ": " & row.reason )
 					break
 				default:
-					out.append( "= Up to date " & r.name )
+					report.append( "= Up to date " & row.name )
 			}
 		}
-		return { exitCode : failed ? 1 : 0, message : out.toList( char( 10 ) ) }
+		return exitWith( failed ? 1 : 0, report.toList( char( 10 ) ) )
 	}
 
 	private string function shorten( required string text, required numeric max ) {
